@@ -1,0 +1,149 @@
+print("=== Running Function Tests ===")
+
+# SECTION 1: Basic Functions
+print("\n[1] Testing Basic Functions...")
+
+# Simple function with parameters and return
+func add(a, b) {
+    return a + b
+}
+
+let result = add(10, 20)
+assert(result == 30)
+
+# Function with no return (implicit null)
+func greet(name) {
+    let message = "Hello " + name
+}
+
+print("  ✓ Basic Functions passed")
+
+# SECTION 2: Functions with Logic
+print("\n[2] Testing Functions with Logic...")
+
+func get_max(x, y) {
+    if (x > y) {
+        return x
+    } else {
+        return y
+    }
+}
+
+assert(get_max(10, 5) == 10)
+assert(get_max(3, 99) == 99)
+
+print("  ✓ Functions with Logic passed")
+
+# SECTION 3: Recursive Functions
+print("\n[3] Testing Recursion...")
+
+# Factorial
+func factorial(n) {
+    if (n <= 1) {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+assert(factorial(5) == 120)
+assert(factorial(0) == 1)
+assert(factorial(1) == 1)
+
+# Fibonacci
+func fib(n) {
+    if (n <= 1) {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+assert(fib(0) == 0)
+assert(fib(1) == 1)
+assert(fib(6) == 8)
+
+print("  ✓ Recursion passed")
+
+# SECTION 4: Nested Functions
+print("\n[4] Testing Nested Functions...")
+
+func outer() {
+    # Inner function (local scope)
+    func inner(val) {
+        return val * 2
+    }
+    
+    return inner(50)
+}
+
+assert(outer() == 100)
+
+# Multiple levels of nesting
+func level1() {
+    func level2() {
+        func level3() {
+            return 42
+        }
+        return level3() + 8
+    }
+    return level2() + 10
+}
+
+assert(level1() == 60) # 42 + 8 + 10
+
+print("  ✓ Nested Functions passed")
+
+# SECTION 5: Functions with Arrays
+print("\n[5] Testing Functions with Arrays...")
+
+func sum_array(arr) {
+    let total = 0
+    for (let i = 0; i < len(arr); i++) {
+        total = total + arr[i]
+    }
+    return total
+}
+
+let numbers = [1, 2, 3, 4, 5]
+assert(sum_array(numbers) == 15)
+
+func reverse_array(arr) {
+    let reversed = []
+    let i = len(arr) - 1
+    while (i >= 0) {
+        append(reversed, arr[i])
+        i--
+    }
+    return reversed
+}
+
+let original = [1, 2, 3]
+let rev = reverse_array(original)
+assert(rev[0] == 3)
+assert(rev[2] == 1)
+
+print("  ✓ Functions with Arrays passed")
+
+# SECTION 6: Function Scope
+print("\n[6] Testing Function Scope...")
+
+let global_var = 100
+
+func modify_global() {
+    global_var = 200
+}
+
+modify_global()
+assert(global_var == 200)
+
+# Local shadowing
+func shadow_test() {
+    let global_var = 999
+    return global_var
+}
+
+assert(shadow_test() == 999)
+assert(global_var == 200) # Global unchanged
+
+print("  ✓ Function Scope passed")
+
+print("\n=== All Function Tests Passed! ===")

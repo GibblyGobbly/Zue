@@ -1,0 +1,17 @@
+=== Running Vector/Array Tests ===
+
+[1] Testing Array Mutation...
+  ✓ Array Mutation passed
+
+[2] Testing Vector Math Functions...
+  ✓ Vector Math Functions passed
+
+[3] Testing Operator Overloading...
+  ✓ Operator Overloading passed
+
+[4] Running Performance Benchmark...
+  Benchmark ran, clock moved forward:
+true
+  ✓ Benchmark passed
+
+=== All Vector Tests Passed! ===

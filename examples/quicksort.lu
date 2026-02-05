@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 Bharath
+# Quicksort on a list of numbers: pick the first item as the pivot, split the rest into
+# smaller and larger items, sort both halves, and put the pieces back together.
+func quicksort(items) {
+    if (len(items) <= 1) {
+        return items
+    }
+    let pivot = items[0]
+    let smaller = []
+    let larger = []
+    for (let i = 1; i < len(items); i++) {
+        if (items[i] < pivot) {
+            append(smaller, items[i])
+        } else {
+            append(larger, items[i])
+        }
+    }
+    let result = quicksort(smaller)
+    append(result, pivot)
+    for (let x in quicksort(larger)) {
+        append(result, x)
+    }
+    return result
+}
+
+let numbers = [34, 7, 23, 32, 5, 62, 32, 7, 1]
+print("before: {numbers}")
+print("after:  {quicksort(numbers)}")
