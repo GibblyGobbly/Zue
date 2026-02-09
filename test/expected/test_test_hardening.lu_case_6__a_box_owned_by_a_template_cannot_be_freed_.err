@@ -1,6 +1,0 @@
-Runtime Error in /tmp/luna_test_case.lu at line 4:
-  this box belongs to a template and is freed with it
-
-   4 |     free(h.bytes)
-
-Hint: A box must be freed exactly once
