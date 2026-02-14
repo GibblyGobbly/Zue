@@ -27,9 +27,9 @@ assert(type(1.5) == "float")
 assert(type(true) == "boolean")
 assert(type(null) == "null")
 
-# Long Integer (bigger than 32-bit)
+# Integers are 64-bit: a large value is still an int
 let big = 9999999999
-assert(type(big) == "long")
+assert(type(big) == "int")
 
 # Characters
 let ch = 'A'

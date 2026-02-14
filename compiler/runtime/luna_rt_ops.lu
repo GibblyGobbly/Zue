@@ -30,6 +30,24 @@ func _overflow(op) {
           cstr("integer overflow in '%s'"), op, 0, 0)
 }
 
+func _float_overflow(op) {
+    _errf(E_RUNTIME, cstr("Luna has no infinity: the result must fit in a 64-bit float."),
+          cstr("float overflow in '%s'"), op, 0, 0)
+}
+
+# A float result that is not infinite or NaN (the exponent bits are not all ones).
+func _is_finite(bits) {
+    return band(shr(bits, 52), 2047) != 2047
+}
+
+# Stores the float r in o, or raises an overflow error naming the operator.
+func _flt_checked(o, r, op) {
+    if (_is_finite(r) == 0) {
+        _float_overflow(op)
+    }
+    _flt(o, r)
+}
+
 func _div_zero() {
     lv_error(E_RUNTIME, cstr("division by zero"), cstr("Check the divisor before dividing."))
 }
@@ -41,6 +59,7 @@ func _oob(idx, len, what) {
 
 # ---- arithmetic ---------------------------------------------------------------------------
 
+# A number element as a double; a dense list holds only numbers.
 func _elem(v) {
     if (_tag(v) == T_INT) {
         return i2f(_val(v))
@@ -48,7 +67,8 @@ func _elem(v) {
     if (_tag(v) == T_FLOAT) {
         return _val(v)
     }
-    return 0
+    _errf(E_TYPE, cstr("A dense list holds only numbers."),
+          cstr("cannot store a %s in a dense list"), _type_name(v), 0, 0)
 }
 
 func _float_op(op, x, y) {
@@ -64,17 +84,46 @@ func _float_op(op, x, y) {
     return fdiv(x, y)
 }
 
-# Element-wise arithmetic on two lists or two dense lists: the result is a
-# dense list (an empty list when two empty plain lists meet), and a list mixed with a
-# dense list gives null. Division follows IEEE rules.
+func _op_symbol(op) {
+    if (op == 0) {
+        return cstr("+")
+    }
+    if (op == 1) {
+        return cstr("-")
+    }
+    if (op == 2) {
+        return cstr("*")
+    }
+    return cstr("/")
+}
+
+# Element i of a list or dense list as a double; an element that is not a number is an error.
+func _list_elem(v, i, op) {
+    if (_tag(v) == T_DENSE) {
+        return ld64(_val(v) + D_DATA)[i]
+    }
+    let e = ld64(_val(v) + L_ITEMS) + 16 * i
+    if (_tag(e) != T_INT and _tag(e) != T_FLOAT) {
+        _errf4(E_TYPE, cstr("Both lists must hold only numbers."),
+               cstr("cannot use '%s' on a list: element %d is a %s, not a number"), op, i, _type_name(e), 0)
+    }
+    return _num(e)
+}
+
+# Element-wise arithmetic on two lists or two dense lists of the same length: the result is a
+# dense list (an empty list when two empty plain lists meet). A list mixed with a dense list,
+# lists of different lengths, a non-number element, a division by zero and a result that is
+# not finite are errors.
 func _list_arith(o, op, a, b) {
+    let sym = _op_symbol(op)
     let n = 0
     let ta = _tag(a)
     let tb = _tag(b)
     if (ta == T_DENSE and tb == T_DENSE) {
         n = ld64(_val(a) + D_COUNT)
-        if (ld64(_val(b) + D_COUNT) < n) {
-            n = ld64(_val(b) + D_COUNT)
+        if (ld64(_val(b) + D_COUNT) != n) {
+            _errf4(E_ARGUMENT, cstr("Both lists need the same number of elements."),
+                   cstr("cannot use '%s' on lists of different lengths (%d and %d)"), sym, n, ld64(_val(b) + D_COUNT), 0)
         }
         if (n == 0) {
             _dense_new(o, 0)
@@ -82,33 +131,31 @@ func _list_arith(o, op, a, b) {
         }
     } else if (ta == T_LIST and tb == T_LIST) {
         n = ld64(_val(a) + L_COUNT)
-        if (ld64(_val(b) + L_COUNT) < n) {
-            n = ld64(_val(b) + L_COUNT)
+        if (ld64(_val(b) + L_COUNT) != n) {
+            _errf4(E_ARGUMENT, cstr("Both lists need the same number of elements."),
+                   cstr("cannot use '%s' on lists of different lengths (%d and %d)"), sym, n, ld64(_val(b) + L_COUNT), 0)
         }
         if (n == 0) {
             _list_new(o, 0)
             return 0
         }
     } else {
-        _null(o)
-        return 0
+        _errf(E_TYPE, cstr("Use two lists, or two dense lists."),
+              cstr("cannot use '%s' on a %s and a %s"), sym, _type_name(a), _type_name(b))
     }
     _dense_new(o, n)
     let out = ld64(_val(o) + D_DATA)
     for (let i = 0; i < n; i++) {
-        let x = 0
-        let y = 0
-        if (ta == T_DENSE) {
-            x = ld64(_val(a) + D_DATA)[i]
-        } else {
-            x = _elem(ld64(_val(a) + L_ITEMS) + 16 * i)
+        let x = _list_elem(a, i, sym)
+        let y = _list_elem(b, i, sym)
+        if (op == 3 and feq(y, 0.0)) {
+            _div_zero()
         }
-        if (tb == T_DENSE) {
-            y = ld64(_val(b) + D_DATA)[i]
-        } else {
-            y = _elem(ld64(_val(b) + L_ITEMS) + 16 * i)
+        let r = _float_op(op, x, y)
+        if (_is_finite(r) == 0) {
+            _float_overflow(sym)
         }
-        out[i] = _float_op(op, x, y)
+        out[i] = r
     }
 }
 
@@ -123,7 +170,7 @@ func lvp_add(o, a, b) {
         return 0
     }
     if (_is_num(a) and _is_num(b)) {
-        _flt(o, fadd(_num(a), _num(b)))
+        _flt_checked(o, fadd(_num(a), _num(b)), cstr("+"))
         return 0
     }
     if (ta == T_STR and tb == T_STR) {
@@ -150,7 +197,7 @@ func lvp_sub(o, a, b) {
         return 0
     }
     if (_is_num(a) and _is_num(b)) {
-        _flt(o, fsub(_num(a), _num(b)))
+        _flt_checked(o, fsub(_num(a), _num(b)), cstr("-"))
         return 0
     }
     if (_is_listish(a) and _is_listish(b)) {
@@ -169,7 +216,7 @@ func lvp_mul(o, a, b) {
         return 0
     }
     if (_is_num(a) and _is_num(b)) {
-        _flt(o, fmul(_num(a), _num(b)))
+        _flt_checked(o, fmul(_num(a), _num(b)), cstr("*"))
         return 0
     }
     if (_is_listish(a) and _is_listish(b)) {
@@ -195,7 +242,7 @@ func lvp_div(o, a, b) {
         if (feq(d, 0.0)) {
             _div_zero()
         }
-        _flt(o, fdiv(_num(a), d))
+        _flt_checked(o, fdiv(_num(a), d), cstr("/"))
         return 0
     }
     if (_is_listish(a) and _is_listish(b)) {

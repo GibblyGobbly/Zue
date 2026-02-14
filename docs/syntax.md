@@ -20,8 +20,7 @@ long as the call happens after that definition has run.
 
 | Literal | `type()` |
 |---|---|
-| `42`, `-7` | `int` |
-| an integer outside the 32-bit range, such as `9223372036854775807` | `long` |
+| `42`, `-7`, `9223372036854775807` (integers are 64-bit) | `int` |
 | `1.5`, `3.0` | `float` |
 | `'c'` | `char` |
 | `"text"` | `string` |
@@ -33,8 +32,7 @@ long as the call happens after that definition has run.
 | builtins such as `len` | `native_function` |
 
 Other values report `file` (from `open`), `bloc`, `box`, `template`, `pointer` (inside
-`unsafe`), and `map` for a `data` value. `long` is only a label: integers are 64-bit
-everywhere, and `int` and `long` values mix freely.
+`unsafe`), and `map` for a `data` value.
 
 `dense_list(n, init)` creates a contiguous float list for vector math (see
 [math](builtins.md#math)); its `type()` is `list`. `data`, `bloc`, `box` and
@@ -268,3 +266,24 @@ function names.
 - [modules](modules.md): `use`, `export`, `import`
 - [data-types](data-types.md): `data`, `bloc`, `box`, `template`
 - [unsafe](unsafe.md): manual memory
+
+## Type checking
+
+The compiler checks the types of the main program before it builds it. A mistake it can prove is
+a `Type Error` with the line, and the program is not built.
+
+- A variable has the type of its first value and keeps it: after `let x = 10`, `x = "a"` and
+  `x = 2.5` are errors. A variable that starts as `null` or has no value (`let x`) takes the type
+  of the first value assigned to it.
+- A number written in the source adapts to the type it is used as: `sqrt(16)` and `2.5 * 2` are
+  fine. A variable never converts: with `let n = 16`, `sqrt(n)` and `n + 1.5` are errors. Write
+  `sqrt(float(n))` to convert on purpose.
+- Operators need operands of the same type. `"a" + 1`, `"a" * 2`, `-"a"`, `1 == "a"` and
+  `3 == 3.0` for a variable are errors, and so is dividing by a zero written in the source.
+- `if`, `while`, `for`, `not`, `and` and `or` need a `bool`.
+- The math builtins check their arguments: `sqrt(float)`, `pow(int, int)` or `pow(float, float)`,
+  `floor(float)` giving an int, `rand(int)`, and so on.
+- Where the checker cannot tell a type (function parameters, list items, results of user
+  functions), it says nothing and the runtime checks still apply.
+
+Only the main file is checked for now; imported modules are not.

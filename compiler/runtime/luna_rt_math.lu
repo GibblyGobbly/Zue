@@ -86,6 +86,10 @@ func lb_clamp(self_p, argc_i, argv_p) {
     _arg_num(self_p, argv_p, 0)
     _arg_num(self_p, argv_p, 1)
     _arg_num(self_p, argv_p, 2)
+    if (_sort_cmp(argv_p + 16, argv_p + 32) > 0) {
+        lv_error(E_ARGUMENT, cstr("clamp() lower bound is greater than the upper bound"),
+                 cstr("Write clamp(value, low, high) with low <= high."))
+    }
     let o = stack_buf(16)
     if (_sort_cmp(argv_p, argv_p + 16) < 0) {
         _cp(o, argv_p + 16)
@@ -115,11 +119,30 @@ func _cbrt(x) {
     return r
 }
 
+func _domain(self_p, what) {
+    _errf(E_ARGUMENT, cstr("Check the argument before calling."),
+          cstr("%s() %s"), _fname(self_p), what, 0)
+}
+
+func _math_overflow(self_p) {
+    _errf(E_RUNTIME, cstr("Luna has no infinity: the result must fit in a 64-bit float."),
+          cstr("float overflow in %s()"), _fname(self_p), 0, 0)
+}
+
 # One-argument math: which picks the function.
 func _math1(self_p, argc_i, argv_p, which, o) {
     lv_arity(self_p, argc_i, 1, 1)
     let x = _arg_num(self_p, argv_p, 0)
     let r = 0
+    if (which == 0 and flt(x, 0.0)) {
+        _domain(self_p, cstr("argument must not be negative"))
+    }
+    if ((which == 3 or which == 4) and fle(x, 0.0)) {
+        _domain(self_p, cstr("argument must be greater than 0"))
+    }
+    if ((which == 8 or which == 9) and (flt(x, -1.0) or fgt(x, 1.0))) {
+        _domain(self_p, cstr("argument must be between -1 and 1"))
+    }
     if (which == 0) {
         r = sqrt(x)
     } else if (which == 1) {
@@ -154,6 +177,9 @@ func _math1(self_p, argc_i, argv_p, which, o) {
         r = fdiv(fmul(x, 3.14159265358979323846), 180.0)
     } else {
         r = fdiv(fmul(x, 180.0), 3.14159265358979323846)
+    }
+    if (_is_finite(r) == 0) {
+        _math_overflow(self_p)
     }
     _flt(o, r)
 }
@@ -260,12 +286,13 @@ func lb_rad_to_deg(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-func _round_to_int(o, r) {
-    if (fgt(r, -9300000000000000000.0) == 0 or flt(r, 9300000000000000000.0) == 0) {
-        _flt(o, r)
-    } else {
-        _int(o, f2i(r))
+# The int for r, or an error when r (also NaN) is outside -2^63 <= r < 2^63.
+func _round_to_int(self_p, o, r) {
+    if (fge(r, -9223372036854775808.0) == 0 or flt(r, 9223372036854775808.0) == 0) {
+        _errf(E_RUNTIME, cstr("Keep the value in the 64-bit int range, or use the float result."),
+              cstr("%s() result does not fit in a 64-bit int"), _fname(self_p), 0, 0)
     }
+    _int(o, f2i(r))
 }
 
 # 0 = floor, 1 = ceil, 2 = round, 3 = trunc
@@ -277,13 +304,13 @@ func _round_builtin(self_p, argc_i, argv_p, which, o) {
     }
     let x = _arg_num(self_p, argv_p, 0)
     if (which == 0) {
-        _round_to_int(o, floor(x))
+        _round_to_int(self_p, o, floor(x))
     } else if (which == 1) {
-        _round_to_int(o, ceil(x))
+        _round_to_int(self_p, o, ceil(x))
     } else if (which == 2) {
-        _round_to_int(o, round(x))
+        _round_to_int(self_p, o, round(x))
     } else {
-        _round_to_int(o, trunc(x))
+        _round_to_int(self_p, o, trunc(x))
     }
 }
 
@@ -311,10 +338,51 @@ func lb_trunc(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# base ** exp for ints with exp >= 0, by repeated squaring; an overflow is an error.
+func _int_pow(base, n) {
+    let result = 1
+    let b = base
+    let e = n
+    while (e > 0) {
+        if (band(e, 1) != 0) {
+            if (mulof(result, b) != 0) {
+                _overflow(cstr("pow"))
+            }
+            result = result * b
+        }
+        e = shr(e, 1)
+        if (e > 0) {
+            if (mulof(b, b) != 0) {
+                _overflow(cstr("pow"))
+            }
+            b = b * b
+        }
+    }
+    return result
+}
+
 func lb_pow(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
+    _arg_num(self_p, argv_p, 0)
+    _arg_num(self_p, argv_p, 1)
     let o = stack_buf(16)
-    _flt(o, pow(_arg_num(self_p, argv_p, 0), _arg_num(self_p, argv_p, 1)))
+    if (_tag(argv_p) == T_INT and _tag(argv_p + 16) == T_INT and _val(argv_p + 16) >= 0) {
+        _int(o, _int_pow(_val(argv_p), _val(argv_p + 16)))
+        retp(o)
+    }
+    let x = _num(argv_p)
+    let y = _num(argv_p + 16)
+    if (feq(x, 0.0) and flt(y, 0.0)) {
+        _div_zero()
+    }
+    if (flt(x, 0.0) and fne(y, trunc(y))) {
+        _domain(self_p, cstr("base must not be negative when the exponent is not a whole number"))
+    }
+    let r = pow(x, y)
+    if (_is_finite(r) == 0) {
+        _math_overflow(self_p)
+    }
+    _flt(o, r)
     retp(o)
 }
 
@@ -342,7 +410,11 @@ func lb_lerp(self_p, argc_i, argv_p) {
     let b = _arg_num(self_p, argv_p, 1)
     let t = _arg_num(self_p, argv_p, 2)
     let o = stack_buf(16)
-    _flt(o, fadd(a, fmul(fsub(b, a), t)))
+    let r = fadd(a, fmul(fsub(b, a), t))
+    if (_is_finite(r) == 0) {
+        _math_overflow(self_p)
+    }
+    _flt(o, r)
     retp(o)
 }
 
@@ -465,15 +537,16 @@ func lb_flush(self_p, argc_i, argv_p) {
 # ---- dense lists and vector math ----------------------------------------------------------------------
 
 func lb_dense_list(self_p, argc_i, argv_p) {
-    if (argc_i != 2 or _tag(argv_p) != T_INT or _tag(argv_p + 16) != T_FLOAT) {
-        lv_error(E_ARGUMENT, cstr("dense_list() expects (size: int, fill: float)"), cstr("Usage: dense_list(100, 1.5)"))
+    lv_arity(self_p, argc_i, 2, 2)
+    _arg_int(self_p, argv_p, 0)
+    if (_tag(argv_p + 16) != T_FLOAT) {
+        _arg_fail(self_p, argv_p, 1, cstr("float"))
     }
     let n = _val(argv_p)
-    let o = stack_buf(16)
-    if (n <= 0) {
-        _dense_new(o, 0)
-        retp(o)
+    if (n < 0) {
+        lv_error(E_ARGUMENT, cstr("dense_list() size must not be negative"), cstr("Usage: dense_list(100, 1.5)"))
     }
+    let o = stack_buf(16)
     _dense_new(o, n)
     let dat = ld64(_val(o) + D_DATA)
     for (let i = 0; i < n; i++) {
@@ -483,11 +556,7 @@ func lb_dense_list(self_p, argc_i, argv_p) {
 }
 
 func _vec_op(self_p, argc_i, argv_p, op, o) {
-    if (argc_i != 2) {
-        printf(cstr("Error: %s expects 2 lists\n"), _fname(self_p))
-        _null(o)
-        return 0
-    }
+    lv_arity(self_p, argc_i, 2, 2)
     _list_arith(o, op, argv_p, argv_p + 16)
 }
 
@@ -516,27 +585,31 @@ func lb_vec_div(self_p, argc_i, argv_p) {
 }
 
 func lb_vec_mul_inline(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 2)
+    if (_tag(argv_p) != T_DENSE) {
+        _arg_fail(self_p, argv_p, 0, cstr("dense list"))
+    }
+    if (_tag(argv_p + 16) != T_DENSE) {
+        _arg_fail(self_p, argv_p, 1, cstr("dense list"))
+    }
+    let a = _val(argv_p)
+    let b = _val(argv_p + 16)
+    let n = ld64(a + D_COUNT)
+    if (ld64(b + D_COUNT) != n) {
+        _errf4(E_ARGUMENT, cstr("Both lists need the same number of elements."),
+               cstr("vec_mul_inline() lists have different lengths (%d and %d)"), n, ld64(b + D_COUNT), 0, 0)
+    }
+    let da = ld64(a + D_DATA)
+    let db = ld64(b + D_DATA)
+    for (let i = 0; i < n; i++) {
+        let r = fmul(da[i], db[i])
+        if (_is_finite(r) == 0) {
+            _float_overflow(cstr("*"))
+        }
+        da[i] = r
+    }
     let o = stack_buf(16)
     _null(o)
-    if (argc_i != 2) {
-        printf(cstr("Error: vec_mul_inline expects 2 lists\n"))
-        retp(o)
-    }
-    if (_tag(argv_p) == T_DENSE and _tag(argv_p + 16) == T_DENSE) {
-        let a = _val(argv_p)
-        let b = _val(argv_p + 16)
-        let n = ld64(a + D_COUNT)
-        if (ld64(b + D_COUNT) < n) {
-            n = ld64(b + D_COUNT)
-        }
-        let da = ld64(a + D_DATA)
-        let db = ld64(b + D_DATA)
-        for (let i = 0; i < n; i++) {
-            da[i] = fmul(da[i], db[i])
-        }
-    } else {
-        printf(cstr("Error: vec_mul_inline requires dense lists for A and B.\n"))
-    }
     retp(o)
 }
 
@@ -558,15 +631,15 @@ func _row_at(r, j) {
 }
 
 func lb_mat_mul(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 2)
     let o = stack_buf(16)
-    _null(o)
-    if (argc_i != 2) {
-        retp(o)
-    }
     let a = argv_p
     let b = argv_p + 16
-    if (_is_listish(a) == 0 or _is_listish(b) == 0) {
-        retp(o)
+    if (_is_listish(a) == 0) {
+        _arg_fail(self_p, argv_p, 0, cstr("list of rows"))
+    }
+    if (_is_listish(b) == 0) {
+        _arg_fail(self_p, argv_p, 1, cstr("list of rows"))
     }
     let rows_a = 1
     let rows_b = 1
@@ -591,8 +664,8 @@ func lb_mat_mul(self_p, argc_i, argv_p) {
     let cols_a = _row_len(first_a)
     let cols_b = _row_len(first_b)
     if (cols_a != rows_b or cols_a == 0) {
-        printf(cstr("Runtime Error: Matrix dimension mismatch (%d cols vs %d rows)\n"), cols_a, rows_b)
-        retp(o)
+        _errf(E_ARGUMENT, cstr("The first matrix needs as many columns as the second has rows."),
+              cstr("mat_mul() dimension mismatch (%d columns vs %d rows)"), cols_a, rows_b, 0)
     }
     let fa = lv_alloc(8 * rows_a * cols_a)
     let fb = lv_alloc(8 * rows_b * cols_b)
@@ -622,7 +695,11 @@ func lb_mat_mul(self_p, argc_i, argv_p) {
         for (let k = 0; k < cols_a; k++) {
             let av = fa[i * cols_a + k]
             for (let j = 0; j < cols_b; j++) {
-                fc[i * cols_b + j] = fadd(fc[i * cols_b + j], fmul(av, fb[k * cols_b + j]))
+                let r = fadd(fc[i * cols_b + j], fmul(av, fb[k * cols_b + j]))
+                if (_is_finite(r) == 0) {
+                    _float_overflow(cstr("*"))
+                }
+                fc[i * cols_b + j] = r
             }
         }
     }
@@ -694,34 +771,26 @@ func _srand_default() {
 }
 
 func lb_trand(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 0, 0)
     let o = stack_buf(16)
     _int(o, _os_entropy())
     retp(o)
 }
 
 func lb_srand(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 0, 1)
     if (argc_i == 0) {
         _seed(_os_entropy())
-    } else if (_tag(argv_p) == T_INT) {
-        _seed(_val(argv_p))
     } else {
-        _seed(f2i(_val(argv_p)))
+        _seed(_arg_int(self_p, argv_p, 0))
     }
     let o = stack_buf(16)
     _null(o)
     retp(o)
 }
 
-# An argument of rand() as an integer: ints as they are, anything else as a double
-# truncated.
-func _rand_arg(v) {
-    if (_tag(v) == T_INT) {
-        return _val(v)
-    }
-    return f2i(_val(v))
-}
-
 func lb_rand(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 0, 2)
     let o = stack_buf(16)
     if (argc_i == 0) {
         let r = _rng_next()
@@ -731,14 +800,10 @@ func lb_rand(self_p, argc_i, argv_p) {
     let lo = 0
     let hi = 0
     if (argc_i == 1) {
-        hi = _rand_arg(argv_p)
-    } else if (argc_i == 2) {
-        lo = _rand_arg(argv_p)
-        hi = _rand_arg(argv_p + 16)
+        hi = _arg_int(self_p, argv_p, 0)
     } else {
-        fprintf(_stderr(), cstr("Runtime Error: rand() takes 0, 1, or 2 arguments.\n"))
-        _null(o)
-        retp(o)
+        lo = _arg_int(self_p, argv_p, 0)
+        hi = _arg_int(self_p, argv_p, 1)
     }
     if (lo > hi) {
         let t = lo
@@ -747,7 +812,8 @@ func lb_rand(self_p, argc_i, argv_p) {
     }
     let range = hi - lo + 1
     if (range == 0) {
-        _int(o, lo)
+        # The range covers every 64-bit value.
+        _int(o, _rng_next())
         retp(o)
     }
     _int(o, lo + urem(_rng_next(), range))

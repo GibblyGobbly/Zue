@@ -105,7 +105,7 @@ assert(sign(50) == 1)
 assert(sign(0) == 0)
 
 # Powers and roots
-assert(pow(2, 3) == 8.0)
+assert(pow(2, 3) == 8)
 assert(sqrt(16) == 4.0)
 assert(cbrt(27) == 3.0)
 
