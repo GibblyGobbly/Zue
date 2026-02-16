@@ -8,6 +8,8 @@
 #   luna build prog.lu -o prog [-S]     build a binary; -S keeps C/prog.ll and stops
 #   luna run prog.lu [args...]          build into C/run/ and run it
 #   luna emit prog.lu [-o out.ll]       write the LLVM IR only
+#   luna ast prog.lu                    print the syntax tree as text
+#   luna unparse prog.lu                print the program as source again
 #   luna --native a.lu b.lu -o out.ll   compile runtime source (see emit_native.lu)
 #
 # The compiler is split into the modules next to this file. This one is the driver.
@@ -21,6 +23,8 @@ use { parse_program } from "parser.lu"
 use { compile_program_ll } from "emit_llvm.lu"
 use { compile_native } from "emit_native.lu"
 use { ST } from "state.lu"
+use { dump_program } from "ast_dump.lu"
+use { unparse_program } from "ast_unparse.lu"
 
 # Name of a file without its directory and extension: "dir/prog.lu" is "prog".
 func base_name(path) {
@@ -52,10 +56,14 @@ func usage() {
     print("usage: luna build prog.lu -o program [-S]")
     print("       luna run prog.lu [args...]")
     print("       luna emit prog.lu [-o out.ll]")
+    print("       luna ast prog.lu")
+    print("       luna unparse prog.lu")
     print("")
     print("  build  compile to a native binary through LLVM IR")
     print("  run    build into C/run/ and run it with the given arguments")
     print("  emit   write LLVM IR only (default C/<name>.ll)")
+    print("  ast    print the parsed syntax tree, one statement per line")
+    print("  unparse  print the parsed program as source again")
     print("  -o     where to write the program or the IR")
     print("  -S     with build: write C/<name>.ll and do not build")
     exit(1)
@@ -158,6 +166,22 @@ func emit_main(a) {
     print("[OK] wrote {out_path}")
 }
 
+# luna ast prog.lu: the syntax tree as text (see ast_dump.lu).
+func ast_main(a) {
+    ST.src_file = a[0]
+    let text = read_file(a[0])
+    ST.src_lines = split_lines(text)
+    print(dump_program(parse_program(lex(text, 1))))
+}
+
+# luna unparse prog.lu: the program written back as source (see ast_unparse.lu).
+func unparse_main(a) {
+    ST.src_file = a[0]
+    let text = read_file(a[0])
+    ST.src_lines = split_lines(text)
+    print(unparse_program(parse_program(lex(text, 1))))
+}
+
 # luna --native a.lu b.lu ... -o out.ll: compiles runtime files (emit_native.lu).
 func native_main(a) {
     let files = []
@@ -213,6 +237,10 @@ func main() {
         run_main(rest)
     } else if (cmd == "emit" and len(rest) >= 1) {
         emit_main(rest)
+    } else if (cmd == "ast" and len(rest) == 1) {
+        ast_main(rest)
+    } else if (cmd == "unparse" and len(rest) == 1) {
+        unparse_main(rest)
     } else if (ends_with(cmd, ".lu")) {
         positional_main(a)
     } else {

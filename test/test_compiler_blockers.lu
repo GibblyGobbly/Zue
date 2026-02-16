@@ -11,7 +11,7 @@ assert(join([], ",") == "")
 
 // \{ and \} are literal braces, even next to interpolation
 let n = 3
-assert("int main(void) \{ return {n}; \}" == "int main(void) " + "{" + " return 3; " + "}")
+assert("int main(void) \{ return {n}; \}" == "int main(void) " + "\{" + " return 3; " + "}")
 assert(len("\{\}") == 2)
 
 // deep recursion (the parser and code generator recurse)

@@ -5,9 +5,12 @@ yourself. Most programs never need it. Lists, maps, strings and `dense_list` cov
 
 The runtime side is `compiler/runtime/luna_rt_data.lu`, which performs allocation, loads,
 stores and frees. Every operation is first checked by the rule functions in
-`compiler/runtime/luna_rt_rules.lu` (the allocation table and the twelve pointer rules). The
-`address_of` call is compiled specially by the compiler (`compiler/emit_llvm.lu`),
-and rule R12 is checked at compile time by `compiler/lint.lu`.
+`compiler/runtime/luna_rt_rules.lu` (the allocation table and the ten pointer rules). The
+`address_of` call is compiled specially by the compiler (`compiler/emit_llvm.lu`), which also
+inserts the check that stops a pointer from leaving its block.
+
+Your own functions may be called inside a block. A pointer is always tied to the block that made it,
+and every `alloc` must be freed before that block ends.
 
 ## Functions
 
@@ -35,8 +38,30 @@ Outside `unsafe`, `defer(call(...))` schedules a call for scope exit, for exampl
   frees it, only `free` or `defer` does. It is registered as a root range, so Luna values
   stored in its slots stay alive while the buffer exists.
 - Normal Luna values inside an `unsafe` block are still GC-managed as usual.
-- A raw pointer may not be stored in a list, map or other GC value (R7), so the collector
+- A raw pointer may not be stored in a list, map or other GC value (R2), so the collector
   never sees one.
+
+## Templates and blocs made by hand
+
+`alloc(object)` with a `template` or `bloc` value copies the object to the C heap, outside the
+garbage collector, and returns a pointer. Fields are read and written through it, and the same
+rules apply as for any allocation (free or defer it, it cannot leave the block, use after free is an
+error):
+
+```javascript
+template Player { name: string, hp: int }
+
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    defer(p)
+    p.hp = p.hp - 20
+    print(p.hp)          # 80
+}
+```
+
+A `bloc` made this way is read-only. An object that holds a `box` cannot be copied this way. Typed
+field checks still apply. `load` and `store` do not work on a whole object. A `bloc` can be made
+inside `unsafe`; a `box` cannot.
 
 ## Lifecycle Example
 
@@ -144,30 +169,30 @@ unsafe {
 | Rule | Meaning |
 |---|---|
 | `R1` | No pointer-to-pointer through `address_of()` |
-| `R2` | Pointers cannot escape the current `unsafe` block |
+| `R2` | A pointer stays inside the `unsafe` block that made it: it cannot be assigned to a variable declared outside the block, returned from it, or stored in a global, list or map |
 | `R3` | `ptr_offset()` cannot go out of bounds |
 | `R4` | No use-after-free and no double free |
 | `R5` | `address_of()` only works on named values, and only inside `unsafe` |
-| `R6` | Nested `unsafe` blocks are rejected |
-| `R7` | Pointers cannot be stored in GC-managed values |
-| `R8` | `alloc()` size must be a positive integer |
-| `R9` | Ordered pointer comparisons need the same base allocation |
-| `R10` | Pointers may only be cast with `int(ptr)` |
-| `R11` | Only builtin calls are allowed inside `unsafe` |
-| `R12` | `free()` inside conditional control flow is rejected (static lint) |
+| `R6` | `unsafe` blocks cannot be nested in the source: the outer block already allows everything. This is a compile-time error. A function that has its own `unsafe` block can still be called from inside another one |
+| `R7` | `alloc()` size must be a positive integer |
+| `R8` | Ordered pointer comparisons need the same base allocation |
+| `R9` | Pointers may only be cast with `int(ptr)` |
+| `R10` | Every `alloc()` is freed, with `free` or `defer`, before its block ends; a leak is an error that names the line of the `alloc` |
 
-R11 is more policy than memory safety. It keeps pointer lifetime analysis simple by forbidding
-user-defined calls inside `unsafe`.
+Rules are checked when the operation runs, except R6, which is a compile-time error. A rule
+violation stops the program with exit status 1. `box` and `bloc` values are rejected inside `unsafe` blocks.
 
-## When rules are checked
+Together the rules say three things. A pointer never outlives its block (R1, R2, R5). Every
+access stays inside a live allocation (R3, R4, R7, R8). And nothing turns a pointer into another
+kind of value, except its address as an int (R9). R10 makes sure memory is given back. R6 keeps the
+idea of "the block" simple: there is one block at a time in the source.
 
-R1 to R11 are checked when the operation runs. R12 is checked by the compiler: the program is
-compiled, but it reports a `Static Error` at start-up, before any other statement runs. A rule
-violation stops the program with exit status 1. `box` and `bloc` values are also rejected inside
-`unsafe` blocks.
+`free` may appear anywhere, including inside a condition or a loop. Calling your own functions is
+allowed, with pointers as arguments or results, as long as R2 holds. A function that returns a
+pointer it made returns it into the block that called it.
 
 `test/test_unsafe_errors.lu` has one case per rule, compared against the recorded output in
-`test/expected/` (see [testing](testing.md)).
+`test/expected/` (see [testing](testing.md)), and `test/test_unsafe_blocks.lu` shows what is allowed.
 
 ## Error Cases
 
@@ -178,22 +203,28 @@ These examples intentionally fail. The message shown is the recorded one.
 ```javascript
 unsafe {
     let buf = alloc(1)
+    defer(buf)
     let bad = address_of(buf)
 }
 ```
 
 Expected message: `cannot take address_of() of a pointer value`
 
-### R2: pointer escape
+### R2: a pointer leaving its block
 
 ```javascript
-let escaped = null
-
-unsafe {
-    let buf = alloc(1)
-    escaped = buf
+func f() {
+    let outer = null
+    unsafe {
+        let buf = alloc(1)
+        defer(buf)
+        outer = buf          # assigned to a variable declared outside the block
+    }
 }
 ```
+
+The same message appears for `return buf` inside the block, for assigning to a global, and (with
+the message `pointers cannot be stored inside GC-managed values`) for `[buf]` or `{"k": buf}`.
 
 Expected message: `pointer cannot escape the current unsafe block`
 
@@ -202,6 +233,7 @@ Expected message: `pointer cannot escape the current unsafe block`
 ```javascript
 unsafe {
     let buf = alloc(1)
+    defer(buf)
     let bad = ptr_offset(buf, 1)
 }
 ```
@@ -209,7 +241,7 @@ unsafe {
 Expected message: `ptr_add() moved outside the allocation bounds` (the message uses the older
 name of `ptr_offset`)
 
-### R4: use after free
+### R4: use after free, double free
 
 ```javascript
 unsafe {
@@ -231,7 +263,7 @@ unsafe {
 
 Expected message: `address_of() only works on named values`
 
-### R6: nested `unsafe`
+### R6: unsafe inside unsafe
 
 ```javascript
 unsafe {
@@ -240,20 +272,9 @@ unsafe {
 }
 ```
 
-Expected message: `nested unsafe blocks are not allowed`
+Expected message: `unsafe blocks cannot be nested: the enclosing unsafe block already allows unsafe operations`
 
-### R7: pointer inside a GC value
-
-```javascript
-unsafe {
-    let buf = alloc(1)
-    let items = [buf]
-}
-```
-
-Expected message: `pointers cannot be stored inside GC-managed values`
-
-### R8: invalid allocation size
+### R7: invalid allocation size
 
 ```javascript
 unsafe {
@@ -263,56 +284,44 @@ unsafe {
 
 Expected message: `alloc() size must be a positive integer`
 
-### R9: ordered compare across different allocations
+### R8: ordered compare across different allocations
 
 ```javascript
 unsafe {
     let left = alloc(1)
     let right = alloc(1)
+    defer(left)
+    defer(right)
     let bad = left < right
 }
 ```
 
 Expected message: `ordered pointer comparisons need the same base allocation`
 
-### R10: invalid pointer cast
+### R9: invalid pointer cast
 
 ```javascript
 unsafe {
     let buf = alloc(1)
+    defer(buf)
     let bad = float(buf)
 }
 ```
 
 Expected message: `pointers may only be cast to int`
 
-### R11: non-builtin call inside `unsafe`
-
-```javascript
-func touch(ptr) {
-    free(ptr)
-}
-
-unsafe {
-    let buf = alloc(1)
-    touch(buf)
-}
-```
-
-Expected message: `only builtin calls are allowed inside unsafe blocks`
-
-### R12: conditional `free()`
+### R10: memory that was never freed
 
 ```javascript
 unsafe {
-    let buf = alloc(1)
-    if (true) {
-        free(buf)
-    }
+    let buf = alloc(4)
+    store(buf, 1)
 }
 ```
 
-Expected message: `free() may not appear inside conditional control flow`
+Expected message: `1 alloc() call(s) in this unsafe block were never freed; the first is at line 2`.
+Write `defer(buf)` right after `alloc`, or call `free(buf)` before the block ends. When a function
+with its own `unsafe` block is called from another block, each block checks the memory made inside it.
 
 ## Example 1: Basic Allocate, Store, Read
 

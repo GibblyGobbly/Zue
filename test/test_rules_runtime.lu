@@ -3,6 +3,7 @@
 # CASE ptr_offset stays inside the allocation
 unsafe {
     let a = alloc(4)
+    defer(a)
     let last = ptr_offset(a, 3)
     store(a, 1)
     store(last, 2)
@@ -43,6 +44,7 @@ unsafe {
 # CASE ordered comparison inside one allocation
 unsafe {
     let a = alloc(4)
+    defer(a)
     let b = ptr_offset(a, 2)
     assert(a < b)
     assert(b > a)
@@ -56,6 +58,8 @@ unsafe {
 unsafe {
     let a = alloc(1)
     let b = alloc(1)
+    defer(a)
+    defer(b)
     assert(a != b)
     assert(not (a == b))
     print("different bases are comparable with == and !=")
@@ -63,6 +67,7 @@ unsafe {
 # CASE int cast of a pointer
 unsafe {
     let a = alloc(1)
+    defer(a)
     let n = int(a)
     assert(n > 0)
     print(type(n))
@@ -129,14 +134,16 @@ print("box limit")
 # CASE box size zero
 let b = box[0]
 # CASE box size one over the limit
-let b = box[4097]
+let b = box[16777217]
 # CASE box size negative
 let b = box[-1]
-# CASE box access after free through an alias
+# CASE box access after free through a function parameter
+func poke(b) {
+    b[0] = 1
+}
 let a = box[4]
-let alias = a
 free(a)
-alias[0] = 1
+poke(a)
 # CASE a freed box handle stays freed after its slot is reused
 let old = box[2]
 free(old)
@@ -166,13 +173,13 @@ bloc Rect { min, max }
 let r = Rect{Vec2{0.5, 1.5}, Vec2{2.5, 3.5}}
 assert(r.max.y == 3.5)
 print("nested bloc")
-# CASE bloc redefinition with the same fields
+# CASE bloc redefinition in the same scope is a compile error
 bloc Pt { x, y }
 bloc Pt { x, y }
 let p = Pt{1, 2}
 assert(p.y == 2)
 print("redefined")
-# CASE template redefinition with the same fields
+# CASE template redefinition in the same scope is a compile error
 template Pair { left, right }
 template Pair { left, right }
 let p = Pair(1, 2)

@@ -1,0 +1,65 @@
+# CASE a box in a loop is fresh and zeroed each time
+for (let i = 0; i < 3; i++) {
+    let b = box[4]
+    print(b[0] + b[3])
+    b[0] = 9
+    b[3] = 7
+}
+# CASE every call has its own box
+func fill(n) {
+    let b = box[8]
+    b[0] = n
+    if (n > 0) {
+        fill(n - 1)
+    }
+    return b[0]
+}
+print(fill(5))
+# CASE the largest box and its last byte
+let big = box[4096]
+big[4095] = 200
+print(big[-1])
+print(big.len)
+# CASE a template that takes a box keeps its bytes after the function returns
+template Packet { bytes }
+func make_packet() {
+    let b = box[4]
+    b[0] = 11
+    b[3] = 44
+    return Packet(b)
+}
+let p = make_packet()
+print(p.bytes[0])
+print(p.bytes[3])
+print(p.bytes.len)
+# CASE a box with a variable size
+let n = 6
+let v = box[n]
+v[5] = 3
+print(v[5])
+print(v.len)
+# CASE a freed box cannot be used
+let b = box[2]
+free(b)
+print(b[0])
+# CASE a box cannot be freed twice
+let b = box[2]
+free(b)
+free(b)
+# CASE a box made inside a function
+let keep = null
+func leak_handle() {
+    let inner = box[2]
+    inner[0] = 5
+    return inner[0]
+}
+print(leak_handle())
+# CASE several boxes in one scope
+let a = box[3]
+let b = box[3]
+a[0] = 1
+b[0] = 2
+print(a[0] + b[0])
+# CASE out of range on a stack box
+let t = box[4]
+t[4] = 1

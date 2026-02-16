@@ -18,7 +18,7 @@ extern("isalnum", "i32", "i32")
 extern("toupper", "i32", "i32")
 extern("tolower", "i32", "i32")
 
-# ---- argument helpers ------------------------------------------------------------------
+# Argument helpers
 
 func _fname(self_p) {
     if (self_p != 0 and ld64(self_p + F_NAME) != 0) {
@@ -30,7 +30,7 @@ func _fname(self_p) {
 # "a" or "an" for a type name.
 func _article(what) {
     let c = ld8(what)
-    if (c == 97 or c == 101 or c == 105 or c == 111 or c == 117) {
+    if (c == 97 or c == 101 or c == 105 or c == 111 or c == 117 or c == 65 or c == 69 or c == 73 or c == 79 or c == 85) {
         return cstr("an")
     }
     return cstr("a")
@@ -95,7 +95,7 @@ func _text_str(self_p, v, i, tmp) {
     return _val(v)
 }
 
-# ---- core builtins ---------------------------------------------------------------------------
+# Core builtins
 
 func lb_len(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
@@ -116,6 +116,15 @@ func lb_len(self_p, argc_i, argv_p) {
     } else {
         _errf(E_TYPE, 0, cstr("len() needs a string, list or map, got %s"), _type_name(argv_p), 0, 0)
     }
+    retp(o)
+}
+
+func lb_print(self_p, argc_i, argv_p) {
+    for (let i = 0; i < argc_i; i++) {
+        lvp_print(argv_p + 16 * i)
+    }
+    let o = stack_buf(16)
+    _null(o)
     retp(o)
 }
 
@@ -483,7 +492,7 @@ func lb_clock(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-# ---- maps ---------------------------------------------------------------------------------------
+# Maps
 
 func lb_map_set(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 3, 3)
@@ -569,7 +578,7 @@ func lb_map_items(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-# ---- lists --------------------------------------------------------------------------------------
+# Lists
 
 func lb_remove(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
@@ -758,7 +767,7 @@ func lb_reduce(self_p, argc_i, argv_p) {
     retp(acc)
 }
 
-# ---- strings ------------------------------------------------------------------------------------
+# Strings
 
 func lb_is_empty(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)

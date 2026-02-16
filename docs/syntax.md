@@ -38,16 +38,18 @@ Other values report `file` (from `open`), `bloc`, `box`, `template`, `pointer` (
 [math](builtins.md#math)); its `type()` is `list`. `data`, `bloc`, `box` and
 `template` define structured values (see [data-types](data-types.md)).
 
-Number literals are decimal digits with an optional fractional part. There are no hex or
-binary literals and no exponent form (`1e3`).
+Number literals are decimal (`42`), hexadecimal (`0xFF`), binary (`0b1010`) or floating point
+(`3.14`, `1e3`, `2.5e-4`). A single `_` may separate digits (`1_000_000`, `0x7FFF_FFFF`). A number
+followed directly by a letter (`12abc`) or a value that does not fit in 64 bits is a syntax error.
 
 `/` follows the operand types: two ints give an int that truncates toward zero (`7 / 2` is `3`,
 `-7 / 2` is `-3`), and if either side is a float the result is a float (`7 / 2.0` is `3.5`).
 `%` takes the sign of the left operand (`-10 % 3` is `-1`) and also works on floats
 (`10.5 % 3` is `1.5`).
 
-Floats print with up to six significant digits, as C's `%g` does: `print(1.0)` prints `1`,
-`print(100.0 / 3)` prints `33.3333` and `print(1234567.0)` prints `1.23457e+06`.
+Floats print with up to six significant digits, as C's `%g` does, and always show that they are
+floats: `print(1.0)` prints `1.0`, `print(100.0 / 3)` prints `33.3333` and `print(1234567.0)` prints
+`1.23457e+06`.
 
 ## Variables
 
@@ -55,10 +57,15 @@ Floats print with up to six significant digits, as C's `%g` does: `print(1.0)` p
 let x = 10
 const version = "0.1"
 x = 20
-x += 5                    # also -=, *=, /=
+x += 5                    # also -=, *=, /=, %=
 x++
 x--
 ```
+
+`x++` and `x--` used as a value give the old value; `++x` and `--x` give the new one. A name is
+declared once per scope: `let x = 1` twice in the same block is a syntax error, but an inner
+block may declare its own `x`. Parameters count as declared in the body of their function, and
+a standalone `{ ... }` block is a scope of its own.
 
 `const` declares a binding that is meant to stay fixed; reassigning it is currently not
 rejected by the compiler.
@@ -73,9 +80,12 @@ print("next hp = {hp + 1}")           # next hp = 126
 print("slot = {[3, 7, 9][1]}")        # slot = 7
 ```
 
-Escapes: `\n`, `\t`, `\r`, `\"`, `\\`, `\{` and `\}`. Any other character after a backslash is
-taken literally. A string may span lines. Character literals are `'a'`, `'\n'`, `'\t'`
-and `'\0'`.
+Escapes: `\n`, `\t`, `\r`, `\"`, `\'`, `\\`, `\{` and `\}`. Any other character after a backslash
+is a syntax error. A `{` starts an interpolation, so a literal brace is written `\{` (`{}` with
+nothing between is kept as it is). The expression inside `{ }` may contain strings of its own:
+`"{len("abc")}"`. A string may span lines. A character literal holds exactly one character or
+one escape: `'a'`, `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\\'`, `'\''`. Only ASCII characters are allowed
+outside strings and comments.
 
 Indexing a string returns a `char`, and negative indices count from the end: `"Luna"[0]` is
 `'L'` and `"Luna"[-1]` is `'a'`. The library is in [string](builtins.md#strings).
@@ -86,7 +96,7 @@ Indexing a string returns a `char`, and negative indices count from the end: `"L
 |---|---|
 | Arithmetic | `+ - * / %`, unary `-` |
 | Comparison | `== != < <= > >=` |
-| Logical | `and` / `&&`, `or` / `\|\|`, `not` / `!` (short-circuit) |
+| Logical | `and` / `&&`, `or` / `\|\|`, `not` / `!` (short-circuit). `not` binds looser than a comparison and tighter than `and`: `not a == b` is `not (a == b)` |
 | Assignment | `= += -= *= /= ++ --` |
 
 Operators do no hidden conversions.
@@ -223,8 +233,8 @@ print("a")               # one line
 let name = input("Name: ")
 ```
 
-`print` and `input` are keywords of the grammar, not ordinary functions. When `print` receives
-several arguments, it prints each one on its own line. Use interpolation for one-line output:
+`print` and `input` are ordinary functions, so `let p = print` and `apply(print, x)` work. When
+`print` receives several arguments, it prints each one on its own line. Use interpolation for one-line output:
 `print("{a} {b}")`. `input(prompt)` writes the prompt and returns one line from standard
 input without the newline, or `""` at end of input.
 
@@ -257,9 +267,28 @@ grab_balls area(w, h) {
 
 ## Names to avoid
 
-The words `data`, `template`, `bloc`, `box`, `unsafe`, `use`, `from`, `export`, `import`,
-`print`, `input`, `in`, `case` and `default` are keywords and cannot be used as variable or
-function names.
+The words `template`, `bloc`, `box`, `unsafe`, `use`, `export`, `import`, `case` and `default`
+are keywords and cannot be used as variable or function names. `data`, `in` and `from` are
+keywords only where they mean something (`data Name {`, `for (let x in xs)`, `use {a} from`) and
+are ordinary names everywhere else. After a `.` any word is a field name: `m.data`, `m.in`.
+
+## Line breaks
+
+A statement ends at the end of its line. A line continues when it ends with a binary operator
+or a comma, or when it is inside `( )`, `[ ]` or a `{ }` literal, where line breaks are ignored.
+Trailing commas are allowed in lists, maps, calls, parameter lists and `use` lists.
+
+```javascript
+let total = 1 +
+    2 +
+    3
+let xs = [
+    1,
+    2,
+]
+```
+
+`return` followed by a line break returns nothing: the value must start on the same line.
 
 ## Next
 
@@ -283,7 +312,12 @@ a `Type Error` with the line, and the program is not built.
 - `if`, `while`, `for`, `not`, `and` and `or` need a `bool`.
 - The math builtins check their arguments: `sqrt(float)`, `pow(int, int)` or `pow(float, float)`,
   `floor(float)` giving an int, `rand(int)`, and so on.
-- Where the checker cannot tell a type (function parameters, list items, results of user
-  functions), it says nothing and the runtime checks still apply.
+- A function you write is checked at each call, with its parameters bound to the argument types:
+  `area(2, "a")` is an error at the call when the body does `w * h`, and the message names the
+  call (`in area(int, string), called at line 3`). A call with a number written in the source gives
+  that parameter the plain type (`16` is an int, `16.0` a float). The type of a call is the type
+  its `return` statements give; a recursive call needs a base case that returns first.
+- Where the checker cannot tell a type (list items, the result of a function whose returns differ,
+  function values), it says nothing and the runtime checks still apply.
 
 Only the main file is checked for now; imported modules are not.

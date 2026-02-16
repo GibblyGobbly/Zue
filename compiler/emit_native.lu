@@ -129,7 +129,7 @@ func from_type(v, ty) {
     return r
 }
 
-# Constants ---------------------------------------------------------------
+# Constants
 
 # The integer value of a constant expression, or null when it is not constant.
 func cfold(e) {
@@ -209,7 +209,7 @@ func band_free(a, b) {
     return true
 }
 
-# Expressions ---------------------------------------------------------------
+# Expressions
 
 func find_local(name) {
     let i = len(ST.ctx.scopes) - 1
@@ -699,7 +699,7 @@ func nx(n) {
     nfail(n, "Unsupported expression '{k}' in native code")
 }
 
-# Statements ----------------------------------------------------------------
+# Statements
 
 func local_slot(name) {
     let v = find_local(name)
@@ -920,7 +920,7 @@ func nst(n) {
     }
 }
 
-# Functions and the module ----------------------------------------------------
+# Functions and the module
 
 func param_kind(name) {
     if (ends_with(name, "_i")) {

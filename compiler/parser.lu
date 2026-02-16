@@ -5,46 +5,138 @@
 
 use { die } from "util.lu"
 use { lex } from "lexer.lu"
+use { KEYWORDS } from "token.lu"
 
 let P_toks = []
 let P_pos = 0
 
+# Number of ( [ and literal { currently open. Inside them a line break is only white space.
+let P_depth = 0
+
+# Names declared so far in each open scope, innermost last; a name may be declared once per scope.
+let P_scopes = [{}]
+
+func p_scope_push() {
+    append(P_scopes, {})
+}
+
+func p_scope_pop() {
+    remove(P_scopes, len(P_scopes) - 1)
+}
+
+func p_declare(name, line) {
+    let top = P_scopes[len(P_scopes) - 1]
+    if (top[name] != null) {
+        die("Syntax Error", line, "'{name}' is already declared in this scope")
+    }
+    top[name] = true
+}
+
+# The current token and its kind. While a bracket is open, line breaks are skipped before either is
+# set, so the parser never sees them there. p_sync must run whenever P_pos or P_depth changes.
+let P_tk = null
+let P_kind = ""
+
+func p_sync() {
+    if (P_depth > 0) {
+        while (P_toks[P_pos].t == "nl") {
+            P_pos += 1
+        }
+    }
+    P_tk = P_toks[P_pos]
+    P_kind = P_tk.t
+}
+
 func p_tok() {
-    return P_toks[P_pos]
+    return P_tk
 }
 
 func p_at(t) {
-    return P_toks[P_pos].t == t
+    return P_kind == t
 }
 
 func p_next() {
-    let tk = P_toks[P_pos]
+    let tk = P_tk
     if (P_pos < len(P_toks) - 1) {
         P_pos += 1
     }
+    p_sync()
     return tk
 }
 
 func p_eat(t) {
-    if (P_toks[P_pos].t == t) {
+    if (P_kind == t) {
         p_next()
         return true
     }
     return false
 }
 
+# Counts one more open bracket, after its opening token has been consumed.
+func p_enter() {
+    P_depth += 1
+    p_sync()
+}
+
+# Words that are keywords only where they mean something: in (for loops), from (use lists) and
+# data (data declarations). Elsewhere they are ordinary names.
+func p_at_word(w) {
+    let tk = P_tk
+    return tk.t == "id" and tk.v == w
+}
+
+func p_eat_word(w) {
+    if (p_at_word(w)) {
+        p_next()
+        return true
+    }
+    return false
+}
+
+func p_expect_word(w, msg) {
+    if (not p_at_word(w)) {
+        p_fail(msg)
+    }
+    return p_next()
+}
+
+# data Name { ... }: the word data, a name, then an opening brace.
+func p_at_data() {
+    if (not p_at_word("data")) {
+        return false
+    }
+    let i = P_pos + 1
+    return i + 1 < len(P_toks) and P_toks[i].t == "id" and P_toks[i + 1].t == "\{"
+}
+
+# Consumes the opening bracket t, and line breaks stop mattering until p_close.
+func p_open(t, msg) {
+    p_expect(t, msg)
+    p_enter()
+}
+
+# The closing bracket is checked first and the depth lowered before it is consumed, so a line break
+# after it still ends the statement.
+func p_close(t, msg) {
+    if (P_kind != t) {
+        p_fail(msg)
+    }
+    P_depth -= 1
+    p_next()
+}
+
 func p_skip_nl() {
-    while (P_toks[P_pos].t == "nl") {
+    while (P_kind == "nl") {
         p_next()
     }
 }
 
 func p_fail(msg) {
-    die("Syntax Error", P_toks[P_pos].line, msg)
+    die("Syntax Error", P_tk.line, msg)
 }
 
 func p_expect(t, msg) {
-    if (P_toks[P_pos].t != t) {
+    if (P_kind != t) {
         p_fail(msg)
     }
     return p_next()
@@ -58,15 +150,19 @@ func node(k, line) {
 func parse_inline(text, line) {
     let saved_toks = P_toks
     let saved_pos = P_pos
+    let saved_depth = P_depth
     P_toks = lex(text, line)
     P_pos = 0
+    P_depth = 1
+    p_sync()
     let e = p_expr()
-    p_skip_nl()
-    if (not p_at("eof")) {
+    if (not (P_kind == "eof")) {
         p_fail("Invalid expression inside string interpolation")
     }
     P_toks = saved_toks
     P_pos = saved_pos
+    P_depth = saved_depth
+    p_sync()
     return e
 }
 
@@ -97,86 +193,83 @@ func p_string(tk) {
 }
 
 func p_list_literal(line) {
+    p_enter()
     let items = []
-    p_skip_nl()
-    if (not p_at("]")) {
-        let more = true
-        while (more) {
-            p_skip_nl()
-            append(items, p_expr())
-            p_skip_nl()
-            more = p_eat(",")
+    while (not (P_kind == "]")) {
+        append(items, p_expr())
+        if (not p_eat(",")) {
+            break
         }
     }
-    p_skip_nl()
-    p_expect("]", "Expected ']' at end of list")
+    p_close("]", "Expected ']' at end of list")
     let n = node("list", line)
     n.items = items
     return n
 }
-
 func p_map_literal(line) {
+    p_enter()
     let keys = []
     let vals = []
-    p_skip_nl()
-    if (not p_at("}")) {
-        let more = true
-        while (more) {
-            p_skip_nl()
-            if (not p_at("str")) {
-                p_fail("Map literal keys must be strings")
-            }
-            let kt = p_next()
-            if (len(kt.v) != 1 or type(kt.v[0]) != "string") {
-                p_fail("Map literal keys must be plain strings")
-            }
-            append(keys, kt.v[0])
-            p_expect(":", "Expected ':' after map key")
-            append(vals, p_expr())
-            p_skip_nl()
-            more = p_eat(",")
+    while (not (P_kind == "}")) {
+        if (not (P_kind == "str")) {
+            p_fail("Map literal keys must be strings")
+        }
+        let kt = p_next()
+        if (len(kt.v) != 1 or type(kt.v[0]) != "string") {
+            p_fail("Map literal keys must be plain strings")
+        }
+        append(keys, kt.v[0])
+        p_expect(":", "Expected ':' after map key")
+        append(vals, p_expr())
+        if (not p_eat(",")) {
+            break
         }
     }
-    p_skip_nl()
-    p_expect("}", "Expected '}' at end of map literal")
+    p_close("}", "Expected '}' at end of map literal")
     let n = node("map", line)
     n.keys = keys
     n.vals = vals
     return n
 }
-
 func p_func_rest(name, line, is_export) {
-    p_expect("(", "Expected '('")
+    p_open("(", "Expected '('")
+    p_scope_push()
     let params = []
     let defaults = []
-    if (not p_at(")")) {
-        let more = true
-        while (more) {
-            if (not p_at("id")) {
-                p_fail("Expected parameter name")
+    let has_default = false
+    while (not (P_kind == ")")) {
+        if (not (P_kind == "id")) {
+            p_fail("Expected parameter name")
+        }
+        let pt = p_next()
+        p_declare(pt.v, pt.line)
+        append(params, pt.v)
+        if (p_eat("=")) {
+            append(defaults, p_expr())
+            has_default = true
+        } else {
+            if (has_default) {
+                die("Syntax Error", pt.line, "Parameter '{pt.v}' needs a default value because an earlier parameter has one")
             }
-            append(params, p_next().v)
-            if (p_eat("=")) {
-                append(defaults, p_expr())
-            } else {
-                append(defaults, null)
-            }
-            more = p_eat(",")
+            append(defaults, null)
+        }
+        if (not p_eat(",")) {
+            break
         }
     }
-    p_expect(")", "Expected ')'")
-    p_expect("{", "Expected '\{'")
+    p_close(")", "Expected ')'")
+    p_expect("\{", "Expected '\{'")
     let n = node("func", line)
     n.name = name
     n.params = params
     n.defaults = defaults
-    n.body = p_block()
+    n.body = p_block_body()
+    p_scope_pop()
     n.exported = is_export
     return n
 }
-
 func p_primary() {
-    let tk = p_tok()
+    let tk = P_tk
     let line = tk.line
     let t = tk.t
     if (t == "num") {
@@ -215,35 +308,22 @@ func p_primary() {
     }
     if (t == "(") {
         p_next()
+        p_enter()
         let e = p_expr()
-        p_expect(")", "Expected ')' after expression")
+        p_close(")", "Expected ')' after expression")
         return e
     }
     if (t == "[") {
         p_next()
         return p_list_literal(line)
     }
-    if (t == "{") {
+    if (t == "\{") {
         p_next()
         return p_map_literal(line)
     }
     if (t == "func") {
         p_next()
         return p_func_rest(null, line, false)
-    }
-    if (t == "input") {
-        p_next()
-        p_expect("(", "Expected '(' after input")
-        let n = node("input", line)
-        n.prompt = null
-        if (not p_at(")")) {
-            if (not p_at("str")) {
-                p_fail("Expected string prompt for input")
-            }
-            n.prompt = p_next().v
-        }
-        p_expect(")", "Expected ')' after input")
-        return n
     }
     if (t == "box") {
         p_next()
@@ -259,65 +339,56 @@ func p_primary() {
     p_fail("Unexpected token '{t}': expected an expression")
 }
 
+func p_args(closer, msg) {
+    p_enter()
+    let args = []
+    while (not p_at(closer)) {
+        append(args, p_expr())
+        if (not p_eat(",")) {
+            break
+        }
+    }
+    p_close(closer, msg)
+    return args
+}
+
 func p_postfix() {
-    let line = p_tok().line
+    let line = P_tk.line
     let e = p_primary()
     while (true) {
-        if (p_at("(")) {
+        if ((P_kind == "(")) {
             p_next()
-            let args = []
-            p_skip_nl()
-            if (not p_at(")")) {
-                let more = true
-                while (more) {
-                    p_skip_nl()
-                    append(args, p_expr())
-                    p_skip_nl()
-                    more = p_eat(",")
-                }
-            }
-            p_skip_nl()
-            p_expect(")", "Expected ')' after arguments")
             let c = node("call", line)
             c.callee = e
-            c.args = args
+            c.args = p_args(")", "Expected ')' after arguments")
             e = c
-        } else if (p_at("\{") and e.k == "id") {
+        } else if ((P_kind == "\{") and e.k == "id") {
             p_next()
-            let args = []
-            p_skip_nl()
-            if (not p_at("}")) {
-                let more = true
-                while (more) {
-                    p_skip_nl()
-                    append(args, p_expr())
-                    p_skip_nl()
-                    more = p_eat(",")
-                }
-            }
-            p_expect("}", "Expected '}' after typed constructor arguments")
             let c = node("call", line)
             c.callee = e
-            c.args = args
+            c.args = p_args("}", "Expected '}' after typed constructor arguments")
             e = c
-        } else if (p_at("[")) {
+        } else if ((P_kind == "[")) {
             p_next()
+            p_enter()
             let idx = p_expr()
-            p_expect("]", "Expected ']' after index")
+            p_close("]", "Expected ']' after index")
             let n = node("index", line)
             n.target = e
             n.index = idx
             e = n
-        } else if (p_at(".")) {
+        } else if ((P_kind == ".")) {
             p_next()
-            if (not p_at("id")) {
+            let tk = P_tk
+            let is_word = tk.t == "id" or (type(tk.v) == "string" and KEYWORDS[tk.v] != null)
+            if (not is_word) {
                 p_fail("Expected field name after '.'")
             }
             let n = node("field", line)
             n.target = e
             n.field = p_next().v
             e = n
-        } else if (p_at("++") or p_at("--")) {
+        } else if ((P_kind == "++") or (P_kind == "--")) {
             let op = p_next().t
             if (e.k != "id") {
                 p_fail("'{op}' can only be applied to variables")
@@ -325,6 +396,7 @@ func p_postfix() {
             let n = node("incdec", line)
             n.name = e.name
             n.op = op
+            n.prefix = false
             e = n
         } else {
             break
@@ -332,14 +404,8 @@ func p_postfix() {
     }
     return e
 }
-
 func p_unary() {
-    let line = p_tok().line
-    if (p_eat("not")) {
-        let n = node("not", line)
-        n.e = p_unary()
-        return n
-    }
+    let line = P_tk.line
     if (p_eat("-")) {
         let r = p_unary()
         if (r.k == "num" or r.k == "float") {
@@ -359,89 +425,114 @@ func p_unary() {
         n.unary = true
         return n
     }
+    if ((P_kind == "++") or (P_kind == "--")) {
+        let op = p_next().t
+        if (not (P_kind == "id")) {
+            p_fail("'{op}' can only be applied to variables")
+        }
+        let n = node("incdec", line)
+        n.name = p_next().v
+        n.op = op
+        n.prefix = true
+        return n
+    }
     if (p_eat("+")) {
         return p_unary()
     }
     return p_postfix()
 }
 
-func p_binary_level(sub, ops) {
-    let line = p_tok().line
-    let e = sub()
-    while (has_op(ops, p_tok().t)) {
+# Binding power of each binary operator; a higher number binds tighter. All are left-associative.
+let BINARY = {
+    "or": 1, "and": 2,
+    "==": 3, "!=": 3,
+    "<": 4, ">": 4, "<=": 4, ">=": 4,
+    "+": 5, "-": 5,
+    "*": 6, "/": 6, "%": 6
+}
+
+# Parses an expression whose operators all bind at least as tight as min_bp.
+func p_expr_bp(min_bp) {
+    let line = P_tk.line
+    let left = null
+    if (min_bp <= 3 and (P_kind == "not")) {
+        # not binds looser than a comparison and tighter than and: not a == b is not (a == b).
+        p_next()
+        left = node("not", line)
+        left.e = p_expr_bp(3)
+    } else {
+        left = p_unary()
+    }
+    while (true) {
+        let bp = BINARY[P_tk.t]
+        if (bp == null or bp < min_bp) {
+            break
+        }
         let op = p_next().t
-        let r = sub()
+        p_skip_nl()
         let n = node("bin", line)
         n.op = op
-        n.l = e
-        n.r = r
-        e = n
+        n.l = left
+        n.r = p_expr_bp(bp + 1)
+        left = n
     }
-    return e
-}
-
-func has_op(ops, t) {
-    for (let o in ops) {
-        if (o == t) {
-            return true
-        }
-    }
-    return false
-}
-
-func p_mul() {
-    return p_binary_level(p_unary, ["*", "/", "%"])
-}
-
-func p_add() {
-    return p_binary_level(p_mul, ["+", "-"])
-}
-
-func p_cmp() {
-    return p_binary_level(p_add, ["<", ">", "<=", ">="])
-}
-
-func p_eq() {
-    return p_binary_level(p_cmp, ["==", "!="])
-}
-
-func p_and() {
-    return p_binary_level(p_eq, ["and"])
+    return left
 }
 
 func p_expr() {
-    return p_binary_level(p_and, ["or"])
+    return p_expr_bp(1)
 }
 
 func p_block() {
+    p_scope_push()
+    let stmts = p_block_body()
+    p_scope_pop()
+    return stmts
+}
+
+func p_block_body() {
+    let saved_depth = P_depth
+    P_depth = 0
+    p_sync()
     let stmts = []
-    while (not p_at("}") and not p_at("eof")) {
+    while (not (P_kind == "}") and not (P_kind == "eof")) {
         if (p_eat("nl")) {
             continue
         }
         append(stmts, p_statement())
     }
     p_expect("}", "Expected '}'")
+    P_depth = saved_depth
+    p_sync()
     return stmts
 }
 
 func p_declaration(is_const, is_export) {
-    let line = p_tok().line
+    let line = P_tk.line
     let names = []
     let more = true
     while (more) {
-        if (not p_at("id")) {
+        if (not (P_kind == "id")) {
             p_fail("Expected variable name after 'let' or ','")
         }
-        append(names, p_next().v)
+        let nt = p_next()
+        p_declare(nt.v, nt.line)
+        append(names, nt.v)
         more = p_eat(",")
+        if (more) {
+            p_skip_nl()
+        }
     }
     let vals = []
     if (p_eat("=")) {
+        p_skip_nl()
         more = true
         while (more) {
             append(vals, p_expr())
             more = p_eat(",")
+            if (more) {
+                p_skip_nl()
+            }
         }
     }
     if (is_const and len(vals) != len(names)) {
@@ -471,16 +562,16 @@ func p_declaration(is_const, is_export) {
 }
 
 func p_cond_paren(what) {
-    p_expect("(", "Expected '(' after {what}")
+    p_open("(", "Expected '(' after {what}")
     let c = p_expr()
-    p_expect(")", "Expected ')' after condition")
+    p_close(")", "Expected ')' after condition")
     return c
 }
 
 func p_if(line) {
     let cond = p_cond_paren("if")
     p_eat("nl")
-    p_expect("{", "Expected '\{'")
+    p_expect("\{", "Expected '\{'")
     let n = node("if", line)
     n.cond = cond
     n.then = p_block()
@@ -488,10 +579,10 @@ func p_if(line) {
     p_eat("nl")
     if (p_eat("else")) {
         p_eat("nl")
-        if (p_at("if")) {
+        if ((P_kind == "if")) {
             n.els = [p_statement()]
         } else {
-            p_expect("{", "Expected '\{'")
+            p_expect("\{", "Expected '\{'")
             n.els = p_block()
         }
     }
@@ -499,18 +590,27 @@ func p_if(line) {
 }
 
 func p_for(line) {
-    p_expect("(", "Expected '(' after for")
-    if (p_at("let")) {
+    p_scope_push()
+    let n = p_for_header(line)
+    p_scope_pop()
+    return n
+}
+
+func p_for_header(line) {
+    p_open("(", "Expected '(' after for")
+    if ((P_kind == "let")) {
         p_next()
-        if (not p_at("id")) {
+        if (not (P_kind == "id")) {
             p_fail("Expected loop variable name in for loop")
         }
-        let name = p_next().v
-        if (p_eat("in")) {
+        let nt = p_next()
+        let name = nt.v
+        p_declare(name, nt.line)
+        if (p_eat_word("in")) {
             let iter = p_expr()
-            p_expect(")", "Expected ')' after for-in iterable")
+            p_close(")", "Expected ')' after for-in iterable")
             p_eat("nl")
-            p_expect("{", "Expected '\{' for loop body")
+            p_expect("\{", "Expected '\{' for loop body")
             let n = node("forin", line)
             n.name = name
             n.iter = iter
@@ -526,17 +626,26 @@ func p_for(line) {
         }
         return p_for_rest(line, init)
     }
+    if ((P_kind == ";")) {
+        return p_for_rest(line, null)
+    }
     return p_for_rest(line, p_statement())
 }
 
 func p_for_rest(line, init) {
     p_expect(";", "Expected ';' after loop initializer")
-    let cond = p_expr()
+    let cond = null
+    if (not (P_kind == ";")) {
+        cond = p_expr()
+    }
     p_expect(";", "Expected ';' after loop condition")
-    let incr = p_statement()
-    p_expect(")", "Expected ')' after loop increment")
+    let incr = null
+    if (not (P_kind == ")")) {
+        incr = p_statement()
+    }
+    p_close(")", "Expected ')' after loop increment")
     p_eat("nl")
-    p_expect("{", "Expected '\{' for loop body")
+    p_expect("\{", "Expected '\{' for loop body")
     let n = node("for", line)
     n.init = init
     n.cond = cond
@@ -546,14 +655,14 @@ func p_for_rest(line, init) {
 }
 
 func p_switch(line) {
-    p_expect("(", "Expected '(' after switch")
+    p_open("(", "Expected '(' after switch")
     let e = p_expr()
-    p_expect(")", "Expected ')'")
-    p_expect("{", "Expected '\{' starting switch block")
+    p_close(")", "Expected ')'")
+    p_expect("\{", "Expected '\{' starting switch block")
     let cases = []
     let dflt = []
-    while (not p_at("}") and not p_at("eof")) {
-        let cline = p_tok().line
+    while (not (P_kind == "}") and not (P_kind == "eof")) {
+        let cline = P_tk.line
         if (p_eat("case")) {
             let v = p_expr()
             p_expect(":", "Expected ':' after case value")
@@ -577,13 +686,15 @@ func p_switch(line) {
 }
 
 func p_case_body() {
+    p_scope_push()
     let body = []
-    while (not p_at("case") and not p_at("default") and not p_at("}")) {
+    while (not (P_kind == "case") and not (P_kind == "default") and not (P_kind == "}")) {
         if (p_eat("nl")) {
             continue
         }
         append(body, p_statement())
     }
+    p_scope_pop()
     return body
 }
 
@@ -600,12 +711,16 @@ func compound_op(t) {
     if (t == "/=") {
         return "/"
     }
+    if (t == "%=") {
+        return "%"
+    }
     return null
 }
 
 func p_simple(line) {
     let e = p_expr()
     if (p_eat("=")) {
+        p_skip_nl()
         let v = p_expr()
         if (e.k == "id") {
             let n = node("assign", line)
@@ -615,9 +730,10 @@ func p_simple(line) {
         }
         return make_setidx(e, v, null, line)
     }
-    let op = compound_op(p_tok().t)
+    let op = compound_op(P_tk.t)
     if (op != null) {
         p_next()
+        p_skip_nl()
         let rhs = p_expr()
         if (e.k == "id") {
             let b = node("bin", line)
@@ -652,49 +768,101 @@ func make_setidx(e, v, op, line) {
     return n
 }
 
-func p_typedef(line, word) {
-    if (not p_at("id")) {
+func p_typedef(line, word, is_export) {
+    if (not (P_kind == "id")) {
         p_fail("Expected a name after '{word}'")
     }
     let n = node("typedef", line)
+    n.exported = is_export
     n.name = p_next().v
+    p_declare(n.name, line)
     n.is_template = word == "template"
     n.is_bloc = word == "bloc"
     n.fields = []
+    n.ftypes = []
     p_expect("\{", "Expected '\{' after type name")
-    while (not p_at("}") and not p_at("eof")) {
+    while (not (P_kind == "}") and not (P_kind == "eof")) {
         p_skip_nl()
-        if (not p_at("id")) {
+        if (not (P_kind == "id")) {
             p_fail("Expected field name in {word} declaration")
         }
         append(n.fields, p_next().v)
+        if (P_kind == ":") {
+            p_next()
+            append(n.ftypes, p_field_type(word))
+        } else {
+            append(n.ftypes, null)
+        }
         p_skip_nl()
         if (not p_eat(",")) {
             break
         }
     }
     p_expect("}", "Expected '}' after {word} fields")
+    p_check_field_types(n, word)
     return n
+}
+
+# The type after "name:" in a bloc or template field: int, float, bool, char, string, list, map,
+# function, the name of another type, or box[N]. Returned as text: "box:16" for box[16].
+func p_field_type(word) {
+    if (P_kind == "box") {
+        p_next()
+        p_expect("[", "Expected '[' after box in a field type")
+        if (not (P_kind == "num")) {
+            p_fail("A box field needs its size written as a number, for example box[16]")
+        }
+        let size = p_next().v
+        p_expect("]", "Expected ']' after the box size")
+        return "box:{size}"
+    }
+    if (not (P_kind == "id")) {
+        p_fail("Expected a type after ':' in a {word} field")
+    }
+    return p_next().v
+}
+
+# A data type has no field types. A bloc has types on all its fields or on none.
+func p_check_field_types(n, word) {
+    let typed = 0
+    for (let t in n.ftypes) {
+        if (t != null) {
+            typed += 1
+        }
+    }
+    if (typed == 0) {
+        return null
+    }
+    if (word == "data") {
+        die("Syntax Error", n.line, "data fields cannot have types; use a template for typed fields")
+    }
+    if (word == "bloc" and typed != len(n.fields)) {
+        die("Syntax Error", n.line, "bloc '{n.name}': give a type to every field or to none")
+    }
+    return null
 }
 
 func p_use(line, word) {
     let n = node("use", line)
     n.names = []
-    if (word == "use" and p_at("\{")) {
+    if ((P_kind == "\{")) {
         p_next()
-        while (not p_at("}") and not p_at("eof")) {
-            if (not p_at("id")) {
+        p_enter()
+        while (not (P_kind == "}") and not (P_kind == "eof")) {
+            if (not (P_kind == "id")) {
                 p_fail("Expected exported name inside use list")
             }
-            append(n.names, p_next().v)
+            let ut = p_next()
+            p_declare(ut.v, ut.line)
+            append(n.names, ut.v)
             if (not p_eat(",")) {
                 break
             }
         }
-        p_expect("}", "Expected '}' after use list")
-        p_expect("from", "Expected 'from' after use list")
+        p_close("}", "Expected '}' after use list")
+        p_expect_word("from", "Expected 'from' after use list")
     }
-    if (not p_at("str")) {
+    if (not (P_kind == "str")) {
         p_fail("Expected string path after {word}")
     }
     n.path = p_next().v[0]
@@ -702,16 +870,17 @@ func p_use(line, word) {
 }
 
 func p_statement() {
-    let tk = p_tok()
+    let tk = P_tk
     let line = tk.line
     let t = tk.t
     if (t == "func") {
         p_next()
-        if (not p_at("id")) {
+        if (not (P_kind == "id")) {
             p_fail("Expected function name after 'func'")
         }
-        let name = p_next().v
-        return p_func_rest(name, line, false)
+        let nt = p_next()
+        p_declare(nt.v, nt.line)
+        return p_func_rest(nt.v, line, false)
     }
     if (t == "let" or t == "const") {
         p_next()
@@ -719,19 +888,20 @@ func p_statement() {
     }
     if (t == "export") {
         p_next()
-        if (p_at("let") or p_at("const")) {
-            let is_const = p_at("const")
+        if ((P_kind == "let") or (P_kind == "const")) {
+            let is_const = (P_kind == "const")
             p_next()
             return p_declaration(is_const, true)
         }
-        if (p_at("func")) {
+        if ((P_kind == "func")) {
             p_next()
-            let name = p_next().v
-            return p_func_rest(name, line, true)
+            let nt = p_next()
+            p_declare(nt.v, nt.line)
+            return p_func_rest(nt.v, line, true)
         }
-        if (p_at("data") or p_at("template") or p_at("bloc")) {
-            let word = p_next().t
-            return p_typedef(line, word)
+        if (p_at_data() or (P_kind == "template") or (P_kind == "bloc")) {
+            let word = p_next().v
+            return p_typedef(line, word, true)
         }
         p_fail("export can only be used with let, const, func, data or bloc declarations")
     }
@@ -739,9 +909,15 @@ func p_statement() {
         p_next()
         return p_use(line, t)
     }
-    if (t == "data" or t == "template" or t == "bloc") {
+    if (p_at_data() or t == "template" or t == "bloc") {
         p_next()
-        return p_typedef(line, t)
+        return p_typedef(line, tk.v, false)
+    }
+    if (t == "\{") {
+        p_next()
+        let n = node("block", line)
+        n.body = p_block()
+        return n
     }
     if (t == "unsafe") {
         p_next()
@@ -751,27 +927,11 @@ func p_statement() {
         n.body = p_block()
         return n
     }
-    if (t == "print") {
-        p_next()
-        p_expect("(", "Expected '(' after print")
-        let args = []
-        if (not p_at(")")) {
-            let more = true
-            while (more) {
-                append(args, p_expr())
-                more = p_eat(",")
-            }
-        }
-        p_expect(")", "Expected ')' after print args")
-        let n = node("print", line)
-        n.args = args
-        return n
-    }
     if (t == "return") {
         p_next()
         let n = node("return", line)
         n.e = null
-        if (not p_at("}") and not p_at("nl") and not p_at("eof")) {
+        if (not (P_kind == "}") and not (P_kind == "nl") and not (P_kind == "eof")) {
             n.e = p_expr()
         }
         return n
@@ -792,7 +952,7 @@ func p_statement() {
         p_next()
         let cond = p_cond_paren("while")
         p_eat("nl")
-        p_expect("{", "Expected '\{'")
+        p_expect("\{", "Expected '\{'")
         let n = node("while", line)
         n.cond = cond
         n.body = p_block()
@@ -812,8 +972,11 @@ func p_statement() {
 export func parse_program(toks) {
     P_toks = toks
     P_pos = 0
+    P_depth = 0
+    P_scopes = [{}]
+    p_sync()
     let stmts = []
-    while (not p_at("eof")) {
+    while (not (P_kind == "eof")) {
         if (p_eat("nl")) {
             continue
         }

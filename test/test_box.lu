@@ -6,12 +6,19 @@ assert(shape(buf) == "box")
 assert(buf.len == 16)
 assert(buf.cap >= 16)
 
+# Assigning a box makes a copy with its own bytes.
+buf[0] = 5
 let alias = buf
 assert(alias.len == 16)
+assert(alias[0] == 5)
+buf[0] = 6
+assert(alias[0] == 5)
 
 free(buf)
 
-assert(to_string(alias) == "<box freed>")
+assert(to_string(buf) == "<box freed>")
+assert(alias[0] == 5)
+free(alias)
 
 let tiny = box[1]
 assert(tiny.len == 1)

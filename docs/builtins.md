@@ -16,7 +16,7 @@ as `sqrt() argument 1 must be a number, got string`.
 
 | Function | Returns |
 |---|---|
-| `print(a, ...)` | Prints each argument on its own line (a statement keyword, not a value) |
+| `print(a, ...)` | Prints each argument on its own line; returns `null` |
 | `input(prompt)` | One line read from standard input, without the newline, as a string; `""` at end of input. The prompt is optional (`input()`), and `input` is a keyword like `print` |
 | `type(v)` | Type name: `"int"`, `"float"`, `"char"`, `"string"`, `"boolean"`, `"null"`, `"list"`, `"map"`, `"function"`, `"native_function"`, `"file"`, `"bloc"`, `"box"`, `"template"`, `"pointer"`. A dense list reports `"list"` and a `data` value reports `"map"` |
 | `shape(v)` | Constructor name of a `data` / `bloc` / `template` value, for example `"Vec2"`; `null` for other values |
@@ -31,7 +31,7 @@ as `sqrt() argument 1 must be a number, got string`.
 | `exit(code)` | Flushes standard output and ends the program with that status (default 0) |
 | `system(cmd)` | Runs `cmd` with the shell and returns its exit status as an int |
 
-Floats are printed with up to six significant digits (`print(1.0)` prints `1`).
+Floats are printed with up to six significant digits and always show a point or an exponent (`print(1.0)` prints `1.0`).
 
 ### Lists
 
@@ -149,7 +149,7 @@ The text inside `{ }` is parsed as a normal Luna expression. Write `\{` for a li
 brace. `format()` is still useful when you want positional `{}` placeholders.
 
 Values print as follows: integers in decimal, floats with up to six significant digits
-(`1.0` prints as `1`), `true` / `false`, `null`, lists as `[1, 2]` (strings inside a list are
+(`1.0` prints as `1.0`), `true` / `false`, `null`, lists as `[1, 2]` (strings inside a list are
 not quoted), and maps as `{"key": value}`.
 
 ```javascript
@@ -229,7 +229,7 @@ argument is outside the function's domain is an `Argument Error` (`sqrt() argume
 negative`), and a float result that is too large is a `Runtime Error` (`float overflow in
 exp()`, `float overflow in '*'`). Results that are not whole numbers print
 with up to six significant digits, so `sqrt(2)` prints `1.41421`, and a float without a
-fractional part prints without `.0` (`sqrt(16)` prints `4`). The `4.0` shown below means "a float".
+fractional part prints with `.0` (`sqrt(16)` prints `4.0`).
 
 ### Basic utilities
 

@@ -1,0 +1,13 @@
+use { Pair, Vec, Rec, total, make_hidden } from "modules_fixtures/shared_types.lu"
+
+let p = Pair(3, 4)
+print(total(p))
+p.left = 10
+print(total(p))
+let v = Vec{1, 2}
+print(v.y)
+let r = Rec(9)
+print(r.a)
+print(shape(p))
+print(shape(v))
+print(make_hidden(5).v)

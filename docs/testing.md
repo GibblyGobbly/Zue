@@ -11,6 +11,22 @@ compared with a recorded copy.
 | `LUNA_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_safety.lu` | Runs with a collection on every allocation (see [gc](gc.md)) |
 | `sh test/native/run.sh` | Unit tests of the rule functions in `compiler/runtime/luna_rt_rules.lu`, compiled in the native dialect; prints `[OK] N checks passed` |
 
+## Checking the lexer and the parser
+
+| Command | What it does |
+|---|---|
+| `luna ast prog.lu` | Prints the syntax tree, one top-level statement per line, so parser output can be read and compared |
+| `luna unparse prog.lu` | Writes the program back as source, with every binary expression parenthesized |
+| `make round-trip` | Runs `tools/check_round_trip.sh`: for every Luna file in the project, parse, unparse, parse again, and require the same tree |
+| `make verify-ir` | Runs the tests and checks every generated IR file with LLVM's verifier (`opt-18`) |
+| `make fuzz` | Needs `python3`. `tools/fuzz_expressions.py` builds random int and bool expressions and compares what Luna prints with an independent evaluator; `tools/fuzz_programs.py` does the same for whole programs with loops, branches, functions and scoping, and also runs each program after `luna unparse` |
+| `luna run bench/frontend_phases.lu file.lu` | Times the lexer, the parser and the type checker on a file |
+| `bench/instruction_count.sh [file.lu]` | Counts the machine instructions the lexer, parser and checker execute (needs valgrind). Counts do not depend on machine load, so they compare cleanly between changes |
+
+`test/test_lexer.lu`, `test/test_syntax.lu` and `test/test_parser_rules.lu` hold the lexer and
+parser cases. A case whose recorded output is a `Syntax Error` or `Type Error` is a program the
+compiler is meant to reject.
+
 The runner prints one `[PASS]`, `[FAIL]` or `[SKIP]` line per test and a summary such as
 `passed 110, failed 0, skipped 0`. It exits non-zero if any test failed, and so does `make test`.
 
@@ -64,7 +80,7 @@ let b = 1 + true
 | `test_bloc.lu`, `test_box.lu`, `test_template.lu`, `test_data_types.lu` | Structured data types |
 | `test_unsafe.lu` | `unsafe` blocks and pointer operations |
 | `test_rules.lu` | `bloc` / `box` / `template` / `unsafe` behavior that must work: 10k blocs and boxes, byte access, loop scopes, aliases |
-| `test_unsafe_errors.lu` | One case per rule violation (R1 to R12, box, bloc, template) |
+| `test_unsafe_errors.lu` | One case per rule violation (R1 to R10, box, bloc, template) |
 | `test_rules_runtime.lu` | Cases for the rule functions in `luna_rt_rules.lu`, run through the language (pointer bounds, box handles, schemas) |
 | `test_gc_safety.lu`, `test_gc_large_safety.lu`, `test_gc_callbacks.lu`, `test_gc_recursion.lu` | Collector liveness under churn, large objects, callbacks and deep recursion |
 | `test_compiler_blockers.lu` | Features the compiler's own source depends on |

@@ -8,11 +8,22 @@
 # runtime checks still apply. int~ and float~ are untyped number constants: a literal adapts to
 # the type its context needs (sqrt(16) is fine), while a variable never converts.
 #
-# A variable has the type of its first value and keeps it. Function parameters are any for now.
+# A variable has the type of its first value and keeps it. A parameter has the type of the
+# argument at each call; a function that is never called is checked with parameters of type any.
 
 use { ST } from "state.lu"
 
 let SCOPES = []
+
+# Per-call checking of user functions. A function body is checked once for each distinct list of
+# argument types, with the parameters bound to those types.
+# The typed bloc and template definitions of the program, by name.
+let TYPEDEFS = {}
+
+let MEMO = {}
+let INPROG = {}
+let CALLS = []
+let RETS = []
 
 # Builtin signatures: name -> alternatives of [parameter types, result]. T stands for a number
 # type (int or float) that must be the same everywhere it appears.
@@ -41,11 +52,17 @@ func ck_init_sigs() {
     sig("rand", [[[], "float"], [["int"], "int"], [["int", "int"], "int"]])
     sig("srand", [[[], "null"], [["int"], "null"]])
     sig("trand", [[[], "int"]])
+    # Explicit conversions: the argument may be anything, the result type is fixed.
+    sig("float", [[["any"], "float"]])
+    sig("to_float", [[["any"], "float"]])
+    sig("int", [[["any"], "int"]])
+    sig("to_int", [[["any"], "int"]])
+    sig("to_string", [[["any"], "string"]])
 }
 
 ck_init_sigs()
 
-# ---- types ----------------------------------------------------------------------------------
+# Types
 
 func is_const(t) {
     return ends_with(t, "~")
@@ -119,7 +136,7 @@ func unify(a, b) {
     return null
 }
 
-# ---- scopes ---------------------------------------------------------------------------------
+# Scopes
 
 func push_scope() {
     append(SCOPES, {})
@@ -153,12 +170,19 @@ func lookup(name) {
     return s[name]
 }
 
-# ---- errors ---------------------------------------------------------------------------------
+# Errors
 
 # Reports a compile-time type error in the layout of a runtime error: the message, then the
 # source line.
 func fail(line, msg) {
     print("Type Error in {ST.src_file} at line {line}:\n  {msg}")
+    let i = len(CALLS) - 1
+    while (i >= 0) {
+        let c = CALLS[i]
+        let sep = ", "
+        print("  in {c.name}({join(c.types, sep)}), called at line {c.line}")
+        i -= 1
+    }
     if (line >= 1 and line <= len(ST.src_lines)) {
         let num = pad_left(to_string(line), 4, " ")
         print("\n{num} | {ST.src_lines[line - 1]}\n")
@@ -178,7 +202,7 @@ func bin_error(n, a, b) {
     operand_error(n.op, a, b, n.line)
 }
 
-# ---- expressions ----------------------------------------------------------------------------
+# Expressions
 
 func is_zero_literal(n) {
     return (n.k == "num" and n.v == "0") or (n.k == "float" and (n.v == "0.0" or n.v == "0"))
@@ -362,6 +386,58 @@ func article(t) {
     return "a"
 }
 
+# The checker type a field declared with type text accepts, or "any" for a type it cannot judge.
+func field_check_type(text) {
+    if (text == null) {
+        return "any"
+    }
+    if (text == "int" or text == "float" or text == "bool" or text == "char" or text == "string") {
+        return text
+    }
+    if (text == "list" or text == "map" or text == "function") {
+        return text
+    }
+    if (starts_with(text, "box:")) {
+        return "box"
+    }
+    return "any"
+}
+
+# Constructing a type with typed fields: a whole-number literal given to a float field becomes a
+# float literal, and an argument that cannot fit its field is an error now, not when it runs.
+func ck_typed_construct(n, name, argtypes) {
+    let td = TYPEDEFS[name]
+    let kind = "Template"
+    if (td.is_bloc == true) {
+        kind = "Bloc"
+    }
+    for (let i = 0; i < len(td.fields) and i < len(argtypes); i++) {
+        let want = field_check_type(td.ftypes[i])
+        let got = argtypes[i]
+        if (want == "any" or got == "any") {
+            continue
+        }
+        if (want == "float" and got == "int~" and (n.args[i].k == "num")) {
+            n.args[i].k = "float"
+            if (index_of(n.args[i].v, ".") < 0) {
+                n.args[i].v = "{n.args[i].v}.0"
+            }
+            continue
+        }
+        if (not fits(got, want)) {
+            let hint = ""
+            if (want == "float" and got == "int~") {
+                hint = ". Write the number with a decimal point, for example 2.0"
+            }
+            fail(n.line, "{kind} '{name}' field '{td.fields[i]}' must be {article(want)} {want}, got {describe(got)}{hint}")
+        }
+    }
+    if (td.is_bloc == true) {
+        return "bloc"
+    }
+    return "template"
+}
+
 func ck_call(n) {
     let argtypes = []
     for (let a in n.args) {
@@ -372,13 +448,112 @@ func ck_call(n) {
         return "any"
     }
     let name = n.callee.name
+    if (TYPEDEFS[name] != null and lookup(name) == "type" and TYPEDEFS[name].is_data != true) {
+        if (TYPEDEFS[name].is_bloc == true or TYPEDEFS[name].is_template == true) {
+            return ck_typed_construct(n, name, argtypes)
+        }
+    }
+    if (name == "print" and lookup(name) == null) {
+        return "null"
+    }
+    if (name == "input" and lookup(name) == null) {
+        return "string"
+    }
+    let fkey = "fn:{name}"
+    let fidx = scope_index(fkey)
+    if (fidx >= 0 and lookup(name) == "function") {
+        return ck_user_call(name, SCOPES[fidx][fkey], fidx, argtypes, n.line)
+    }
     if (lookup(name) == null and SIGS[name] != null) {
         return ck_builtin_call(name, SIGS[name], argtypes, n.line)
     }
     return "any"
 }
 
+# The index of the innermost scope that holds key, or -1.
+func scope_index(key) {
+    let i = len(SCOPES) - 1
+    while (i >= 0) {
+        if (SCOPES[i][key] != null) {
+            return i
+        }
+        i -= 1
+    }
+    return -1
+}
+
+# The type a function returns: the common type of its return statements.
+func join_returns(rets) {
+    if (len(rets) == 0) {
+        return "null"
+    }
+    let t = rets[0]
+    for (let r in rets) {
+        if (r != t) {
+            return "any"
+        }
+    }
+    return t
+}
+
+# Checks the body of fn with its parameters bound to the argument types of this call, and returns
+# the type the call has. The body sees the scopes the function was defined in, not the caller's.
+func ck_user_call(name, fn, idx, argtypes, line) {
+    let np = len(fn.params)
+    let required = 0
+    for (let d in fn.defaults) {
+        if (d == null) {
+            required += 1
+        }
+    }
+    if (len(argtypes) < required or len(argtypes) > np) {
+        let wanted = "{np}"
+        if (required != np) {
+            wanted = "{required} to {np}"
+        }
+        let plural = "s"
+        if (wanted == "1") {
+            plural = ""
+        }
+        fail(line, "{name}() expects {wanted} argument{plural}, but got {len(argtypes)}")
+    }
+    let types = []
+    for (let i = 0; i < np; i++) {
+        if (i < len(argtypes)) {
+            append(types, settle(argtypes[i]))
+        } else {
+            append(types, settle(ck_expr(fn.defaults[i])))
+        }
+    }
+    let sep = ","
+    let mkey = "{name}({join(types, sep)})"
+    if (MEMO[mkey] != null) {
+        return MEMO[mkey]
+    }
+    if (INPROG[mkey] != null) {
+        return "any"
+    }
+    INPROG[mkey] = true
+    let saved = SCOPES
+    SCOPES = slice(saved, 0, idx + 1)
+    push_scope()
+    for (let i = 0; i < np; i++) {
+        declare(fn.params[i], types[i])
+    }
+    append(CALLS, {"name": name, "types": types, "line": line})
+    append(RETS, [])
+    ck_block(fn.body)
+    let rets = remove(RETS, len(RETS) - 1)
+    remove(CALLS, len(CALLS) - 1)
+    SCOPES = saved
+    let result = join_returns(rets)
+    MEMO[mkey] = result
+    INPROG[mkey] = null
+    return result
+}
+
 func ck_func(n) {
+    append(RETS, [])
     push_scope()
     for (let i = 0; i < len(n.params); i++) {
         if (n.defaults[i] != null) {
@@ -388,6 +563,7 @@ func ck_func(n) {
     }
     ck_block(n.body)
     pop_scope()
+    remove(RETS, len(RETS) - 1)
 }
 
 func ck_expr(n) {
@@ -480,13 +656,15 @@ func ck_expr(n) {
         ck_expr(n.size)
         return "box"
     }
-    if (k == "input") {
-        return "string"
-    }
     return "any"
 }
 
-# ---- statements -----------------------------------------------------------------------------
+# Statements
+
+func declare_func(n) {
+    declare(n.name, "function")
+    declare("fn:{n.name}", n)
+}
 
 func ck_cond(e, what) {
     let t = ck_expr(e)
@@ -533,7 +711,7 @@ func ck_stmt(n) {
         ck_assign(n)
     } else if (k == "func") {
         if (n.name != null) {
-            declare(n.name, "function")
+            declare_func(n)
         }
         ck_func(n)
     } else if (k == "if") {
@@ -551,9 +729,15 @@ func ck_stmt(n) {
         pop_scope()
     } else if (k == "for") {
         push_scope()
-        ck_stmt(n.init)
-        ck_cond(n.cond, "'for'")
-        ck_stmt(n.incr)
+        if (n.init != null) {
+            ck_stmt(n.init)
+        }
+        if (n.cond != null) {
+            ck_cond(n.cond, "'for'")
+        }
+        if (n.incr != null) {
+            ck_stmt(n.incr)
+        }
         push_scope()
         ck_block(n.body)
         pop_scope()
@@ -580,23 +764,28 @@ func ck_stmt(n) {
         ck_block(n.dflt)
         pop_scope()
     } else if (k == "return") {
+        let rt = "null"
         if (n.e != null) {
-            ck_expr(n.e)
+            rt = settle(ck_expr(n.e))
         }
-    } else if (k == "print") {
-        for (let a in n.args) {
-            ck_expr(a)
+        if (len(RETS) > 0) {
+            append(RETS[len(RETS) - 1], rt)
         }
     } else if (k == "setidx") {
         ck_expr(n.target)
         ck_expr(n.index)
         ck_expr(n.e)
+    } else if (k == "block") {
+        push_scope()
+        ck_block(n.body)
+        pop_scope()
     } else if (k == "unsafe") {
         push_scope()
         ck_block(n.body)
         pop_scope()
     } else if (k == "typedef") {
         declare(n.name, "type")
+        TYPEDEFS[n.name] = n
     } else if (k == "use") {
         for (let nm in n.names) {
             declare(nm, "any")
@@ -613,9 +802,10 @@ func ck_stmt(n) {
 func ck_hoist(stmts) {
     for (let s in stmts) {
         if (s.k == "func" and s.name != null) {
-            declare(s.name, "function")
+            declare_func(s)
         } else if (s.k == "typedef") {
             declare(s.name, "type")
+            TYPEDEFS[s.name] = s
         } else if (s.k == "use") {
             for (let nm in s.names) {
                 declare(nm, "any")
@@ -634,6 +824,11 @@ func ck_block(stmts) {
 # Stops with a Type Error at the first problem it can prove.
 export func check_program(stmts) {
     SCOPES = []
+    TYPEDEFS = {}
+    MEMO = {}
+    INPROG = {}
+    CALLS = []
+    RETS = []
     push_scope()
     ck_block(stmts)
     pop_scope()

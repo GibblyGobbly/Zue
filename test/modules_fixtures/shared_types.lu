@@ -1,0 +1,13 @@
+export template Pair { left, right }
+export bloc Vec { x, y }
+export data Rec { a }
+
+template Hidden { v }
+
+export func make_hidden(n) {
+    return Hidden(n)
+}
+
+export func total(p) {
+    return p.left + p.right
+}

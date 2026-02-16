@@ -1,0 +1,354 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 Bharath
+#
+# ast_unparse.lu: the AST written back as Luna source, for `luna unparse prog.lu`. Every binary
+# expression is parenthesized, so the text means exactly what the tree says. Parsing the output
+# must give the same tree as the original (see tools/check_round_trip.sh).
+
+let PRINTABLE = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz\{|}~"
+
+# The text of a string value with the escapes the lexer reads back.
+func escape_text(s) {
+    let out = []
+    for (let ch in s) {
+        let c = int(ch)
+        if (ch == '\\') {
+            append(out, "\\\\")
+        } else if (ch == '"') {
+            append(out, "\\\"")
+        } else if (ch == '\n') {
+            append(out, "\\n")
+        } else if (ch == '\t') {
+            append(out, "\\t")
+        } else if (c == 13) {
+            append(out, "\\r")
+        } else if (ch == '\{') {
+            append(out, "\\\{")
+        } else if (ch == '}') {
+            append(out, "\\}")
+        } else {
+            append(out, "{ch}")
+        }
+    }
+    return join(out, "")
+}
+
+func char_literal(code) {
+    if (code == 10) {
+        return "'\\n'"
+    }
+    if (code == 9) {
+        return "'\\t'"
+    }
+    if (code == 13) {
+        return "'\\r'"
+    }
+    if (code == 0) {
+        return "'\\0'"
+    }
+    if (code == 92) {
+        return "'\\\\'"
+    }
+    if (code == 39) {
+        return "'\\''"
+    }
+    if (code >= 32 and code <= 126) {
+        return "'{PRINTABLE[code - 32]}'"
+    }
+    return "'?'"
+}
+
+func pad(depth) {
+    return repeat("    ", depth)
+}
+
+func exprs(list) {
+    let parts = []
+    for (let e in list) {
+        append(parts, expr(e))
+    }
+    return join(parts, ", ")
+}
+
+func params_text(n) {
+    let parts = []
+    for (let i = 0; i < len(n.params); i++) {
+        if (n.defaults[i] == null) {
+            append(parts, n.params[i])
+        } else {
+            append(parts, "{n.params[i]} = {expr(n.defaults[i])}")
+        }
+    }
+    return join(parts, ", ")
+}
+
+func func_text(n, depth) {
+    let head = "func"
+    if (n.name != null) {
+        head = "func {n.name}"
+    }
+    return "{head}({params_text(n)}) \{\n{block_text(n.body, depth + 1)}{pad(depth)}}"
+}
+
+func expr(n) {
+    let k = n.k
+    if (k == "num") {
+        if (starts_with(n.v, "-")) {
+            return "({n.v})"
+        }
+        return n.v
+    }
+    if (k == "float") {
+        if (starts_with(n.v, "-")) {
+            return "({n.v})"
+        }
+        return n.v
+    }
+    if (k == "bool") {
+        return "{n.v}"
+    }
+    if (k == "char") {
+        return char_literal(n.v)
+    }
+    if (k == "str") {
+        return "\"{escape_text(n.v)}\""
+    }
+    if (k == "tmpl") {
+        let out = ["\""]
+        for (let part in n.parts) {
+            if (type(part) == "string") {
+                append(out, escape_text(part))
+            } else {
+                append(out, "\{{expr(part)}}")
+            }
+        }
+        append(out, "\"")
+        return join(out, "")
+    }
+    if (k == "id") {
+        return n.name
+    }
+    if (k == "list") {
+        return "[{exprs(n.items)}]"
+    }
+    if (k == "map") {
+        let parts = []
+        for (let i = 0; i < len(n.keys); i++) {
+            append(parts, "\"{escape_text(n.keys[i])}\": {expr(n.vals[i])}")
+        }
+        return "\{{join(parts, ", ")}}"
+    }
+    if (k == "func") {
+        return func_text(n, 0)
+    }
+    if (k == "call") {
+        return "{expr(n.callee)}({exprs(n.args)})"
+    }
+    if (k == "index") {
+        return "{expr(n.target)}[{expr(n.index)}]"
+    }
+    if (k == "field") {
+        return "{expr(n.target)}.{n.field}"
+    }
+    if (k == "incdec") {
+        if (n.prefix == true) {
+            return "({n.op}{n.name})"
+        }
+        return "({n.name}{n.op})"
+    }
+    if (k == "not") {
+        return "(not {expr(n.e)})"
+    }
+    if (k == "bin") {
+        if (n.unary == true) {
+            return "(-{expr(n.r)})"
+        }
+        return "({expr(n.l)} {n.op} {expr(n.r)})"
+    }
+    if (k == "box") {
+        return "box[{expr(n.size)}]"
+    }
+    return "<unknown {k}>"
+}
+
+func let_text(n) {
+    let word = "let"
+    if (n.const_decl == true) {
+        word = "const"
+    }
+    let head = word
+    if (n.exported == true) {
+        head = "export {word}"
+    }
+    if (n.init == null) {
+        return "{head} {n.name}"
+    }
+    return "{head} {n.name} = {expr(n.init)}"
+}
+
+func block_text(stmts, depth) {
+    let out = ""
+    for (let s in stmts) {
+        out = out + stmt(s, depth)
+    }
+    return out
+}
+
+func if_text(n, depth) {
+    let text = "if ({expr(n.cond)}) \{\n{block_text(n.then, depth + 1)}{pad(depth)}}"
+    if (len(n.els) == 0) {
+        return text
+    }
+    if (len(n.els) == 1 and n.els[0].k == "if") {
+        return "{text} else {if_text(n.els[0], depth)}"
+    }
+    return "{text} else \{\n{block_text(n.els, depth + 1)}{pad(depth)}}"
+}
+
+func simple_text(n) {
+    if (n.k == "let") {
+        return let_text(n)
+    }
+    if (n.k == "assign") {
+        return "{n.name} = {expr(n.e)}"
+    }
+    return expr(n)
+}
+
+func stmt_body(n, depth) {
+    let k = n.k
+    if (k == "let") {
+        return let_text(n)
+    }
+    if (k == "group") {
+        let names = []
+        let vals = []
+        for (let item in n.items) {
+            append(names, item.name)
+            if (item.init != null) {
+                append(vals, expr(item.init))
+            }
+        }
+        let word = "let"
+        if (n.items[0].const_decl == true) {
+            word = "const"
+        }
+        if (n.items[0].exported == true) {
+            word = "export {word}"
+        }
+        if (len(vals) == 0) {
+            return "{word} {join(names, ", ")}"
+        }
+        return "{word} {join(names, ", ")} = {join(vals, ", ")}"
+    }
+    if (k == "assign") {
+        return "{n.name} = {expr(n.e)}"
+    }
+    if (k == "setidx") {
+        let op = ""
+        if (n.op != null) {
+            op = n.op
+        }
+        return "{expr(n.target)}[{expr(n.index)}] {op}= {expr(n.e)}"
+    }
+    if (k == "func") {
+        let text = func_text(n, depth)
+        if (n.exported == true) {
+            return "export {text}"
+        }
+        return text
+    }
+    if (k == "if") {
+        return if_text(n, depth)
+    }
+    if (k == "while") {
+        return "while ({expr(n.cond)}) \{\n{block_text(n.body, depth + 1)}{pad(depth)}}"
+    }
+    if (k == "for") {
+        let init = ""
+        if (n.init != null) {
+            init = simple_text(n.init)
+        }
+        let cond = ""
+        if (n.cond != null) {
+            cond = expr(n.cond)
+        }
+        let incr = ""
+        if (n.incr != null) {
+            incr = simple_text(n.incr)
+        }
+        return "for ({init}; {cond}; {incr}) \{\n{block_text(n.body, depth + 1)}{pad(depth)}}"
+    }
+    if (k == "forin") {
+        return "for (let {n.name} in {expr(n.iter)}) \{\n{block_text(n.body, depth + 1)}{pad(depth)}}"
+    }
+    if (k == "switch") {
+        let out = "switch ({expr(n.e)}) \{\n"
+        for (let c in n.cases) {
+            out = out + "{pad(depth + 1)}case {expr(c.value)}:\n{block_text(c.body, depth + 2)}"
+        }
+        if (len(n.dflt) > 0) {
+            out = out + "{pad(depth + 1)}default:\n{block_text(n.dflt, depth + 2)}"
+        }
+        return out + pad(depth) + "}"
+    }
+    if (k == "return") {
+        if (n.e == null) {
+            return "return"
+        }
+        return "return {expr(n.e)}"
+    }
+    if (k == "break") {
+        return "break"
+    }
+    if (k == "continue") {
+        return "continue"
+    }
+    if (k == "block") {
+        return "\{\n{block_text(n.body, depth + 1)}{pad(depth)}}"
+    }
+    if (k == "unsafe") {
+        return "unsafe \{\n{block_text(n.body, depth + 1)}{pad(depth)}}"
+    }
+    if (k == "typedef") {
+        let word = "data"
+        if (n.is_template == true) {
+            word = "template"
+        } else if (n.is_bloc == true) {
+            word = "bloc"
+        }
+        let head = word
+        if (n.exported == true) {
+            head = "export {word}"
+        }
+        let fields = []
+        for (let i = 0; i < len(n.fields); i++) {
+            if (n.ftypes[i] == null) {
+                append(fields, n.fields[i])
+            } else {
+                let kind = n.ftypes[i]
+                if (starts_with(kind, "box:")) {
+                    kind = "box[{slice(kind, 4, len(kind))}]"
+                }
+                append(fields, "{n.fields[i]}: {kind}")
+            }
+        }
+        return "{head} {n.name} \{ {join(fields, ", ")} }"
+    }
+    if (k == "use") {
+        let path = "\"{escape_text(n.path)}\""
+        if (len(n.names) == 0) {
+            return "use {path}"
+        }
+        return "use \{ {join(n.names, ", ")} } from {path}"
+    }
+    return expr(n)
+}
+
+func stmt(n, depth) {
+    return "{pad(depth)}{stmt_body(n, depth)}\n"
+}
+
+export func unparse_program(stmts) {
+    return block_text(stmts, 0)
+}

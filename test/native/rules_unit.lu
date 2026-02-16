@@ -44,12 +44,13 @@ func expect_text(label, code_is_mem, code, want) {
     }
 }
 
-# ---- unsafe_rt tests -----------------------------------------------------------------------------
+# Unsafe_rt tests
 
 func test_enter_block_rejects_nesting() {
     luna_mem_init()
     expect("begin", luna_mem_begin(), 0)
-    expect("nested begin", luna_mem_begin(), 6)
+    expect("nested begin", luna_mem_begin(), 0)
+    luna_mem_end()
     luna_mem_end()
     expect("begin after end", luna_mem_begin(), 0)
     luna_mem_end()
@@ -108,7 +109,7 @@ func test_defer_marks_freed() {
     luna_mem_defer(100)
     luna_mem_defer(300)
     luna_mem_defer(200)
-    luna_mem_run_defers()
+    luna_mem_run_defers(0)
     expect("deferred 100", luna_mem_deref_ok(100), 4)
     expect("deferred 200", luna_mem_deref_ok(200), 4)
     luna_mem_track_alloc(400, 8)
@@ -120,14 +121,27 @@ func test_defer_marks_freed() {
     luna_mem_end()
 }
 
+func test_nested_blocks_free_their_own_defers() {
+    luna_mem_init()
+    luna_mem_track_alloc(100, 8)
+    luna_mem_track_alloc(200, 8)
+    luna_mem_begin()
+    luna_mem_defer(100)
+    luna_mem_begin()
+    luna_mem_defer(200)
+    luna_mem_end()
+    expect("inner end frees the inner pointer", luna_mem_deref_ok(200), 4)
+    expect("inner end keeps the outer pointer", luna_mem_deref_ok(100), 0)
+    luna_mem_end()
+    expect("outer end frees the outer pointer", luna_mem_deref_ok(100), 4)
+}
+
 func test_addr_and_call_checks() {
     luna_mem_init()
     luna_mem_track_alloc(100, 8)
     expect("addr named", luna_mem_addr_ok(10, 1), 0)
     expect("addr pointer", luna_mem_addr_ok(100, 1), 1)
     expect("addr temporary", luna_mem_addr_ok(10, 0), 5)
-    expect("call builtin", luna_mem_call_ok(1), 0)
-    expect("call user", luna_mem_call_ok(0), 11)
     expect("alloc size 1", luna_mem_alloc_size_ok(1, 1), 0)
     expect("alloc size 0", luna_mem_alloc_size_ok(0, 1), 8)
     expect("alloc size -5", luna_mem_alloc_size_ok(-5, 1), 8)
@@ -164,19 +178,17 @@ func test_mem_messages() {
     expect_text("mem 3", 1, 3, "ptr_add() moved outside the allocation bounds")
     expect_text("mem 4", 1, 4, "pointer was freed or freed twice")
     expect_text("mem 5", 1, 5, "address_of() only works on named values")
-    expect_text("mem 6", 1, 6, "nested unsafe blocks are not allowed")
     expect_text("mem 7", 1, 7, "pointers cannot be stored inside GC-managed values")
     expect_text("mem 8", 1, 8, "alloc() size must be a positive integer")
     expect_text("mem 9", 1, 9, "ordered pointer comparisons need the same base allocation")
     expect_text("mem 10", 1, 10, "pointers may only be cast to int")
-    expect_text("mem 11", 1, 11, "only builtin calls are allowed inside unsafe blocks")
-    expect_text("mem 12", 1, 12, "free() may not appear inside conditional control flow")
+    expect_text("mem 12", 1, 12, "memory from alloc() was not freed before the unsafe block ended")
     expect_text("mem 13", 1, 13, "unsafe error: pointer is not registered in the runtime")
     expect_text("mem 14", 1, 14, "unsafe error: unknown runtime error")
     expect_text("mem -1", 1, -1, "unsafe error: unknown runtime error")
 }
 
-# ---- data_rt tests -------------------------------------------------------------------------------
+# Data_rt tests
 
 func test_box_lifecycle() {
     luna_data_init()
@@ -184,7 +196,9 @@ func test_box_lifecycle() {
     expect("size 1", luna_data_box_size_ok(1), 0)
     expect("size 4096", luna_data_box_size_ok(4096), 0)
     expect("size 0", luna_data_box_size_ok(0), 4)
-    expect("size 4097", luna_data_box_size_ok(4097), 4)
+    expect("size 4097", luna_data_box_size_ok(4097), 0)
+    expect("size 16777216", luna_data_box_size_ok(16777216), 0)
+    expect("size 16777217", luna_data_box_size_ok(16777217), 4)
     expect("size huge", luna_data_box_size_ok(-1), 4)
 
     expect("untracked access", luna_data_box_access_ok(42), 6)
@@ -221,15 +235,20 @@ func test_box_many_handles() {
 }
 
 func test_bloc_validate() {
-    let f = stack_buf(64)
+    let f = stack_buf(128)
     st64(f, cstr("x"))
     st64(f + 8, cstr("y"))
     st64(f + 16, cstr("z"))
     st64(f + 24, cstr("w"))
     st64(f + 32, cstr("v"))
+    st64(f + 40, cstr("u"))
+    st64(f + 48, cstr("t"))
+    st64(f + 56, cstr("s"))
+    st64(f + 64, cstr("r"))
     expect("Vec2 fits", luna_data_bloc_validate(cstr("Vec2"), f, 2), 0)
     expect("four fields fit", luna_data_bloc_validate(cstr("Quad"), f, 4), 0)
-    expect("five fields oversize", luna_data_bloc_validate(cstr("TooWide"), f, 5), 3)
+    expect("five fields still fit", luna_data_bloc_validate(cstr("Wide"), f, 5), 0)
+    expect("nine fields oversize", luna_data_bloc_validate(cstr("TooWide"), f, 9), 3)
     expect("no fields", luna_data_bloc_validate(cstr("Empty"), 0, 0), 0)
     expect("negative count", luna_data_bloc_validate(cstr("Neg"), f, -3), 0)
     expect("empty name", luna_data_bloc_validate(cstr(""), f, 2), 1)
@@ -295,15 +314,15 @@ func test_template_register() {
 }
 
 func test_containment() {
-    expect("template in template", luna_data_containment_ok(3, 3), 12)
+    expect("template in template", luna_data_containment_ok(3, 3), 0)
     expect("bloc in template", luna_data_containment_ok(3, 1), 0)
     expect("box in template", luna_data_containment_ok(3, 2), 0)
-    expect("bloc in box", luna_data_containment_ok(2, 1), 0)
-    expect("box in bloc", luna_data_containment_ok(1, 2), 12)
+    expect("box in bloc", luna_data_containment_ok(1, 2), 0)
     expect("template in bloc", luna_data_containment_ok(1, 3), 12)
+    expect("bloc in bloc", luna_data_containment_ok(1, 1), 12)
+    expect("bloc in box", luna_data_containment_ok(2, 1), 12)
     expect("box in box", luna_data_containment_ok(2, 2), 12)
     expect("template in box", luna_data_containment_ok(2, 3), 12)
-    expect("bloc in bloc", luna_data_containment_ok(1, 1), 12)
     expect("unknown kinds", luna_data_containment_ok(0, 9), 12)
 }
 
@@ -311,8 +330,8 @@ func test_data_messages() {
     expect_text("data 0", 0, 0, "ok")
     expect_text("data 1", 0, 1, "bloc name cannot be empty")
     expect_text("data 2", 0, 2, "bloc has duplicate field names")
-    expect_text("data 3", 0, 3, "bloc exceeds the cache-line size limit (32 bytes)")
-    expect_text("data 4", 0, 4, "box size must be between 1 and 4096 bytes")
+    expect_text("data 3", 0, 3, "bloc exceeds the cache-line size limit (64 bytes)")
+    expect_text("data 4", 0, 4, "box size must be between 1 and 16777216 bytes")
     expect_text("data 5", 0, 5, "box was already freed (use-after-free)")
     expect_text("data 6", 0, 6, "box is not live")
     expect_text("data 7", 0, 7, "template name cannot be empty")
@@ -343,6 +362,7 @@ func main(argc_i, argv_p) {
     test_alloc_tracking_and_poisoning()
     test_compare_and_cast_rules()
     test_defer_marks_freed()
+    test_nested_blocks_free_their_own_defers()
     test_addr_and_call_checks()
     test_many_allocations()
     test_mem_messages()

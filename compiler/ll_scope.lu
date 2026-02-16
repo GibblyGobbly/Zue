@@ -89,6 +89,18 @@ export func var_set(v, expr) {
     }
 }
 
+# The index in the scope stack of the scope that declares name, or -1.
+export func find_local_index(name) {
+    let i = len(ST.ctx.scopes) - 1
+    while (i >= 0) {
+        if (ST.ctx.scopes[i][name] != null) {
+            return i
+        }
+        i -= 1
+    }
+    return -1
+}
+
 export func find_local(name) {
     let i = len(ST.ctx.scopes) - 1
     while (i >= 0) {

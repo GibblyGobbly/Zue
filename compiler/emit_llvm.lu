@@ -12,15 +12,14 @@ use { die, path_dir, path_join, path_norm, split_lines } from "util.lu"
 use { lex } from "lexer.lu"
 use { parse_program } from "parser.lu"
 use { MODULES, MOD_LIST, uid } from "shared.lu"
-use { collect_exports, has_zero_arg_main, p_prompt_text, used_names, walk_nested } from "analysis.lu"
+use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analysis.lu"
 use { LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_KSTRS, LL_MODDECLS } from "ll_state.lu"
 use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.lu"
 use { ll_call_out, ll_char, ll_condbr, ll_copy, ll_cstr, ll_float, ll_gname, ll_int } from "ll_state.lu"
 use { ll_kstr, ll_label, ll_mark, ll_new_ctx, ll_new_label, ll_null, ll_reg } from "ll_state.lu"
 use { ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } from "ll_state.lu"
-use { at_top, cap_cell, declare, pop_scope, push_scope, resolve, run_defers } from "ll_scope.lu"
+use { at_top, cap_cell, declare, find_local_index, pop_scope, push_scope, resolve, run_defers } from "ll_scope.lu"
 use { var_get, var_set } from "ll_scope.lu"
-use { lint_program } from "lint.lu"
 use { check_program } from "check.lu"
 use { ST } from "state.lu"
 
@@ -34,15 +33,31 @@ func ll_binop(op, a, b) {
     return ll_call_out(LL_BINOPS[op], "ptr {a}, ptr {b}")
 }
 
+# The i1 for a condition held in slot. A boolean is read in place; anything else goes to the
+# runtime, which reports the error. 1 is the runtime's T_BOOL tag.
 func ll_truth_flag(slot) {
-    let r = ll_reg()
-    ll("{r} = call i32 @lvp_truth(ptr {slot})")
-    let b = ll_reg()
-    ll("{b} = icmp ne i32 {r}, 0")
-    return b
+    let tag = ll_reg()
+    ll("{tag} = load i64, ptr {slot}")
+    let is_bool = ll_reg()
+    ll("{is_bool} = icmp eq i64 {tag}, 1")
+    let bad = ll_new_label("tbad")
+    let ok = ll_new_label("tbool")
+    ll_condbr(is_bool, ok, bad)
+    ll_label(bad)
+    let ignored = ll_reg()
+    ll("{ignored} = call i32 @lvp_truth(ptr {slot})")
+    ll_br(ok)
+    ll_label(ok)
+    let payload = ll_reg()
+    ll("{payload} = getelementptr inbounds i8, ptr {slot}, i64 8")
+    let v = ll_reg()
+    ll("{v} = load i32, ptr {payload}")
+    let flag = ll_reg()
+    ll("{flag} = icmp ne i32 {v}, 0")
+    return flag
 }
 
-# Expressions -----------------------------------------------------------
+# Expressions
 
 # An integer literal must fit in 64 bits; -9223372036854775808 is the one that needs the sign.
 func int_literal(n) {
@@ -69,6 +84,29 @@ func ex_list(nodes) {
     return res
 }
 
+# Reads a global variable. The common case, a defined variable, is a plain load and store; the
+# runtime call is only made (to report the error) when the variable is still undefined. 17 is the
+# runtime's T_UNDEF tag.
+func global_get(name) {
+    let g = ll_gname(name)
+    let t = ll_slot()
+    let tag = ll_reg()
+    ll("{tag} = load i64, ptr {g}")
+    let undefined = ll_reg()
+    ll("{undefined} = icmp eq i64 {tag}, 17")
+    let slow = ll_new_label("gundef")
+    let ok = ll_new_label("gdef")
+    ll_condbr(undefined, slow, ok)
+    ll_label(slow)
+    ll("call void @lvp_gget(ptr {t}, ptr {g}, ptr {ll_cstr(name)})")
+    ll_br(ok)
+    ll_label(ok)
+    let v = ll_reg()
+    ll("{v} = load %LV, ptr {g}")
+    ll("store %LV {v}, ptr {t}")
+    return t
+}
+
 func ex_id(n) {
     let r = resolve(n.name)
     if (r.kind == "local") {
@@ -88,7 +126,7 @@ func ex_id(n) {
     }
     ll_reg_global(n.name)
     ll_mark(n.line)
-    return ll_call_out("lvp_gget", "ptr {ll_gname(n.name)}, ptr {ll_cstr(n.name)}")
+    return global_get(n.name)
 }
 
 func call_builtin(name, argv) {
@@ -200,16 +238,25 @@ func ex_bin(n) {
     return ll_binop(n.op, a, b)
 }
 
-func ex_incdec(n) {
+# x++ and x-- as a value give the old value; ++x and --x give the new one. as_statement skips
+# keeping the old value.
+func ex_incdec(n, as_statement) {
     ll_mark(n.line)
     let fn_name = "lvp_add_fast"
     if (n.op == "--") {
         fn_name = "lvp_sub_fast"
     }
     let cur = ex_id(n)
+    let old = null
+    if (n.prefix != true and not as_statement) {
+        old = copy_slot(cur)
+    }
     let one = ll_int("1")
     let t = ll_call_out(fn_name, "ptr {cur}, ptr {one}")
     store_name(n.name, t)
+    if (old != null) {
+        return old
+    }
     return t
 }
 
@@ -298,21 +345,21 @@ func ex(n) {
         return compile_function(n)
     }
     if (k == "incdec") {
-        return ex_incdec(n)
+        return ex_incdec(n, false)
     }
     if (k == "box") {
         let size = ex(n.size)
         ll_mark(n.line)
         let id = box_scope_id()
-        return ll_call_out("lvp_box_new", "ptr {size}, i64 {id}")
-    }
-    if (k == "input") {
-        ll_mark(n.line)
-        if (n.prompt == null) {
-            return call_builtin("input", [])
+        # A box whose size is written as a number lives in the function's own stack frame.
+        if (n.size.k == "num" and len(n.size.v) <= 4) {
+            let bytes = int(n.size.v)
+            if (bytes >= 1 and bytes <= 4096) {
+                let mem = ll_alloca("[{bytes} x i8]")
+                return ll_call_out("lvp_box_new_stack", "ptr {size}, i64 {id}, ptr {mem}")
+            }
         }
-        let prompt = p_prompt_text(n.prompt)
-        return call_builtin("input", [ll_kstr(prompt)])
+        return ll_call_out("lvp_box_new", "ptr {size}, i64 {id}")
     }
     die("Compile Error", n.line, "cannot compile expression of kind '{k}'")
 }
@@ -339,7 +386,7 @@ func box_scope_id() {
     return id
 }
 
-# Functions -------------------------------------------------------------
+# Functions
 
 # Puts a finished function together: signature, entry-block allocas, then the body.
 func finish_function(header, ctx) {
@@ -444,9 +491,23 @@ func global_in_function() {
     return 1
 }
 
+# Whether a value stored into name would leave the innermost unsafe block: the variable was
+# declared outside it.
+func outlives_unsafe(name) {
+    let marks = ST.ctx.unsafe_marks
+    if (len(marks) == 0) {
+        return false
+    }
+    let idx = find_local_index(name)
+    return idx >= 0 and idx < marks[len(marks) - 1]
+}
+
 func store_name(name, value) {
     let r = resolve(name)
     if (r.kind == "local") {
+        if (outlives_unsafe(name)) {
+            ll("call void @lvp_ptr_escape_check(ptr {value})")
+        }
         var_set(r.v, value)
     } else if (r.kind == "cap") {
         ll_copy(cap_cell(r.i), value)
@@ -457,7 +518,7 @@ func store_name(name, value) {
     }
 }
 
-# Statements ------------------------------------------------------------
+# Statements
 
 func st_block(stmts) {
     push_scope()
@@ -467,11 +528,23 @@ func st_block(stmts) {
     pop_scope()
 }
 
+# A value read from a variable, field or element is copied when it is a box: assigning a box makes
+# a new box with the same bytes, so the two never share storage. A box passed to a function is
+# lent and not copied.
+func copy_if_box(node, v) {
+    if (node.k == "id" or node.k == "field" or node.k == "index") {
+        let t = copy_slot(v)
+        ll("call void @lvp_box_assign_copy(ptr {t}, i64 {box_scope_id()})")
+        return t
+    }
+    return v
+}
+
 func st_let(n) {
     ll_mark(n.line)
     let init_ptr = ll_null()
     if (n.init != null) {
-        init_ptr = ex(n.init)
+        init_ptr = copy_if_box(n.init, ex(n.init))
     }
     if (at_top()) {
         ll_reg_global(n.name)
@@ -557,7 +630,9 @@ func st_while(n) {
 
 func st_for(n) {
     push_scope()
-    st(n.init)
+    if (n.init != null) {
+        st(n.init)
+    }
     let cond = ll_new_label("fcond")
     let body = ll_new_label("fbody")
     let step = ll_new_label("fstep")
@@ -565,14 +640,20 @@ func st_for(n) {
     loop_push("for", done, step)
     ll_br(cond)
     ll_label(cond)
-    let c = ex(n.cond)
-    ll_mark(n.line)
-    ll_condbr(ll_truth_flag(c), body, done)
+    if (n.cond == null) {
+        ll_br(body)
+    } else {
+        let c = ex(n.cond)
+        ll_mark(n.line)
+        ll_condbr(ll_truth_flag(c), body, done)
+    }
     ll_label(body)
     st_block(n.body)
     ll_br(step)
     ll_label(step)
-    st(n.incr)
+    if (n.incr != null) {
+        st(n.incr)
+    }
     ll_br(cond)
     ll_label(done)
     loop_pop()
@@ -660,13 +741,19 @@ func st_switch(n) {
 }
 
 func st_unsafe(n) {
+    if (len(ST.ctx.unsafe_marks) > 0) {
+        die("Syntax Error", n.line, "unsafe blocks cannot be nested: the enclosing unsafe block already allows unsafe operations")
+    }
     ll_mark(n.line)
     ll("call void @lv_unsafe_begin()")
     push_scope()
+    # Variables in scopes below this index were declared outside the block.
+    append(ST.ctx.unsafe_marks, len(ST.ctx.scopes) - 1)
     append(ST.ctx.defers[len(ST.ctx.defers) - 1], {"kind": "unsafe"})
     for (let s in n.body) {
         st(s)
     }
+    remove(ST.ctx.unsafe_marks, len(ST.ctx.unsafe_marks) - 1)
     pop_scope()
 }
 
@@ -704,6 +791,9 @@ func st_return(n) {
         ST.ctx.dead = true
     } else {
         v = copy_slot(v)
+        if (len(ST.ctx.unsafe_marks) > 0) {
+            ll("call void @lvp_ptr_escape_check(ptr {v})")
+        }
         let where_text = ll_cstr("returned from a function")
         ll("call void @lvp_box_escape_check(ptr {v}, ptr {where_text})")
         run_defers(0)
@@ -726,16 +816,10 @@ func st(n) {
         st_funcdef(n)
     } else if (k == "assign") {
         ll_mark(n.line)
-        let v = ex(n.e)
+        let v = copy_if_box(n.e, ex(n.e))
         store_name(n.name, v)
     } else if (k == "setidx") {
         st_setidx(n)
-    } else if (k == "print") {
-        for (let arg in n.args) {
-            let v = ex(arg)
-            ll_mark(n.line)
-            ll("call void @lvp_print(ptr {v})")
-        }
     } else if (k == "return") {
         st_return(n)
     } else if (k == "break") {
@@ -758,13 +842,17 @@ func st(n) {
         st_unsafe(n)
     } else if (k == "typedef") {
         ll_mark(n.line)
+    } else if (k == "block") {
+        st_scoped(n.body)
+    } else if (k == "incdec") {
+        ex_incdec(n, true)
     } else {
         ll_mark(n.line)
         ex(n)
     }
 }
 
-# Modules ---------------------------------------------------------------
+# Modules
 
 func new_module(display, canon) {
     let id = len(MOD_LIST)
@@ -817,16 +905,39 @@ func define_types(stmts) {
                 let joined = join(names, ", ")
                 append(LL_MODDECLS, "{fields} = private constant [{len(names)} x ptr] [{joined}]")
             }
+            # The declared field types as text, "null" for a field without one; null when none has a type.
+            let ftypes = "null"
+            let typed = false
+            let type_texts = []
+            for (let ft in s.ftypes) {
+                if (ft == null) {
+                    append(type_texts, "ptr null")
+                } else {
+                    typed = true
+                    append(type_texts, "ptr {ll_cstr(ft)}")
+                }
+            }
+            if (typed) {
+                ftypes = "@fty{uid()}"
+                let joined_types = join(type_texts, ", ")
+                append(LL_MODDECLS, "{ftypes} = private constant [{len(type_texts)} x ptr] [{joined_types}]")
+            }
             ll_mark(s.line)
             let r = ll_reg()
-            if (s.is_bloc) {
+            if (s.is_bloc and typed) {
+                ll("{r} = call %LV @lv_define_bloc_typed(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields}, ptr {ftypes})")
+            } else if (s.is_bloc) {
                 ll("{r} = call %LV @lv_define_bloc(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields})")
             } else {
                 let template_flag = 0
                 if (s.is_template) {
                     template_flag = 1
                 }
-                ll("{r} = call %LV @lv_define_data(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields}, i32 {template_flag})")
+                if (typed) {
+                    ll("{r} = call %LV @lv_define_data_typed(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields}, i32 {template_flag}, ptr {ftypes})")
+                } else {
+                    ll("{r} = call %LV @lv_define_data(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields}, i32 {template_flag})")
+                }
             }
             ll("store %LV {r}, ptr {ll_gname(s.name)}")
         }
@@ -839,9 +950,7 @@ func compile_module_body(m, stmts, fname) {
     walk_nested(stmts, ST.ctx.nested)
     prescan_globals(stmts)
     ll("store ptr @mod_{m.id}, ptr @lv_pos_mod")
-    if (m.id == 0) {
-        define_types(stmts)
-    }
+    define_types(stmts)
     for (let s in stmts) {
         st(s)
     }
@@ -944,7 +1053,7 @@ func st_use(n) {
     }
 }
 
-# Program ---------------------------------------------------------------
+# Program
 
 func declarations() {
     let d = []
@@ -962,6 +1071,8 @@ func declarations() {
     append(d, "declare void @lvp_global_store_check(ptr, i32)")
     append(d, "declare void @lvp_box_escape_check(ptr, ptr)")
     append(d, "declare void @lvp_box_new(ptr, ptr, i64)")
+    append(d, "declare void @lvp_box_new_stack(ptr, ptr, i64, ptr)")
+    append(d, "declare void @lvp_box_assign_copy(ptr, i64)")
     append(d, "declare void @lvp_gget(ptr, ptr, ptr)")
     append(d, "declare void @lvp_iter_prepare(ptr, ptr)")
     append(d, "declare i64 @lvp_iter_len(ptr)")
@@ -978,14 +1089,16 @@ func declarations() {
     append(d, "declare %LV @lv_interp(i32, ptr)")
     append(d, "declare %LV @lv_define_bloc(ptr, i32, ptr)")
     append(d, "declare %LV @lv_define_data(ptr, i32, ptr, i32)")
+    append(d, "declare %LV @lv_define_bloc_typed(ptr, i32, ptr, ptr)")
+    append(d, "declare %LV @lv_define_data_typed(ptr, i32, ptr, i32, ptr)")
     append(d, "declare i64 @lv_scope_new()")
     append(d, "declare void @lv_box_release_scope(i64)")
     append(d, "declare void @lv_unsafe_begin()")
     append(d, "declare void @lv_unsafe_end()")
+    append(d, "declare void @lvp_ptr_escape_check(ptr)")
     append(d, "declare %LV @lv_addr(ptr)")
     append(d, "declare %LV @lv_addr_invalid(i32)")
     append(d, "declare void @lv_arity(ptr, i32, i32, i32)")
-    append(d, "declare void @lv_static_error(i32, ptr, ptr)")
     append(d, "declare void @lv_name_error(ptr, ptr, ptr, ptr)")
     append(d, "declare i32 @lv_main(i32, ptr, ptr)")
     for (let b in LL_BUILTINS) {
@@ -998,18 +1111,9 @@ export func compile_program_ll(stmts) {
     let m = new_module(ST.src_file, path_norm(path_join(ST.cwd, ST.src_file)))
     ST.mod = m
     decl_module_source(m, ST.src_lines)
-    let static_err = lint_program(stmts)
-    if (static_err != null) {
-        ST.ctx = ll_new_ctx(true)
-        ll("store ptr @mod_0, ptr @lv_pos_mod")
-        ll("call void @lv_static_error(i32 {static_err.line}, ptr {ll_cstr(static_err.msg)}, ptr {ll_cstr(static_err.hint)})")
-        ll("ret void")
-        finish_function("define internal void @entry() \{", ST.ctx)
-    } else {
-        check_program(stmts)
-        collect_exports(stmts, m.exports)
-        compile_module_body(m, stmts, "entry")
-    }
+    check_program(stmts)
+    collect_exports(stmts, m.exports)
+    compile_module_body(m, stmts, "entry")
 
     # Pieces that create more string constants come first.
     let natives = []

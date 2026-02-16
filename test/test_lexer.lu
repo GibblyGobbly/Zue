@@ -1,0 +1,89 @@
+# CASE hexadecimal binary and underscore numbers
+print(0xFF)
+print(0XfF)
+print(0b1010)
+print(1_000_000)
+print(0x7FFFFFFFFFFFFFFF)
+print(007)
+print(0x1_0)
+# CASE float forms
+print(1e3)
+print(2.5e-4)
+print(1E2)
+print(1_0.5_0)
+print(3.0)
+# CASE modulo assignment
+let x = 17
+x %= 5
+print(x)
+# CASE string escapes
+print("a\tb")
+print("q\"q")
+print("back\\slash")
+print("cr\rlf")
+print("brace \{ and \}")
+print("single \' quote")
+# CASE nested strings inside interpolation
+let m = {"k": "v"}
+print("{len("abc")}")
+print("{"x" + "y"}")
+print("{m["k"]}")
+print("a{ "b{1 + 1}" }c")
+print("{ 1 + 2 }")
+print("{}")
+# CASE escaped quotes inside interpolation
+let p = {"x": 1, "y": 2}
+print("({p[\"x\"]}, {p[\"y\"]})")
+# CASE character literals
+print(int('a'))
+print(int('\n'))
+print(int('\t'))
+print(int('\r'))
+print(int('\\'))
+print(int('\''))
+print(int('"'))
+print(int('\0'))
+print(int('\{'))
+print(int('{'))
+# CASE unexpected dollar sign
+let x = 5 $ 3
+# CASE unexpected at sign
+let y = @
+# CASE unexpected question mark
+print(1 ? 2)
+# CASE non-ASCII outside a string
+let é = 1
+# CASE unterminated string
+print("abc
+# CASE unterminated string at the end of the file
+print("abc)
+# CASE unterminated interpolation
+print("{x")
+# CASE lone opening brace in a string
+print("{")
+# CASE unknown escape in a string
+print("\q")
+# CASE number followed by letters
+let a = 12abc
+# CASE exponent without digits
+let a = 1e
+# CASE hex without digits
+let a = 0x
+# CASE hex with a bad digit
+let a = 0xG1
+# CASE binary with a bad digit
+let a = 0b102
+# CASE double underscore in a number
+let a = 1__0
+# CASE trailing underscore in a number
+let a = 1_
+# CASE hex literal too large
+let a = 0xFFFFFFFFFFFFFFFF
+# CASE empty character literal
+let c = ''
+# CASE character literal with two characters
+let c = 'ab'
+# CASE unknown escape in a character literal
+let c = '\q'
+# CASE unterminated character literal
+let c = 'a

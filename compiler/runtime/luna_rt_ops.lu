@@ -14,7 +14,7 @@ extern("pthread_join", "i32", "i64,ptr")
 
 const MAX_DEPTH = 100000
 
-# ---- errors in operators ---------------------------------------------------------------
+# Errors in operators
 
 func _operand_error(op, a, b) {
     let msg = stack_buf(160)
@@ -57,7 +57,7 @@ func _oob(idx, len, what) {
           cstr("Index %lld is out of bounds for %s of length %lld"), idx, what, len)
 }
 
-# ---- arithmetic ---------------------------------------------------------------------------
+# Arithmetic
 
 # A number element as a double; a dense list holds only numbers.
 func _elem(v) {
@@ -292,7 +292,7 @@ func lvp_neg(o, a) {
     _operand_error(cstr("-"), zero, a)
 }
 
-# ---- comparison -----------------------------------------------------------------------------
+# Comparison
 
 func _family(v) {
     let t = _tag(v)
@@ -486,12 +486,20 @@ func lvp_lt_fast(o, a, b) {
         _bool(o, _val(a) < _val(b))
         return 0
     }
+    if (_tag(a) == T_CHAR and _tag(b) == T_CHAR) {
+        _bool(o, ld8(a + 8) < ld8(b + 8))
+        return 0
+    }
     lvp_lt(o, a, b)
 }
 
 func lvp_le_fast(o, a, b) {
     if (_tag(a) == T_INT and _tag(b) == T_INT) {
         _bool(o, _val(a) <= _val(b))
+        return 0
+    }
+    if (_tag(a) == T_CHAR and _tag(b) == T_CHAR) {
+        _bool(o, ld8(a + 8) <= ld8(b + 8))
         return 0
     }
     lvp_le(o, a, b)
@@ -502,12 +510,20 @@ func lvp_gt_fast(o, a, b) {
         _bool(o, _val(a) > _val(b))
         return 0
     }
+    if (_tag(a) == T_CHAR and _tag(b) == T_CHAR) {
+        _bool(o, ld8(a + 8) > ld8(b + 8))
+        return 0
+    }
     lvp_gt(o, a, b)
 }
 
 func lvp_ge_fast(o, a, b) {
     if (_tag(a) == T_INT and _tag(b) == T_INT) {
         _bool(o, _val(a) >= _val(b))
+        return 0
+    }
+    if (_tag(a) == T_CHAR and _tag(b) == T_CHAR) {
+        _bool(o, ld8(a + 8) >= ld8(b + 8))
         return 0
     }
     lvp_ge(o, a, b)
@@ -522,6 +538,10 @@ func lvp_eq_fast(o, a, b) {
         _bool(o, ld8(a + 8) == ld8(b + 8))
         return 0
     }
+    if (_tag(a) == T_STR and _tag(b) == T_STR) {
+        _bool(o, _str_same(_val(a), _val(b)))
+        return 0
+    }
     lvp_eq(o, a, b)
 }
 
@@ -534,6 +554,10 @@ func lvp_ne_fast(o, a, b) {
         _bool(o, ld8(a + 8) != ld8(b + 8))
         return 0
     }
+    if (_tag(a) == T_STR and _tag(b) == T_STR) {
+        _bool(o, _str_same(_val(a), _val(b)) == 0)
+        return 0
+    }
     lvp_ne(o, a, b)
 }
 
@@ -544,7 +568,7 @@ func lvp_eq_b(a, b) {
     return ld32(r + 8)
 }
 
-# ---- indexing ----------------------------------------------------------------------------------
+# Indexing
 
 func _need_int_index(idx, what) {
     if (_tag(idx) != T_INT) {
@@ -725,7 +749,7 @@ func lvp_gget(o, g, name) {
     _cp(o, g)
 }
 
-# ---- calls -------------------------------------------------------------------------------------
+# Calls
 
 func lvp_call(o, f, argc_i, argv) {
     let tf = _tag(f)
@@ -740,9 +764,6 @@ func lvp_call(o, f, argc_i, argv) {
     let mod = ld64(addr_of("lv_pos_mod"))
     let line = ld32(addr_of("lv_pos_line"))
     let fn = _val(f)
-    if (_unsafe_depth() > 0) {
-        _unsafe_call_check(ld32(fn + F_NATIVE))
-    }
     st32(addr_of("lv_depth"), ld32(addr_of("lv_depth")) + 1)
     if (ld32(addr_of("lv_depth")) > MAX_DEPTH) {
         lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
@@ -778,7 +799,7 @@ func lv_arity(self_p, argc_i, min_i, max_i) {
            cstr("%s() expects %d to %d arguments, but got %d"), name, min_i, max_i, argc_i)
 }
 
-# ---- program entry ----------------------------------------------------------------------------
+# Program entry
 
 func _thread_main(start) {
     lv_gc_start()

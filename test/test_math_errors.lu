@@ -25,17 +25,17 @@ print(int("  -42  "))
 print(int("+7"))
 # CASE rand with a string
 func pass(v) {
-    return v
+    return [v][0]
 }
 print(rand(pass("a")))
 # CASE rand with a float
 func pass(v) {
-    return v
+    return [v][0]
 }
 print(rand(pass(5.9)))
 # CASE srand with a string
 func pass(v) {
-    return v
+    return [v][0]
 }
 srand(pass("x"))
 # CASE rand over every 64-bit value

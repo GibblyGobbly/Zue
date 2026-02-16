@@ -34,7 +34,7 @@ extern("remove", "i32", "ptr")
 extern("time", "i64", "ptr")
 extern("getline", "i64", "ptr,ptr,ptr")
 
-# ---- math ---------------------------------------------------------------------------------
+# Math
 
 func lb_abs(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
@@ -418,7 +418,7 @@ func lb_lerp(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-# ---- files ----------------------------------------------------------------------------------------
+# Files
 
 # The LvFile of argument i, which must be an open file.
 func _arg_file(self_p, argv, i) {
@@ -534,7 +534,7 @@ func lb_flush(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-# ---- dense lists and vector math ----------------------------------------------------------------------
+# Dense lists and vector math
 
 func lb_dense_list(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
@@ -718,7 +718,7 @@ func lb_mat_mul(self_p, argc_i, argv_p) {
     retp(res)
 }
 
-# ---- random numbers -------------------------------------------------------------------------------------
+# Random numbers
 
 # xoroshiro128++, seeded and scrambled exactly as in src/math_lib.c.
 space("_rng", 16)
