@@ -316,7 +316,8 @@ after:  [1, 5, 7, 7, 23, 32, 32, 34, 62]
 
 Everything is in [docs](docs/README.md): the language pages, the builtin functions, how the
 compiler and the runtime work, the garbage collector, `unsafe` memory, and how to run and add
-tests.
+tests. [development](docs/development.md) lists the techniques and tools used to build and check the
+front end, with results and credit.
 
 ## How Luna got here
 

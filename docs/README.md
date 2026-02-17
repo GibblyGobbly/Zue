@@ -12,3 +12,4 @@
 | [architecture](architecture.md) | How a program becomes a binary; the compiler, the runtime, the bootstrap |
 | [gc](gc.md) | The garbage collector |
 | [testing](testing.md) | The test runner, how to add a test |
+| [development](development.md) | The techniques behind the lexer, parser, checker and memory rules, the results, the sources, and credit |
