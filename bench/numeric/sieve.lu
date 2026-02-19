@@ -1,0 +1,22 @@
+# List indexing and booleans: a prime sieve up to 15 million.
+let n = 15000000
+let flags = []
+for (let i = 0; i <= n; i++) {
+    append(flags, true)
+}
+flags[0] = false
+flags[1] = false
+for (let p = 2; p * p <= n; p++) {
+    if (flags[p]) {
+        for (let m = p * p; m <= n; m += p) {
+            flags[m] = false
+        }
+    }
+}
+let count = 0
+for (let i = 0; i <= n; i++) {
+    if (flags[i]) {
+        count += 1
+    }
+}
+print(count)

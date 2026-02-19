@@ -1,0 +1,7 @@
+# Math builtins: sqrt, floor and pow in a loop of 15 million steps.
+let acc = 0.0
+for (let i = 1; i <= 15000000; i++) {
+    let x = float(i)
+    acc += sqrt(x) + float(floor(x / 3.0)) + pow(x, 2.0) / 1000000000.0
+}
+print(acc)

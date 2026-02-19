@@ -1,0 +1,40 @@
+# String search, split, replace and join on a 2 MB text.
+let parts = []
+for (let i = 0; i < 200000; i++) {
+    append(parts, "word{i % 1000}")
+}
+let text = join(parts, ",")
+print(len(text))
+
+let t0 = clock()
+let found = 0
+for (let k = 0; k < 20; k++) {
+    found += index_of(text, "word999,word0,wordX")
+}
+print("index_of miss   {clock() - t0}")
+
+t0 = clock()
+let pieces = split(text, ",")
+print("split           {clock() - t0} {len(pieces)}")
+
+t0 = clock()
+let replaced = replace(text, "word1", "w")
+print("replace         {clock() - t0} {len(replaced)}")
+
+t0 = clock()
+let counts = {}
+for (let w in pieces) {
+    if (map_has(counts, w)) {
+        counts[w] = counts[w] + 1
+    } else {
+        counts[w] = 1
+    }
+}
+print("word count map  {clock() - t0} {len(map_keys(counts))}")
+
+t0 = clock()
+let s = ""
+for (let i = 0; i < 20000; i++) {
+    s = s + "ab"
+}
+print("concat loop     {clock() - t0} {len(s)}")
