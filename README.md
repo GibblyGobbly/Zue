@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="assets/luna.png" alt="Luna logo" width="140">
+  <img src="assets/luna-banner.png" alt="Luna" width="560">
 </p>
-
-<h1 align="center">Luna</h1>
 
 <p align="center">
   A simple, blazing-fast programming language with JavaScript-like syntax that compiles directly to native machine code.
