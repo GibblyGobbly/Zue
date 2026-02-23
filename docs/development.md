@@ -21,7 +21,7 @@ covered by tests in `test/`.
 |---|---|---|
 | Hand-written lexer with tables indexed by byte code | `compiler/lexer.lu` | No string or map work for operators |
 | Tokens as `template` objects, not maps | `compiler/lexer.lu` | About 5 times faster to make and 4 times smaller than a map |
-| Recursive descent with a Pratt (precedence climbing) table for binary operators | `compiler/parser.lu` | One table row per operator; adding `**` or a bitwise operator is a one-line change |
+| Recursive descent with a Pratt (precedence climbing) table for binary operators | `compiler/parser.lu` | One table row per operator; adding `**` and the bitwise operators was a one-line change each |
 | The current token and its kind kept in variables | `compiler/parser.lu` | Asking "what is the next token?" is a comparison, not a call |
 | Line breaks ignored inside brackets by lowering the bracket depth before the closing token | `compiler/parser.lu` | Multi-line calls and literals without a continuation character |
 | Contextual keywords (`data`, `in`, `from`) | `compiler/parser.lu` | They stay usable as names |

@@ -83,6 +83,19 @@ export func ll_int(text) {
 # Float literal text such as 3.14, 1e-05 or 2. as an LLVM double constant expression.
 export func ll_float(text) {
     let t = text
+    # Luna has no negative zero: -0.0 is 0.0
+    if (starts_with(t, "-")) {
+        let nonzero = false
+        for (let i = 1; i < len(t) and char_at(t, i) != "e" and char_at(t, i) != "E"; i++) {
+            let ch = char_at(t, i)
+            if (ch != "0" and ch != ".") {
+                nonzero = true
+            }
+        }
+        if (not nonzero) {
+            t = slice(t, 1, len(t))
+        }
+    }
     if (index_of(t, ".") < 0) {
         let e = index_of(t, "e")
         if (e < 0) {
@@ -193,8 +206,17 @@ export func ll_reg() {
 
 export func ll_copy(dst, src) {
     let r = ll_reg()
-    ll("{r} = load %LV, ptr {src}")
-    ll("store %LV {r}, ptr {dst}")
+    # two 8-byte moves: a 16-byte vector load right after two 8-byte stores cannot be forwarded
+    # by the CPU and stalls
+    let sp = ll_reg()
+    let dp = ll_reg()
+    let w = ll_reg()
+    ll("{r} = load i64, ptr {src}")
+    ll("{sp} = getelementptr inbounds i8, ptr {src}, i64 8")
+    ll("{w} = load i64, ptr {sp}")
+    ll("store i64 {r}, ptr {dst}")
+    ll("{dp} = getelementptr inbounds i8, ptr {dst}, i64 8")
+    ll("store i64 {w}, ptr {dp}")
 }
 
 export func ll_mark(line) {

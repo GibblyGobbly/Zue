@@ -148,7 +148,8 @@ func _int(o, i) {
 }
 
 func _flt(o, bits) {
-    _set(o, T_FLOAT, bits)
+    # adding +0.0 turns -0.0 into 0.0: Luna has no negative zero
+    _set(o, T_FLOAT, fadd(bits, 0.0))
 }
 
 func _bool(o, b) {

@@ -1,0 +1,75 @@
+# CASE power operator
+print(2 ** 10)
+print(2 ** 0)
+print(-2 ** 2)
+print((-2) ** 3)
+print(2 ** 3 ** 2)
+print(2.0 ** 0.5)
+print(2 ** 3 + 1)
+# CASE power overflow
+func pass(v) {
+    return v
+}
+print(pass(2) ** 63)
+# CASE power with a negative int exponent
+func pass(v) {
+    return v
+}
+print(pass(2) ** pass(-1))
+# CASE bitwise and, or, xor, not
+print(12 & 10)
+print(12 | 3)
+print(12 ^ 10)
+print(~5)
+print(~0)
+print(~(-1))
+let x = 6
+print(x & 3)
+print(x | 9)
+print(x ^ x)
+print(~x)
+# CASE shifts
+print(1 << 10)
+print(1 << 62)
+print(-16 >> 2)
+print(255 >> 4)
+print(-1 >> 63)
+print(5 >> 0)
+# CASE precedence
+print(1 + 2 << 3)
+print(1 | 2 == 3)
+print(5 & 3 + 1)
+print(6 ^ 3 & 5)
+print(1 | 2 ^ 3)
+print(2 * 3 & 7)
+# CASE left shift loses bits
+func pass(v) {
+    return v
+}
+print(pass(1) << 63)
+# CASE shift count too large
+func pass(v) {
+    return v
+}
+print(pass(1) << pass(64))
+# CASE negative shift count
+func pass(v) {
+    return v
+}
+print(pass(8) >> pass(-1))
+# CASE bitwise on a float
+func pass(v) {
+    return v
+}
+print(pass(1.5) & 3)
+# CASE bitwise on a float is caught at compile time
+let f = 2.5
+print(f | 1)
+# CASE a mask loop
+let bits = 0
+for (let i = 0; i < 64; i++) {
+    if ((255 >> i) & 1 == 1) {
+        bits++
+    }
+}
+print(bits)

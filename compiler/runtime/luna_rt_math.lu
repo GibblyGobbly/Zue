@@ -55,11 +55,55 @@ func lb_abs(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# The list argument of sum, mean, min and max: not empty, every item a number, all of one type.
+# Returns the item count.
+func _number_list(self_p, argv_p) {
+    let t = _tag(argv_p)
+    if (t != T_LIST and t != T_DENSE) {
+        _errf(E_TYPE, 0, cstr("%s() needs a list of numbers, got %s"), _fname(self_p), _type_name(argv_p), 0)
+    }
+    let n = lvp_iter_len(argv_p)
+    if (n == 0) {
+        _errf(E_ARGUMENT, cstr("Check that the list has items before calling it."),
+              cstr("%s() needs a list with at least one item"), _fname(self_p), 0, 0)
+    }
+    let first = stack_buf(16)
+    let item = stack_buf(16)
+    lvp_iter_at(first, argv_p, 0)
+    for (let i = 0; i < n; i++) {
+        lvp_iter_at(item, argv_p, i)
+        if (_is_num(item) == 0) {
+            _errf(E_TYPE, 0, cstr("%s() list items must be numbers, got %s"), _fname(self_p), _type_name(item), 0)
+        }
+        if (_tag(item) != _tag(first)) {
+            _errf(E_TYPE, cstr("Convert the items with int() or float() so that all have the same type."),
+                  cstr("%s() list items must all be int or all be float, got %s and %s"),
+                  _fname(self_p), _type_name(first), _type_name(item))
+        }
+    }
+    return n
+}
+
+# min and max of a list: which is -1 for the smallest item, 1 for the largest.
+func _list_extreme(argv_p, n, which, o) {
+    let item = stack_buf(16)
+    lvp_iter_at(o, argv_p, 0)
+    for (let i = 1; i < n; i++) {
+        lvp_iter_at(item, argv_p, i)
+        if (_sort_cmp(item, o) * which > 0) {
+            _cp(o, item)
+        }
+    }
+}
+
 func lb_min(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 2, 2)
-    _arg_num(self_p, argv_p, 0)
-    _arg_num(self_p, argv_p, 1)
+    lv_arity(self_p, argc_i, 1, 2)
     let o = stack_buf(16)
+    if (argc_i == 1) {
+        _list_extreme(argv_p, _number_list(self_p, argv_p), -1, o)
+        retp(o)
+    }
+    _same_number_type(self_p, argv_p)
     if (_sort_cmp(argv_p + 16, argv_p) < 0) {
         _cp(o, argv_p + 16)
     } else {
@@ -69,15 +113,68 @@ func lb_min(self_p, argc_i, argv_p) {
 }
 
 func lb_max(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 2, 2)
-    _arg_num(self_p, argv_p, 0)
-    _arg_num(self_p, argv_p, 1)
+    lv_arity(self_p, argc_i, 1, 2)
     let o = stack_buf(16)
+    if (argc_i == 1) {
+        _list_extreme(argv_p, _number_list(self_p, argv_p), 1, o)
+        retp(o)
+    }
+    _same_number_type(self_p, argv_p)
     if (_sort_cmp(argv_p + 16, argv_p) > 0) {
         _cp(o, argv_p + 16)
     } else {
         _cp(o, argv_p)
     }
+    retp(o)
+}
+
+# Neumaier's compensated sum of the list items as floats: the rounding error of every addition is
+# collected in a second variable and added at the end.
+func _float_list_sum(argv_p, n) {
+    let item = stack_buf(16)
+    let s = 0.0
+    let c = 0.0
+    for (let i = 0; i < n; i++) {
+        lvp_iter_at(item, argv_p, i)
+        let x = _num(item)
+        let t = fadd(s, x)
+        if (fge(fabs(s), fabs(x))) {
+            c = fadd(c, fadd(fsub(s, t), x))
+        } else {
+            c = fadd(c, fadd(fsub(x, t), s))
+        }
+        s = t
+    }
+    return fadd(s, c)
+}
+
+func lb_sum(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let n = _number_list(self_p, argv_p)
+    let o = stack_buf(16)
+    let item = stack_buf(16)
+    lvp_iter_at(item, argv_p, 0)
+    if (_tag(item) == T_INT) {
+        let total = 0
+        for (let i = 0; i < n; i++) {
+            lvp_iter_at(item, argv_p, i)
+            if (addof(total, _val(item)) != 0) {
+                _overflow(cstr("sum"))
+            }
+            total = total + _val(item)
+        }
+        _int(o, total)
+        retp(o)
+    }
+    _flt_checked(o, _float_list_sum(argv_p, n), cstr("sum"))
+    retp(o)
+}
+
+func lb_mean(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let n = _number_list(self_p, argv_p)
+    let o = stack_buf(16)
+    _flt_checked(o, fdiv(_float_list_sum(argv_p, n), i2f(n)), cstr("mean"))
     retp(o)
 }
 
@@ -172,7 +269,7 @@ func _math1(self_p, argc_i, argv_p, which, o) {
     } else if (which == 13) {
         r = tanh(x)
     } else if (which == 14) {
-        r = fsub(x, floor(x))
+        r = fsub(x, trunc(x))
     } else if (which == 15) {
         r = fdiv(fmul(x, 3.14159265358979323846), 180.0)
     } else {
@@ -326,9 +423,39 @@ func lb_ceil(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# round(x) gives an int. round(x, digits) keeps x a float with 0 to 15 decimal places, halves away
+# from zero; an int x is returned unchanged. The scaling is done in binary, so a value such as
+# 1.005 (really 1.00499999999999989...) rounds down.
 func lb_round(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 2)
     let o = stack_buf(16)
-    _round_builtin(self_p, argc_i, argv_p, 2, o)
+    if (argc_i == 1) {
+        _round_builtin(self_p, argc_i, argv_p, 2, o)
+        retp(o)
+    }
+    let x = _arg_num(self_p, argv_p, 0)
+    if (_tag(argv_p + 16) != T_INT) {
+        _errf(E_TYPE, 0, cstr("round() digits must be an int, got %s"), _type_name(argv_p + 16), 0, 0)
+    }
+    let digits = _val(argv_p + 16)
+    if (digits < 0 or digits > 15) {
+        _errf(E_ARGUMENT, cstr("Use a number of decimal places from 0 to 15."),
+              cstr("round() digits must be between 0 and 15"), 0, 0, 0)
+    }
+    if (_tag(argv_p) == T_INT) {
+        _cp(o, argv_p)
+        retp(o)
+    }
+    let scale = 1.0
+    for (let i = 0; i < digits; i++) {
+        scale = fmul(scale, 10.0)
+    }
+    let v = fmul(x, scale)
+    if (fge(fabs(v), 9007199254740992.0)) {
+        _flt(o, x)
+        retp(o)
+    }
+    _flt(o, fdiv(round(v), scale))
     retp(o)
 }
 
@@ -366,7 +493,14 @@ func lb_pow(self_p, argc_i, argv_p) {
     _arg_num(self_p, argv_p, 0)
     _arg_num(self_p, argv_p, 1)
     let o = stack_buf(16)
-    if (_tag(argv_p) == T_INT and _tag(argv_p + 16) == T_INT and _val(argv_p + 16) >= 0) {
+    if (_tag(argv_p) == T_INT and _tag(argv_p + 16) == T_INT and _val(argv_p + 16) < 0) {
+        if (_val(argv_p) == 0) {
+            _div_zero()
+        }
+        _errf(E_ARGUMENT, cstr("Use floats for a negative power, for example pow(2.0, -1.0)."),
+              cstr("%s() exponent of an int must not be negative"), _fname(self_p), 0, 0)
+    }
+    if (_tag(argv_p) == T_INT and _tag(argv_p + 16) == T_INT) {
         _int(o, _int_pow(_val(argv_p), _val(argv_p + 16)))
         retp(o)
     }
@@ -393,14 +527,129 @@ func lb_atan2(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# The two arguments of mod, floor_div and divmod must both be ints or both be floats.
+func _same_number_type(self_p, argv_p) {
+    _arg_num(self_p, argv_p, 0)
+    _arg_num(self_p, argv_p, 1)
+    if (_tag(argv_p) != _tag(argv_p + 16)) {
+        let msg = stack_buf(256)
+        snprintf(msg, 256, cstr("%s() arguments must both be int or both be float, got %s and %s"),
+                 _fname(self_p), _type_name(argv_p), _type_name(argv_p + 16))
+        lv_error(E_TYPE, msg, cstr("Convert one of them with int() or float() so that both have the same type."))
+    }
+}
+
+# Floored division of ints: the quotient rounds toward negative infinity and the remainder takes the
+# sign of the divisor. The results are left in g_math_q and g_math_r.
+let g_math_q = 0
+let g_math_r = 0
+let g_math_ovf = 0
+
+func _floor_divmod_int(a, b) {
+    if (b == 0) {
+        _div_zero()
+    }
+    g_math_ovf = 0
+    if (b == -1) {
+        g_math_r = 0
+        g_math_q = 0
+        if (a == -9223372036854775807 - 1) {
+            g_math_ovf = 1
+        } else {
+            g_math_q = 0 - a
+        }
+        return 0
+    }
+    let q = a / b
+    let r = a % b
+    if (r != 0 and ((r < 0) != (b < 0))) {
+        q -= 1
+        r += b
+    }
+    g_math_q = q
+    g_math_r = r
+}
+
+# The floored remainder of floats: the sign of the divisor. The divisor is not zero and both are
+# finite, so the result is finite.
+func _floor_mod_float(a, b) {
+    let r = fmod(a, b)
+    if (fne(r, 0.0) and (flt(r, 0.0) != flt(b, 0.0))) {
+        r = fadd(r, b)
+    }
+    return r
+}
+
 func lb_mod(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
-    let b = _arg_num(self_p, argv_p, 1)
+    _same_number_type(self_p, argv_p)
+    let o = stack_buf(16)
+    if (_tag(argv_p) == T_INT) {
+        _floor_divmod_int(_val(argv_p), _val(argv_p + 16))
+        _int(o, g_math_r)
+        retp(o)
+    }
+    let b = _num(argv_p + 16)
     if (feq(b, 0.0)) {
         _div_zero()
     }
+    _flt(o, _floor_mod_float(_num(argv_p), b))
+    retp(o)
+}
+
+func lb_floor_div(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 2)
+    _same_number_type(self_p, argv_p)
     let o = stack_buf(16)
-    _flt(o, fmod(_arg_num(self_p, argv_p, 0), b))
+    if (_tag(argv_p) == T_INT) {
+        _floor_divmod_int(_val(argv_p), _val(argv_p + 16))
+        if (g_math_ovf != 0) {
+            _overflow(cstr("floor_div"))
+        }
+        _int(o, g_math_q)
+        retp(o)
+    }
+    let b = _num(argv_p + 16)
+    if (feq(b, 0.0)) {
+        _div_zero()
+    }
+    let q = floor(fdiv(_num(argv_p), b))
+    if (_is_finite(q) == 0) {
+        _float_overflow(cstr("floor_div"))
+    }
+    _flt(o, q)
+    retp(o)
+}
+
+func lb_divmod(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 2)
+    _same_number_type(self_p, argv_p)
+    let o = stack_buf(16)
+    let cell = stack_buf(16)
+    _list_new(o, 2)
+    if (_tag(argv_p) == T_INT) {
+        _floor_divmod_int(_val(argv_p), _val(argv_p + 16))
+        if (g_math_ovf != 0) {
+            _overflow(cstr("divmod"))
+        }
+        _int(cell, g_math_q)
+        _list_push(o, cell)
+        _int(cell, g_math_r)
+        _list_push(o, cell)
+        retp(o)
+    }
+    let b = _num(argv_p + 16)
+    if (feq(b, 0.0)) {
+        _div_zero()
+    }
+    let q = floor(fdiv(_num(argv_p), b))
+    if (_is_finite(q) == 0) {
+        _float_overflow(cstr("divmod"))
+    }
+    _flt(cell, q)
+    _list_push(o, cell)
+    _flt(cell, _floor_mod_float(_num(argv_p), b))
+    _list_push(o, cell)
     retp(o)
 }
 
@@ -882,5 +1131,102 @@ func lb_ssort(self_p, argc_i, argv_p) {
         }
         st64(d + D_COUNT, w)
     }
+    retp(o)
+}
+
+# Greatest common divisor of two ints by Euclid's algorithm. The result may be negative; a divisor
+# of -1 is handled apart because INT_MIN % -1 traps.
+func _gcd_int(x, y) {
+    let a = x
+    let b = y
+    while (b != 0) {
+        if (b == -1) {
+            a = 1
+            b = 0
+        } else {
+            let t = a % b
+            a = b
+            b = t
+        }
+    }
+    return a
+}
+
+func _int_pair(self_p, argv_p) {
+    for (let i = 0; i < 2; i++) {
+        if (_tag(argv_p + 16 * i) != T_INT) {
+            _errf(E_TYPE, 0, cstr("%s() argument %d must be an int, got %s"), _fname(self_p), i + 1,
+                  _type_name(argv_p + 16 * i))
+        }
+    }
+}
+
+func lb_gcd(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 2)
+    _int_pair(self_p, argv_p)
+    let g = _gcd_int(_val(argv_p), _val(argv_p + 16))
+    if (g == -9223372036854775807 - 1) {
+        _overflow(cstr("gcd"))
+    }
+    let o = stack_buf(16)
+    if (g < 0) {
+        g = 0 - g
+    }
+    _int(o, g)
+    retp(o)
+}
+
+func lb_lcm(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 2)
+    _int_pair(self_p, argv_p)
+    let x = _val(argv_p)
+    let y = _val(argv_p + 16)
+    let o = stack_buf(16)
+    if (x == 0 or y == 0) {
+        _int(o, 0)
+        retp(o)
+    }
+    let g = _gcd_int(x, y)
+    if (g == -9223372036854775807 - 1) {
+        _overflow(cstr("lcm"))
+    }
+    if (g < 0) {
+        g = 0 - g
+    }
+    let q = x / g
+    if (mulof(q, y) != 0) {
+        _overflow(cstr("lcm"))
+    }
+    let r = q * y
+    if (r == -9223372036854775807 - 1) {
+        _overflow(cstr("lcm"))
+    }
+    if (r < 0) {
+        r = 0 - r
+    }
+    _int(o, r)
+    retp(o)
+}
+
+# The largest r with r * r <= n: the float square root is within one of it, then corrected exactly.
+func lb_isqrt(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    if (_tag(argv_p) != T_INT) {
+        _errf(E_TYPE, 0, cstr("isqrt() argument must be an int, got %s"), _type_name(argv_p), 0, 0)
+    }
+    let n = _val(argv_p)
+    if (n < 0) {
+        _errf(E_ARGUMENT, cstr("Check the value before taking the square root."),
+              cstr("isqrt() argument must not be negative"), 0, 0, 0)
+    }
+    let r = f2i(sqrt(i2f(n)))
+    while (mulof(r, r) != 0 or r * r > n) {
+        r = r - 1
+    }
+    while (mulof(r + 1, r + 1) == 0 and (r + 1) * (r + 1) <= n) {
+        r = r + 1
+    }
+    let o = stack_buf(16)
+    _int(o, r)
     retp(o)
 }

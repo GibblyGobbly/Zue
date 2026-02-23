@@ -26,11 +26,191 @@ use { ST } from "state.lu"
 let LL_BINOPS = {
     "+": "lvp_add_fast", "-": "lvp_sub_fast", "*": "lvp_mul_fast", "/": "lvp_div", "%": "lvp_mod",
     "==": "lvp_eq_fast", "!=": "lvp_ne_fast", "<": "lvp_lt_fast", "<=": "lvp_le_fast",
-    ">": "lvp_gt_fast", ">=": "lvp_ge_fast"
+    ">": "lvp_gt_fast", ">=": "lvp_ge_fast",
+    "&": "lvp_band", "|": "lvp_bor", "^": "lvp_bxor", "<<": "lvp_shl", ">>": "lvp_shr"
 }
+let LL_VALUE_CALL = {
+    "+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod", "<": "lt", "<=": "le",
+    ">": "gt", ">=": "ge", "==": "eq", "!=": "ne", "&": "band", "|": "bor", "^": "bxor",
+    "<<": "shl", ">>": "shr"
+}
+let LL_FLOAT_ARITH = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}
+let LL_FLOAT_COMPARE = {"==": "oeq", "!=": "une", "<": "olt", "<=": "ole", ">": "ogt", ">=": "oge"}
+let LL_INT_BITWISE = {"&": "and", "|": "or", "^": "xor"}
 
+let LL_INT_ARITH = {"+": "sadd", "-": "ssub", "*": "smul"}
+let LL_INT_DIVIDE = {"/": "sdiv", "%": "srem"}
+let LL_INT_COMPARE = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
+
+# Integer operations are done in line when both operands are ints (tag 2) and an arithmetic
+# result does not overflow. Everything else, including the errors, goes to the runtime call.
+# Constant operands are folded by LLVM because their tags are known.
 func ll_binop(op, a, b) {
-    return ll_call_out(LL_BINOPS[op], "ptr {a}, ptr {b}")
+    let arith = LL_INT_ARITH[op]
+    let compare = LL_INT_COMPARE[op]
+    let divide = LL_INT_DIVIDE[op]
+    let bitwise = LL_INT_BITWISE[op]
+    if (arith == null and compare == null and divide == null and bitwise == null) {
+        return ll_call_out(LL_BINOPS[op], "ptr {a}, ptr {b}")
+    }
+    let t = ll_slot()
+    let ta = ll_reg()
+    let tb = ll_reg()
+    ll("{ta} = load i64, ptr {a}")
+    ll("{tb} = load i64, ptr {b}")
+    let ia = ll_reg()
+    let ib = ll_reg()
+    ll("{ia} = icmp eq i64 {ta}, 2")
+    ll("{ib} = icmp eq i64 {tb}, 2")
+    let both = ll_reg()
+    ll("{both} = and i1 {ia}, {ib}")
+    let fast = ll_new_label("ifast")
+    let fcheck = ll_new_label("fcheck")
+    let slow = ll_new_label("islow")
+    let done = ll_new_label("idone")
+    let float_arith = LL_FLOAT_ARITH[op]
+    let float_compare = LL_FLOAT_COMPARE[op]
+    let float_op = float_arith != null or float_compare != null
+    if (float_op) {
+        ll_condbr(both, fast, fcheck)
+    } else {
+        ll_condbr(both, fast, slow)
+    }
+    ll_label(fast)
+    let pa_ptr = ll_reg()
+    let pb_ptr = ll_reg()
+    ll("{pa_ptr} = getelementptr inbounds i8, ptr {a}, i64 8")
+    ll("{pb_ptr} = getelementptr inbounds i8, ptr {b}, i64 8")
+    let pa = ll_reg()
+    let pb = ll_reg()
+    ll("{pa} = load i64, ptr {pa_ptr}")
+    ll("{pb} = load i64, ptr {pb_ptr}")
+    let out_tag = ll_reg()
+    let out_ptr = ll_reg()
+    ll("{out_ptr} = getelementptr inbounds i8, ptr {t}, i64 8")
+    if (divide != null) {
+        # a divisor of 0 or -1 (the two that raise or overflow) is left to the runtime
+        let shifted = ll_reg()
+        let usable = ll_reg()
+        ll("{shifted} = add i64 {pb}, 1")
+        ll("{usable} = icmp ugt i64 {shifted}, 1")
+        let store_it = ll_new_label("istore")
+        ll_condbr(usable, store_it, slow)
+        ll_label(store_it)
+        let value = ll_reg()
+        ll("{value} = {divide} i64 {pa}, {pb}")
+        ll("store i64 2, ptr {t}")
+        ll("store i64 {value}, ptr {out_ptr}")
+    } else if (bitwise != null) {
+        let value = ll_reg()
+        ll("{value} = {bitwise} i64 {pa}, {pb}")
+        ll("store i64 2, ptr {t}")
+        ll("store i64 {value}, ptr {out_ptr}")
+    } else if (arith != null) {
+        let pair = ll_reg()
+        ll("{pair} = call \{ i64, i1 } @llvm.{arith}.with.overflow.i64(i64 {pa}, i64 {pb})")
+        let value = ll_reg()
+        let overflow = ll_reg()
+        ll("{value} = extractvalue \{ i64, i1 } {pair}, 0")
+        ll("{overflow} = extractvalue \{ i64, i1 } {pair}, 1")
+        let store_it = ll_new_label("istore")
+        ll_condbr(overflow, slow, store_it)
+        ll_label(store_it)
+        ll("store i64 2, ptr {t}")
+        ll("store i64 {value}, ptr {out_ptr}")
+    } else {
+        let flag = ll_reg()
+        let widened = ll_reg()
+        ll("{flag} = icmp {compare} i64 {pa}, {pb}")
+        ll("{widened} = zext i1 {flag} to i64")
+        ll("store i64 1, ptr {t}")
+        ll("store i64 {widened}, ptr {out_ptr}")
+    }
+    ll_br(done)
+    if (float_op) {
+        # Both operands floats: done in line. A result that is not finite, or a zero divisor, goes
+        # to the runtime, which raises the error. Adding 0.0 turns -0.0 into 0.0.
+        ll_label(fcheck)
+        let fa = ll_reg()
+        let fb = ll_reg()
+        ll("{fa} = icmp eq i64 {ta}, 3")
+        ll("{fb} = icmp eq i64 {tb}, 3")
+        let fboth = ll_reg()
+        ll("{fboth} = and i1 {fa}, {fb}")
+        let ffast = ll_new_label("ffast")
+        ll_condbr(fboth, ffast, slow)
+        ll_label(ffast)
+        let fpa_ptr = ll_reg()
+        let fpb_ptr = ll_reg()
+        let fpa = ll_reg()
+        let fpb = ll_reg()
+        let xa = ll_reg()
+        let xb = ll_reg()
+        let fout = ll_reg()
+        ll("{fpa_ptr} = getelementptr inbounds i8, ptr {a}, i64 8")
+        ll("{fpb_ptr} = getelementptr inbounds i8, ptr {b}, i64 8")
+        ll("{fpa} = load i64, ptr {fpa_ptr}")
+        ll("{fpb} = load i64, ptr {fpb_ptr}")
+        ll("{xa} = bitcast i64 {fpa} to double")
+        ll("{xb} = bitcast i64 {fpb} to double")
+        ll("{fout} = getelementptr inbounds i8, ptr {t}, i64 8")
+        if (float_compare != null) {
+            let fflag = ll_reg()
+            let fwide = ll_reg()
+            ll("{fflag} = fcmp {float_compare} double {xa}, {xb}")
+            ll("{fwide} = zext i1 {fflag} to i64")
+            ll("store i64 1, ptr {t}")
+            ll("store i64 {fwide}, ptr {fout}")
+            ll_br(done)
+        } else {
+            let fstore = ll_new_label("fstore")
+            if (op == "/") {
+                let zero = ll_reg()
+                let nonzero = ll_new_label("fdiv")
+                ll("{zero} = fcmp oeq double {xb}, 0.0")
+                ll_condbr(zero, slow, nonzero)
+                ll_label(nonzero)
+            }
+            let fres = ll_reg()
+            let fabsv = ll_reg()
+            let fok = ll_reg()
+            ll("{fres} = {float_arith} double {xa}, {xb}")
+            ll("{fabsv} = call double @llvm.fabs.f64(double {fres})")
+            ll("{fok} = fcmp olt double {fabsv}, 0x7FF0000000000000")
+            ll_condbr(fok, fstore, slow)
+            ll_label(fstore)
+            let fclean = ll_reg()
+            let fbits = ll_reg()
+            ll("{fclean} = fadd double {fres}, 0.0")
+            ll("{fbits} = bitcast double {fclean} to i64")
+            ll("store i64 3, ptr {t}")
+            ll("store i64 {fbits}, ptr {fout}")
+            ll_br(done)
+        }
+    }
+    ll_label(slow)
+    # The slow path passes the operands by value, so no operand slot has its address taken.
+    let sa = ll_reg()
+    let sb = ll_reg()
+    let sa_ptr = ll_reg()
+    let sb_ptr = ll_reg()
+    ll("{sa_ptr} = getelementptr inbounds i8, ptr {a}, i64 8")
+    ll("{sb_ptr} = getelementptr inbounds i8, ptr {b}, i64 8")
+    ll("{sa} = load i64, ptr {sa_ptr}")
+    ll("{sb} = load i64, ptr {sb_ptr}")
+    let sres = ll_reg()
+    let res_tag = ll_reg()
+    let res_val = ll_reg()
+    let res_ptr = ll_reg()
+    ll("{sres} = call %LV @lvv_{LL_VALUE_CALL[op]}(i64 {ta}, i64 {sa}, i64 {tb}, i64 {sb})")
+    ll("{res_tag} = extractvalue %LV {sres}, 0")
+    ll("{res_val} = extractvalue %LV {sres}, 1")
+    ll("store i64 {res_tag}, ptr {t}")
+    ll("{res_ptr} = getelementptr inbounds i8, ptr {t}, i64 8")
+    ll("store i64 {res_val}, ptr {res_ptr}")
+    ll_br(done)
+    ll_label(done)
+    return t
 }
 
 # The i1 for a condition held in slot. A boolean is read in place; anything else goes to the
@@ -44,8 +224,12 @@ func ll_truth_flag(slot) {
     let ok = ll_new_label("tbool")
     ll_condbr(is_bool, ok, bad)
     ll_label(bad)
+    let bad_ptr = ll_reg()
+    let bad_val = ll_reg()
     let ignored = ll_reg()
-    ll("{ignored} = call i32 @lvp_truth(ptr {slot})")
+    ll("{bad_ptr} = getelementptr inbounds i8, ptr {slot}, i64 8")
+    ll("{bad_val} = load i64, ptr {bad_ptr}")
+    ll("{ignored} = call i64 @lvv_truth(i64 {tag}, i64 {bad_val})")
     ll_br(ok)
     ll_label(ok)
     let payload = ll_reg()
@@ -98,12 +282,10 @@ func global_get(name) {
     let ok = ll_new_label("gdef")
     ll_condbr(undefined, slow, ok)
     ll_label(slow)
-    ll("call void @lvp_gget(ptr {t}, ptr {g}, ptr {ll_cstr(name)})")
+    ll("call void @lvp_gundef(ptr {g}, ptr {ll_cstr(name)})")
     ll_br(ok)
     ll_label(ok)
-    let v = ll_reg()
-    ll("{v} = load %LV, ptr {g}")
-    ll("store %LV {v}, ptr {t}")
+    ll_copy(t, g)
     return t
 }
 
@@ -235,6 +417,9 @@ func ex_bin(n) {
     let a = ex(n.l)
     let b = ex(n.r)
     ll_mark(n.line)
+    if (n.op == "**") {
+        return call_builtin("pow", [a, b])
+    }
     return ll_binop(n.op, a, b)
 }
 
@@ -242,9 +427,9 @@ func ex_bin(n) {
 # keeping the old value.
 func ex_incdec(n, as_statement) {
     ll_mark(n.line)
-    let fn_name = "lvp_add_fast"
+    let op = "+"
     if (n.op == "--") {
-        fn_name = "lvp_sub_fast"
+        op = "-"
     }
     let cur = ex_id(n)
     let old = null
@@ -252,7 +437,7 @@ func ex_incdec(n, as_statement) {
         old = copy_slot(cur)
     }
     let one = ll_int("1")
-    let t = ll_call_out(fn_name, "ptr {cur}, ptr {one}")
+    let t = ll_binop(op, cur, one)
     store_name(n.name, t)
     if (old != null) {
         return old
@@ -502,6 +687,26 @@ func outlives_unsafe(name) {
     return idx >= 0 and idx < marks[len(marks) - 1]
 }
 
+# Only pointers and boxes need the checks in lvp_global_store_check. Null, bool, int and float
+# (tags 0 to 3) skip the call.
+func global_store_check(value, in_function) {
+    let tag = ll_reg()
+    let plain = ll_reg()
+    ll("{tag} = load i64, ptr {value}")
+    ll("{plain} = icmp ule i64 {tag}, 3")
+    let check = ll_new_label("gcheck")
+    let done = ll_new_label("gchecked")
+    ll_condbr(plain, done, check)
+    ll_label(check)
+    let check_ptr = ll_reg()
+    let check_val = ll_reg()
+    ll("{check_ptr} = getelementptr inbounds i8, ptr {value}, i64 8")
+    ll("{check_val} = load i64, ptr {check_ptr}")
+    ll("call void @lvv_global_store_check(i64 {tag}, i64 {check_val}, i64 {in_function})")
+    ll_br(done)
+    ll_label(done)
+}
+
 func store_name(name, value) {
     let r = resolve(name)
     if (r.kind == "local") {
@@ -513,7 +718,7 @@ func store_name(name, value) {
         ll_copy(cap_cell(r.i), value)
     } else {
         ll_reg_global(name)
-        ll("call void @lvp_global_store_check(ptr {value}, i32 {global_in_function()})")
+        global_store_check(value, global_in_function())
         ll_copy(ll_gname(name), value)
     }
 }
@@ -548,7 +753,7 @@ func st_let(n) {
     }
     if (at_top()) {
         ll_reg_global(n.name)
-        ll("call void @lvp_global_store_check(ptr {init_ptr}, i32 0)")
+        global_store_check(init_ptr, 0)
         ll_copy(ll_gname(n.name), init_ptr)
     } else {
         declare(n.name, init_ptr)
@@ -795,7 +1000,22 @@ func st_return(n) {
             ll("call void @lvp_ptr_escape_check(ptr {v})")
         }
         let where_text = ll_cstr("returned from a function")
-        ll("call void @lvp_box_escape_check(ptr {v}, ptr {where_text})")
+        # Only a box (tag 15) can be wrong here; the check takes the value by value.
+        let ret_tag = ll_reg()
+        let is_box = ll_reg()
+        ll("{ret_tag} = load i64, ptr {v}")
+        ll("{is_box} = icmp eq i64 {ret_tag}, 15")
+        let box_check = ll_new_label("rbox")
+        let box_done = ll_new_label("rchecked")
+        ll_condbr(is_box, box_check, box_done)
+        ll_label(box_check)
+        let ret_ptr = ll_reg()
+        let ret_val = ll_reg()
+        ll("{ret_ptr} = getelementptr inbounds i8, ptr {v}, i64 8")
+        ll("{ret_val} = load i64, ptr {ret_ptr}")
+        ll("call void @lvv_box_escape_check(i64 {ret_tag}, i64 {ret_val}, ptr {where_text})")
+        ll_br(box_done)
+        ll_label(box_done)
         run_defers(0)
         let r = ll_reg()
         ll("{r} = load %LV, ptr {v}")
@@ -1057,9 +1277,19 @@ func st_use(n) {
 
 func declarations() {
     let d = []
-    for (let nm in split("add_fast sub_fast mul_fast div mod eq_fast ne_fast lt_fast le_fast gt_fast ge_fast", " ")) {
+    for (let nm in split("add_fast sub_fast mul_fast div mod eq_fast ne_fast lt_fast le_fast gt_fast ge_fast band bor bxor shl shr", " ")) {
         append(d, "declare void @lvp_{nm}(ptr, ptr, ptr)")
     }
+    append(d, "declare double @llvm.fabs.f64(double)")
+    for (let nm in ["sadd", "ssub", "smul"]) {
+        append(d, "declare \{ i64, i1 } @llvm.{nm}.with.overflow.i64(i64, i64)")
+    }
+    for (let nm in split("add sub mul div mod lt le gt ge eq ne band bor bxor shl shr", " ")) {
+        append(d, "declare %LV @lvv_{nm}(i64, i64, i64, i64)")
+    }
+    append(d, "declare i64 @lvv_truth(i64, i64)")
+    append(d, "declare void @lvv_global_store_check(i64, i64, i64)")
+    append(d, "declare void @lvp_gundef(ptr, ptr)")
     append(d, "declare void @lvp_not(ptr, ptr)")
     append(d, "declare i32 @lvp_truth(ptr)")
     append(d, "declare i32 @lvp_eq_b(ptr, ptr)")
@@ -1070,6 +1300,7 @@ func declarations() {
     append(d, "declare void @lvp_container_check(ptr)")
     append(d, "declare void @lvp_global_store_check(ptr, i32)")
     append(d, "declare void @lvp_box_escape_check(ptr, ptr)")
+    append(d, "declare void @lvv_box_escape_check(i64, i64, ptr)")
     append(d, "declare void @lvp_box_new(ptr, ptr, i64)")
     append(d, "declare void @lvp_box_new_stack(ptr, ptr, i64, ptr)")
     append(d, "declare void @lvp_box_assign_copy(ptr, i64)")

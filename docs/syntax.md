@@ -95,11 +95,14 @@ Indexing a string returns a `char`, and negative indices count from the end: `"L
 | Kind | Operators |
 |---|---|
 | Arithmetic | `+ - * / %`, unary `-` |
+| Power | `**`, the same as `pow`: `2 ** 10` is `1024`. It is right-associative and binds tighter than a unary minus on its left, so `2 ** 3 ** 2` is `512` and `-2 ** 2` is `-4`. An int to a negative int power is an `Argument Error` (use floats) |
+| Bitwise | `& \| ^ << >> ~`, ints only. `~x` is `x ^ -1`. A shift count must be 0 to 63, `>>` keeps the sign, and `<<` that would lose bits is an overflow error. They bind tighter than comparisons (so `x & 1 == 1` works), unlike C |
 | Comparison | `== != < <= > >=` |
 | Logical | `and` / `&&`, `or` / `\|\|`, `not` / `!` (short-circuit). `not` binds looser than a comparison and tighter than `and`: `not a == b` is `not (a == b)` |
 | Assignment | `= += -= *= /= ++ --` |
 
-Operators do no hidden conversions.
+Operators do no hidden conversions. From loosest to tightest: `or`, `and`, `== !=`, `< <= > >=`,
+`|`, `^`, `&`, `<< >>`, `+ -`, `* / %`, then `**` and the unary operators.
 
 | Rule | Example | Result |
 |---|---|---|
