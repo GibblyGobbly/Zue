@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+# An imported module is type checked too, and the error names the module's file.
+use "modules_fixtures/bad_types.zu"
+print("not reached")

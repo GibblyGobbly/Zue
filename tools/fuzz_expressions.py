@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (c) 2026 Bharath
+# Copyright (c) 2026 GibblyGobbly
 #
 # fuzz_expressions.py: checks the lexer, parser and operators against an independent evaluator.
 #
-# It builds random int and bool expressions, writes them as Luna source with only the parentheses
-# that Luna's precedence rules require, runs the program with bin/luna, and compares every printed
+# It builds random int and bool expressions, writes them as Zue source with only the parentheses
+# that Zue's precedence rules require, runs the program with bin/zue, and compares every printed
 # value with what Python computes from the same expression tree. A mismatch means the parser (or an
 # operator) disagrees with the language rules written in this file.
 #
@@ -21,7 +21,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LUNA = os.path.join(ROOT, "bin", "luna")
+ZUE = os.path.join(ROOT, "bin", "zue")
 
 LIMIT = 1 << 62  # keep values far from the 64-bit overflow errors
 
@@ -79,7 +79,7 @@ def c_mod(x, y):
 
 
 def evaluate(n):
-    """The value of n under Luna's rules, or None when it would be an error."""
+    """The value of n under Zue's rules, or None when it would be an error."""
     if isinstance(n, Lit):
         return n.value
     if isinstance(n, Var):
@@ -171,7 +171,7 @@ def power(n):
 
 
 def render(n, minimal=True):
-    """Luna source for n. With minimal=True it uses only the parentheses precedence requires."""
+    """Zue source for n. With minimal=True it uses only the parentheses precedence requires."""
     if isinstance(n, Lit):
         if isinstance(n.value, bool):
             return "true" if n.value else "false"
@@ -215,12 +215,12 @@ def build_program(rng, count, minimal, depth):
     return "\n".join(lines) + "\n", expected, texts
 
 
-def run_luna(source):
+def run_zue(source):
     with tempfile.TemporaryDirectory() as tmp:
-        path = os.path.join(tmp, "fuzz.lu")
+        path = os.path.join(tmp, "fuzz.zu")
         with open(path, "w") as f:
             f.write(source)
-        done = subprocess.run([LUNA, "run", path], capture_output=True, text=True, cwd=ROOT, timeout=120)
+        done = subprocess.run([ZUE, "run", path], capture_output=True, text=True, cwd=ROOT, timeout=120)
     return done
 
 
@@ -231,27 +231,27 @@ def main():
     ap.add_argument("--depth", type=int, default=5)
     ap.add_argument("--seed", type=int, default=1)
     args = ap.parse_args()
-    if not os.path.exists(LUNA):
-        sys.exit("bin/luna is missing: run make first")
+    if not os.path.exists(ZUE):
+        sys.exit("bin/zue is missing: run make first")
     rng = random.Random(args.seed)
     checked = failures = 0
     for p in range(args.programs):
         for minimal in (True, False):
             source, expected, texts = build_program(rng, args.per_program, minimal, args.depth)
-            done = run_luna(source)
+            done = run_zue(source)
             got = done.stdout.split("\n")[:-1] if done.stdout else []
             if done.returncode != 0 or len(got) != len(expected):
                 failures += 1
                 print("PROGRAM %d (%s parentheses) failed to run cleanly:" % (p, "minimal" if minimal else "full"))
                 print((done.stdout + done.stderr)[:600])
-                with open(os.path.join(ROOT, "C", "fuzz_failed.lu"), "w") as f:
+                with open(os.path.join(ROOT, "C", "fuzz_failed.zu"), "w") as f:
                     f.write(source)
                 continue
             for text, want, have in zip(texts, expected, got):
                 checked += 1
                 if want != have:
                     failures += 1
-                    print("MISMATCH  %s\n  expected %s, Luna printed %s" % (text, want, have))
+                    print("MISMATCH  %s\n  expected %s, Zue printed %s" % (text, want, have))
     print("%d expressions checked, %d failures" % (checked, failures))
     sys.exit(1 if failures else 0)
 

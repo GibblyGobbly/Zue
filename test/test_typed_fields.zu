@@ -1,0 +1,152 @@
+# CASE a bloc with float fields
+bloc Vec { x: float, y: float }
+let v = Vec{1.5, 2.5}
+print(v.x + v.y)
+print(v == Vec{1.5, 2.5})
+# CASE whole-number literals become floats for float fields
+bloc Vec { x: float, y: float }
+let v = Vec{1, 2}
+print(v.x)
+print(v.x + v.y)
+# CASE a variable holding an int is not a float
+bloc Vec { x: float, y: float }
+let n = 3
+let v = Vec{n, 2}
+# CASE a string given to a float field
+bloc Vec { x: float, y: float }
+let v = Vec{1.0, "a"}
+# CASE bloc with the wrong number of values
+bloc Vec { x: float, y: float }
+let v = Vec{1.0}
+# CASE a bloc stays immutable
+bloc Vec { x: float, y: float }
+let v = Vec{1.0, 2.0}
+v.x = 5.0
+# CASE nested blocs and strings
+bloc Inner { a: int }
+bloc Outer { i: Inner, tag: string }
+let o = Outer{Inner{3}, "x"}
+print(o.i.a)
+print(o.tag)
+print(o == Outer{Inner{3}, "x"})
+print(o == Outer{Inner{4}, "x"})
+# CASE the wrong nested bloc
+bloc Inner { a: int }
+bloc Other { a: int }
+bloc Outer { i: Inner }
+func pass(v) {
+    return [v, null][0]
+}
+let o = Outer{pass(Other{1})}
+# CASE a bloc cannot hold a template
+template T { a: int }
+bloc B { t: T }
+# CASE a bloc cannot hold a list
+bloc B { items: list }
+# CASE a bloc cannot hold a map
+bloc B { m: map }
+# CASE a bloc that is too big
+bloc Big { a: int, b: int, c: int, d: int, e: int, f: int, g: int, h: int, i: int }
+# CASE a bloc of exactly 64 bytes
+bloc Fits { a: int, b: int, c: int, d: int, e: int, f: int, g: int, h: int }
+let f = Fits{1, 2, 3, 4, 5, 6, 7, 8}
+print(f.h)
+# CASE a bloc with only some fields typed
+bloc Half { a: int, b }
+# CASE a box inside a bloc is a copy
+bloc Packet { id: int, payload: box[8] }
+let b = box[8]
+b[0] = 5
+let p = Packet{1, b}
+b[0] = 99
+print(p.payload[0])
+print(b[0])
+print(p.payload.len)
+# CASE the box inside a bloc cannot be changed
+bloc Packet { id: int, payload: box[8] }
+let p = Packet{1, box[8]}
+p.payload[0] = 7
+# CASE a box of the wrong size
+bloc Packet { id: int, payload: box[8] }
+let p = Packet{1, box[4]}
+# CASE blocs with equal boxes are equal
+bloc Packet { payload: box[2] }
+let a = box[2]
+let b = box[2]
+a[0] = 1
+b[0] = 1
+print(Packet{a} == Packet{b})
+b[1] = 9
+print(Packet{a} == Packet{b})
+# CASE a bloc with a box and other fields
+bloc Frame { id: int, flags: box[4], scale: float }
+let flags = box[4]
+flags[3] = 200
+let fr = Frame{7, flags, 2}
+print(fr.flags[3])
+print(fr.scale)
+# CASE a template with typed fields
+template Player { name: string, hp: int, pos: list }
+let p = Player("Astra", 100, [0, 0])
+p.hp = 80
+print(p.hp)
+print(p.name)
+# CASE a template field assigned the wrong type
+template Player { name: string, hp: int }
+func pass(v) {
+    return [v, null][0]
+}
+let p = Player("Astra", 100)
+p.hp = pass("dead")
+# CASE a template built with the wrong type
+template Player { name: string, hp: int }
+let p = Player("Astra", 1.5)
+# CASE a template holds a bloc and a box
+bloc V { x: float, y: float }
+template Body { pos: V, bytes: box[4] }
+func make() {
+    let b = box[4]
+    b[0] = 3
+    return Body(V{1, 2}, b)
+}
+let body = make()
+print(body.pos.y)
+print(body.bytes[0])
+body.bytes[0] = 4
+print(body.bytes[0])
+# CASE a template field typed with a bloc gets another type
+bloc V { x: float, y: float }
+template Body { pos: V }
+func pass(v) {
+    return [v, null][0]
+}
+let b = Body(pass(5))
+# CASE a template may hold another template
+template Inner { n: int }
+template Outer { inner: Inner, name: string }
+let o = Outer(Inner(4), "o")
+print(o.inner.n)
+o.inner.n = 5
+print(o.inner.n)
+# CASE a template field typed as a function
+template Handler { name: string, run: function }
+let h = Handler("double", func(x) { return x * 2 })
+print(h.run(4))
+# CASE a typed template mixed with untyped fields
+template Mixed { id: int, extra }
+let m = Mixed(1, "anything")
+func pass(v) {
+    return [v, null][0]
+}
+m.extra = 5
+print(m.extra)
+m.id = pass("no")
+# CASE data cannot have field types
+data D { a: int }
+# CASE an unknown type name on a template field
+template Holder { thing: Missing }
+let h = Holder(1)
+# CASE templates declared in the unparsed program keep their types
+template Pair { left: int, right: float }
+let p = Pair(1, 2)
+print(p.right)

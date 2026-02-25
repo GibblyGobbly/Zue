@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+# CASE a list literal of ints is a list of ints
+let xs = [1, 2, 3]
+let n = xs[0] + xs[2]
+print(n)
+# CASE appending the wrong type
+let xs = [1, 2, 3]
+append(xs, "four")
+# CASE storing the wrong type
+let xs = [1, 2, 3]
+xs[1] = "two"
+# CASE a mixed list stays dynamic
+let xs = [1, "two", 3.0]
+xs[0] = "one"
+print(xs[0])
+# CASE a plain list annotation stays dynamic
+let xs: list = [1, 2, 3]
+xs[0] = "one"
+print(xs[0])
+# CASE an empty list takes any element
+let xs = []
+append(xs, 1)
+append(xs, "two")
+print(xs)
+# CASE an annotated list of floats adapts whole numbers
+let xs: list<float> = [1, 2, 3]
+xs[0] = 4
+append(xs, 5)
+print(xs)
+# CASE an annotated list rejects the wrong element type
+let xs: list<int> = ["a"]
+# CASE an annotated list rejects a list of another type
+let ys = ["a", "b"]
+let xs: list<int> = ys
+# CASE a parameter with an element type
+func total(v: list<int>) {
+    let t = 0
+    for (let x in v) {
+        t += x
+    }
+    return t
+}
+print(total([1, 2, 3]))
+# CASE a parameter with an element type rejects another list
+func total(v: list<int>) {
+    return len(v)
+}
+print(total(["a"]))
+# CASE a loop variable has the element type
+for (let x in [1, 2]) {
+    x = "a"
+}
+# CASE the element type reaches arithmetic
+let xs = [1, 2]
+let y = xs[0] + 1.5
+# CASE a list of lists
+let grid: list<list<int>> = [[1, 2], [3, 4]]
+print(grid[1][0])
+grid[0][1] = "x"
+# CASE map element types
+let m: map<int> = {"a": 1, "b": 2}
+print(m["a"] + m["b"])
+m["c"] = "three"
+# CASE map element types inferred
+let m = {"a": 1.5}
+let z = m["a"] + 1
+print(z)
+m["b"] = "x"
+# CASE nested angle brackets before an equals sign
+let m: map<list<int>>= {"a": [1, 2]}
+print(m["a"][1])
+# CASE a list index must be an int
+let xs = [1, 2]
+print(xs[1.5])
+# CASE unknown annotation
+let x: strin = "a"
+# CASE only list and map take an element type
+let x: int<string> = 1
+# CASE an unclosed element type
+let x: list<int = [1]
+# CASE builtin results are known
+let n = len([1, 2])
+n = "two"
+# CASE split gives strings
+let parts = split("a,b", ",")
+print(parts[0] + 1)
+# CASE range gives ints
+for (let i in range(3)) {
+    print(i * 0.5)
+}
+# CASE min and max of a list keep its element type
+let xs = [3, 1, 2]
+let lo = min(xs)
+lo = "a"
+# CASE a float variable stays a float
+let x = 2.5
+x = 3
+print(x)
+print(type(x))
+# CASE an int constant expression for a float
+let x = 2.5
+x = 7 / 2
+# CASE a typed field with an element type
+template Bag { items: list<int>, label: string }
+let b = Bag{[1, 2], "bag"}
+print(b.items[1])
+# CASE a typed field with an element type rejects another list
+template Bag { items: list<int>, label: string }
+let b = Bag{["a"], "bag"}
+# CASE list values from untyped code are accepted
+func make() {
+    return [1, "a"]
+}
+let xs: list<int> = make()
+print(len(xs))
+# CASE equality of lists of different element types
+print([1] == ["a"])
+# CASE adding lists keeps the element type
+let a = [1, 2]
+let b = [3, 4]
+let c = a + b
+c[0] = "x"

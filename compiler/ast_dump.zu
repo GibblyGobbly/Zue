@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# ast_dump.zu: the AST as text, for `zue ast prog.zu`. One top-level statement per line, written as
+#   (kind@line :field value :field value ...)
+# Fields are sorted by name, so the same tree always gives the same text.
+
+func quote_text(s) {
+    let q = "\""
+    let t = replace(s, "\\", "\\\\")
+    t = replace(t, q, "\\\"")
+    t = replace(t, "\n", "\\n")
+    return q + t + q
+}
+
+func dump_value(x) {
+    let t = type(x)
+    if (t == "map") {
+        return dump_node(x)
+    }
+    if (t == "list") {
+        let items = []
+        for (let item in x) {
+            append(items, dump_value(item))
+        }
+        return "[" + join(items, " ") + "]"
+    }
+    if (t == "string") {
+        return quote_text(x)
+    }
+    return to_string(x)
+}
+
+# A node is a map with a "k" kind; other maps (switch cases, string parts) print as "map".
+func dump_node(n) {
+    let keys = map_keys(n)
+    sort(keys)
+    let kind = n.k
+    if (kind == null) {
+        kind = "map"
+    }
+    let parts = ["({kind}@{n.line}"]
+    for (let key in keys) {
+        if (key != "k" and key != "line") {
+            append(parts, ":{key} {dump_value(n[key])}")
+        }
+    }
+    return join(parts, " ") + ")"
+}
+
+export func dump_program(stmts) {
+    let lines = []
+    for (let s in stmts) {
+        append(lines, dump_value(s))
+    }
+    return join(lines, "\n")
+}

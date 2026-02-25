@@ -1,8 +1,8 @@
-# Luna Documentation
+# Zue Documentation
 
 | Page | Covers |
 |---|---|
-| [getting-started](getting-started.md) | Requirements, build, `luna build` / `run` / `emit` |
+| [getting-started](getting-started.md) | Requirements, build, `zue build` / `run` / `emit` |
 | [syntax](syntax.md) | The language in one page |
 | [modules](modules.md) | `use` / `export`, how files are found |
 | [data-types](data-types.md) | `data`, `template`, `bloc`, `box` |

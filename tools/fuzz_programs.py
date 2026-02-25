@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (c) 2026 Bharath
+# Copyright (c) 2026 GibblyGobbly
 #
 # fuzz_programs.py: checks statements, scoping and function calls against an independent model.
 #
 # It builds random programs from int variables, if/else, while and for loops with break and
 # continue, functions and calls. Python runs the same program structure to get the expected output.
-# Luna must print exactly that, both for the program as written and for the same program after
-# `luna unparse` has written it back out. A mismatch points at the parser, the code generator or
+# Zue must print exactly that, both for the program as written and for the same program after
+# `zue unparse` has written it back out. A mismatch points at the parser, the code generator or
 # the unparser.
 #
 #   python3 tools/fuzz_programs.py [--programs 50] [--seed 1]
@@ -22,12 +22,12 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LUNA = os.path.join(ROOT, "bin", "luna")
+ZUE = os.path.join(ROOT, "bin", "zue")
 LIMIT = 1 << 62
 
 
 class Discard(Exception):
-    """The program would hit a Luna error (zero divisor, overflow); the generator drops it."""
+    """The program would hit a Zue error (zero divisor, overflow); the generator drops it."""
 
 
 def c_div(x, y):
@@ -77,7 +77,7 @@ def render(e):
 
 
 class Machine:
-    """Runs the generated program structure with Luna's integer rules."""
+    """Runs the generated program structure with Zue's integer rules."""
 
     def __init__(self):
         self.out = []
@@ -338,13 +338,13 @@ def expected_output(funcs, main):
     return m.out
 
 
-def luna_run(path):
-    done = subprocess.run([LUNA, "run", path], capture_output=True, text=True, cwd=ROOT, timeout=120)
+def zue_run(path):
+    done = subprocess.run([ZUE, "run", path], capture_output=True, text=True, cwd=ROOT, timeout=120)
     return done
 
 
-def luna_unparse(path):
-    done = subprocess.run([LUNA, "unparse", path], capture_output=True, text=True, cwd=ROOT, timeout=60)
+def zue_unparse(path):
+    done = subprocess.run([ZUE, "unparse", path], capture_output=True, text=True, cwd=ROOT, timeout=60)
     return done.stdout
 
 
@@ -353,8 +353,8 @@ def main():
     ap.add_argument("--programs", type=int, default=50)
     ap.add_argument("--seed", type=int, default=1)
     args = ap.parse_args()
-    if not os.path.exists(LUNA):
-        sys.exit("bin/luna is missing: run make first")
+    if not os.path.exists(ZUE):
+        sys.exit("bin/zue is missing: run make first")
     os.makedirs(os.path.join(ROOT, "C"), exist_ok=True)
     rng = random.Random(args.seed)
     ran = failures = 0
@@ -369,25 +369,25 @@ def main():
             continue
         source = program_source(funcs, main_block)
         with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "program.lu")
+            path = os.path.join(tmp, "program.zu")
             with open(path, "w") as f:
                 f.write(source)
             variants = [("as written", path)]
-            unparsed = luna_unparse(path)
+            unparsed = zue_unparse(path)
             if unparsed:
-                round_path = os.path.join(tmp, "unparsed.lu")
+                round_path = os.path.join(tmp, "unparsed.zu")
                 with open(round_path, "w") as f:
                     f.write(unparsed)
                 variants.append(("after unparse", round_path))
             for label, p in variants:
-                done = luna_run(p)
+                done = zue_run(p)
                 got = done.stdout.split("\n")[:-1]
                 if done.returncode != 0 or got != want:
                     failures += 1
-                    keep = os.path.join(ROOT, "C", "fuzz_program_failed.lu")
+                    keep = os.path.join(ROOT, "C", "fuzz_program_failed.zu")
                     with open(keep, "w") as f:
                         f.write(source)
-                    print("FAILED (%s), program saved in C/fuzz_program_failed.lu" % label)
+                    print("FAILED (%s), program saved in C/fuzz_program_failed.zu" % label)
                     print("  exit %d, expected %d lines, got %d" % (done.returncode, len(want), len(got)))
                     print("  " + (done.stdout + done.stderr)[:300].replace("\n", "\n  "))
                     break

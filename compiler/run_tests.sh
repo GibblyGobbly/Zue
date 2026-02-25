@@ -1,10 +1,10 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (c) 2026 Bharath
+# Copyright (c) 2026 GibblyGobbly
 # Every program is compiled to a native binary and run, and stdout, stderr and the exit code
 # must equal the recorded files in test/expected/. Files made of "# CASE <name>" sections run
 # each case on its own.
-# Usage: compiler/run_tests.sh [file.lu ...]   (default: test/*.lu)
+# Usage: compiler/run_tests.sh [file.zu ...]   (default: test/*.zu)
 # VERIFY_IR=1 compiler/run_tests.sh   also runs $OPT (default opt-18) -passes=verify on every generated IR file.
 # RECORD=1 compiler/run_tests.sh   writes test/expected/ from the compiled programs. Read the
 #                                  diff (git diff test/expected) before committing it.
@@ -12,15 +12,15 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || exit 1
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-[ $# -eq 0 ] && set -- test/*.lu
+[ $# -eq 0 ] && set -- test/*.zu
 RT=compiler/runtime
 EXT=ll; CC=${CC:-clang}; OPT=${OPT:-opt-18}
 RTSRC=$("$ROOT/compiler/build_runtime.sh") || exit 1
-CASE_FILE="$TMP/case.lu"
+CASE_FILE="$TMP/case.zu"
 EXPECT=test/expected
 mkdir -p "$EXPECT"
-LUNAC="$ROOT/bin/luna"
-[ -x "$LUNAC" ] || { echo "[ERROR] $LUNAC is not built; run make"; exit 1; }
+ZUEC="$ROOT/bin/zue"
+[ -x "$ZUEC" ] || { echo "[ERROR] $ZUEC is not built; run make"; exit 1; }
 pass=0; fail=0; skip=0
 
 # check_one <source> <label>: compiles and runs <source> on both engines. A compile-time error
@@ -29,12 +29,12 @@ pass=0; fail=0; skip=0
 check_one() {
     src=$1; label=$2; name=bin_$$
     key=$(printf '%s' "$label" | sed 's/[^A-Za-z0-9._-]/_/g')
-    if ! "$LUNAC" "$src" "$TMP/$name.$EXT" . > "$TMP/cerr" 2>&1; then
-        if grep -q "not supported by lunac" "$TMP/cerr"; then
+    if ! "$ZUEC" "$src" "$TMP/$name.$EXT" . > "$TMP/cerr" 2>&1; then
+        if grep -q "not supported by zuec" "$TMP/cerr"; then
             skip=$((skip + 1)); echo "[SKIP] $label"; return
         fi
         if ! head -1 "$TMP/cerr" | grep -q '^[A-Za-z ]* Error in '; then
-            fail=$((fail + 1)); echo "[FAIL] $label (lunac)"; head -3 "$TMP/cerr"; return
+            fail=$((fail + 1)); echo "[FAIL] $label (zuec)"; head -3 "$TMP/cerr"; return
         fi
         cp "$TMP/cerr" "$TMP/c.out"; : > "$TMP/c.err"; cc=1
     else
@@ -49,7 +49,7 @@ check_one() {
         timeout 60 "$TMP/$name" > "$TMP/c.out" 2> "$TMP/c.err" < /dev/null; cc=$?
     fi
     # Error messages name the source file; the recorded outputs use this fixed name.
-    sed -i "s|$CASE_FILE|/tmp/luna_test_case.lu|g" "$TMP/c.out" "$TMP/c.err"
+    sed -i "s|$CASE_FILE|/tmp/zue_test_case.zu|g" "$TMP/c.out" "$TMP/c.err"
     if [ -n "$RECORD" ]; then
         rm -f "$EXPECT/$key".*
         cp "$TMP/c.out" "$EXPECT/$key.out"; cp "$TMP/c.err" "$EXPECT/$key.err"; echo "$cc" > "$EXPECT/$key.rc"
@@ -72,11 +72,11 @@ check_one() {
     fi
 }
 
-# check_golden <source>: compiled output must equal <source minus .lu>.golden.
+# check_golden <source>: compiled output must equal <source minus .zu>.golden.
 check_golden() {
     src=$1; name=gold_$$
-    gold="${src%.lu}.golden"
-    if ! "$LUNAC" "$src" "$TMP/$name.$EXT" . > "$TMP/cerr" 2>&1 ||
+    gold="${src%.zu}.golden"
+    if ! "$ZUEC" "$src" "$TMP/$name.$EXT" . > "$TMP/cerr" 2>&1 ||
        ! $CC -O1 -w "$TMP/$name.$EXT" "$RTSRC" \
             -lm -lpthread -ldl -o "$TMP/$name" 2> "$TMP/gerr"; then
         fail=$((fail + 1)); echo "[FAIL] $src (build)"; head -3 "$TMP/cerr" "$TMP/gerr"; return
@@ -90,7 +90,7 @@ check_golden() {
 }
 
 for f in "$@"; do
-    if [ -f "${f%.lu}.golden" ]; then
+    if [ -f "${f%.zu}.golden" ]; then
         check_golden "$f"
     elif grep -q '^# CASE ' "$f"; then
         # Run each case in this shell so the counters survive.

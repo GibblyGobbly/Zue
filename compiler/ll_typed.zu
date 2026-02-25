@@ -1,0 +1,308 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# ll_typed.zu: expressions computed on raw machine values.
+#
+# An expression made only of literals and variables kept raw (see ll_unbox.zu) is computed as i64,
+# double or i1 with no 16-byte LV and no tag test. skind says whether an expression qualifies without
+# emitting anything; tex emits it. The results match the boxed fast paths: an int result that
+# overflows, a zero divisor, and a float result that is not finite all end in the same runtime
+# call, which reports the error.
+
+use { die } from "util.zu"
+use { ll, ll_alloca, ll_br, ll_condbr, ll_float_text, ll_label, ll_mark, ll_new_label, ll_reg } from "ll_state.zu"
+use { find_local } from "ll_scope.zu"
+use { ty_load } from "ll_unbox.zu"
+
+let T_VALUE_CALL = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod"}
+let T_INT_OP = {"+": "sadd", "-": "ssub", "*": "smul"}
+let T_FLOAT_OP = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}
+let T_INT_CMP = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
+let T_FLOAT_CMP = {"==": "oeq", "!=": "une", "<": "olt", "<=": "ole", ">": "ogt", ">=": "oge"}
+let T_BITWISE = {"&": "and", "|": "or", "^": "xor"}
+
+# An integer literal must fit in 64 bits; -9223372036854775808 is the one that needs the sign.
+export func lit_int(n) {
+    let digits = n.v
+    let limit = "9223372036854775807"
+    if (starts_with(digits, "-")) {
+        digits = slice(digits, 1, len(digits))
+        limit = "9223372036854775808"
+    }
+    while (len(digits) > 1 and starts_with(digits, "0")) {
+        digits = slice(digits, 1, len(digits))
+    }
+    if (len(digits) > 19 or (len(digits) == 19 and digits > limit)) {
+        die("Syntax Error", n.line, "Integer literal {n.v} does not fit in 64 bits")
+    }
+    return n.v
+}
+
+# The kind (int, float or bool) n has when computed raw, or null when it cannot be.
+export func skind(n) {
+    let k = n.k
+    if (k == "num") {
+        return "int"
+    }
+    if (k == "float") {
+        return "float"
+    }
+    if (k == "bool") {
+        return "bool"
+    }
+    if (k == "id") {
+        let v = find_local(n.name)
+        if (v != null and v.ty != null) {
+            return v.ty
+        }
+        return null
+    }
+    if (k == "not") {
+        if (skind(n.e) == "bool") {
+            return "bool"
+        }
+        return null
+    }
+    if (k == "bin") {
+        return bin_kind(n)
+    }
+    return null
+}
+
+# The kind both operands of a binary node are computed in, or null. A whole-number literal next to a
+# float is a float, as it is in the runtime.
+func operand_kind(n) {
+    let a = skind(n.l)
+    if (a == null) {
+        return null
+    }
+    let b = skind(n.r)
+    if (b == null) {
+        return null
+    }
+    if (a == b) {
+        return a
+    }
+    if (a == "float" and n.r.k == "num") {
+        return "float"
+    }
+    if (b == "float" and n.l.k == "num") {
+        return "float"
+    }
+    return null
+}
+
+func bin_kind(n) {
+    let op = n.op
+    if (op == "and" or op == "or") {
+        if (skind(n.l) == "bool" and skind(n.r) == "bool") {
+            return "bool"
+        }
+        return null
+    }
+    let u = operand_kind(n)
+    if (u == null) {
+        return null
+    }
+    if (u == "bool") {
+        if (op == "==" or op == "!=") {
+            return "bool"
+        }
+        return null
+    }
+    if (T_INT_CMP[op] != null) {
+        return "bool"
+    }
+    if (op == "+" or op == "-" or op == "*" or op == "/") {
+        return u
+    }
+    if ((op == "%" or op == "&" or op == "|" or op == "^") and u == "int") {
+        return "int"
+    }
+    return null
+}
+
+# The raw operand of n, which skind accepted.
+export func tex(n) {
+    let k = n.k
+    if (k == "num") {
+        return lit_int(n)
+    }
+    if (k == "float") {
+        return ll_float_text(n.v)
+    }
+    if (k == "bool") {
+        return "{n.v}"
+    }
+    if (k == "id") {
+        return ty_load(find_local(n.name))
+    }
+    if (k == "not") {
+        let e = tex(n.e)
+        let r = ll_reg()
+        ll("{r} = xor i1 {e}, true")
+        return r
+    }
+    return tex_bin(n)
+}
+
+# n computed as kind want; a whole-number literal becomes a double when a float is wanted.
+func tex_as(n, want) {
+    if (want == "float" and n.k == "num") {
+        return ll_float_text(n.v)
+    }
+    return tex(n)
+}
+
+func tex_bin(n) {
+    let op = n.op
+    if (op == "and" or op == "or") {
+        return tex_logic(n)
+    }
+    let u = operand_kind(n)
+    let a = tex_as(n.l, u)
+    let b = tex_as(n.r, u)
+    ll_mark(n.line)
+    if (T_INT_CMP[op] != null) {
+        let r = ll_reg()
+        if (u == "float") {
+            ll("{r} = fcmp {T_FLOAT_CMP[op]} double {a}, {b}")
+        } else if (u == "bool") {
+            ll("{r} = icmp {T_INT_CMP[op]} i1 {a}, {b}")
+        } else {
+            ll("{r} = icmp {T_INT_CMP[op]} i64 {a}, {b}")
+        }
+        return r
+    }
+    if (T_BITWISE[op] != null) {
+        let r = ll_reg()
+        ll("{r} = {T_BITWISE[op]} i64 {a}, {b}")
+        return r
+    }
+    if (u == "float") {
+        return tex_float_arith(op, a, b)
+    }
+    return tex_int_arith(op, a, b)
+}
+
+# cur plus or minus one, for ++ and --, in the machine type of kind.
+export func tex_step(kind, op, cur) {
+    if (kind == "float") {
+        return tex_float_arith(op, cur, "1.0")
+    }
+    return tex_int_arith(op, cur, "1")
+}
+
+# a and b / a or b: the right side runs only when the left does not decide.
+func tex_logic(n) {
+    let res = ll_alloca("i64")
+    let left = tex(n.l)
+    let lw = ll_reg()
+    ll("{lw} = zext i1 {left} to i64")
+    ll("store i64 {lw}, ptr {res}")
+    let rhs = ll_new_label("trhs")
+    let done = ll_new_label("tdone")
+    if (n.op == "and") {
+        ll_condbr(left, rhs, done)
+    } else {
+        ll_condbr(left, done, rhs)
+    }
+    ll_label(rhs)
+    let right = tex(n.r)
+    let rw = ll_reg()
+    ll("{rw} = zext i1 {right} to i64")
+    ll("store i64 {rw}, ptr {res}")
+    ll_br(done)
+    ll_label(done)
+    let w = ll_reg()
+    ll("{w} = load i64, ptr {res}")
+    let r = ll_reg()
+    ll("{r} = icmp ne i64 {w}, 0")
+    return r
+}
+
+# + - * with an overflow check, and / % where a divisor of 0 or -1 is left to the runtime (the two
+# that raise an error or overflow). The runtime call returns the result or raises.
+func tex_int_arith(op, a, b) {
+    let fast = ll_new_label("tfast")
+    let slow = ll_new_label("tslow")
+    let done = ll_new_label("tdone")
+    let value = ll_reg()
+    if (T_INT_OP[op] != null) {
+        let pair = ll_reg()
+        let overflow = ll_reg()
+        ll("{pair} = call \{ i64, i1 } @llvm.{T_INT_OP[op]}.with.overflow.i64(i64 {a}, i64 {b})")
+        ll("{value} = extractvalue \{ i64, i1 } {pair}, 0")
+        ll("{overflow} = extractvalue \{ i64, i1 } {pair}, 1")
+        ll_condbr(overflow, slow, fast)
+    } else {
+        let shifted = ll_reg()
+        let usable = ll_reg()
+        ll("{shifted} = add i64 {b}, 1")
+        ll("{usable} = icmp ugt i64 {shifted}, 1")
+        ll_condbr(usable, fast, slow)
+    }
+    ll_label(slow)
+    let sres = ll_reg()
+    let spay = ll_reg()
+    ll("{sres} = call %LV @lvv_{T_VALUE_CALL[op]}(i64 2, i64 {a}, i64 2, i64 {b})")
+    ll("{spay} = extractvalue %LV {sres}, 1")
+    ll_br(done)
+    ll_label(fast)
+    if (T_INT_OP[op] == null) {
+        let inst = "sdiv"
+        if (op == "%") {
+            inst = "srem"
+        }
+        ll("{value} = {inst} i64 {a}, {b}")
+    }
+    ll_br(done)
+    ll_label(done)
+    let r = ll_reg()
+    ll("{r} = phi i64 [ {value}, %{fast} ], [ {spay}, %{slow} ]")
+    return r
+}
+
+# + - * / on doubles. A zero divisor and a result that is not finite go to the runtime, which
+# raises the error. Adding 0.0 turns -0.0 into 0.0.
+func tex_float_arith(op, a, b) {
+    let compute = ll_new_label("tcomp")
+    let store = ll_new_label("tstore")
+    let slow = ll_new_label("tslow")
+    let done = ll_new_label("tdone")
+    if (op == "/") {
+        let zero = ll_reg()
+        ll("{zero} = fcmp oeq double {b}, 0.0")
+        ll_condbr(zero, slow, compute)
+    } else {
+        ll_br(compute)
+    }
+    ll_label(compute)
+    let res = ll_reg()
+    let mag = ll_reg()
+    let finite = ll_reg()
+    ll("{res} = {T_FLOAT_OP[op]} double {a}, {b}")
+    ll("{mag} = call double @llvm.fabs.f64(double {res})")
+    ll("{finite} = fcmp olt double {mag}, 0x7FF0000000000000")
+    ll_condbr(finite, store, slow)
+    ll_label(store)
+    let clean = ll_reg()
+    ll("{clean} = fadd double {res}, 0.0")
+    ll_br(done)
+    ll_label(slow)
+    let abits = ll_reg()
+    let bbits = ll_reg()
+    let sres = ll_reg()
+    let spay = ll_reg()
+    let sval = ll_reg()
+    ll("{abits} = bitcast double {a} to i64")
+    ll("{bbits} = bitcast double {b} to i64")
+    ll("{sres} = call %LV @lvv_{T_VALUE_CALL[op]}(i64 3, i64 {abits}, i64 3, i64 {bbits})")
+    ll("{spay} = extractvalue %LV {sres}, 1")
+    ll("{sval} = bitcast i64 {spay} to double")
+    ll_br(done)
+    ll_label(done)
+    let r = ll_reg()
+    ll("{r} = phi double [ {clean}, %{store} ], [ {sval}, %{slow} ]")
+    return r
+}

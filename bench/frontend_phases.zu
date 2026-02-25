@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# frontend_phases.zu: how long the lexer, the parser and the type checker take on source files.
+#   zue run bench/frontend_phases.zu file.zu [file.zu ...]
+# Times are in seconds. Use a large file (thousands of lines) for numbers worth comparing.
+
+use { lex } from "../compiler/lexer.zu"
+use { parse_program } from "../compiler/parser.zu"
+use { read_file } from "../compiler/util.zu"
+use { check_program } from "../compiler/check.zu"
+
+func measure(path) {
+    let text = read_file(path)
+    let t0 = clock()
+    let toks = lex(text, 1)
+    let t1 = clock()
+    let tree = parse_program(toks)
+    let t2 = clock()
+    check_program(tree)
+    let t3 = clock()
+    print("{path}: {len(text)} bytes, {len(toks)} tokens")
+    print("  lex   {t1 - t0}")
+    print("  parse {t2 - t1}")
+    print("  check {t3 - t2}")
+}
+
+for (let p in args()) {
+    measure(p)
+}

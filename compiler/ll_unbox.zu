@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# ll_unbox.zu: local variables kept as a raw i64 (int, bool) or double (float) instead of a 16-byte LV.
+#
+# The checker records the scalar type of a variable (n.sty). A variable of that type that no nested
+# function captures and nothing takes the address of lives in an alloca of its machine type. Reads
+# that need an LV box the value on demand; a boxed value written into it passes a tag guard first, so
+# a value from code the checker cannot see still gets a precise error instead of a wrong result.
+
+use { ll, ll_alloca, ll_cstr, ll_new_label, ll_reg, ll_label, ll_condbr, ll_br, ll_slot } from "ll_state.zu"
+
+# The runtime tag of each scalar kind.
+export func tag_of(kind) {
+    if (kind == "bool") {
+        return 1
+    }
+    if (kind == "int") {
+        return 2
+    }
+    return 3
+}
+
+# Whether any call of address_of or addr occurs in the syntax tree x. A variable's address needs its
+# LV storage, so a function that takes addresses keeps every variable boxed.
+export func uses_address(x) {
+    let t = type(x)
+    if (t == "list") {
+        for (let item in x) {
+            if (uses_address(item)) {
+                return true
+            }
+        }
+        return false
+    }
+    if (t != "map") {
+        return false
+    }
+    if (x.k == "id" and (x.name == "address_of" or x.name == "addr")) {
+        return true
+    }
+    for (let key in map_keys(x)) {
+        let v = x[key]
+        let vt = type(v)
+        if ((vt == "map" or vt == "list") and uses_address(v)) {
+            return true
+        }
+    }
+    return false
+}
+
+# A variable record for a scalar of the given kind; its storage is an alloca of the machine type.
+export func new_typed_var(name, kind) {
+    let machine = "i64"
+    if (kind == "float") {
+        machine = "double"
+    }
+    return {"name": name, "cell": false, "c": ll_alloca(machine), "ty": kind}
+}
+
+# The variable's current raw value as an SSA operand.
+export func ty_load(v) {
+    let r = ll_reg()
+    if (v.ty == "float") {
+        ll("{r} = load double, ptr {v.c}")
+    } else if (v.ty == "bool") {
+        let w = ll_reg()
+        ll("{w} = load i64, ptr {v.c}")
+        ll("{r} = icmp ne i64 {w}, 0")
+    } else {
+        ll("{r} = load i64, ptr {v.c}")
+    }
+    return r
+}
+
+# Stores a raw SSA operand (i64, double or i1 by the variable's kind).
+export func ty_store(v, raw) {
+    if (v.ty == "float") {
+        ll("store double {raw}, ptr {v.c}")
+    } else if (v.ty == "bool") {
+        let w = ll_reg()
+        ll("{w} = zext i1 {raw} to i64")
+        ll("store i64 {w}, ptr {v.c}")
+    } else {
+        ll("store i64 {raw}, ptr {v.c}")
+    }
+}
+
+# An LV slot holding the raw value.
+export func box_raw(kind, raw) {
+    let t = ll_slot()
+    ll("store i64 {tag_of(kind)}, ptr {t}")
+    let p = ll_reg()
+    ll("{p} = getelementptr inbounds i8, ptr {t}, i64 8")
+    if (kind == "float") {
+        let bits = ll_reg()
+        ll("{bits} = bitcast double {raw} to i64")
+        ll("store i64 {bits}, ptr {p}")
+    } else if (kind == "bool") {
+        let w = ll_reg()
+        ll("{w} = zext i1 {raw} to i64")
+        ll("store i64 {w}, ptr {p}")
+    } else {
+        ll("store i64 {raw}, ptr {p}")
+    }
+    return t
+}
+
+# The raw value of the LV in slot, which must have the tag of kind; any other tag is a runtime error
+# naming the variable.
+export func unbox_checked(slot, kind, name) {
+    let tag = ll_reg()
+    ll("{tag} = load i64, ptr {slot}")
+    let p = ll_reg()
+    ll("{p} = getelementptr inbounds i8, ptr {slot}, i64 8")
+    let payload = ll_reg()
+    ll("{payload} = load i64, ptr {p}")
+    let ok = ll_reg()
+    ll("{ok} = icmp eq i64 {tag}, {tag_of(kind)}")
+    let good = ll_new_label("ubok")
+    let bad = ll_new_label("ubbad")
+    ll_condbr(ok, good, bad)
+    ll_label(bad)
+    ll("call void @lvv_unbox_fail(ptr {ll_cstr(name)}, i64 {tag_of(kind)}, i64 {tag}, i64 {payload})")
+    ll_br(good)
+    ll_label(good)
+    if (kind == "float") {
+        let d = ll_reg()
+        ll("{d} = bitcast i64 {payload} to double")
+        return d
+    }
+    if (kind == "bool") {
+        let b = ll_reg()
+        ll("{b} = icmp ne i64 {payload}, 0")
+        return b
+    }
+    return payload
+}

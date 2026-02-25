@@ -1,6 +1,6 @@
 # Data Types
 
-Luna has four ways to define your own structured values:
+Zue has four ways to define your own structured values:
 
 | Type | Mutable | Memory | Best for |
 |---|---|---|---|
@@ -10,7 +10,7 @@ Luna has four ways to define your own structured values:
 | `box` | yes | manual byte buffer, freed at scope end | scratch bytes, up to 4096 |
 
 Their rules are checked at run time by the runtime library; a violation stops the program with
-the messages shown below. `make test` checks every rule (`test/test_unsafe_errors.lu`).
+the messages shown below. `make test` checks every rule (`test/test_unsafe_errors.zu`).
 
 ## Typed fields
 
@@ -23,7 +23,8 @@ bloc Packet { id: int, payload: box[16] }
 ```
 
 A field type is `int`, `float`, `bool`, `char`, `string`, `list`, `map`, `function`, the name of a
-`bloc` or `template`, or `box[N]`. A value of another type is an error when the object is built
+`bloc` or `template`, or `box[N]`. `list<int>` and `map<float>` give the items a type, which the
+compiler checks; at run time only `list` or `map` is checked. A value of another type is an error when the object is built
 and when a field is assigned: `Template 'Player' field 'hp' must be an int, got string`. A whole
 number written in the source adapts to a float field (`Vec{1, 2}` has floats); a variable never
 does. A `bloc` types all its fields or none. `data` fields have no types.
@@ -150,7 +151,7 @@ See [unsafe](unsafe.md).
 
 ## How it works
 
-All of this is in `compiler/runtime/luna_rt_data.lu`.
+All of this is in `compiler/runtime/zue_rt_data.zu`.
 
 - **bloc**: a small GC object holding a pointer to a shared descriptor (name, field names, kinds,
   size) and one 16-byte value cell per field. The first construction fixes the layout. A nested
@@ -162,5 +163,5 @@ All of this is in `compiler/runtime/luna_rt_data.lu`.
 - **template**: a GC object with a pointer to its type and one value cell per field.
 - **data**: a map with a hidden type tag and a constructor.
 - **Validation**: names, duplicate fields, the 32-byte cap, box sizes and template schemas are
-  checked by the rule functions in `compiler/runtime/luna_rt_rules.lu`. The runtime then raises
+  checked by the rule functions in `compiler/runtime/zue_rt_rules.zu`. The runtime then raises
   the error with the source line.

@@ -1,10 +1,10 @@
 # Builtin Functions
 
-Every builtin is a runtime function; the names are listed in `compiler/shared.lu`.
+Every builtin is a runtime function; the names are listed in `compiler/shared.zu`.
 
 ## Core
 Builtins are always available and need no import. The compiler knows their names (the
-`BUILTINS` list in `compiler/shared.lu`), and each one is implemented as a function named
+`BUILTINS` list in `compiler/shared.zu`), and each one is implemented as a function named
 `lb_<name>` in `compiler/runtime/`. Strings, math and files have their own pages:
 [string](builtins.md#strings), [math](builtins.md#math), [file](builtins.md#files).
 
@@ -95,7 +95,7 @@ byte strings: `len("héllo")` is 6, and indexing is zero-based by byte. `to_uppe
 | `substring(s, start, n)` | `n` characters starting at `start`; the result is cut at the end of the string | `substring("Hello", 0, 2)` is `"He"` |
 | `slice(s, start, end)` | From `start` up to, not including, `end` (bounds are clamped) | `slice("Hello", 1, 4)` is `"ell"` |
 
-`s[i]` returns a `char` (not a string): `"Luna"[0]` is `'L'` and `"Luna"[-1]` is `'a'`. A
+`s[i]` returns a `char` (not a string): `"Zue"[0]` is `'Z'` and `"Zue"[-1]` is `'e'`. A
 `char` and a one-character string are different types: `'a' == "a"` is an error, but both
 work with `contains`, `index_of`, `starts_with` and `ends_with`.
 
@@ -117,11 +117,11 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 | `to_upper(s)`, `to_lower(s)` | Case conversion (ASCII) | `to_upper("abc")` is `"ABC"` |
 | `trim(s)`, `trim_left(s)`, `trim_right(s)` | Remove whitespace from both ends, the start or the end | `trim("  hi  ")` is `"hi"` |
 | `replace(s, old, new)` | Replaces all occurrences of `old` with `new`. An empty `old` changes nothing | `replace("foobar", "o", "a")` is `"faabar"` |
-| `reverse(s)` | Reverses a string (also a list) | `reverse("Luna")` is `"anuL"` |
+| `reverse(s)` | Reverses a string (also a list) | `reverse("Zue")` is `"euZ"` |
 | `repeat(s, n)` | `n` copies of `s`; `""` when `n` is 0 or less | `repeat("Na", 3)` is `"NaNaNa"` |
 | `pad_left(s, w, ch)` | Pads the start of `s` with the character `ch` up to width `w` | `pad_left("7", 3, "0")` is `"007"` |
 | `pad_right(s, w, ch)` | Pads the end of `s` | `pad_right("Ok", 5, ".")` is `"Ok..."` |
-| `format(s, ...)` | Replaces each `{}` with the next argument; extra placeholders stay as `{}` | `format("Hi {}", "Luna")` is `"Hi Luna"` |
+| `format(s, ...)` | Replaces each `{}` with the next argument; extra placeholders stay as `{}` | `format("Hi {}", "Zue")` is `"Hi Zue"` |
 | `to_string(v)` | Text of any value | `to_string(12)` is `"12"` |
 | `to_int(s)`, `to_float(s)` | Parse the whole text as a number (spaces around it are allowed). Text that is not a number, a value outside the 64-bit range, and the names `nan`, `inf` and hex digits are errors | `to_int("12")` is `12` |
 
@@ -141,11 +141,11 @@ A string literal evaluates any expression written inside `{ }` and inserts its t
 
 | Syntax | Result |
 |---|---|
-| `"Hello {name}"` | `"Hello Luna"` when `name` is `"Luna"` |
+| `"Hello {name}"` | `"Hello Zue"` when `name` is `"Zue"` |
 | `"sum = {1 + 2}"` | `"sum = 3"` |
 | `"slot = {items[0]}"` | `"slot = 7"` when `items` is `[7]` |
 
-The text inside `{ }` is parsed as a normal Luna expression. Write `\{` for a literal opening
+The text inside `{ }` is parsed as a normal Zue expression. Write `\{` for a literal opening
 brace. `format()` is still useful when you want positional `{}` placeholders.
 
 Values print as follows: integers in decimal, floats with up to six significant digits
@@ -216,7 +216,7 @@ func censor_text(text, bad_word) {
     return replace(text, bad_word, repeat("*", len(bad_word)))
 }
 
-format_title("welcome to luna")
+format_title("welcome to zue")
 print(join(["apples", "bread", "milk"], ", "))
 print(censor_text("This is a darn good example", "darn"))
 ```
@@ -224,7 +224,7 @@ print(censor_text("This is a darn good example", "darn"))
 ## Math
 Numeric functions, random numbers, and vector math. All of these are builtins. Arguments must
 be numbers (an int or a float); anything else is a `Type Error` such as
-`sqrt() argument 1 must be a number, got string`. Luna has no infinity and no NaN: a call whose
+`sqrt() argument 1 must be a number, got string`. Zue has no infinity and no NaN: a call whose
 argument is outside the function's domain is an `Argument Error` (`sqrt() argument must not be
 negative`), and a float result that is too large is a `Runtime Error` (`float overflow in
 exp()`, `float overflow in '*'`). Results that are not whole numbers print
@@ -262,7 +262,7 @@ All return a float except `pow` with two ints.
 
 ### Rounding
 
-Luna has no negative zero: `-0.0` and any result of `-0.0` is `0.0`.
+Zue has no negative zero: `-0.0` and any result of `-0.0` is `0.0`.
 
 `floor`, `ceil`, `round` (with one argument) and `trunc` return an int; a result outside the 64-bit int range is a
 `Runtime Error` (`floor() result does not fit in a 64-bit int`). `fract` and `mod` return a float.

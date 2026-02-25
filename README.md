@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/luna-banner.png" alt="Luna" width="560">
+  <img src="assets/zue-banner.png" alt="Zue" width="560">
 </p>
 
 <p align="center">
@@ -8,8 +8,8 @@
 
 ---
 
-Luna is a compiled, self-hosted programming language with JavaScript-like syntax. The compiler is
-written in Luna; it generates LLVM IR, and clang (LLVM) turns that into native machine code. A finished program is an
+Zue is a compiled, self-hosted programming language with JavaScript-like syntax. The compiler is
+written in Zue; it generates LLVM IR, and clang (LLVM) turns that into native machine code. A finished program is an
 ordinary executable.
 
 - Dynamically typed, with no implicit conversions: integer overflow is an error, and conditions
@@ -42,17 +42,17 @@ sudo pacman -S clang make git
 Check that `clang --version` reports 18. Optional extras: `llvm-18` (the `opt-18` tool checks
 generated IR) and `valgrind`.
 
-## Get Luna and build it
+## Get Zue and build it
 
 ```bash
-git clone https://github.com/Bharathsencha/The-Luna-Project.git luna
-cd luna
-make              # builds bin/luna
+git clone https://github.com/GibblyGobbly/Zue.git zue
+cd zue
+make              # builds bin/zue
 make test         # compiles and runs every test; the last lines say "passed N, failed 0"
 ```
 
 `make` builds the compiler from the two seed files in `bootstrap/` (LLVM IR of the compiler and
-the runtime), then rebuilds it once more and checks that the result is identical. To use `luna` from
+the runtime), then rebuilds it once more and checks that the result is identical. To use `zue` from
 anywhere, put `bin` on your path:
 
 ```bash
@@ -61,26 +61,26 @@ export PATH="$PWD/bin:$PATH"
 
 ## Hello, World
 
-Save this as `hello.lu`:
+Save this as `hello.zu`:
 
 ```javascript
 print("Hello, World!")
 ```
 
 ```bash
-luna run hello.lu                  # build and run in one step
-luna build hello.lu -o hello       # or build a program and run it yourself
+zue run hello.zu                  # build and run in one step
+zue build hello.zu -o hello       # or build a program and run it yourself
 ./hello
 ```
 
 | Command | Effect |
 |---|---|
-| `luna build prog.lu -o prog` | Compile to a native executable |
-| `luna build prog.lu -S` | Write the LLVM IR to `C/prog.ll` and stop |
-| `luna run prog.lu [args...]` | Build into `C/run/` and run; the exit status is the program's |
-| `luna emit prog.lu [-o out.ll]` | Write the LLVM IR only |
+| `zue build prog.zu -o prog` | Compile to a native executable |
+| `zue build prog.zu -S` | Write the LLVM IR to `C/prog.ll` and stop |
+| `zue run prog.zu [args...]` | Build into `C/run/` and run; the exit status is the program's |
+| `zue emit prog.zu [-o out.ll]` | Write the LLVM IR only |
 
-Generated files go in a `C/` folder next to where you run `luna`.
+Generated files go in a `C/` folder next to where you run `zue`.
 
 ## The language in ten minutes
 
@@ -208,15 +208,15 @@ print("({p.x}, {p.y})")
 Split a program over files and share names with `export`:
 
 ```javascript
-# utils.lu
+# utils.zu
 export func shout(text) {
     return to_upper(text) + "!"
 }
 ```
 
 ```javascript
-# main.lu
-use { shout } from "utils.lu"
+# main.zu
+use { shout } from "utils.zu"
 print(shout("hello"))
 ```
 
@@ -243,12 +243,12 @@ print(rand(1, 6))          # a random whole number from 1 to 6, both included
 Strings are bytes with a length. Indexing gives a one-character value.
 
 ```javascript
-let s = "Hello, Luna"
-print(len(s))                       # 11
-print(to_upper(s))                  # HELLO, LUNA
-print(substring(s, 7, 4))           # Luna
-print(index_of(s, "Luna"))          # 7
-print(replace(s, "Luna", "World"))  # Hello, World
+let s = "Hello, Zue"
+print(len(s))                       # 10
+print(to_upper(s))                  # HELLO, ZUE
+print(substring(s, 7, 3))           # Zue
+print(index_of(s, "Zue"))           # 7
+print(replace(s, "Zue", "World"))   # Hello, World
 print(split("a,b,c", ","))          # [a, b, c]
 print(join(["x", "y", "z"], "-"))   # x-y-z
 print(trim("   padded  "))          # padded
@@ -263,7 +263,7 @@ All builtin functions are listed in [docs/builtins.md](docs/builtins.md).
 
 ## Small programs
 
-The [examples](examples) folder has these ready to run with `luna run examples/<name>.lu`.
+The [examples](examples) folder has these ready to run with `zue run examples/<name>.zu`.
 
 ### Quicksort
 
@@ -304,11 +304,11 @@ after:  [1, 5, 7, 7, 23, 32, 32, 34, 62]
 
 | File | What it shows |
 |---|---|
-| [hello.lu](examples/hello.lu) | the smallest program |
-| [fizzbuzz.lu](examples/fizzbuzz.lu) | loops and conditions |
-| [primes.lu](examples/primes.lu) | a sieve over a list of booleans |
-| [wordcount.lu](examples/wordcount.lu) | maps and `split` |
-| [quicksort.lu](examples/quicksort.lu) | recursion and lists |
+| [hello.zu](examples/hello.zu) | the smallest program |
+| [fizzbuzz.zu](examples/fizzbuzz.zu) | loops and conditions |
+| [primes.zu](examples/primes.zu) | a sieve over a list of booleans |
+| [wordcount.zu](examples/wordcount.zu) | maps and `split` |
+| [quicksort.zu](examples/quicksort.zu) | recursion and lists |
 
 ## Documentation
 
@@ -317,20 +317,20 @@ compiler and the runtime work, the garbage collector, `unsafe` memory, and how t
 tests. [development](docs/development.md) lists the techniques and tools used to build and check the
 front end, with results and credit.
 
-## How Luna got here
+## How Zue got here
 
-Luna began as a tree-walking interpreter written in C: it read the program and acted on it
+Zue began as a tree-walking interpreter written in C: it read the program and acted on it
 directly. That was simple but slow. Next came a bytecode virtual machine, which turned the
 program into compact instructions first and ran them on a small machine; it was much faster,
 and it came with its own garbage collector. The last step was to stop running programs at all:
-Luna now compiles them to native code through LLVM, and the compiler and the runtime were
-rewritten in Luna itself. Each step kept the same language and the same error messages; only
+Zue now compiles them to native code through LLVM, and the compiler and the runtime were
+rewritten in Zue itself. Each step kept the same language and the same error messages; only
 the way programs run changed.
 
 ## License
 
-Luna is free software under the GNU General Public License, version 3 or (at your option) any
-later version. The full text is in [LICENSE](LICENSE). Copyright (c) 2026 Bharath. Source files
+Zue is free software under the GNU General Public License, version 3 or (at your option) any
+later version. The full text is in [LICENSE](LICENSE). Copyright (c) 2026 GibblyGobbly. Source files
 start with an `SPDX-License-Identifier: GPL-3.0-or-later` line.
 
-Compiled programs link the Luna runtime, which is part of this project.
+Compiled programs link the Zue runtime, which is part of this project.

@@ -1,0 +1,2 @@
+use { Hidden } from "modules_fixtures/shared_types.zu"
+print(Hidden(1).v)

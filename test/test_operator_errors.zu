@@ -1,0 +1,71 @@
+# CASE string plus int
+func pass(v) {
+    return [v, null][0]
+}
+let s = pass("a") + 1
+# CASE int plus bool
+func pass(v) {
+    return [v, null][0]
+}
+let s = pass(1) + true
+# CASE null plus int
+func pass(v) {
+    return [v, null][0]
+}
+let s = pass(null) + 1
+# CASE list plus int
+func pass(v) {
+    return [v, null][0]
+}
+let s = pass([1, 2]) + 1
+# CASE integer overflow
+let big = 9223372036854775807
+let s = big + 1
+# CASE integer overflow in multiply
+let big = 4611686018427387904
+let s = big * 2
+# CASE integer division by zero
+let z = 0
+let s = 1 / z
+# CASE float division by zero
+let z = 0.0
+let s = 1.5 / z
+# CASE modulo by zero
+let z = 0
+let s = 5 % z
+# CASE if on an int
+func pass(v) {
+    return [v, null][0]
+}
+if (pass(5)) { print("no") }
+# CASE while on a string
+func pass(v) {
+    return [v, null][0]
+}
+while (pass("x")) { print("no") }
+# CASE not on an int
+func pass(v) {
+    return [v, null][0]
+}
+let s = not pass(0)
+# CASE and on an int
+func pass(v) {
+    return [v, null][0]
+}
+let s = pass(1) and true
+# CASE compare int with string
+func pass(v) {
+    return [v, null][0]
+}
+let s = pass(1) == "1"
+# CASE order int and string
+func pass(v) {
+    return [v, null][0]
+}
+let s = pass(1) < "a"
+# CASE negate a string
+func pass(v) {
+    return [v, null][0]
+}
+let t = pass("x")
+let s = -t
