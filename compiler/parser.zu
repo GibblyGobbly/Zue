@@ -6,6 +6,7 @@
 use { die } from "util.zu"
 use { lex } from "lexer.zu"
 use { KEYWORDS } from "token.zu"
+use { mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_typedef, mk_use, mk_block, mk_return, mk_jump } from "ast_nodes.zu"
 
 let P_toks = []
 let P_pos = 0
@@ -142,10 +143,6 @@ func p_expect(t, msg) {
     return p_next()
 }
 
-func node(k, line) {
-    return {"k": k, "line": line}
-}
-
 # Parses source text with its own token stream, then restores the parser.
 func parse_inline(text, line) {
     let saved_toks = P_toks
@@ -175,11 +172,8 @@ func p_string(tk) {
         }
     }
     if (not has_expr) {
-        let s = node("str", tk.line)
-        s.v = parts[0]
-        return s
+        return mk_lit("str", tk.line, parts[0])
     }
-    let t = node("tmpl", tk.line)
     let items = []
     for (let part in parts) {
         if (type(part) == "map") {
@@ -188,8 +182,7 @@ func p_string(tk) {
             append(items, part)
         }
     }
-    t.parts = items
-    return t
+    return mk_tmpl(tk.line, items)
 }
 
 func p_list_literal(line) {
@@ -202,9 +195,7 @@ func p_list_literal(line) {
         }
     }
     p_close("]", "Expected ']' at end of list")
-    let n = node("list", line)
-    n.items = items
-    return n
+    return mk_list(line, items)
 }
 func p_map_literal(line) {
     p_enter()
@@ -226,10 +217,7 @@ func p_map_literal(line) {
         }
     }
     p_close("}", "Expected '}' at end of map literal")
-    let n = node("map", line)
-    n.keys = keys
-    n.vals = vals
-    return n
+    return mk_map(line, keys, vals)
 }
 # A type annotation after ':' on a variable, a parameter or a field: a type name, and for list and
 # map an element type in angle brackets, as in list<int> or map<list<float>>. Returned as text.
@@ -306,17 +294,13 @@ func p_func_rest(name, line, is_export) {
     }
     p_close(")", "Expected ')'")
     p_expect("\{", "Expected '\{'")
-    let n = node("func", line)
-    n.name = name
-    n.params = params
-    n.defaults = defaults
+    let declared = null
     if (has_type) {
-        n.ptypes = ptypes
+        declared = ptypes
     }
-    n.body = p_block_body()
+    let body = p_block_body()
     p_scope_pop()
-    n.exported = is_export
-    return n
+    return mk_func(line, name, params, defaults, declared, body, is_export)
 }
 func p_primary() {
     let tk = P_tk
@@ -324,15 +308,11 @@ func p_primary() {
     let t = tk.t
     if (t == "num") {
         p_next()
-        let n = node("num", line)
-        n.v = tk.v
-        return n
+        return mk_lit("num", line, tk.v)
     }
     if (t == "float") {
         p_next()
-        let n = node("float", line)
-        n.v = tk.v
-        return n
+        return mk_lit("float", line, tk.v)
     }
     if (t == "str") {
         p_next()
@@ -340,21 +320,15 @@ func p_primary() {
     }
     if (t == "char") {
         p_next()
-        let n = node("char", line)
-        n.v = tk.v
-        return n
+        return mk_lit("char", line, tk.v)
     }
     if (t == "true" or t == "false") {
         p_next()
-        let n = node("bool", line)
-        n.v = t == "true"
-        return n
+        return mk_lit("bool", line, t == "true")
     }
     if (t == "id") {
         p_next()
-        let n = node("id", line)
-        n.name = tk.v
-        return n
+        return mk_id(line, tk.v)
     }
     if (t == "(") {
         p_next()
@@ -378,10 +352,9 @@ func p_primary() {
     if (t == "box") {
         p_next()
         p_expect("[", "Expected '[' after 'box'")
-        let n = node("box", line)
-        n.size = p_expr()
+        let size = p_expr()
         p_expect("]", "Expected ']' after box size")
-        return n
+        return mk_box(line, size)
     }
     if (t == ";") {
         p_fail("Unexpected semicolon ';'")
@@ -408,25 +381,16 @@ func p_postfix() {
     while (true) {
         if ((P_kind == "(")) {
             p_next()
-            let c = node("call", line)
-            c.callee = e
-            c.args = p_args(")", "Expected ')' after arguments")
-            e = c
+            e = mk_call(line, e, p_args(")", "Expected ')' after arguments"))
         } else if ((P_kind == "\{") and e.k == "id") {
             p_next()
-            let c = node("call", line)
-            c.callee = e
-            c.args = p_args("}", "Expected '}' after typed constructor arguments")
-            e = c
+            e = mk_call(line, e, p_args("}", "Expected '}' after typed constructor arguments"))
         } else if ((P_kind == "[")) {
             p_next()
             p_enter()
             let idx = p_expr()
             p_close("]", "Expected ']' after index")
-            let n = node("index", line)
-            n.target = e
-            n.index = idx
-            e = n
+            e = mk_index(line, e, idx)
         } else if ((P_kind == ".")) {
             p_next()
             let tk = P_tk
@@ -434,20 +398,13 @@ func p_postfix() {
             if (not is_word) {
                 p_fail("Expected field name after '.'")
             }
-            let n = node("field", line)
-            n.target = e
-            n.field = p_next().v
-            e = n
+            e = mk_field(line, e, p_next().v)
         } else if ((P_kind == "++") or (P_kind == "--")) {
             let op = p_next().t
             if (e.k != "id") {
                 p_fail("'{op}' can only be applied to variables")
             }
-            let n = node("incdec", line)
-            n.name = e.name
-            n.op = op
-            n.prefix = false
-            e = n
+            e = mk_incdec(line, e.name, op, false)
         } else {
             break
         }
@@ -467,11 +424,7 @@ func p_unary() {
             }
             return r
         }
-        let n = node("bin", line)
-        n.op = "-"
-        n.l = node("num", line)
-        n.l.v = "0"
-        n.r = r
+        let n = mk_bin(line, "-", mk_lit("num", line, "0"), r)
         n.unary = true
         return n
     }
@@ -480,11 +433,7 @@ func p_unary() {
         if (not (P_kind == "id")) {
             p_fail("'{op}' can only be applied to variables")
         }
-        let n = node("incdec", line)
-        n.name = p_next().v
-        n.op = op
-        n.prefix = true
-        return n
+        return mk_incdec(line, p_next().v, op, true)
     }
     if (p_eat("+")) {
         return p_unary()
@@ -492,23 +441,15 @@ func p_unary() {
     if (P_kind == "~") {
         # ~x is x ^ -1
         p_next()
-        let flip = node("bin", line)
-        flip.op = "^"
-        flip.l = p_unary()
-        flip.r = node("num", line)
-        flip.r.v = "-1"
-        return flip
+        let operand = p_unary()
+        return mk_bin(line, "^", operand, mk_lit("num", line, "-1"))
     }
     let base = p_postfix()
     if (P_kind == "**") {
         # ** binds tighter than a unary minus on its left and is right-associative: -2 ** 2 is -4
         p_next()
         p_skip_nl()
-        let power = node("bin", line)
-        power.op = "**"
-        power.l = base
-        power.r = p_unary()
-        return power
+        return mk_bin(line, "**", base, p_unary())
     }
     return base
 }
@@ -530,8 +471,7 @@ func p_expr_bp(min_bp) {
     if (min_bp <= 3 and (P_kind == "not")) {
         # not binds looser than a comparison and tighter than and: not a == b is not (a == b).
         p_next()
-        left = node("not", line)
-        left.e = p_expr_bp(3)
+        left = mk_not(line, p_expr_bp(3))
     } else {
         left = p_unary()
     }
@@ -542,11 +482,7 @@ func p_expr_bp(min_bp) {
         }
         let op = p_next().t
         p_skip_nl()
-        let n = node("bin", line)
-        n.op = op
-        n.l = left
-        n.r = p_expr_bp(bp + 1)
-        left = n
+        left = mk_bin(line, op, left, p_expr_bp(bp + 1))
     }
     return left
 }
@@ -621,25 +557,16 @@ func p_declaration(is_const, is_export) {
     }
     let lets = []
     for (let i = 0; i < len(names); i++) {
-        let n = node("let", line)
-        n.name = names[i]
-        n.init = null
+        let init = null
         if (len(vals) > 0) {
-            n.init = vals[i]
+            init = vals[i]
         }
-        n.exported = is_export
-        n.const_decl = is_const
-        if (types[i] != null) {
-            n.type = types[i]
-        }
-        append(lets, n)
+        append(lets, mk_let(line, names[i], init, is_export, is_const, types[i]))
     }
     if (len(lets) == 1) {
         return lets[0]
     }
-    let g = node("group", line)
-    g.items = lets
-    return g
+    return mk_group(line, lets)
 }
 
 func p_cond_paren(what) {
@@ -653,21 +580,19 @@ func p_if(line) {
     let cond = p_cond_paren("if")
     p_eat("nl")
     p_expect("\{", "Expected '\{'")
-    let n = node("if", line)
-    n.cond = cond
-    n.then = p_block()
-    n.els = []
+    let then_body = p_block()
+    let els = []
     p_eat("nl")
     if (p_eat("else")) {
         p_eat("nl")
         if ((P_kind == "if")) {
-            n.els = [p_statement()]
+            els = [p_statement()]
         } else {
             p_expect("\{", "Expected '\{'")
-            n.els = p_block()
+            els = p_block()
         }
     }
-    return n
+    return mk_if(line, cond, then_body, els)
 }
 
 func p_for(line) {
@@ -692,23 +617,17 @@ func p_for_header(line) {
             p_close(")", "Expected ')' after for-in iterable")
             p_eat("nl")
             p_expect("\{", "Expected '\{' for loop body")
-            let n = node("forin", line)
-            n.name = name
-            n.iter = iter
-            n.body = p_block()
-            return n
+            return mk_forin(line, name, iter, p_block())
         }
-        let init = node("let", line)
-        init.name = name
-        init.init = null
-        init.exported = false
+        let ty = null
         if (p_eat(":")) {
-            init.type = p_type("a variable")
+            ty = p_type("a variable")
         }
+        let first = null
         if (p_eat("=")) {
-            init.init = p_expr()
+            first = p_expr()
         }
-        return p_for_rest(line, init)
+        return p_for_rest(line, mk_let(line, name, first, false, null, ty))
     }
     if ((P_kind == ";")) {
         return p_for_rest(line, null)
@@ -730,12 +649,7 @@ func p_for_rest(line, init) {
     p_close(")", "Expected ')' after loop increment")
     p_eat("nl")
     p_expect("\{", "Expected '\{' for loop body")
-    let n = node("for", line)
-    n.init = init
-    n.cond = cond
-    n.incr = incr
-    n.body = p_block()
-    return n
+    return mk_for(line, init, cond, incr, p_block())
 }
 
 func p_switch(line) {
@@ -762,11 +676,7 @@ func p_switch(line) {
         }
     }
     p_expect("}", "Expected '}' ending switch")
-    let n = node("switch", line)
-    n.e = e
-    n.cases = cases
-    n.dflt = dflt
-    return n
+    return mk_switch(line, e, cases, dflt)
 }
 
 func p_case_body() {
@@ -807,10 +717,7 @@ func p_simple(line) {
         p_skip_nl()
         let v = p_expr()
         if (e.k == "id") {
-            let n = node("assign", line)
-            n.name = e.name
-            n.e = v
-            return n
+            return mk_assign(line, e.name, v)
         }
         return make_setidx(e, v, null, line)
     }
@@ -820,14 +727,7 @@ func p_simple(line) {
         p_skip_nl()
         let rhs = p_expr()
         if (e.k == "id") {
-            let b = node("bin", line)
-            b.op = op
-            b.l = e
-            b.r = rhs
-            let n = node("assign", line)
-            n.name = e.name
-            n.e = b
-            return n
+            return mk_assign(line, e.name, mk_bin(line, op, e, rhs))
         }
         return make_setidx(e, rhs, op, line)
     }
@@ -836,34 +736,22 @@ func p_simple(line) {
 
 # target[index] = value  /  target.field = value, with an optional compound op.
 func make_setidx(e, v, op, line) {
-    let n = node("setidx", line)
     if (e.k == "index") {
-        n.target = e.target
-        n.index = e.index
-    } else if (e.k == "field") {
-        n.target = e.target
-        n.index = node("str", line)
-        n.index.v = e.field
-    } else {
-        p_fail("Invalid assignment target")
+        return mk_setidx(line, e.target, e.index, v, op)
     }
-    n.e = v
-    n.op = op
-    return n
+    if (e.k == "field") {
+        return mk_setidx(line, e.target, mk_lit("str", line, e.field), v, op)
+    }
+    p_fail("Invalid assignment target")
 }
 
 func p_typedef(line, word, is_export) {
     if (not (P_kind == "id")) {
         p_fail("Expected a name after '{word}'")
     }
-    let n = node("typedef", line)
-    n.exported = is_export
-    n.name = p_next().v
-    p_declare(n.name, line)
-    n.is_template = word == "template"
-    n.is_bloc = word == "bloc"
-    n.fields = []
-    n.ftypes = []
+    let name = p_next().v
+    p_declare(name, line)
+    let n = mk_typedef(line, is_export, name, word == "template", word == "bloc", [], [])
     p_expect("\{", "Expected '\{' after type name")
     while (not (P_kind == "}") and not (P_kind == "eof")) {
         p_skip_nl()
@@ -924,8 +812,7 @@ func p_check_field_types(n, word) {
 }
 
 func p_use(line, word) {
-    let n = node("use", line)
-    n.names = []
+    let names = []
     if ((P_kind == "\{")) {
         p_next()
         p_enter()
@@ -935,7 +822,7 @@ func p_use(line, word) {
             }
             let ut = p_next()
             p_declare(ut.v, ut.line)
-            append(n.names, ut.v)
+            append(names, ut.v)
             if (not p_eat(",")) {
                 break
             }
@@ -946,8 +833,7 @@ func p_use(line, word) {
     if (not (P_kind == "str")) {
         p_fail("Expected string path after {word}")
     }
-    n.path = p_next().v[0]
-    return n
+    return mk_use(line, names, p_next().v[0])
 }
 
 func p_statement() {
@@ -996,34 +882,29 @@ func p_statement() {
     }
     if (t == "\{") {
         p_next()
-        let n = node("block", line)
-        n.body = p_block()
-        return n
+        return mk_block("block", line, p_block())
     }
     if (t == "unsafe") {
         p_next()
         p_eat("nl")
         p_expect("\{", "Expected '\{' after unsafe")
-        let n = node("unsafe", line)
-        n.body = p_block()
-        return n
+        return mk_block("unsafe", line, p_block())
     }
     if (t == "return") {
         p_next()
-        let n = node("return", line)
-        n.e = null
+        let e = null
         if (not (P_kind == "}") and not (P_kind == "nl") and not (P_kind == "eof")) {
-            n.e = p_expr()
+            e = p_expr()
         }
-        return n
+        return mk_return(line, e)
     }
     if (t == "break") {
         p_next()
-        return node("break", line)
+        return mk_jump("break", line)
     }
     if (t == "continue") {
         p_next()
-        return node("continue", line)
+        return mk_jump("continue", line)
     }
     if (t == "if") {
         p_next()
@@ -1034,10 +915,7 @@ func p_statement() {
         let cond = p_cond_paren("while")
         p_eat("nl")
         p_expect("\{", "Expected '\{'")
-        let n = node("while", line)
-        n.cond = cond
-        n.body = p_block()
-        return n
+        return mk_while(line, cond, p_block())
     }
     if (t == "for") {
         p_next()

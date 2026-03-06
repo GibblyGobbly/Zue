@@ -5,6 +5,8 @@
 #   (kind@line :field value :field value ...)
 # Fields are sorted by name, so the same tree always gives the same text.
 
+use { NODE_FIELDS, OPTIONAL_FIELDS } from "ast_nodes.zu"
+
 func quote_text(s) {
     let q = "\""
     let t = replace(s, "\\", "\\\\")
@@ -15,7 +17,7 @@ func quote_text(s) {
 
 func dump_value(x) {
     let t = type(x)
-    if (t == "map") {
+    if (t == "map" or t == "template") {
         return dump_node(x)
     }
     if (t == "list") {
@@ -31,18 +33,39 @@ func dump_value(x) {
     return to_string(x)
 }
 
-# A node is a map with a "k" kind; other maps (switch cases, string parts) print as "map".
+# A node is a template with a k kind; other maps (switch cases) print as "map". A field in
+# OPTIONAL_FIELDS that is null was never set, so it is left out.
+func is_optional(key) {
+    for (let name in OPTIONAL_FIELDS) {
+        if (name == key) {
+            return true
+        }
+    }
+    return false
+}
+
 func dump_node(n) {
-    let keys = map_keys(n)
-    sort(keys)
     let kind = n.k
+    let keys = []
+    let is_tree_node = type(n) == "template"
+    if (is_tree_node) {
+        for (let name in NODE_FIELDS[kind]) {
+            append(keys, name)
+        }
+    } else {
+        keys = map_keys(n)
+    }
+    sort(keys)
     if (kind == null) {
         kind = "map"
     }
     let parts = ["({kind}@{n.line}"]
     for (let key in keys) {
         if (key != "k" and key != "line") {
-            append(parts, ":{key} {dump_value(n[key])}")
+            let value = n[key]
+            if (not (is_tree_node and value == null and is_optional(key))) {
+                append(parts, ":{key} {dump_value(value)}")
+            }
         }
     }
     return join(parts, " ") + ")"

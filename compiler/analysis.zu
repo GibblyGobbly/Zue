@@ -4,6 +4,8 @@
 # analysis.zu: which names a function uses and which are captured by nested functions.
 
 # Used by the LLVM backend.
+use { node_children } from "ast_nodes.zu"
+
 # Every name read or written anywhere inside x (in order of first use).
 func walk_names(x, seen, order) {
     if (type(x) == "list") {
@@ -12,7 +14,8 @@ func walk_names(x, seen, order) {
         }
         return null
     }
-    if (type(x) != "map") {
+    let t = type(x)
+    if (t != "template" and t != "map") {
         return null
     }
     let k = x.k
@@ -22,10 +25,8 @@ func walk_names(x, seen, order) {
             append(order, x.name)
         }
     }
-    for (let y in map_values(x)) {
-        if (type(y) == "list" or type(y) == "map") {
-            walk_names(y, seen, order)
-        }
+    for (let y in node_children(x)) {
+        walk_names(y, seen, order)
     }
     return null
 }
@@ -44,7 +45,8 @@ export func walk_nested(x, out) {
         }
         return null
     }
-    if (type(x) != "map") {
+    let t = type(x)
+    if (t != "template" and t != "map") {
         return null
     }
     if (x.k == "func") {
@@ -52,10 +54,8 @@ export func walk_nested(x, out) {
         walk_names(x, out, order)
         return null
     }
-    for (let y in map_values(x)) {
-        if (type(y) == "list" or type(y) == "map") {
-            walk_nested(y, out)
-        }
+    for (let y in node_children(x)) {
+        walk_nested(y, out)
     }
     return null
 }

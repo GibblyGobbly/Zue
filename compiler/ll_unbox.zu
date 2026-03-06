@@ -8,6 +8,7 @@
 # that need an LV box the value on demand; a boxed value written into it passes a tag guard first, so
 # a value from code the checker cannot see still gets a precise error instead of a wrong result.
 
+use { node_children } from "ast_nodes.zu"
 use { ll, ll_alloca, ll_cstr, ll_new_label, ll_reg, ll_label, ll_condbr, ll_br, ll_slot } from "ll_state.zu"
 
 # The runtime tag of each scalar kind.
@@ -33,16 +34,14 @@ export func uses_address(x) {
         }
         return false
     }
-    if (t != "map") {
+    if (t != "template" and t != "map") {
         return false
     }
     if (x.k == "id" and (x.name == "address_of" or x.name == "addr")) {
         return true
     }
-    for (let key in map_keys(x)) {
-        let v = x[key]
-        let vt = type(v)
-        if ((vt == "map" or vt == "list") and uses_address(v)) {
+    for (let v in node_children(x)) {
+        if (uses_address(v)) {
             return true
         }
     }

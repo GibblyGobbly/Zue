@@ -1,0 +1,6 @@
+// A node has only the fields of its kind: an identifier has no operator.
+use { mk_id } from "../compiler/ast_nodes.zu"
+
+let n = mk_id(1, "x")
+print(n.name)
+print(n.op)
