@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 4:
+  shift count -1 is out of range
+
+   4 | print(pass(8) >> pass(-1))
+
+Hint: A shift count must be from 0 to 63.

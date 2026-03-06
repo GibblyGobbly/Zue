@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  pow() base must not be negative when the exponent is not a whole number
+
+   1 | print(pow(-8.0, 0.5))
+
+Hint: Check the argument before calling.

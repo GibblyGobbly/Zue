@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  dense_list() argument 2 must be a float, got int
+
+   1 | print(dense_list(3, 0))
+

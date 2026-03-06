@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  box size must be between 1 and 16777216 bytes
+
+   1 | let b = box[16777217]
+
+Hint: Use box[n] with n between 1 and 16777216

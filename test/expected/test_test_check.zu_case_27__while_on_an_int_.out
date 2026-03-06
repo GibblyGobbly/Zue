@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  'while' needs a bool, got int
+
+   2 | while (k) { k = 0 }
+

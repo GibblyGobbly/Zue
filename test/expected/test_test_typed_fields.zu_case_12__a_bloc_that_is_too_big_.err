@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  bloc exceeds the cache-line size limit (64 bytes)
+
+   1 | bloc Big { a: int, b: int, c: int, d: int, e: int, f: int, g: int, h: int, i: int }
+
+Hint: A bloc holds at most 64 bytes of unique fields; each name keeps one field list

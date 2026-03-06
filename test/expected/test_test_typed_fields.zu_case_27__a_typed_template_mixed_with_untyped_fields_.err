@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 8:
+  Template 'Mixed' field 'id' must be an int, got string
+
+   8 | m.id = pass("no")
+
+Hint: Give the field a value of its declared type. A whole number written in the source is an int; write 2.0 for a float.

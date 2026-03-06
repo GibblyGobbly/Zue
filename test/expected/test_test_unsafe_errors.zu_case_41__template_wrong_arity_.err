@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 2:
+  Data constructor 'Pair' expects 2 field value(s), but got 1
+
+   2 | let p = Pair(42)
+
+Hint: Pass one value for each declared data field

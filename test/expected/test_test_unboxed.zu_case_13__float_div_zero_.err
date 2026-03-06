@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 4:
+  division by zero
+
+   4 |     return x / z
+
+Hint: Check the divisor before dividing.

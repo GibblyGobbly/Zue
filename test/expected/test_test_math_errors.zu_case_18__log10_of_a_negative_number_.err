@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  log10() argument must be greater than 0
+
+   1 | print(log10(-5))
+
+Hint: Check the argument before calling.

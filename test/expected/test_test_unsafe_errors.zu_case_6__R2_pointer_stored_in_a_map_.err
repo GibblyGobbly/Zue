@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 4:
+  pointers cannot be stored inside GC-managed values
+
+   4 |     let m = {"k": a}
+
+Hint: Pointers cannot go into lists or maps because those values are GC-managed.

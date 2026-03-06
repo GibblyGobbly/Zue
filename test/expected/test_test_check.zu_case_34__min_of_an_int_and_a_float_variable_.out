@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  min() argument 2 must be an int, got float
+
+   3 | print(min(a, b))
+

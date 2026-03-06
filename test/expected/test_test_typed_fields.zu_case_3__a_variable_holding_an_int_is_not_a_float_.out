@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  Bloc 'Vec' field 'x' must be a float, got int
+
+   3 | let v = Vec{n, 2}
+

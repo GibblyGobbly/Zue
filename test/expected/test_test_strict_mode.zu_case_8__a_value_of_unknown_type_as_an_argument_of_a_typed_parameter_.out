@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 6:
+  strict mode: the type of argument 1 of double() is not known. Give it a type, for example let x: int = ...
+
+   6 | print(double(xs[0]))
+

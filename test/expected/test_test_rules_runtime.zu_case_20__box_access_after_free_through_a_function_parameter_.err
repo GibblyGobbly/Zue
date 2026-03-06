@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 2:
+  box was already freed (use-after-free)
+
+   2 |     b[0] = 1
+
+Hint: Use b[i] = byte with 0 <= i < b.len and 0 <= byte <= 255

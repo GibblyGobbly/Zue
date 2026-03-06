@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 1:
+  integer overflow in 'divmod'
+
+   1 | print(divmod(-9223372036854775807 - 1, -1))
+
+Hint: The result does not fit in a 64-bit int. Use floats for very large numbers.

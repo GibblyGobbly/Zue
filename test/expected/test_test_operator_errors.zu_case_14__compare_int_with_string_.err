@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  cannot compare int with string
+
+   4 | let s = pass(1) == "1"
+
+Hint: Compare values of the same type (comparing with null is always allowed).

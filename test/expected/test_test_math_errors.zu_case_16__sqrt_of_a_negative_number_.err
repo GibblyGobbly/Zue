@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  sqrt() argument must not be negative
+
+   1 | print(sqrt(-4))
+
+Hint: Check the argument before calling.

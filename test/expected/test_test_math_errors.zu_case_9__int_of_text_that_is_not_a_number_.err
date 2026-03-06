@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  int() cannot read "12abc" as an integer
+
+   1 | print(int("12abc"))
+
+Hint: Use a string of digits such as "42" or "-7".

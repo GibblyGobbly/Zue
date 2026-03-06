@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 1:
+  float overflow in sinh()
+
+   1 | print(sinh(1000))
+
+Hint: Zue has no infinity: the result must fit in a 64-bit float.

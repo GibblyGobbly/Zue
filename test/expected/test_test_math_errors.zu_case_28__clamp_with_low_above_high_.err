@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  clamp() lower bound is greater than the upper bound
+
+   1 | print(clamp(5, 10, 0))
+
+Hint: Write clamp(value, low, high) with low <= high.

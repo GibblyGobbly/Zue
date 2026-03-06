@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 6:
+  Template 'Body' field 'pos' must be a V, got int
+
+   6 | let b = Body(pass(5))
+
+Hint: Give the field a value of its declared type. A whole number written in the source is an int; write 2.0 for a float.

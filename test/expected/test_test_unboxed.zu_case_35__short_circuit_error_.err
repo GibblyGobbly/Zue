@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 3:
+  division by zero
+
+   3 |     let ok = x == 0 and 10 / x > 1
+
+Hint: Check the divisor before dividing.

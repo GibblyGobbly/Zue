@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  float() cannot read "inf" as a float
+
+   1 | print(float("inf"))
+
+Hint: Use a number such as "3.5", "-2" or "1e3".

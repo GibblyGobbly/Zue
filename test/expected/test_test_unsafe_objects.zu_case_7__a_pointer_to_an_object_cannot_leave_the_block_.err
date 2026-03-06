@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 6:
+  pointer cannot escape the current unsafe block
+
+   6 |     keep = p
+
+Hint: Pointers must stay inside the current unsafe block. Copy the pointed-to value out instead.

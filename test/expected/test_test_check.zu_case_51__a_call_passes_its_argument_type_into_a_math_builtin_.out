@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  sqrt() argument 1 must be a float, got int
+  in root(int), called at line 4
+
+   2 |     return sqrt(x)
+

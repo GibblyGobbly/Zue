@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 4:
+  cannot take address_of() of a pointer value
+
+   4 |     let b = address_of(a)
+
+Hint: address_of() only works on normal values. If you already have a pointer, use it directly.

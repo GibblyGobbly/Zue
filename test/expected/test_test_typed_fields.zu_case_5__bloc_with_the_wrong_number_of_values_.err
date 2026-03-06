@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  Bloc 'Vec' expects 2 field value(s), but got 1
+
+   2 | let v = Vec{1.0}
+
+Hint: A bloc holds at most 64 bytes of unique fields; each name keeps one field list

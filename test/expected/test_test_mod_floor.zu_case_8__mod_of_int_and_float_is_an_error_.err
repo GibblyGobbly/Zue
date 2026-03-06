@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  mod() arguments must both be int or both be float, got float and int
+
+   1 | print(mod(5.5, 2))
+
+Hint: Convert one of them with int() or float() so that both have the same type.

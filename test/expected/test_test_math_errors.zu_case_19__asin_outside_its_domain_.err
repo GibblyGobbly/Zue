@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  asin() argument must be between -1 and 1
+
+   1 | print(asin(2))
+
+Hint: Check the argument before calling.

@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 4:
+  pointers may only be cast to int
+
+   4 |     let f = float(a)
+
+Hint: Only int(ptr) is allowed for pointer casts.

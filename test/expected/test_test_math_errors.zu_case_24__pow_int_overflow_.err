@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 1:
+  integer overflow in 'pow'
+
+   1 | print(pow(2, 63))
+
+Hint: The result does not fit in a 64-bit int. Use floats for very large numbers.

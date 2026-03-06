@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 5:
+  cannot assign an int constant to 's', which is string
+
+   5 | s = 5
+

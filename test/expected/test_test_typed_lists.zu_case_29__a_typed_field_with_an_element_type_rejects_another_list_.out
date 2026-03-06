@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  Template 'Bag' field 'items' must be a list<int>, got list<string>
+
+   2 | let b = Bag{["a"], "bag"}
+

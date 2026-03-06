@@ -1,0 +1,6 @@
+Name Error in test/test_module_types_private_error.zu at line 1:
+  Module 'modules_fixtures/shared_types.zu' does not export 'Hidden'
+
+   1 | use { Hidden } from "modules_fixtures/shared_types.zu"
+
+Hint: Export names explicitly in the module before using them

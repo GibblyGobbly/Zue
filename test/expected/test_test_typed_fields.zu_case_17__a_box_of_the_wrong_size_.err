@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  Bloc 'Packet' field 'payload' must be a box[8], got box[4]
+
+   2 | let p = Packet{1, box[4]}
+
+Hint: Give the field a value of its declared type. A whole number written in the source is an int; write 2.0 for a float.

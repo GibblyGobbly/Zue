@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 4:
+  integer overflow in 'lcm'
+
+   4 | print(lcm(pass(4611686018427387904), 3))
+
+Hint: The result does not fit in a 64-bit int. Use floats for very large numbers.

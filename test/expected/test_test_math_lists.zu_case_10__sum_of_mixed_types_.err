@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  sum() list items must all be int or all be float, got int and float
+
+   4 | print(sum(pass([1, 2.5])))
+
+Hint: Convert the items with int() or float() so that all have the same type.

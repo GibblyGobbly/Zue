@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  strict mode: the type of the left operand of '+' is not known. Give it a type, for example let x: int = ...
+
+   3 | let y = xs[0] + 1
+

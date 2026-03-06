@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  area() expects 2 arguments, but got 1
+
+   4 | print(area(2))
+

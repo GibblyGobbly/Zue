@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot assign an int constant to 'x', which is float. Write the number with a decimal point, for example 2.0
+
+   2 | x = 7 / 2
+

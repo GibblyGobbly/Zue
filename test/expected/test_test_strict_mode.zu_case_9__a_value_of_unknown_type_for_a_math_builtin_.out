@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  strict mode: the type of argument 1 of sqrt() is not known. Give it a type, for example let x: float = ...
+
+   3 | print(sqrt(xs[0]))
+

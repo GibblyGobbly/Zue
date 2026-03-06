@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 1:
+  float() value "1e999" does not fit in a 64-bit float
+
+   1 | print(float("1e999"))
+
+Hint: Zue has no infinity: the value must fit in a 64-bit float.

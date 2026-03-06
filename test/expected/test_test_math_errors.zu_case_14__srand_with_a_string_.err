@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  srand() argument 1 must be an int, got string
+
+   4 | srand(pass("x"))
+

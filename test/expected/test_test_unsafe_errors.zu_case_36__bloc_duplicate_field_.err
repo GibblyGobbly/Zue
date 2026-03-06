@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  bloc has duplicate field names
+
+   1 | bloc B { x, x }
+
+Hint: A bloc holds at most 64 bytes of unique fields; each name keeps one field list
