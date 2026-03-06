@@ -20,6 +20,7 @@ export let LL_MODDECLS = []    # per-module state, source tables and descriptors
 export let LL_FUNCS = []       # finished function bodies
 export let LL_KSTRS = []       # text of each K[] string constant
 export let LL_K_IDS = {}
+export let LL_ICS = []         # one inline cache per field read: a template type and a field index
 export let LL_BUILTINS = []    # builtin names whose lb_ function is declared
 export let LL_BUILTIN_IDS = {}
 export let LL_NATIVES = []     # builtins called directly: names that need an nf_ global
@@ -138,6 +139,12 @@ export func ll_kstr(text) {
     return "getelementptr inbounds (%LV, ptr @K, i64 {idx})"
 }
 
+# The inline cache for one field read, as a constant pointer expression into @ic (two words).
+export func ll_ic() {
+    append(LL_ICS, 0)
+    return "getelementptr inbounds (i64, ptr @ic, i64 {(len(LL_ICS) - 1) * 2})"
+}
+
 export func ll_use_builtin(name) {
     if (LL_BUILTIN_IDS[name] == null) {
         LL_BUILTIN_IDS[name] = true
@@ -154,9 +161,10 @@ export func ll_use_native(name) {
     }
 }
 
+template Ctx { out, allocas, scopes, defers, nested, capmap, is_main, line, loops, dead, unsafe_marks, no_unbox, lv, spills }
+
 export func ll_new_ctx(is_main) {
-    return {"out": [], "allocas": [], "scopes": [{}], "defers": [[]], "nested": {}, "capmap": {},
-            "is_main": is_main, "line": -1, "loops": [], "dead": false, "unsafe_marks": [], "no_unbox": false}
+    return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, null, null)
 }
 
 # One instruction. After a terminator a fresh block starts first, so unreachable code

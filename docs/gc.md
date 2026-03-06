@@ -21,10 +21,15 @@ aligned word it scans as a possible pointer.
 - **Atomic objects** (strings, doubles, byte buffers, dense list data) are allocated from
   separate pages and are never scanned for pointers.
 - **Large objects** (over 8192 bytes) get pages of their own.
-- A page table (a hash table keyed by page address) answers "is this word a pointer into the
-  heap, and to which object?". Interior pointers keep an object alive. Every allocation is one
+- Small-object pages are cut from 2 MB chunks of anonymous memory that the kernel zeroes, and each
+  chunk is marked as a candidate for huge pages. That means far fewer page faults than one
+  allocation per page. A page that was emptied and reused is cleared again.
+- A page table (two levels, indexed by bits 32 to 47 and 16 to 31 of the address) answers "is this
+  word a pointer into the heap, and to which object?" with two loads. The object index inside a page
+  is found with a multiply by a per-page reciprocal, not a division. Interior pointers keep an object alive. Every allocation is one
   byte larger than requested, so a pointer just past the end still points inside the object.
-- New memory is zeroed.
+- New memory is zeroed: fresh pages come zeroed from the kernel, and a recycled object is cleared
+  when it is handed out again.
 - A page whose objects are all dead is returned to a pool and can be reused for any size class.
 
 ## Collection

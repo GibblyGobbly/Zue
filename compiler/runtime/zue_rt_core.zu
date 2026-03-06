@@ -469,6 +469,12 @@ func _str_same(a, b) {
     if (ld64(a) != ld64(b)) {
         return 0
     }
+    if (ld64(a) == 0) {
+        return 1
+    }
+    if (ld8(a + S_DATA) != ld8(b + S_DATA)) {
+        return 0
+    }
     return memcmp(a + S_DATA, b + S_DATA, ld64(a)) == 0
 }
 
@@ -717,6 +723,36 @@ func _to_string(o, v) {
 func lv_interp(n_i, parts) {
     let b = stack_buf(B_SIZE)
     let o = stack_buf(16)
+    # When every part is already a string, the result is built with one exact-size allocation.
+    let total = 0
+    let all_text = 1
+    for (let i = 0; i < n_i; i++) {
+        let part = parts + 16 * i
+        if (_tag(part) != T_STR) {
+            all_text = 0
+            break
+        }
+        total += ld64(_val(part))
+    }
+    if (all_text != 0) {
+        if (ugt(total, 70368744177664)) {
+            _die_oom()
+        }
+        let st = lv_alloc_atomic(S_DATA + total + 1)
+        st64(st, total)
+        let at = st + S_DATA
+        for (let i = 0; i < n_i; i++) {
+            let src = _val(parts + 16 * i)
+            let n = ld64(src)
+            if (n != 0) {
+                memcpy(at, src + S_DATA, n)
+                at += n
+            }
+        }
+        st8(at, 0)
+        _set(o, T_STR, st)
+        retp(o)
+    }
     _buf_init(b)
     for (let i = 0; i < n_i; i++) {
         _buf_value(b, parts + 16 * i)

@@ -700,6 +700,29 @@ func lvp_field(o, t, key) {
     _errf(E_TYPE, cstr("Dot access works on maps"), cstr("cannot read field '%s' of %s"), _val(key) + S_DATA, _type_name(t), 0)
 }
 
+# target.name in generated code. ic is the site's cache: the template type last seen there and the
+# index of the field in it. The same site nearly always sees the same type, so a read is a compare
+# and a copy. The cache words sit in the data segment, which the collector scans, so a cached type
+# is never freed and its address never reused.
+func lvp_field_ic(o, t, key, ic) {
+    if (_tag(t) == T_TEMPLATE) {
+        let tp = _val(t)
+        let dt = ld64(tp + TP_DT)
+        if (dt == ld64(ic)) {
+            _cp(o, tp + TP_FIELDS + 16 * ld64(ic + 8))
+            return 0
+        }
+        let i = _tpl_find(tp, _val(key) + S_DATA)
+        if (i >= 0) {
+            st64(ic, dt)
+            st64(ic + 8, i)
+            _cp(o, tp + TP_FIELDS + 16 * i)
+            return 0
+        }
+    }
+    lvp_field(o, t, key)
+}
+
 func lvp_index_set(t, idx, val) {
     let tt = _tag(t)
     if (tt >= T_BLOC_TYPE and tt <= T_PTR) {
@@ -991,6 +1014,14 @@ func lvv_eq(at, ap, bt, bp) {
     let a = stack_buf(16)
     let b = stack_buf(16)
     let o = stack_buf(16)
+    if (at == T_STR and bt == T_STR) {
+        _bool(o, _str_same(ap, bp))
+        retp(o)
+    }
+    if (at == T_INT and bt == T_INT) {
+        _bool(o, ap == bp)
+        retp(o)
+    }
     _set(a, at, ap)
     _set(b, bt, bp)
     lvp_eq_fast(o, a, b)
@@ -1001,6 +1032,14 @@ func lvv_ne(at, ap, bt, bp) {
     let a = stack_buf(16)
     let b = stack_buf(16)
     let o = stack_buf(16)
+    if (at == T_STR and bt == T_STR) {
+        _bool(o, _str_same(ap, bp) == 0)
+        retp(o)
+    }
+    if (at == T_INT and bt == T_INT) {
+        _bool(o, ap != bp)
+        retp(o)
+    }
     _set(a, at, ap)
     _set(b, bt, bp)
     lvp_ne_fast(o, a, b)

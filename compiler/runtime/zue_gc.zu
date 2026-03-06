@@ -20,6 +20,9 @@ extern("calloc", "ptr", "i64,i64")
 extern("realloc", "ptr", "ptr,i64")
 extern("free", "void", "ptr")
 extern("aligned_alloc", "ptr", "i64,i64")
+extern("mmap", "ptr", "ptr,i64,i32,i32,i32,i64")
+extern("munmap", "i32", "ptr,i64")
+extern("madvise", "i32", "ptr,i64,i32")
 extern("memset", "ptr", "ptr,i32,i64")
 extern("memcpy", "ptr", "ptr,ptr,i64")
 extern("write", "i64", "i32,ptr,i64")
@@ -51,7 +54,8 @@ const PG_SPAN = 48        # bytes owned by a large page
 const PG_USED = 56
 const PG_MARK = 64
 const PG_NEXT = 72
-const PG_SIZE = 80
+const PG_RECIP = 80       # i64, 2^32 / object size + 1: offset * PG_RECIP >> 32 is the object index
+const PG_SIZE = 88
 
 # struct Slot { key, page }
 const SLOT_SIZE = 16
@@ -60,6 +64,7 @@ const PAGE_SHIFT = 16
 const PAGE_SIZE = 65536
 const MAX_SMALL = 8192
 const MIN_THRESHOLD = 16777216
+const CHUNK_SIZE = 2097152    # small-object pages are cut from chunks of this size (32 pages)
 const NCLASSES = 26
 
 table("_class_sizes", "i32", 16, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768, 1024, 1280, 1536, 2048, 3072, 4096, 6144, 8192)
@@ -73,13 +78,12 @@ let g_all_cap = 0
 let g_pool = 0
 let g_pool_count = 0
 let g_pool_cap = 0
-let g_table = 0
-let g_table_cap = 0
-let g_table_used = 0
+let g_table = 0            # top level of the page table: 65536 pointers to second-level tables
 let g_heap_lo = -1
 let g_heap_hi = 0
 let g_bytes_since_gc = 0
 let g_threshold = MIN_THRESHOLD
+let g_limit = 4611686018427387904    # bytes allocated since the last collection that make _gc_alloc look at the collector
 let g_live_bytes = 0
 let g_gc_ready = 0
 let g_gc_busy = 0
@@ -96,6 +100,8 @@ let g_root_cap = 0
 let g_pause_total = 0      # nanoseconds spent in collections
 let g_pause_max = 0        # the longest single collection, in nanoseconds
 let g_stack_low = 0        # lowest usable address of the program thread stack; 0 when unknown
+let g_chunk_next = 0         # next unused page in the current chunk
+let g_chunk_end = 0
 let g_idx = 0              # object index set by _page_of
 
 func _die_oom() {
@@ -120,64 +126,34 @@ func _gc_setup() {
     }
 }
 
-# Page table
-
-func _slot_hash(key, cap) {
-    let k = bxor(key, shr(key, 17))
-    k = k * -7046029254386353131
-    return band(shr(k, 20), cap - 1)
-}
+# Page table: the page descriptor of each 64 KB page, found from the address with two loads. The
+# first level is indexed by bits 32 to 47 of the address, the second by bits 16 to 31.
 
 func _table_insert(key, pg) {
-    if ((g_table_used + 1) * 2 > g_table_cap) {
-        _table_grow()
-    }
-    let i = _slot_hash(key, g_table_cap)
-    let mask = g_table_cap - 1
-    while (ld64(g_table + i * SLOT_SIZE + 8) != 0 and ld64(g_table + i * SLOT_SIZE) != key) {
-        i = band(i + 1, mask)
-    }
-    if (ld64(g_table + i * SLOT_SIZE + 8) == 0) {
-        g_table_used++
-    }
-    st64(g_table + i * SLOT_SIZE, key)
-    st64(g_table + i * SLOT_SIZE + 8, pg)
-}
-
-func _table_grow() {
-    let old = g_table
-    let old_cap = g_table_cap
-    if (g_table_cap != 0) {
-        g_table_cap = g_table_cap * 2
-    } else {
-        g_table_cap = 1024
-    }
-    g_table = calloc(g_table_cap, SLOT_SIZE)
     if (g_table == 0) {
-        _die_oom()
-    }
-    g_table_used = 0
-    for (let i = 0; i < old_cap; i++) {
-        if (ld64(old + i * SLOT_SIZE + 8) != 0) {
-            _table_insert(ld64(old + i * SLOT_SIZE), ld64(old + i * SLOT_SIZE + 8))
+        g_table = calloc(65536, 8)
+        if (g_table == 0) {
+            _die_oom()
         }
     }
-    free(old)
+    let slot = g_table + shr(key, 16) * 8
+    let l2 = ld64(slot)
+    if (l2 == 0) {
+        l2 = calloc(65536, 8)
+        if (l2 == 0) {
+            _die_oom()
+        }
+        st64(slot, l2)
+    }
+    st64(l2 + band(key, 65535) * 8, pg)
 }
 
 func _table_find(key) {
-    if (g_table_cap == 0) {
+    let l2 = ld64(g_table + shr(key, 16) * 8)
+    if (l2 == 0) {
         return 0
     }
-    let mask = g_table_cap - 1
-    let i = _slot_hash(key, g_table_cap)
-    while (ld64(g_table + i * SLOT_SIZE + 8) != 0) {
-        if (ld64(g_table + i * SLOT_SIZE) == key) {
-            return ld64(g_table + i * SLOT_SIZE + 8)
-        }
-        i = band(i + 1, mask)
-    }
-    return 0
+    return ld64(l2 + band(key, 65535) * 8)
 }
 
 # Pages
@@ -211,6 +187,7 @@ func _init_small_page(pg, cls, atomic) {
     let size = _class_size(cls)
     st32(pg + PG_CLS, cls)
     st64(pg + PG_OBJ, size)
+    st64(pg + PG_RECIP, udiv(4294967296, size) + 1)
     st32(pg + PG_NOBJS, PAGE_SIZE / size)
     st32(pg + PG_BUMP, 0)
     st32(pg + PG_FREE, 0)
@@ -230,6 +207,32 @@ func _init_small_page(pg, cls, atomic) {
     }
 }
 
+# A 64 KB page, zero filled and aligned to 64 KB. Pages are cut from 2 MB chunks of fresh anonymous
+# memory, which the kernel zeroes, and which may be backed by huge pages: far fewer page faults than
+# one allocation per page.
+func _chunk_page() {
+    if (g_chunk_next == g_chunk_end) {
+        let raw = mmap(0, CHUNK_SIZE * 2, 3, 34, -1, 0)    # read and write, private and anonymous
+        if (raw == -1 or raw == 0) {
+            _die_oom()
+        }
+        let base = band(raw + CHUNK_SIZE - 1, bnot(CHUNK_SIZE - 1))
+        if (base > raw) {
+            munmap(raw, base - raw)
+        }
+        let tail = raw + CHUNK_SIZE * 2 - (base + CHUNK_SIZE)
+        if (tail > 0) {
+            munmap(base + CHUNK_SIZE, tail)
+        }
+        madvise(base, CHUNK_SIZE, 14)    # MADV_HUGEPAGE: a hint, ignored where unsupported
+        g_chunk_next = base
+        g_chunk_end = base + CHUNK_SIZE
+    }
+    let page = g_chunk_next
+    g_chunk_next += PAGE_SIZE
+    return page
+}
+
 func _new_small_page(cls, atomic) {
     let pg = 0
     if (g_pool_count != 0) {
@@ -238,10 +241,12 @@ func _new_small_page(cls, atomic) {
     }
     if (pg != 0) {
         st64(pg + PG_NEXT, 0)
+        # A recycled page still holds its old objects. A fresh one is already zero.
+        memset(ld64(pg + PG_BASE), 0, PAGE_SIZE)
     } else {
         pg = calloc(1, PG_SIZE)
-        let mem = aligned_alloc(PAGE_SIZE, PAGE_SIZE)
-        if (pg == 0 or mem == 0) {
+        let mem = _chunk_page()
+        if (pg == 0) {
             _die_oom()
         }
         st64(pg + PG_BASE, mem)
@@ -284,6 +289,28 @@ func _alloc_large(n, atomic) {
     return mem
 }
 
+# Sets g_limit: the threshold while collecting is allowed, -1 when every allocation is to be counted
+# (stress mode), and out of reach while the collector runs or has not started.
+func _set_limit() {
+    g_limit = 4611686018427387904
+    if (g_gc_ready != 0 and g_gc_busy == 0) {
+        g_limit = g_threshold
+        if (g_stress_every != 0) {
+            g_limit = -1
+        }
+    }
+}
+
+# The slow part of an allocation: whether it is time to collect.
+func _gc_check() {
+    g_alloc_count++
+    if (g_gc_ready != 0 and g_gc_busy == 0) {
+        if (g_bytes_since_gc > g_threshold or (g_stress_every != 0 and g_alloc_count % g_stress_every == 0)) {
+            _collect()
+        }
+    }
+}
+
 func _gc_alloc(size, atomic) {
     if (g_setup_done == 0) {
         _gc_setup()
@@ -291,16 +318,9 @@ func _gc_alloc(size, atomic) {
     if (ugt(size, 70368744177664)) {
         _die_oom()    # more than 64 TiB: no request like that can be met, and size + 16 would wrap
     }
-    let n = size
-    if (n == 0) {
-        n = 1
-    }
-    n += 1    # keeps a pointer just past the end inside the object
-    g_alloc_count++
-    if (g_gc_ready != 0 and g_gc_busy == 0) {
-        if (g_bytes_since_gc > g_threshold or (g_stress_every != 0 and g_alloc_count % g_stress_every == 0)) {
-            _collect()
-        }
+    let n = size + 1    # keeps a pointer just past the end inside the object
+    if (g_bytes_since_gc > g_limit) {
+        _gc_check()
     }
     if (n > MAX_SMALL) {
         return _alloc_large(n, atomic)
@@ -325,14 +345,13 @@ func _gc_alloc(size, atomic) {
         idx = ld32(pg + PG_FREE) - 1
         st32(pg + PG_FREE, ld32(ld64(pg + PG_BASE) + idx * osz))
         st32(pg + PG_NFREE, ld32(pg + PG_NFREE) - 1)
+        memset(ld64(pg + PG_BASE) + idx * osz, 0, osz)    # a recycled object holds its old contents
     } else {
         idx = ld32(pg + PG_BUMP)
         st32(pg + PG_BUMP, idx + 1)
     }
     st8(ld64(pg + PG_USED) + idx, 1)
-    st32(pg + PG_USED_COUNT, ld32(pg + PG_USED_COUNT) + 1)
     let obj = ld64(pg + PG_BASE) + idx * osz
-    memset(obj, 0, osz)
     g_bytes_since_gc += osz
     return obj
 }
@@ -350,6 +369,9 @@ func _page_of(w) {
     if (ult(w, g_heap_lo) or uge(w, g_heap_hi)) {
         return 0
     }
+    if (g_table == 0) {
+        return 0
+    }
     let pg = _table_find(shr(w, PAGE_SHIFT))
     if (pg == 0 or ld8(pg + PG_DEAD) != 0) {
         return 0
@@ -360,7 +382,7 @@ func _page_of(w) {
             return 0
         }
     } else {
-        idx = udiv(w - ld64(pg + PG_BASE), ld64(pg + PG_OBJ))
+        idx = shr((w - ld64(pg + PG_BASE)) * ld64(pg + PG_RECIP), 32)
         if (idx >= ld32(pg + PG_BUMP)) {
             return 0
         }
@@ -560,21 +582,23 @@ func _sweep() {
         let osz = ld64(pg + PG_OBJ)
         let base = ld64(pg + PG_BASE)
         let bump = ld32(pg + PG_BUMP)
+        let live = 0
         for (let j = 0; j < bump; j++) {
             if (ld8(used + j) == 0) {
                 continue
             }
             if (ld8(mark + j) != 0) {
                 st8(mark + j, 0)
+                live++
                 continue
             }
             st8(used + j, 0)
-            st32(pg + PG_USED_COUNT, ld32(pg + PG_USED_COUNT) - 1)
             st32(base + j * osz, ld32(pg + PG_FREE))
             st32(pg + PG_FREE, j + 1)
             st32(pg + PG_NFREE, ld32(pg + PG_NFREE) + 1)
         }
-        g_live_bytes += ld32(pg + PG_USED_COUNT) * osz
+        st32(pg + PG_USED_COUNT, live)
+        g_live_bytes += live * osz
         st64(g_all_pages + keep * 8, pg)
         keep++
         if (ld32(pg + PG_USED_COUNT) == 0) {
@@ -605,6 +629,7 @@ func _now_ns() {
 func _collect() {
     let t0 = _now_ns()
     g_gc_busy = 1
+    _set_limit()
     g_collections++
     g_mtop = 0
     _scan_range(addr_of("__data_start"), addr_of("_end"))
@@ -622,6 +647,7 @@ func _collect() {
         g_threshold = MIN_THRESHOLD
     }
     g_gc_busy = 0
+    _set_limit()
     let dt = _now_ns() - t0
     g_pause_total += dt
     if (dt > g_pause_max) {
@@ -664,4 +690,5 @@ func lv_gc_start() {
         atexit(fn_addr("_gc_report"))
     }
     g_gc_ready = 1
+    _set_limit()
 }
