@@ -15,7 +15,13 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - name: Get the sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone --no-checkout "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
+          git fetch --depth 1 origin "$GITHUB_SHA"
+          git checkout --detach FETCH_HEAD
       - name: Install LLVM 18
         run: sudo apt-get update && sudo apt-get install -y clang-18 llvm-18 && sudo ln -sf /usr/bin/clang-18 /usr/local/bin/clang
       - name: Check the tag matches VERSION
