@@ -1,0 +1,50 @@
+// index_of with a start position, index_of_any and skip_chars: the scanning builtins the lexer uses.
+
+# CASE index_of with a start
+print(index_of("banana", "an"))
+print(index_of("banana", "an", 2))
+print(index_of("banana", "an", 4))
+print(index_of("banana", "a", 6))
+print(index_of("banana", "", 3))
+print(index_of("banana", "", 6))
+print(index_of("banana", 'n', 3))
+print(index_of("", "a", 0))
+print(index_of("aaa", "aa", 1))
+# CASE index_of_any
+print(index_of_any("hello, world", ", "))
+print(index_of_any("hello, world", ", ", 6))
+print(index_of_any("hello", "xyz"))
+print(index_of_any("hello", ""))
+print(index_of_any("hello", 'l'))
+print(index_of_any("hello", "lo", 4))
+print(index_of_any("", "a"))
+print(index_of_any("abc", "c", 3))
+# CASE skip_chars
+print(skip_chars("   x", " "))
+print(skip_chars("abc123", "abc"))
+print(skip_chars("abc123", "abc", 1))
+print(skip_chars("abc", "abc"))
+print(skip_chars("abc", ""))
+print(skip_chars("", " "))
+print(skip_chars("aab", 'a'))
+print(skip_chars("a_b9 c", "abcdefghijklmnopqrstuvwxyz_0123456789"))
+# CASE bytes above 127 and zero-length results
+let s = "héllo"
+print(len(s))
+print(index_of_any(s, "l"))
+print(skip_chars(s, "h"))
+print(skip_chars(s, ""))
+# CASE start past the end
+print(index_of("abc", "a", 4))
+# CASE negative start
+print(index_of_any("abc", "a", -1))
+# CASE start must be an int
+func pass(v) {
+    return [v, null][0]
+}
+print(skip_chars("abc", "a", pass("1")))
+# CASE set must be a string
+func pass(v) {
+    return [v, null][0]
+}
+print(skip_chars("abc", pass(5)))

@@ -1,0 +1,6 @@
+Index Error in /tmp/zue_test_case.zu at line 1:
+  index_of() start 4 is out of bounds for a string of length 3
+
+   1 | print(index_of("abc", "a", 4))
+
+Hint: Ensure the start is between 0 and len(s)

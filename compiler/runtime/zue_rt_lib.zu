@@ -18,6 +18,7 @@ extern("isalpha", "i32", "i32")
 extern("isalnum", "i32", "i32")
 extern("toupper", "i32", "i32")
 extern("tolower", "i32", "i32")
+extern("memmem", "ptr", "ptr,i64,ptr,i64")
 
 # Argument helpers
 
@@ -859,23 +860,103 @@ func _find_sub(s, sub, frm) {
         }
         return -1
     }
-    let i = frm
-    while (i + m <= n) {
-        if (memcmp(s + S_DATA + i, sub + S_DATA, m) == 0) {
-            return i
-        }
-        i += 1
+    if (frm + m > n) {
+        return -1
     }
-    return -1
+    let p = memmem(s + S_DATA + frm, n - frm, sub + S_DATA, m)
+    if (p == 0) {
+        return -1
+    }
+    return p - (s + S_DATA)
+}
+
+# The optional start position argument i: 0 when it is not given, otherwise an int from 0 to n.
+func _start_arg(self_p, argc_i, argv_p, i, n) {
+    if (argc_i <= i) {
+        return 0
+    }
+    let frm = _arg_int(self_p, argv_p, i)
+    if (frm < 0 or frm > n) {
+        _errf4(E_INDEX, cstr("Ensure the start is between 0 and len(s)"),
+               cstr("%s() start %lld is out of bounds for a string of length %lld"), _fname(self_p), frm, n, 0)
+    }
+    return frm
 }
 
 func lb_index_of(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 2, 2)
+    lv_arity(self_p, argc_i, 2, 3)
     let tmp = stack_buf(16)
     let s = _arg_str(self_p, argv_p, 0)
     let sub = _text_str(self_p, argv_p + 16, 1, tmp)
+    let frm = _start_arg(self_p, argc_i, argv_p, 2, ld64(s))
     let o = stack_buf(16)
-    _int(o, _find_sub(s, sub, 0))
+    _int(o, _find_sub(s, sub, frm))
+    retp(o)
+}
+
+# Tables of recently used set strings for index_of_any and skip_chars: 8 entries chosen by the
+# string's address, each the address (kept alive by the root range, so it cannot be reused) and a
+# 256-byte table with 1 at every byte of the set. The lexer asks for the same few sets over and over.
+let g_set_cache = 0
+
+func _fill_table(tbl, set) {
+    memset(tbl, 0, 256)
+    for (let k = 0; k < ld64(set); k++) {
+        st8(tbl + ld8(set + S_DATA + k), 1)
+    }
+}
+
+# A table for the set in argument 1 (a string or a char). scratch is 256 bytes for the char case.
+func _set_table(self_p, argv_p, scratch) {
+    if (_tag(argv_p + 16) == T_STR) {
+        let set = _val(argv_p + 16)
+        if (g_set_cache == 0) {
+            g_set_cache = calloc(8, 272)
+            lv_gc_root_add(g_set_cache, g_set_cache + 2176)
+        }
+        let e = g_set_cache + 272 * band(shr(set, 4), 7)
+        if (ld64(e) != set) {
+            _fill_table(e + 8, set)
+            st64(e, set)
+        }
+        return e + 8
+    }
+    let tmp = stack_buf(16)
+    _fill_table(scratch, _text_str(self_p, argv_p + 16, 1, tmp))
+    return scratch
+}
+
+# index_of_any(s, set, start): the first index at or after start whose byte is in set, or -1.
+func lb_index_of_any(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 3)
+    let s = _arg_str(self_p, argv_p, 0)
+    let tbl = _set_table(self_p, argv_p, stack_buf(256))
+    let i = _start_arg(self_p, argc_i, argv_p, 2, ld64(s))
+    let n = ld64(s)
+    let o = stack_buf(16)
+    _int(o, -1)
+    while (i < n) {
+        if (ld8(tbl + ld8(s + S_DATA + i)) != 0) {
+            _int(o, i)
+            break
+        }
+        i += 1
+    }
+    retp(o)
+}
+
+# skip_chars(s, set, start): the first index at or after start whose byte is not in set, or len(s).
+func lb_skip_chars(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 3)
+    let s = _arg_str(self_p, argv_p, 0)
+    let tbl = _set_table(self_p, argv_p, stack_buf(256))
+    let i = _start_arg(self_p, argc_i, argv_p, 2, ld64(s))
+    let n = ld64(s)
+    while (i < n and ld8(tbl + ld8(s + S_DATA + i)) != 0) {
+        i += 1
+    }
+    let o = stack_buf(16)
+    _int(o, i)
     retp(o)
 }
 

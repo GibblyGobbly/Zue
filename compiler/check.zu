@@ -44,7 +44,7 @@ func sig(name, alts) {
 let RESULTS = {}
 
 func ck_init_results() {
-    for (let nm in split("len str_len index_of last_index_of", " ")) {
+    for (let nm in split("len str_len index_of index_of_any skip_chars last_index_of", " ")) {
         RESULTS[nm] = "int"
     }
     for (let nm in split("type to_upper to_lower trim trim_left trim_right replace repeat pad_left pad_right substring join", " ")) {

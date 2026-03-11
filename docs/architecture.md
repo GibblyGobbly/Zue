@@ -45,6 +45,12 @@ compiler in detail.
 The compiler reads imported modules while compiling, so one IR file holds the program and every
 module it uses.
 
+The lexer does its work per token, not per character. A table indexed by byte code says what a
+token starts with, and the runs inside a token (identifier bytes, digits, blanks, comments, string
+bodies) are skipped by the builtins `skip_chars` and `index_of_any`, which scan in native code and
+keep a lookup table for each recent set string. Operator tokens reuse tables built at start-up
+(`ONE_TEXT`, `TWO_KIND`, `TWO_TEXT`), so lexing an operator allocates nothing but the token.
+
 ## The runtime (`compiler/runtime/`)
 
 The runtime is compiled by the native backend into `C/zue_rt_native.ll`, then to an object,
