@@ -18,6 +18,7 @@ export template NFunc { k, line, name, params, defaults, ptypes, body, exported 
 export template NBox { k, line, size }
 export template NCall { k, line, callee, args }
 export template NIndex { k, line, target, index }
+export template NSlice { k, line, target, lo, hi }
 export template NField { k, line, target, field }
 export template NIncdec { k, line, name, op, prefix }
 export template NBin { k, line, op, l, r, unary }
@@ -47,6 +48,7 @@ export let NODE_FIELDS = {
     "box": ["size"],
     "call": ["callee", "args"],
     "index": ["target", "index"],
+    "slice": ["target", "lo", "hi"],
     "field": ["target", "field"],
     "incdec": ["name", "op", "prefix"],
     "bin": ["op", "l", "r", "unary"],
@@ -104,6 +106,11 @@ export func mk_call(line, callee, args) {
 
 export func mk_index(line, target, index) {
     return NIndex("index", line, target, index)
+}
+
+# target[lo:hi]: positions from lo to hi, counting from 1, both included. lo or hi is null when left out.
+export func mk_slice(line, target, lo, hi) {
+    return NSlice("slice", line, target, lo, hi)
 }
 
 export func mk_field(line, target, field) {

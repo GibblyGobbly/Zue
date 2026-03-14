@@ -622,6 +622,52 @@ func _need_int_index(idx, what) {
     }
 }
 
+# target[lo:hi] in generated code. Positions count from 1 and both ends are included, so "bug"[1:2]
+# is "bu". lo or hi is null when it was left out: it then stands for the first or the last position.
+# Zero, a position past the end, and a start after the end are errors.
+func lvp_slice(o, t, lo, hi) {
+    let tt = _tag(t)
+    let n = 0
+    if (tt == T_STR) {
+        n = ld64(_val(t))
+    } else if (tt == T_LIST) {
+        n = ld64(_val(t) + L_COUNT)
+    } else {
+        _errf(E_TYPE, cstr("Slices work on strings and lists"), cstr("cannot slice a value of type %s"), _type_name(t), 0, 0)
+    }
+    if (_tag(lo) == T_NULL and _tag(hi) == T_NULL) {
+        _cp(o, t)
+        return 0
+    }
+    let a = 1
+    let b = n
+    if (_tag(lo) != T_NULL) {
+        _need_int_index(lo, cstr("slice start must be an int, got %s"))
+        a = _val(lo)
+    }
+    if (_tag(hi) != T_NULL) {
+        _need_int_index(hi, cstr("slice end must be an int, got %s"))
+        b = _val(hi)
+    }
+    let what = cstr("string")
+    if (tt == T_LIST) {
+        what = cstr("list")
+    }
+    if (a < 1 or b > n) {
+        _errf(E_INDEX, cstr("Positions start at 1 and both ends are included, so a slice stays within 1 to the length"),
+              cstr("Slice %lld:%lld is out of bounds for a %s"), a, b, what)
+    }
+    if (a > b) {
+        _errf(E_INDEX, cstr("The start of a slice must not come after its end"),
+              cstr("Slice start %lld is after its end %lld"), a, b, 0)
+    }
+    if (tt == T_STR) {
+        _str_n(o, _val(t) + S_DATA + a - 1, b - a + 1)
+    } else {
+        _list_of(o, b - a + 1, ld64(_val(t) + L_ITEMS) + 16 * (a - 1))
+    }
+}
+
 func lvp_index(o, t, idx) {
     let tt = _tag(t)
     if (tt >= T_BLOC_TYPE and tt <= T_PTR) {

@@ -510,6 +510,19 @@ func ex(n) {
         ll_mark(n.line)
         return ll_call_out("lvp_index", "ptr {t}, ptr {i}")
     }
+    if (k == "slice") {
+        let t = ex(n.target)
+        let lo = ll_null()
+        let hi = ll_null()
+        if (n.lo != null) {
+            lo = ex(n.lo)
+        }
+        if (n.hi != null) {
+            hi = ex(n.hi)
+        }
+        ll_mark(n.line)
+        return ll_call_out("lvp_slice", "ptr {t}, ptr {lo}, ptr {hi}")
+    }
     if (k == "field") {
         let t = ex(n.target)
         ll_mark(n.line)
@@ -1361,6 +1374,7 @@ func declarations() {
     append(d, "declare i32 @lvp_truth(ptr)")
     append(d, "declare i32 @lvp_eq_b(ptr, ptr)")
     append(d, "declare void @lvp_index(ptr, ptr, ptr)")
+    append(d, "declare void @lvp_slice(ptr, ptr, ptr, ptr)")
     append(d, "declare void @lvp_index_set(ptr, ptr, ptr)")
     append(d, "declare void @lvp_field_ic(ptr, ptr, ptr, ptr)")
     append(d, "declare void @lvp_map_put(ptr, ptr, ptr)")

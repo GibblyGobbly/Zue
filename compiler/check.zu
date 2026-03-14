@@ -949,6 +949,25 @@ func ck_expr(n) {
         }
         return "any"
     }
+    if (k == "slice") {
+        let t = ck_expr(n.target)
+        strict_known(t, n.line, "the value being sliced")
+        for (let bound in [n.lo, n.hi]) {
+            if (bound != null) {
+                let bt = ck_expr(bound)
+                if (bt != "any" and bt != "int" and bt != "int~") {
+                    fail(n.line, "slice position must be an int, got {describe(bt)}")
+                }
+            }
+        }
+        if (t == "string" or kind_of(t) == "list") {
+            return t
+        }
+        if (t != "any") {
+            fail(n.line, "cannot slice {describe(t)}")
+        }
+        return "any"
+    }
     if (k == "field") {
         let ft = ck_expr(n.target)
         strict_known(ft, n.line, "the value whose field '{n.field}' is read")

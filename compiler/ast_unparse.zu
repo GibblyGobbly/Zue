@@ -151,6 +151,17 @@ func expr(n) {
     if (k == "index") {
         return "{expr(n.target)}[{expr(n.index)}]"
     }
+    if (k == "slice") {
+        let lo = ""
+        let hi = ""
+        if (n.lo != null) {
+            lo = expr(n.lo)
+        }
+        if (n.hi != null) {
+            hi = expr(n.hi)
+        }
+        return "{expr(n.target)}[{lo}:{hi}]"
+    }
     if (k == "field") {
         return "{expr(n.target)}.{n.field}"
     }
