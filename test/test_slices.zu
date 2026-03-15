@@ -1,0 +1,102 @@
+// s[a:b]: positions count from 1 and both ends are included. Works on strings and lists.
+
+# CASE strings
+let s = "bug"
+print(s[1:3])
+print(s[1:1])
+print(s[3:3])
+print(s[2:3])
+print(s[1:2])
+print("hello world"[7:11])
+# CASE open ends
+let s = "bug"
+print(s[:2])
+print(s[2:])
+print(s[:])
+print(s[:3])
+print(s[3:])
+
+# CASE lists
+let l = [10, 20, 30, 40]
+print(l[2:3])
+print(l[:2])
+print(l[3:])
+print(l[:])
+print(l[1:4])
+let words = ["a", "b", "c"]
+print(words[2:3])
+# CASE bounds are expressions
+let s = "abcdef"
+let n = 2
+print(s[n:n + 2])
+print(s[n * 2:len(s)])
+func first(t, k) {
+    return t[1:k]
+}
+print(first("hello", 4))
+print(first([1, 2, 3], 2))
+# CASE slice of a slice and of a call result
+func upper(t) {
+    return to_upper(t)
+}
+let s = "abcdef"
+print(s[2:5][2:3])
+print(upper("abc")[1:2])
+# CASE the result is a copy for lists
+let a = [1, 2, 3]
+let b = a[1:3]
+append(b, 4)
+print(a)
+print(b)
+# CASE slice inside interpolation
+let s = "bug"
+print("first two: {s[1:2]}, last: {s[3:3]}")
+# CASE empty string and empty list
+let e = ""
+print(e[:])
+let el = []
+print(el[:])
+# CASE start is zero
+let s = "bug"
+print(s[0:2])
+# CASE end past the end
+let s = "bug"
+print(s[1:4])
+# CASE start after end
+let s = "bug"
+print(s[3:2])
+# CASE negative position
+let s = "bug"
+print(s[-1:2])
+# CASE list out of bounds
+let l = [1, 2, 3]
+print(l[2:9])
+# CASE position must be an int at run time
+func pass(v) {
+    return [v, null][0]
+}
+let s = "bug"
+print(s[pass("1"):2])
+# CASE end must be an int at run time
+func pass(v) {
+    return [v, null][0]
+}
+let s = "bug"
+print(s[1:pass(2.0)])
+# CASE value that cannot be sliced at run time
+func pass(v) {
+    return [v, null][0]
+}
+print(pass(5)[1:2])
+# CASE float position is a compile error
+let s = "bug"
+print(s[1.5:2])
+# CASE slicing an int is a compile error
+let n = 5
+print(n[1:2])
+# CASE missing close bracket
+let s = "bug"
+print(s[1:2
+# CASE slice is not assignable
+let s = "bug"
+s[1:2] = "x"

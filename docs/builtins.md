@@ -95,6 +95,8 @@ byte strings: `len("héllo")` is 6, and indexing is zero-based by byte. `to_uppe
 | `substring(s, start, n)` | `n` characters starting at `start`; the result is cut at the end of the string | `substring("Hello", 0, 2)` is `"He"` |
 | `slice(s, start, end)` | From `start` up to, not including, `end` (bounds are clamped) | `slice("Hello", 1, 4)` is `"ell"` |
 
+For a slice written as an expression, with positions from 1 and both ends included, see [slices](syntax.md#slices): `"Hello"[2:4]` is `"ell"`.
+
 `s[i]` returns a `char` (not a string): `"Zue"[0]` is `'Z'` and `"Zue"[-1]` is `'e'`. A
 `char` and a one-character string are different types: `'a' == "a"` is an error, but both
 work with `contains`, `index_of`, `starts_with` and `ends_with`.

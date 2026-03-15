@@ -654,8 +654,8 @@ func lvp_slice(o, t, lo, hi) {
         what = cstr("list")
     }
     if (a < 1 or b > n) {
-        _errf(E_INDEX, cstr("Positions start at 1 and both ends are included, so a slice stays within 1 to the length"),
-              cstr("Slice %lld:%lld is out of bounds for a %s"), a, b, what)
+        _errf4(E_INDEX, cstr("Positions start at 1 and both ends are included, so a slice stays within 1 to the length"),
+               cstr("Slice %lld:%lld is out of bounds for a %s of length %lld"), a, b, what, n)
     }
     if (a > b) {
         _errf(E_INDEX, cstr("The start of a slice must not come after its end"),
