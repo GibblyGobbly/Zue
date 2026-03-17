@@ -102,8 +102,10 @@ print(floor(i))
 print(rand(5.5))
 # CASE rand with three arguments
 print(rand(1, 2, 3))
-# CASE trand with an argument
-print(trand(5))
+# CASE trand with three arguments
+print(trand(1, 2, 3))
+# CASE trand with a float
+print(trand(5.5))
 # CASE srand with a string
 srand("x")
 # CASE incrementing a string

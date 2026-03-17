@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 4:
+  tshuffle() expects 1 argument, but got 0
+
+   4 | tshuffle()
+
+Hint: Pass one value per parameter

@@ -33,6 +33,9 @@ extern("access", "i32", "ptr,i32")
 extern("remove", "i32", "ptr")
 extern("time", "i64", "ptr")
 extern("getline", "i64", "ptr,ptr,ptr")
+extern("getrandom", "i64", "ptr,i64,i32")
+extern("__errno_location", "ptr", "")
+extern("strerror", "ptr", "i32")
 
 # Math
 
@@ -987,19 +990,72 @@ func _rng_next() {
     return result
 }
 
+# Fills n bytes from the kernel's entropy source. Failing is an error: a clock value is not entropy.
+func _os_fill(buf, n) {
+    let off = 0
+    while (off < n) {
+        let r = getrandom(buf + off, n - off, 0)
+        if (r < 0) {
+            let e = ld32(__errno_location())
+            if (e != 4) {
+                _errf(E_RUNTIME, cstr("The operating system could not supply random bytes."),
+                      cstr("cannot read system entropy: %s"), strerror(e), 0, 0)
+            }
+        } else {
+            off += r
+        }
+    }
+}
+
 func _os_entropy() {
     let val = stack_buf(8)
-    st64(val, 0)
-    let f = fopen(cstr("/dev/urandom"), cstr("rb"))
-    if (f != 0) {
-        if (fread(val, 8, 1, f) != 1) {
-            st64(val, time(0))
-        }
-        fclose(f)
-    } else {
-        st64(val, time(0))
-    }
+    _os_fill(val, 8)
     return ld64(val)
+}
+
+# A uniform value from 0 to range - 1 (range is not 0). Values below 2^64 mod range are thrown
+# away, so every result is equally likely.
+func _rng_below(range) {
+    let thr = urem(0 - range, range)
+    let x = _rng_next()
+    while (ult(x, thr)) {
+        x = _rng_next()
+    }
+    return urem(x, range)
+}
+
+func _os_below(range) {
+    let thr = urem(0 - range, range)
+    let x = _os_entropy()
+    while (ult(x, thr)) {
+        x = _os_entropy()
+    }
+    return urem(x, range)
+}
+
+# A buffered entropy stream for loops that need many words: word 0 is the next unread word,
+# words 1 to 256 hold the bytes. One kernel call serves 256 draws.
+func _ent_init(ctl) {
+    ctl[0] = 256
+}
+
+func _ent_word(ctl) {
+    if (ctl[0] >= 256) {
+        _os_fill(ctl + 8, 2048)
+        ctl[0] = 0
+    }
+    let w = ctl[ctl[0] + 1]
+    ctl[0] = ctl[0] + 1
+    return w
+}
+
+func _ent_below(ctl, range) {
+    let thr = urem(0 - range, range)
+    let x = _ent_word(ctl)
+    while (ult(x, thr)) {
+        x = _ent_word(ctl)
+    }
+    return urem(x, range)
 }
 
 func _splitmix(z0) {
@@ -1020,9 +1076,19 @@ func _srand_default() {
 }
 
 func lb_trand(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 0, 0)
+    lv_arity(self_p, argc_i, 0, 2)
     let o = stack_buf(16)
-    _int(o, _os_entropy())
+    if (argc_i == 0) {
+        _int(o, _os_entropy())
+        retp(o)
+    }
+    let bounds = stack_buf(16)
+    _int_bounds(self_p, argc_i, argv_p, bounds)
+    if (bounds[1] == 0) {
+        _int(o, _os_entropy())
+        retp(o)
+    }
+    _int(o, bounds[0] + _os_below(bounds[1]))
     retp(o)
 }
 
@@ -1038,14 +1104,9 @@ func lb_srand(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-func lb_rand(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 0, 2)
-    let o = stack_buf(16)
-    if (argc_i == 0) {
-        let r = _rng_next()
-        _flt(o, fmul(i2f(shr(r, 11)), fdiv(1.0, 9007199254740992.0)))
-        retp(o)
-    }
+# The bounds of f(max) and f(min, max), both ends included and swapped if reversed:
+# out[0] is the low end, out[1] the number of values (0 stands for all 2^64 of them).
+func _int_bounds(self_p, argc_i, argv_p, out) {
     let lo = 0
     let hi = 0
     if (argc_i == 1) {
@@ -1059,31 +1120,62 @@ func lb_rand(self_p, argc_i, argv_p) {
         lo = hi
         hi = t
     }
-    let range = hi - lo + 1
-    if (range == 0) {
+    out[0] = lo
+    out[1] = hi - lo + 1
+}
+
+func lb_rand(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 0, 2)
+    let o = stack_buf(16)
+    if (argc_i == 0) {
+        let r = _rng_next()
+        _flt(o, fmul(i2f(shr(r, 11)), fdiv(1.0, 9007199254740992.0)))
+        retp(o)
+    }
+    let bounds = stack_buf(16)
+    _int_bounds(self_p, argc_i, argv_p, bounds)
+    if (bounds[1] == 0) {
         # The range covers every 64-bit value.
         _int(o, _rng_next())
         retp(o)
     }
-    _int(o, lo + urem(_rng_next(), range))
+    _int(o, bounds[0] + _rng_below(bounds[1]))
     retp(o)
 }
 
-func lb_shuffle(self_p, argc_i, argv_p) {
-    if (argc_i != 1 or _tag(argv_p) != T_LIST) {
-        lv_error(E_ARGUMENT, cstr("shuffle() expects 1 list"), cstr("Usage: shuffle(myList)"))
-    }
-    let l = _val(argv_p)
-    let items = ld64(l + L_ITEMS)
+# Fisher-Yates. ctl is 0 to draw from the seeded generator, or an entropy stream.
+func _shuffle_items(items, n, ctl) {
     let t = stack_buf(16)
-    let i = ld64(l + L_COUNT) - 1
+    let i = n - 1
     while (i > 0) {
-        let j = urem(_rng_next(), i + 1)
+        let j = 0
+        if (ctl == 0) {
+            j = _rng_below(i + 1)
+        } else {
+            j = _ent_below(ctl, i + 1)
+        }
         _cp(t, items + 16 * i)
         _cp(items + 16 * i, items + 16 * j)
         _cp(items + 16 * j, t)
         i -= 1
     }
+}
+
+func lb_shuffle(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let l = _arg_list(self_p, argv_p, 0)
+    _shuffle_items(ld64(l + L_ITEMS), ld64(l + L_COUNT), 0)
+    let o = stack_buf(16)
+    _null(o)
+    retp(o)
+}
+
+func lb_tshuffle(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let l = _arg_list(self_p, argv_p, 0)
+    let ctl = stack_buf(2064)
+    _ent_init(ctl)
+    _shuffle_items(ld64(l + L_ITEMS), ld64(l + L_COUNT), ctl)
     let o = stack_buf(16)
     _null(o)
     retp(o)
@@ -1091,8 +1183,9 @@ func lb_shuffle(self_p, argc_i, argv_p) {
 
 # Stalin sort: drops every element smaller than the last one kept.
 func lb_ssort(self_p, argc_i, argv_p) {
-    if (argc_i != 1 or (_tag(argv_p) != T_LIST and _tag(argv_p) != T_DENSE)) {
-        lv_error(E_ARGUMENT, cstr("ssort() expects 1 list"), cstr("Usage: ssort(myList)"))
+    lv_arity(self_p, argc_i, 1, 1)
+    if (_tag(argv_p) != T_LIST and _tag(argv_p) != T_DENSE) {
+        _arg_fail(self_p, argv_p, 0, cstr("list"))
     }
     let o = stack_buf(16)
     _null(o)

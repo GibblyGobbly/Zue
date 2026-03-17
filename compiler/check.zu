@@ -90,7 +90,7 @@ func ck_init_sigs() {
     sig("sign", [[["int"], "int"], [["float"], "int"]])
     sig("rand", [[[], "float"], [["int"], "int"], [["int", "int"], "int"]])
     sig("srand", [[[], "null"], [["int"], "null"]])
-    sig("trand", [[[], "int"]])
+    sig("trand", [[[], "int"], [["int"], "int"], [["int", "int"], "int"]])
     # Explicit conversions: the argument may be anything, the result type is fixed.
     sig("float", [[["any"], "float"]])
     sig("to_float", [[["any"], "float"]])

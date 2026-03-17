@@ -43,8 +43,9 @@ Floats are printed with up to six significant digits and always show a point or 
 | `slice(list, a, b)` | New list of elements `a` to `b - 1`; the bounds are clamped, and `a >= b` gives `[]`. Also works on strings |
 | `range(end)`, `range(start, end)`, `range(start, end, step)` | List of integers; `step` may be negative and must not be 0 |
 | `map(list, fn)`, `filter(list, fn)`, `reduce(list, fn, init)` | Higher-order helpers; return new values. `reduce` needs all three arguments |
-| `sort(list)` | In-place ascending sort of numbers or of strings; returns `null`. Mixing numbers and strings is an error |
-| `shuffle(list)` | In-place Fisher-Yates shuffle |
+| `sort(list)` | In-place ascending, stable sort of numbers, strings or chars; returns `null`. Mixing numbers and strings is an error. A list of 256 or more non-negative ints is sorted by radix sort (no comparisons, several times faster); everything else by insertion sort for 16 items or fewer and merge sort above that |
+| `shuffle(list)` | In-place Fisher-Yates shuffle with the seeded generator, so `srand` makes it repeatable. Every index draw is unbiased |
+| `tshuffle(list)` | The same shuffle, but the randomness comes from the OS entropy source, so it cannot be repeated and every ordering of a list of any length can occur |
 | `ssort(list)` | Stalin sort, in place: deletes every element smaller than the last one kept, leaving a non-decreasing list. Returns `null`. Works on dense lists too |
 | `dense_list(n, fill)` | Contiguous float list of `n` copies of the float `fill`, for vector math (see [math](builtins.md#math)) |
 
@@ -305,11 +306,24 @@ Angles are in radians. All of these return a float.
 | `rand(max)` | An integer from `0` to `max`, both ends included; `max` must be an int |
 | `rand(min, max)` | An integer from `min` to `max`, both ends included (swapped if `min > max`); both must be ints |
 | `srand(seed)` | Seeds the generator, for reproducible sequences; `seed` must be an int. `srand()` reseeds from the OS |
-| `trand()` | A 64-bit integer read from the OS entropy source (`/dev/urandom`) |
+| `trand()` | A 64-bit integer (may be negative) from the OS entropy source |
+| `trand(max)` | An integer from `0` to `max`, both ends included, from the OS entropy source |
+| `trand(min, max)` | An integer from `min` to `max`, both ends included (swapped if `min > max`), from the OS entropy source |
 
 The generator is xoroshiro128++, and `srand` expands the seed with SplitMix64. Without `srand`,
-every program run starts from an OS-entropy seed. `shuffle(list)` and `sort(list)` are in
+every program run starts from an OS-entropy seed. `shuffle(list)`, `tshuffle(list)` and `sort(list)` are in
 [core](builtins.md).
+
+`trand` reads the kernel's entropy source with `getrandom`, so it cannot be repeated and `srand` does
+not affect it. If the system cannot supply the bytes, `trand` stops with a `Runtime Error`; it never
+falls back to the clock. It costs a system call per number, so use `rand` in hot loops.
+
+Ranges are exact: a draw that would favour small values is thrown away and drawn again, so every
+integer from `min` to `max` is equally likely.
+
+A 128-bit generator can produce at most 2^128 different sequences, which covers every ordering of
+up to 34 items. A seeded `shuffle` of a longer list is well mixed but cannot reach every ordering;
+use `tshuffle` for that.
 
 ```javascript
 srand(7)

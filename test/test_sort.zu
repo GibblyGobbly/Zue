@@ -1,0 +1,467 @@
+// sort (insertion plus merge; non-negative ints from 256 items up use a radix sort) and ssort.
+
+# CASE small lists
+let a = [3, 1, 2]
+sort(a)
+print(a)
+let e = []
+sort(e)
+print(e)
+let one = [7]
+sort(one)
+print(one)
+let d = [5, 5, 1, 1, 3]
+sort(d)
+print(d)
+# CASE negative and mixed sign ints
+let a = [3, -1, 0, -7, 12, 5, -1]
+sort(a)
+print(a)
+# CASE floats, and ints mixed with floats
+let f = [2.5, -1.5, 0.0, 10.25]
+sort(f)
+print(f)
+let m = [3, 1.5, 2, 0.5]
+sort(m)
+print(m)
+# CASE strings and chars
+let s = ["pear", "apple", "fig", "banana", "Apple", ""]
+sort(s)
+print(s)
+let c = ['b', 'a', 'c']
+sort(c)
+print(c)
+# CASE radix sizes around the cutoff
+func ordered(l) {
+    for (let i = 1; i < len(l); i++) {
+        if (l[i - 1] > l[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func floats_of(l) {
+    let f = []
+    for (let i = 0; i < len(l); i++) {
+        append(f, to_float(l[i]))
+    }
+    return f
+}
+
+# Sorts the ints and the same values as floats (a different path) and compares the two results.
+func agrees(l) {
+    let f = floats_of(l)
+    sort(l)
+    sort(f)
+    return ordered(l) and len(l) == len(f) and ordered(f) and sum_matches(l, f)
+}
+
+func sum_matches(l, f) {
+    for (let i = 0; i < len(l); i++) {
+        if (to_float(l[i]) != f[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func random_ints(n, hi) {
+    let l = []
+    for (let i = 0; i < n; i++) {
+        append(l, rand(0, hi))
+    }
+    return l
+}
+srand(11)
+print(agrees(random_ints(255, 1000000)))
+print(agrees(random_ints(256, 1000000)))
+print(agrees(random_ints(257, 1000000)))
+print(agrees(random_ints(1000, 1000000)))
+print(agrees(random_ints(100000, 1000000000)))
+# CASE radix digit counts
+func ordered(l) {
+    for (let i = 1; i < len(l); i++) {
+        if (l[i - 1] > l[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func floats_of(l) {
+    let f = []
+    for (let i = 0; i < len(l); i++) {
+        append(f, to_float(l[i]))
+    }
+    return f
+}
+
+# Sorts the ints and the same values as floats (a different path) and compares the two results.
+func agrees(l) {
+    let f = floats_of(l)
+    sort(l)
+    sort(f)
+    return ordered(l) and len(l) == len(f) and ordered(f) and sum_matches(l, f)
+}
+
+func sum_matches(l, f) {
+    for (let i = 0; i < len(l); i++) {
+        if (to_float(l[i]) != f[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func random_ints(n, hi) {
+    let l = []
+    for (let i = 0; i < n; i++) {
+        append(l, rand(0, hi))
+    }
+    return l
+}
+srand(12)
+print(agrees(random_ints(500, 5)))
+print(agrees(random_ints(500, 255)))
+print(agrees(random_ints(500, 256)))
+print(agrees(random_ints(500, 65535)))
+print(agrees(random_ints(500, 4294967296)))
+print(agrees(random_ints(500, 9223372036854775807)))
+# CASE radix with the largest int and with zeros
+func ordered(l) {
+    for (let i = 1; i < len(l); i++) {
+        if (l[i - 1] > l[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func floats_of(l) {
+    let f = []
+    for (let i = 0; i < len(l); i++) {
+        append(f, to_float(l[i]))
+    }
+    return f
+}
+
+# Sorts the ints and the same values as floats (a different path) and compares the two results.
+func agrees(l) {
+    let f = floats_of(l)
+    sort(l)
+    sort(f)
+    return ordered(l) and len(l) == len(f) and ordered(f) and sum_matches(l, f)
+}
+
+func sum_matches(l, f) {
+    for (let i = 0; i < len(l); i++) {
+        if (to_float(l[i]) != f[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func random_ints(n, hi) {
+    let l = []
+    for (let i = 0; i < n; i++) {
+        append(l, rand(0, hi))
+    }
+    return l
+}
+let l = random_ints(300, 100)
+l[100] = 9223372036854775807
+l[200] = 0
+sort(l)
+print(ordered(l))
+print(l[0])
+print(l[299])
+# CASE radix on equal, sorted and reversed ints
+func ordered(l) {
+    for (let i = 1; i < len(l); i++) {
+        if (l[i - 1] > l[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func floats_of(l) {
+    let f = []
+    for (let i = 0; i < len(l); i++) {
+        append(f, to_float(l[i]))
+    }
+    return f
+}
+
+# Sorts the ints and the same values as floats (a different path) and compares the two results.
+func agrees(l) {
+    let f = floats_of(l)
+    sort(l)
+    sort(f)
+    return ordered(l) and len(l) == len(f) and ordered(f) and sum_matches(l, f)
+}
+
+func sum_matches(l, f) {
+    for (let i = 0; i < len(l); i++) {
+        if (to_float(l[i]) != f[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func random_ints(n, hi) {
+    let l = []
+    for (let i = 0; i < n; i++) {
+        append(l, rand(0, hi))
+    }
+    return l
+}
+let z = []
+let up = []
+let down = []
+for (let i = 0; i < 400; i++) {
+    append(z, 0)
+    append(up, i * 3)
+    append(down, 1200 - i * 3)
+}
+sort(z)
+print(z[0] == 0 and z[399] == 0 and len(z) == 400)
+sort(up)
+print(ordered(up) and up[0] == 0 and up[399] == 1197)
+sort(down)
+print(ordered(down) and down[0] == 3 and down[399] == 1200)
+let same = []
+for (let i = 0; i < 400; i++) {
+    append(same, 77)
+}
+sort(same)
+print(same[0] == 77 and same[399] == 77)
+# CASE one negative int keeps the merge path
+func ordered(l) {
+    for (let i = 1; i < len(l); i++) {
+        if (l[i - 1] > l[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func floats_of(l) {
+    let f = []
+    for (let i = 0; i < len(l); i++) {
+        append(f, to_float(l[i]))
+    }
+    return f
+}
+
+# Sorts the ints and the same values as floats (a different path) and compares the two results.
+func agrees(l) {
+    let f = floats_of(l)
+    sort(l)
+    sort(f)
+    return ordered(l) and len(l) == len(f) and ordered(f) and sum_matches(l, f)
+}
+
+func sum_matches(l, f) {
+    for (let i = 0; i < len(l); i++) {
+        if (to_float(l[i]) != f[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func random_ints(n, hi) {
+    let l = []
+    for (let i = 0; i < n; i++) {
+        append(l, rand(0, hi))
+    }
+    return l
+}
+srand(13)
+let l = random_ints(1000, 100000)
+append(l, -5)
+sort(l)
+print(ordered(l))
+print(l[0])
+# CASE a long list of floats and one of strings
+func ordered(l) {
+    for (let i = 1; i < len(l); i++) {
+        if (l[i - 1] > l[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func floats_of(l) {
+    let f = []
+    for (let i = 0; i < len(l); i++) {
+        append(f, to_float(l[i]))
+    }
+    return f
+}
+
+# Sorts the ints and the same values as floats (a different path) and compares the two results.
+func agrees(l) {
+    let f = floats_of(l)
+    sort(l)
+    sort(f)
+    return ordered(l) and len(l) == len(f) and ordered(f) and sum_matches(l, f)
+}
+
+func sum_matches(l, f) {
+    for (let i = 0; i < len(l); i++) {
+        if (to_float(l[i]) != f[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func random_ints(n, hi) {
+    let l = []
+    for (let i = 0; i < n; i++) {
+        append(l, rand(0, hi))
+    }
+    return l
+}
+srand(14)
+let f = floats_of(random_ints(2000, 1000))
+sort(f)
+print(ordered(f))
+let w = []
+for (let i = 0; i < 600; i++) {
+    append(w, "k{rand(0, 99999)}")
+}
+sort(w)
+print(ordered(w))
+# CASE sorting twice and sorting the sorted
+func ordered(l) {
+    for (let i = 1; i < len(l); i++) {
+        if (l[i - 1] > l[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func floats_of(l) {
+    let f = []
+    for (let i = 0; i < len(l); i++) {
+        append(f, to_float(l[i]))
+    }
+    return f
+}
+
+# Sorts the ints and the same values as floats (a different path) and compares the two results.
+func agrees(l) {
+    let f = floats_of(l)
+    sort(l)
+    sort(f)
+    return ordered(l) and len(l) == len(f) and ordered(f) and sum_matches(l, f)
+}
+
+func sum_matches(l, f) {
+    for (let i = 0; i < len(l); i++) {
+        if (to_float(l[i]) != f[i]) {
+            return false
+        }
+    }
+    return true
+}
+
+func random_ints(n, hi) {
+    let l = []
+    for (let i = 0; i < n; i++) {
+        append(l, rand(0, hi))
+    }
+    return l
+}
+srand(15)
+let l = random_ints(1000, 5000)
+sort(l)
+let first = l[0]
+let last = l[999]
+sort(l)
+print(first == l[0] and last == l[999] and ordered(l))
+# CASE ssort keeps a rising run
+let a = [1, 5, 2, 7, 3, 9]
+ssort(a)
+print(a)
+let b = [4, 4, 3, 5]
+ssort(b)
+print(b)
+let c = [9, 1, 2]
+ssort(c)
+print(c)
+let e = []
+ssort(e)
+print(e)
+let s = ["b", "a", "c", "d", "a"]
+ssort(s)
+print(s)
+# CASE ssort on a dense list
+let d = dense_list(4, 0.0)
+d[0] = 1.0
+d[1] = 3.0
+d[2] = 2.0
+d[3] = 4.0
+ssort(d)
+print(len(d))
+# CASE sort of a mix of numbers and strings
+func pass(v) {
+    return [v, null][0]
+}
+let l = pass([3, "a", 1])
+sort(l)
+# CASE sort of a long mix of ints and a string
+func pass(v) {
+    return [v, null][0]
+}
+let l = []
+for (let i = 0; i < 400; i++) {
+    append(l, i)
+}
+append(l, "x")
+sort(pass(l))
+# CASE sort of booleans
+func pass(v) {
+    return [v, null][0]
+}
+let l = pass([true, false])
+sort(l)
+# CASE sort of a number
+func pass(v) {
+    return [v, null][0]
+}
+sort(pass(5))
+# CASE sort with two arguments
+func pass(v) {
+    return [v, null][0]
+}
+sort(pass([1]), [2])
+# CASE sort with no argument
+func pass(v) {
+    return [v, null][0]
+}
+sort()
+# CASE ssort of a string
+func pass(v) {
+    return [v, null][0]
+}
+ssort(pass("abc"))
+# CASE ssort with two arguments
+func pass(v) {
+    return [v, null][0]
+}
+ssort(pass([1]), [2])
+# CASE ssort of mixed items
+func pass(v) {
+    return [v, null][0]
+}
+let l = pass([1, "a"])
+ssort(l)

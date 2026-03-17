@@ -732,13 +732,85 @@ func _merge_sort(items, tmp, n) {
     memcpy(items, tmp, 16 * n)
 }
 
+const RADIX_MIN = 256
+
+# Sorts a list of non-negative ints with an LSD radix sort on 8-bit digits: one counting pass per
+# byte the largest value needs, and no comparisons. Returns 0 with the list untouched when any
+# item is not such an int.
+func _radix_sort(items, n) {
+    let mx = 0
+    for (let i = 0; i < n; i++) {
+        let it = items + 16 * i
+        if (_tag(it) != T_INT) {
+            return 0
+        }
+        let v = _val(it)
+        if (v < 0) {
+            return 0
+        }
+        if (v > mx) {
+            mx = v
+        }
+    }
+    let passes = 0
+    let rest = mx
+    while (rest != 0) {
+        passes++
+        rest = shr(rest, 8)
+    }
+    if (passes == 0) {
+        return 1
+    }
+    let a = lv_alloc_atomic(16 * n)
+    let b = a + 8 * n
+    let cnt = stack_buf(16384)
+    memset(cnt, 0, 16384)
+    for (let i = 0; i < n; i++) {
+        let v = _val(items + 16 * i)
+        a[i] = v
+        for (let p = 0; p < passes; p++) {
+            let k = p * 256 + band(shr(v, 8 * p), 255)
+            cnt[k] = cnt[k] + 1
+        }
+    }
+    for (let p = 0; p < passes; p++) {
+        let c = cnt + 2048 * p
+        # A pass where every item has the same digit would change nothing.
+        if (c[band(shr(a[0], 8 * p), 255)] != n) {
+            let pos = 0
+            for (let d = 0; d < 256; d++) {
+                let k = c[d]
+                c[d] = pos
+                pos += k
+            }
+            for (let i = 0; i < n; i++) {
+                let v = a[i]
+                let d = band(shr(v, 8 * p), 255)
+                b[c[d]] = v
+                c[d] = c[d] + 1
+            }
+            let t = a
+            a = b
+            b = t
+        }
+    }
+    for (let i = 0; i < n; i++) {
+        st64(items + 16 * i + 8, a[i])
+    }
+    return 1
+}
+
 func lb_sort(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let l = _arg_list(self_p, argv_p, 0)
-    let tmp = lv_alloc(16 * (ld64(l + L_COUNT) + 1))
-    _merge_sort(ld64(l + L_ITEMS), tmp, ld64(l + L_COUNT))
+    let n = ld64(l + L_COUNT)
     let o = stack_buf(16)
     _null(o)
+    if (n >= RADIX_MIN and _radix_sort(ld64(l + L_ITEMS), n) != 0) {
+        retp(o)
+    }
+    let tmp = lv_alloc(16 * (n + 1))
+    _merge_sort(ld64(l + L_ITEMS), tmp, n)
     retp(o)
 }
 

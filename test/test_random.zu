@@ -1,0 +1,218 @@
+// rand and srand (xoroshiro128++), trand and tshuffle (OS entropy), shuffle. Both ends of a range are included.
+
+# CASE srand repeats a sequence
+func same(x, y) {
+    if (len(x) != len(y)) {
+        return false
+    }
+    for (let i = 0; i < len(x); i++) {
+        if (x[i] != y[i]) {
+            return false
+        }
+    }
+    return true
+}
+srand(42)
+let a = [rand(1, 100), rand(1, 100), rand(1, 100), rand(1, 100)]
+srand(42)
+let b = [rand(1, 100), rand(1, 100), rand(1, 100), rand(1, 100)]
+print(a)
+print(same(a, b))
+srand(43)
+print(same([rand(1, 100), rand(1, 100), rand(1, 100), rand(1, 100)], a))
+# CASE rand float stays in 0 to 1
+let ok = true
+for (let i = 0; i < 2000; i++) {
+    let r = rand()
+    if (r < 0.0 or r >= 1.0) {
+        ok = false
+    }
+}
+print(ok)
+# CASE rand includes both ends and nothing else
+srand(1)
+let seen = [0, 0, 0, 0, 0]
+for (let i = 0; i < 3000; i++) {
+    let r = rand(1, 3)
+    seen[r] += 1
+}
+print(seen[0] == 0 and seen[1] > 800 and seen[2] > 800 and seen[3] > 800 and seen[4] == 0)
+# CASE rand with one bound starts at 0
+srand(1)
+let seen = [0, 0, 0, 0]
+for (let i = 0; i < 3000; i++) {
+    let r = rand(2)
+    seen[r] += 1
+}
+print(seen[0] > 800 and seen[1] > 800 and seen[2] > 800 and seen[3] == 0)
+# CASE rand with reversed or equal bounds
+srand(1)
+print(rand(5, 5))
+print(rand(-3, -3))
+let r = rand(9, 7)
+print(r >= 7 and r <= 9)
+# CASE rand over every 64-bit value
+print(type(rand(-9223372036854775807 - 1, 9223372036854775807)))
+# CASE trand includes both ends and nothing else
+let seen = [0, 0, 0, 0, 0]
+for (let i = 0; i < 3000; i++) {
+    let r = trand(1, 3)
+    seen[r] += 1
+}
+print(seen[0] == 0 and seen[1] > 700 and seen[2] > 700 and seen[3] > 700 and seen[4] == 0)
+# CASE trand with one bound, equal bounds and reversed bounds
+let seen = [0, 0, 0]
+for (let i = 0; i < 2000; i++) {
+    seen[trand(2)] += 1
+}
+print(seen[0] > 500 and seen[1] > 500 and seen[2] > 500)
+print(trand(7, 7))
+let r = trand(20, 10)
+print(r >= 10 and r <= 20)
+let big = trand(0, 129083847)
+print(big >= 0 and big <= 129083847)
+# CASE trand with no bounds and over every 64-bit value
+print(type(trand()))
+print(type(trand(-9223372036854775807 - 1, 9223372036854775807)))
+print(trand() != trand())
+# CASE srand does not change trand
+srand(5)
+let x = trand()
+srand(5)
+print(x != trand())
+# CASE shuffle repeats after srand and keeps every item
+func same(x, y) {
+    if (len(x) != len(y)) {
+        return false
+    }
+    for (let i = 0; i < len(x); i++) {
+        if (x[i] != y[i]) {
+            return false
+        }
+    }
+    return true
+}
+srand(9)
+let a = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+shuffle(a)
+print(a)
+srand(9)
+let b = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+shuffle(b)
+print(same(a, b))
+sort(a)
+print(a)
+# CASE shuffle of empty, one item and two items
+let e = []
+shuffle(e)
+print(e)
+let one = [4]
+shuffle(one)
+print(one)
+let two = [1, 2]
+shuffle(two)
+print(len(two))
+# CASE shuffle gives each of the six orders of three items equally often
+srand(77)
+let counts = {}
+for (let i = 0; i < 6000; i++) {
+    let l = [1, 2, 3]
+    shuffle(l)
+    let k = "{l[0]}{l[1]}{l[2]}"
+    if (map_has(counts, k)) {
+        counts[k] += 1
+    } else {
+        counts[k] = 1
+    }
+}
+let even = len(map_keys(counts)) == 6
+for (let k in map_keys(counts)) {
+    if (counts[k] < 800 or counts[k] > 1200) {
+        even = false
+    }
+}
+print(even)
+# CASE tshuffle gives each of the six orders of three items equally often
+let counts = {}
+for (let i = 0; i < 6000; i++) {
+    let l = [1, 2, 3]
+    tshuffle(l)
+    let k = "{l[0]}{l[1]}{l[2]}"
+    if (map_has(counts, k)) {
+        counts[k] += 1
+    } else {
+        counts[k] = 1
+    }
+}
+let even = len(map_keys(counts)) == 6
+for (let k in map_keys(counts)) {
+    if (counts[k] < 750 or counts[k] > 1250) {
+        even = false
+    }
+}
+print(even)
+# CASE tshuffle keeps every item of a long list
+func same(x, y) {
+    if (len(x) != len(y)) {
+        return false
+    }
+    for (let i = 0; i < len(x); i++) {
+        if (x[i] != y[i]) {
+            return false
+        }
+    }
+    return true
+}
+let l = []
+for (let i = 0; i < 1000; i++) {
+    append(l, i)
+}
+tshuffle(l)
+print(same(l, range(0, 1000)))
+sort(l)
+print(same(l, range(0, 1000)))
+# CASE rand with a string
+func pass(v) {
+    return [v, null][0]
+}
+print(rand(pass("a")))
+# CASE rand with a float bound
+func pass(v) {
+    return [v, null][0]
+}
+print(rand(1, pass(2.5)))
+# CASE trand with a string
+func pass(v) {
+    return [v, null][0]
+}
+print(trand(pass("a")))
+# CASE trand with a float bound
+func pass(v) {
+    return [v, null][0]
+}
+print(trand(pass(2.5), 9))
+# CASE srand with a float
+func pass(v) {
+    return [v, null][0]
+}
+srand(pass(1.5))
+# CASE shuffle of a number
+func pass(v) {
+    return [v, null][0]
+}
+shuffle(pass(5))
+# CASE tshuffle of a string
+func pass(v) {
+    return [v, null][0]
+}
+tshuffle(pass("abc"))
+# CASE shuffle with two arguments
+func pass(v) {
+    return [v, null][0]
+}
+shuffle(pass([1]), [2])
+# CASE tshuffle with no arguments
+func pass(v) {
+    return [v, null][0]
+}
+tshuffle()

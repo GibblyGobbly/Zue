@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  tshuffle() argument 1 must be a list, got string
+
+   4 | tshuffle(pass("abc"))
+
