@@ -30,6 +30,9 @@ covered by tests in `test/`.
 | Line breaks ignored inside brackets by lowering the bracket depth before the closing token | `compiler/parser.zu` | Multi-line calls and literals without a continuation character |
 | Contextual keywords (`data`, `in`, `from`) | `compiler/parser.zu` | They stay usable as names |
 | Strings scanned in one pass, with a nested-string scanner for `"{...}"` | `compiler/lexer.zu` | Quotes inside an interpolation work |
+| One dispatch on a byte class (operator, identifier, digit, blank, newline, quote, `#`, `/`), operator tokens from tables built at start-up | `compiler/lexer.zu` | A token costs one table read, and an operator allocates nothing but the token |
+| Runs inside a token (identifier, digits, blanks, string bodies, comments) skipped by native builtins `skip_chars`, `index_of_any` and `index_of`, which keeps a 256-byte lookup table for each recent set and uses `memmem` | `compiler/runtime/zue_rt_lib.zu` | The lexer is about 1.85 times faster with identical tokens on 90 files |
+| Slice syntax `x[a:b]` parsed in the same postfix branch as `x[i]`; one runtime function `lvp_slice` for strings and lists | `compiler/parser.zu`, `compiler/runtime/zue_rt_ops.zu` | A slice is an `NSlice` node, checked by the type checker and printed back by `unparse` |
 
 ### Type checking
 
@@ -59,6 +62,9 @@ covered by tests in `test/`.
 | Profile first with `valgrind --tool=callgrind` and count instructions, which do not depend on machine load | `bench/instruction_count.sh` |
 | Inline the common case in generated code: reading a defined global and testing a boolean condition are plain loads, and the runtime is called only for the error | Every program |
 | Fast paths for string and character comparisons in the runtime | Lexer and parser |
+| LSD radix sort (8-bit digits, passes skipped when a digit is the same everywhere) when a list has 256 or more non-negative ints; the scan that decides this stops at the first item that does not qualify | `sort` of 100,000 ints 8 ms to 2.2 ms; 1,000,000 ints 95 ms to 23 ms. Below 256 items the insertion and merge sort is faster, so it stays |
+| `getrandom` for OS entropy in one system call, read in 2 KB blocks for `tshuffle` | `trand()` 12 microseconds to about 0.5 |
+| Unbiased integers by rejection: a draw below 2^64 mod range is thrown away | Every value of `rand(a, b)`, `trand(a, b)` and every shuffle index is equally likely |
 | Replace maps with templates for tokens | 38 % faster lexing, 54 % less memory |
 
 ### Checking the work
@@ -67,7 +73,7 @@ covered by tests in `test/`.
 |---|---|
 | Golden-file tests: output, errors and exit status of every program are recorded and compared | Behaviour does not change by accident |
 | Syntax matrix (`test/test_syntax.zu`) with hand-checked outputs | Every construct and every precedence pair |
-| Round trip (`make round-trip`): parse, print back as source, parse again, require the same tree | The parser and the printer agree on all 381 project files and cases |
+| Round trip (`make round-trip`): parse, print back as source, parse again, require the same tree | The parser and the printer agree on all 620 project files and cases |
 | Differential fuzzing (`make fuzz`): random expressions and whole programs are run by Zue and by an independent Python model | Precedence, scoping, loops and functions are right. Runs of 12,000 expressions and 750 programs found no compiler bug |
 | LLVM verifier (`make verify-ir`) on the IR of every test | The code generator never writes malformed IR |
 | Testing the tests: a deliberately wrong rule is fed to each fuzzer, which must fail | A passing run means something |
@@ -86,6 +92,33 @@ Measured on a 188 KB file of 56,000 tokens, and by instruction count.
 | Instructions, `emit_llvm.zu` | 114.9 M | 65.5 M (43 % fewer) |
 | 300,000 small boxes in a loop | 0.079 s (heap) | 0.047 s (stack) |
 | 100,000 tokens as maps against templates | 0.050 s, 67 MB | 0.0095 s, 16 MB |
+| Lexing 5 source files | 35.5 ms | about 19 ms |
+| Compiling the compiler (time, peak memory) | 340 ms, 112 MB | 210 ms, 85 MB |
+| String benchmark | 450 ms | 230 ms |
+| `sort` of 1,000,000 random ints | 95 ms | 23 ms |
+| `trand()` | 12 microseconds | about 0.5 microseconds |
+
+The runtime figures compare the commit before the runtime work (`6a3b3b9`) with the current one,
+on the same machine (an AMD Ryzen 7 7435HS).
+
+## Where the time goes
+
+Compiling the compiler is about 1,805 million instructions. The garbage collector is not the
+cause: with it switched off the time is the same (see [gc](gc.md#measured-cost)).
+
+| Phase | Share of the instructions |
+|---|---|
+| Reading and splitting the source | 1.7 % |
+| Lexing | 5.2 % |
+| Parsing | 7.3 % |
+| Type checking | 5.9 % |
+| Tree walks (names used, nested functions, address use) | 16 % |
+| Emitting and joining the IR text | about 64 % |
+
+Inside emission the hot spots are making register names (`ll_reg`, 13.7 %, through `snprintf`),
+escaping string constants one character at a time (`ll_cstr`, 10.1 %), and `ll` (9 %). The IR text is
+held three times (the per-function joins, the whole join, and the final newline), which is most of
+the 35 MB live at exit. These are known and not yet changed.
 
 ## The memory model
 

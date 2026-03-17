@@ -84,4 +84,21 @@ the compiler compiles itself twice, and the two outputs must be identical.
   no incremental or generational mode yet.
 - No compaction. Fragmented pages are reused through their free lists.
 - The threshold rule (the larger of 16 MiB and the live size) is not tuned.
-- Memory use and collection speed have not been benchmarked yet.
+- Large objects (over 8192 bytes) are taken with `calloc` and not from the 2 MB chunks, so they miss
+  the huge-page benefit and cost more to allocate and free.
+- The heap can grow to about twice the live size before a collection, because the threshold is the
+  live size of the last collection.
+
+## Measured cost
+
+Compiling the compiler (a 212 KB source file, 11 MB of generated IR, about 275 MB allocated in
+total):
+
+| Run | Wall time | Peak memory | Page faults |
+|---|---|---|---|
+| Collector on (14 collections, 26 to 36 ms of pauses in all) | 220 ms | 85 MB | 17 thousand |
+| Collector off | 220 ms | 281 MB | 33 thousand |
+
+The collector costs memory, not time, here: switching it off saves nothing. The time goes into
+building the IR text (see [development](development.md#where-the-time-goes)). Measure it yourself
+with `ZUE_RT_GC_STATS=1`.

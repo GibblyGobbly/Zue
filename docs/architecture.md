@@ -32,7 +32,7 @@ compiler in detail.
 |---|---|
 | `zuec.zu` | Driver: `build`, `run`, `emit`, and the internal `--native` and positional forms. Builds the clang command line |
 | `lexer.zu`, `token.zu` | Source text to tokens; keyword and operator tables, including the keyword aliases |
-| `parser.zu` | Recursive descent with precedence climbing; produces the AST |
+| `parser.zu` | Recursive descent with precedence climbing; produces the AST. `x[a:b]` becomes an `NSlice` node, `x[i]` an `NIndex` node |
 | `ast_nodes.zu` | The AST node types: one `template` per kind of node (`NBin`, `NLet`, ...) with its `mk_*` constructor, and `NODE_FIELDS`, the fields of each kind. A node always has `k` (the kind) and `line`; reading a field its kind does not have is an error |
 | `check.zu` | The compile-time type checker for the main program and imported modules: variable types, operators, conditions and the signatures of the math builtins. See [syntax](syntax.md#type-checking) |
 | `analysis.zu` | Which names a function reads and writes, exports, and which variables closures capture |
@@ -60,9 +60,9 @@ and linked into every program.
 |---|---|
 | `zue_gc.zu` | The garbage collector. See [gc](gc.md) |
 | `zue_rt_core.zu` | Value layouts, errors, strings, lists, maps, `to_string` |
-| `zue_rt_ops.zu` | Operators, indexing, iteration, calls, recursion limit, program entry |
-| `zue_rt_lib.zu` | Builtins: conversions, maps, lists, strings, `args`, `exit`, `system`, `clock` |
-| `zue_rt_math.zu` | Math, files, dense lists, vector math, random numbers |
+| `zue_rt_ops.zu` | Operators, indexing, slicing (`lvp_slice`), iteration, calls, recursion limit, program entry |
+| `zue_rt_lib.zu` | Builtins: conversions, maps, lists, `sort` (insertion, merge and radix sort), strings and the scanning builtins, `args`, `exit`, `system`, `clock` |
+| `zue_rt_math.zu` | Math, files, dense lists, vector math, random numbers (`rand`/`srand` on xoroshiro128++, `trand`/`tshuffle` on `getrandom`), `shuffle` and `ssort` |
 | `zue_rt_data.zu` | `data`, `template`, `bloc`, `box` and `unsafe` |
 | `zue_rt_rules.zu` | The validation rules behind them: bloc and template schemas, the box handle table, the allocation table and the ten pointer rules. Each rule returns 0 or an error code, which `zue_rt_data.zu` turns into the error message |
 

@@ -27,6 +27,19 @@ compared with a recorded copy.
 parser cases. A case whose recorded output is a `Syntax Error` or `Type Error` is a program the
 compiler is meant to reject.
 
+## Tests for strings, slices, sorting and random numbers
+
+| File | Covers |
+|---|---|
+| `test/test_string_scanning.zu` | `index_of` with a start, `index_of_any`, `skip_chars` and their errors |
+| `test/test_lexer_scanning.zu` | Lexer edge cases: braces and interpolation in strings, numbers with underscores, comments, and the lexer errors (unterminated string, non-ASCII outside a string, unexpected character) |
+| `test/test_slices.zu` | `s[a:b]` on strings and lists: both ends included, open ends, and every out-of-range error |
+| `test/test_sort.zu` | `sort` on every item type, both sides of the radix cutoff (256 items), digit counts from 1 to 8 passes, `ssort`, and the argument errors |
+| `test/test_random.zu` | `rand`, `srand`, `trand` and `shuffle`/`tshuffle`: inclusive ends, reversed bounds, 64-bit ranges, repeatable seeds, evenness over all six orders of three items, and the errors |
+
+Tests of random numbers never record a value that depends on entropy. They print booleans such as
+"every value from 1 to 3 appeared and nothing else", and record exact numbers only after `srand`.
+
 The runner prints one `[PASS]`, `[FAIL]` or `[SKIP]` line per test and a summary such as
 `passed 110, failed 0, skipped 0`. It exits non-zero if any test failed, and so does `make test`.
 
