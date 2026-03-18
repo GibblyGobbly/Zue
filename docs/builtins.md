@@ -75,7 +75,7 @@ A `for-in` loop does not iterate a map directly: loop over `map_keys(m)`.
 `box` (see [data-types](data-types.md)).
 
 ## Strings
-Text manipulation, searching and formatting. All of these are builtins. Strings are
+For the full list with five worked programs, see [string](string.md). Text manipulation, searching and formatting. All of these are builtins. Strings are
 byte strings: `len("héllo")` is 6, and indexing is zero-based by byte. `to_upper` and
 `to_lower` change ASCII letters only.
 
@@ -228,7 +228,7 @@ print(censor_text("This is a darn good example", "darn"))
 ```
 
 ## Math
-Numeric functions, random numbers, and vector math. All of these are builtins. Arguments must
+For the full list with five worked programs, see [math](math.md). Numeric functions, random numbers, and vector math. All of these are builtins. Arguments must
 be numbers (an int or a float); anything else is a `Type Error` such as
 `sqrt() argument 1 must be a number, got string`. Zue has no infinity and no NaN: a call whose
 argument is outside the function's domain is an `Argument Error` (`sqrt() argument must not be
