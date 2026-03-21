@@ -1,0 +1,6 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Unexpected character '@'
+
+   1 | let x = 5 @ 3
+     |           ^ not part of the language
+

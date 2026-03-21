@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Invalid number literal
+
+   1 | let a = 0xG1
+     |         ^^
+
+Hint: Digits are needed after 0x or 0b, and '_' goes between digits

@@ -14,8 +14,13 @@
 
 use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
+use { diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, span_at, span_line, suggest } from "diag.zu"
 
 let SCOPES = []
+
+# Beside each scope, where each of its variables got its type: a node (the first value) or a span
+# (a type annotation or a parameter). Used only to label an error.
+let ORIGINS = []
 
 # Strict mode, per file: a "# strict" comment among the first lines turns every value whose type the
 # checker cannot tell into an error where it is used, and every untyped parameter into an error.
@@ -63,6 +68,10 @@ ck_init_results()
 for (let nm in map_keys(BUILTINS)) {
     BUILTIN_NAMES[nm] = true
 }
+
+# Names the code generator treats as calls without them being in BUILTINS (see ex_call).
+BUILTIN_NAMES["address_of"] = true
+BUILTIN_NAMES["addr"] = true
 
 func ck_init_sigs() {
     for (let nm in split("sqrt cbrt exp ln log10 sin cos tan asin acos atan sinh cosh tanh fract deg_to_rad rad_to_deg", " ")) {
@@ -239,11 +248,11 @@ func adapt_expr(n, et, want) {
 }
 
 # The checker type for a type written in the source. An unknown name is an error when strict, else any.
-func annot(text, line, strict) {
+func annot(text, span, strict) {
     let i = index_of(text, "<")
     if (i >= 0) {
         let kind = slice(text, 0, i)
-        let inner = annot(slice(text, i + 1, len(text) - 1), line, strict)
+        let inner = annot(slice(text, i + 1, len(text) - 1), span, strict)
         if (inner == "any") {
             return kind
         }
@@ -263,7 +272,9 @@ func annot(text, line, strict) {
         return "any"
     }
     if (strict and lookup(text) == null) {
-        fail(line, "unknown type '{text}'")
+        let d = fail_at(span, "unknown type '{text}'")
+        diag_text(d, "not a type")
+        diag_hint(d, "The types are int, float, bool, char, string, list, map, function, and the names of your own bloc and template types")
     }
     return "any"
 }
@@ -311,14 +322,39 @@ func unify(a, b) {
 
 func push_scope() {
     append(SCOPES, {})
+    append(ORIGINS, null)
 }
 
 func pop_scope() {
     remove(SCOPES, len(SCOPES) - 1)
+    remove(ORIGINS, len(ORIGINS) - 1)
 }
 
-func declare(name, t) {
-    SCOPES[len(SCOPES) - 1][name] = t
+# Every name a block declares with let, func, a type or use, noted when the block starts. At the end
+# of the check it tells a typo from a name that is merely declared further down.
+let HOISTED = {}
+
+func declare(name, t, at = null) {
+    let last = len(SCOPES) - 1
+    SCOPES[last][name] = t
+    if (at != null) {
+        if (ORIGINS[last] == null) {
+            ORIGINS[last] = {}
+        }
+        ORIGINS[last][name] = at
+    }
+}
+
+# Where the type of variable name was decided, as a span, or null.
+func type_origin(name) {
+    let i = scope_index(name)
+    if (i < 0) {
+        return null
+    }
+    if (ORIGINS[i] == null or ORIGINS[i][name] == null) {
+        return null
+    }
+    return nspan(ORIGINS[i][name])
 }
 
 # The scope map that holds name, or null.
@@ -343,49 +379,192 @@ func lookup(name) {
 
 # Errors
 
-# Reports a compile-time type error in the layout of a runtime error: the message, then the
-# source line.
-func fail(line, msg) {
-    print("Type Error in {ST.src_file} at line {line}:\n  {msg}")
+# A name that is read or assigned but declared nowhere yet is noted here and judged at the end of the
+# check, when every declaration has been seen: it is a typo only if nothing in the program declares
+# it, and it is not a builtin. When a use brings in a whole file without naming its names, any name
+# may come from it.
+let PENDING = []
+let OPEN_IMPORT = false
+
+# The names a typo could have meant: those in scope, those declared anywhere, then the builtins.
+func name_candidates(scopes) {
+    let out = []
+    let seen = {}
+    for (let sc in scopes) {
+        for (let key in map_keys(sc)) {
+            if (index_of(key, ":") < 0 and seen[key] == null) {
+                seen[key] = true
+                append(out, key)
+            }
+        }
+    }
+    for (let key in map_keys(HOISTED)) {
+        if (seen[key] == null) {
+            seen[key] = true
+            append(out, key)
+        }
+    }
+    for (let key in map_keys(BUILTIN_NAMES)) {
+        if (seen[key] == null) {
+            append(out, key)
+        }
+    }
+    return out
+}
+
+# Notes the name in id node n for the end of the check if it is not a builtin. what is Variable or
+# Function. Returns true when the name is not declared at this point, so the caller treats its type
+# as unknown.
+func check_name(n, what) {
+    let name = n.name
+    if (BUILTIN_NAMES[name] == true or name == "null") {
+        return false
+    }
+    append(PENDING, {"span": nspan(n), "name": name, "what": what, "scopes": slice(SCOPES, 0, len(SCOPES))})
+    return true
+}
+
+func undefined_error(span, name, what, scopes) {
+    let d = fail_at(span, "{what} '{name}' is not defined", "Name Error")
+    diag_text(d, "not declared anywhere")
+    let guess = suggest(name, name_candidates(scopes))
+    if (guess != null) {
+        diag_hint(d, "Did you mean '{guess}'?")
+    } else if (what == "Function") {
+        diag_hint(d, "Define it with func {name}(...) before calling it, or check the spelling of a builtin")
+    } else {
+        diag_hint(d, "Declare variables with 'let' before using them")
+    }
+}
+
+# Places that already have an error. A function body is checked once for each list of argument
+# types, so the same mistake could be found again; it is reported once.
+let REPORTED = {}
+
+# The place of node n as a span; only its line when the compiler made the node.
+func nspan(n) {
+    if (n.col == 0) {
+        return span_line(n.line)
+    }
+    return span_at(n.line, n.col, n.eline, n.ecol)
+}
+
+# sp, or the place of node n when sp is not known.
+func span_or(sp, n) {
+    if (sp == null) {
+        return nspan(n)
+    }
+    return sp
+}
+
+# Records a type error at span. Returns it, to add labels and a hint, or null when the place already
+# has one. Checking goes on after an error; the expression that failed is given the type any, which
+# raises no further errors.
+func fail_at(span, msg, kind = "Type Error") {
+    let key = "{span.line}:{span.col}"
+    if (span.col == 0) {
+        key = "{span.line}:{msg}"
+    }
+    if (REPORTED[key] != null) {
+        return null
+    }
+    REPORTED[key] = true
+    let d = diag_new(kind, span, msg)
     let i = len(CALLS) - 1
     while (i >= 0) {
         let c = CALLS[i]
         let sep = ", "
-        print("  in {c.name}({join(c.types, sep)}), called at line {c.line}")
+        diag_trace(d, "  in {c.name}({join(c.types, sep)}), called at line {c.line}")
         i -= 1
     }
-    if (line >= 1 and line <= len(ST.src_lines)) {
-        let num = pad_left(to_string(line), 4, " ")
-        print("\n{num} | {ST.src_lines[line - 1]}\n")
+    return d
+}
+
+func fail_node(n, msg) {
+    return fail_at(nspan(n), msg)
+}
+
+# What to write to get a value of type want from one of type got, or "".
+func convert_hint(want, got, n = null) {
+    if (n != null and (n.k == "str" or n.k == "tmpl" or n.k == "char" or n.k == "bool" or n.k == "list" or n.k == "map")) {
+        # A literal of the wrong type is not something to convert; the value itself is wrong.
+        if (want != "float" and want != "int") {
+            return ""
+        }
+        if (n.k != "num" and n.k != "float") {
+            return ""
+        }
     }
-    exit(1)
+    if (want == "float" and got == "int~") {
+        return "Write the number with a decimal point, for example 2.0"
+    }
+    if (want == "float" and got == "int") {
+        return "An int never becomes a float by itself: convert it with float(x)"
+    }
+    if (want == "int" and (got == "float" or got == "float~")) {
+        return "A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)"
+    }
+    if (want == "string" and is_number(got)) {
+        return "Convert a number to text with to_string(x), or write it inside a string: \"\{x}\""
+    }
+    if ((want == "int" or want == "float" or want == "number") and got == "string") {
+        return "Convert text to a number with to_int(s) or to_float(s)"
+    }
+    if (want == "bool") {
+        return "Make a bool with a comparison, for example x != 0 or len(s) > 0"
+    }
+    return ""
 }
 
 # In strict mode a value of type any may not be used where its type matters.
-func strict_known(t, line, what) {
+func strict_known(t, n, what) {
     if (STRICT and t == "any") {
-        fail(line, "strict mode: the type of {what} is not known. Give it a type, for example let x: int = ...")
+        let d = fail_node(n, "strict mode: the type of {what} is not known. Give it a type, for example let x: int = ...")
+        diag_text(d, "type not known")
     }
 }
 
-func operand_error(op, a, b, line) {
-    fail(line, "cannot use '{op}' on {describe(a)} and {describe(b)}")
+# The place of the operator of a binary node.
+func op_span(n) {
+    if (n.ospan != null) {
+        return n.ospan
+    }
+    return nspan(n)
+}
+
+func operand_error(n, a, b) {
+    let op = n.op
+    let d = fail_at(op_span(n), "cannot use '{op}' on {describe(a)} and {describe(b)}")
+    diag_label(d, nspan(n.l), describe(a))
+    diag_label(d, nspan(n.r), describe(b))
+    if (op == "+" and (a == "string" or b == "string")) {
+        diag_hint(d, "'+' joins two strings. Build text with interpolation, \"\{x} and \{y}\", or convert with to_string(x)")
+    } else if (is_number(a) and is_number(b)) {
+        diag_hint(d, "int and float never mix: convert one side explicitly with float(x) or int(x)")
+    } else if (op == "==" or op == "!=") {
+        diag_hint(d, "'{op}' compares two values of the same kind; convert one side first")
+    }
 }
 
 # Names the operands of a binary node; unary minus is stored as 0 - x.
 func bin_error(n, a, b) {
     if (n.unary == true) {
-        fail(n.line, "cannot negate {describe(b)}")
+        let d = fail_at(op_span(n), "cannot negate {describe(b)}")
+        diag_label(d, nspan(n.r), describe(b))
+        diag_hint(d, "Only an int or a float can be negated")
+        return null
     }
-    operand_error(n.op, a, b, n.line)
+    operand_error(n, a, b)
 }
 
 # Expressions
 
 # A list is indexed by an int.
-func ck_index(t, it, line) {
+func ck_index(t, it, idx_node) {
     if (kind_of(t) == "list" and it != "any" and it != "int" and it != "int~") {
-        fail(line, "list index must be an int, got {describe(it)}")
+        let d = fail_node(idx_node, "list index must be an int, got {describe(it)}")
+        diag_text(d, "this is {describe(it)}")
+        diag_hint(d, "An index is a whole number counting from 0; convert with int(x) if you mean that")
     }
 }
 
@@ -398,15 +577,19 @@ func ck_bin(n) {
     let b = ck_expr(n.r)
     let op = n.op
     if (STRICT and (op != "==" and op != "!=" or (a != "null" and b != "null"))) {
-        strict_known(a, n.line, "the left operand of '{op}'")
-        strict_known(b, n.line, "the right operand of '{op}'")
+        strict_known(a, n.l, "the left operand of '{op}'")
+        strict_known(b, n.r, "the right operand of '{op}'")
     }
     if (op == "and" or op == "or") {
         if (a != "any" and a != "bool") {
-            fail(n.line, "'{op}' needs bool operands, got {describe(a)}")
+            let d = fail_node(n.l, "'{op}' needs bool operands, got {describe(a)}")
+            diag_text(d, "this is {describe(a)}")
+            diag_hint(d, "Use a comparison, for example x != 0 or len(s) > 0")
         }
         if (b != "any" and b != "bool") {
-            fail(n.line, "'{op}' needs bool operands, got {describe(b)}")
+            let d = fail_node(n.r, "'{op}' needs bool operands, got {describe(b)}")
+            diag_text(d, "this is {describe(b)}")
+            diag_hint(d, "Use a comparison, for example x != 0 or len(s) > 0")
         }
         return "bool"
     }
@@ -416,12 +599,12 @@ func ck_bin(n) {
         }
         if (is_number(a) or is_number(b)) {
             if (unify(a, b) == null) {
-                operand_error(op, a, b, n.line)
+                operand_error(n, a, b)
             }
             return "bool"
         }
         if (a != b and not fits(a, b)) {
-            operand_error(op, a, b, n.line)
+            operand_error(n, a, b)
         }
         return "bool"
     }
@@ -431,18 +614,20 @@ func ck_bin(n) {
         }
         if (is_number(a) or is_number(b)) {
             if (unify(a, b) == null) {
-                operand_error(op, a, b, n.line)
+                operand_error(n, a, b)
             }
             return "bool"
         }
         if (a == b and (a == "string" or a == "char")) {
             return "bool"
         }
-        operand_error(op, a, b, n.line)
+        operand_error(n, a, b)
+        return "bool"
     }
     if (op == "&" or op == "|" or op == "^" or op == "<<" or op == ">>") {
         if ((a != "any" and a != "int" and a != "int~") or (b != "any" and b != "int" and b != "int~")) {
-            operand_error(op, a, b, n.line)
+            operand_error(n, a, b)
+            return "any"
         }
         if (a == "any" or b == "any") {
             return "any"
@@ -466,9 +651,12 @@ func ck_bin(n) {
     let t = unify(a, b)
     if (t == null) {
         bin_error(n, a, b)
+        return "any"
     }
     if ((op == "/" or op == "%") and is_zero_literal(n.r)) {
-        fail(n.line, "division by zero")
+        let d = fail_node(n.r, "division by zero")
+        diag_text(d, "this is zero")
+        diag_hint(d, "A divisor of 0 is always an error; check the value before dividing")
     }
     return t
 }
@@ -530,7 +718,15 @@ func alt_text(alt) {
     return "({join(alt[0], sep)})"
 }
 
-func ck_builtin_call(name, alts, argtypes, line) {
+# The place of the argument list of a call node, parentheses included.
+func args_span(n) {
+    if (n.aspan != null) {
+        return n.aspan
+    }
+    return nspan(n)
+}
+
+func ck_builtin_call(n, name, alts, argtypes) {
     let same_count = []
     for (let alt in alts) {
         if (len(alt[0]) == len(argtypes)) {
@@ -552,7 +748,16 @@ func ck_builtin_call(name, alts, argtypes, line) {
         if (wanted == "1") {
             plural = ""
         }
-        fail(line, "{name}() expects {wanted} argument{plural}, but got {len(argtypes)}")
+        let d = fail_at(args_span(n), "{name}() expects {wanted} argument{plural}, but got {len(argtypes)}")
+        diag_text(d, "found {len(argtypes)}")
+        diag_label(d, nspan(n.callee), "{name} takes {wanted}")
+        let forms = []
+        for (let alt in alts) {
+            append(forms, "{name}{alt_text(alt)}")
+        }
+        let or_sep = " or "
+        diag_hint(d, "Usage: {join(forms, or_sep)}")
+        return "any"
     }
     let first_miss = null
     for (let alt in same_count) {
@@ -566,7 +771,11 @@ func ck_builtin_call(name, alts, argtypes, line) {
     }
     if (len(same_count) == 1) {
         let idx = first_miss[0]
-        fail(line, "{name}() argument {idx + 1} must be {article(first_miss[1])} {first_miss[1]}, got {describe(argtypes[idx])}")
+        let d = fail_node(n.args[idx], "{name}() argument {idx + 1} must be {article(first_miss[1])} {first_miss[1]}, got {describe(argtypes[idx])}")
+        diag_text(d, "expected {first_miss[1]}, found {describe(argtypes[idx])}")
+        diag_label(d, nspan(n.callee), "argument {idx + 1} of {name}()")
+        diag_hint(d, convert_hint(first_miss[1], argtypes[idx], n.args[idx]))
+        return "any"
     }
     let forms = []
     for (let alt in same_count) {
@@ -578,18 +787,22 @@ func ck_builtin_call(name, alts, argtypes, line) {
     }
     let sep = ", "
     let or_text = " or "
-    fail(line, "{name}() cannot be called with ({join(got, sep)}); use {join(forms, or_text)}")
+    let d = fail_at(args_span(n), "{name}() cannot be called with ({join(got, sep)}); use {join(forms, or_text)}")
+    diag_text(d, "no form takes ({join(got, sep)})")
+    diag_label(d, nspan(n.callee), name)
+    return "any"
 }
 
 # A builtin that wants a particular type is not given a value of unknown type.
-func ck_strict_args(name, alts, argtypes, line) {
+func ck_strict_args(n, name, alts, argtypes) {
     for (let i = 0; i < len(argtypes); i++) {
         if (argtypes[i] != "any") {
             continue
         }
         for (let alt in alts) {
             if (len(alt[0]) == len(argtypes) and alt[0][i] != "any") {
-                fail(line, "strict mode: the type of argument {i + 1} of {name}() is not known. Give it a type, for example let x: float = ...")
+                let d = fail_node(n.args[i], "strict mode: the type of argument {i + 1} of {name}() is not known. Give it a type, for example let x: float = ...")
+                diag_text(d, "type not known")
             }
         }
     }
@@ -616,7 +829,7 @@ func field_check_type(text) {
     if (starts_with(text, "box:")) {
         return "box"
     }
-    return annot(text, 0, false)
+    return annot(text, null, false)
 }
 
 # The index of field in the fields of the typed definition td, or -1.
@@ -658,7 +871,12 @@ func ck_typed_construct(n, name, argtypes) {
             if (want == "float" and got == "int~") {
                 hint = ". Write the number with a decimal point, for example 2.0"
             }
-            fail(n.line, "{kind} '{name}' field '{td.fields[i]}' must be {article(want)} {want}, got {describe(got)}{hint}")
+            let d = fail_node(n.args[i], "{kind} '{name}' field '{td.fields[i]}' must be {article(want)} {want}, got {describe(got)}{hint}")
+            diag_text(d, "expected {want}, found {describe(got)}")
+            if (td.fspans != null) {
+                diag_label(d, td.fspans[i], "field '{td.fields[i]}' of {name} is {want}")
+            }
+            diag_hint(d, convert_hint(want, got, n.args[i]))
         }
     }
     return name
@@ -674,23 +892,29 @@ func ck_call(n) {
         return "any"
     }
     let name = n.callee.name
-    if (TYPEDEFS[name] != null and lookup(name) == "type") {
+    let known = lookup(name)
+    if (known == null and BUILTIN_NAMES[name] != true and check_name(n.callee, "Function")) {
+        return "any"
+    }
+    if (TYPEDEFS[name] != null and known == "type") {
         if (TYPEDEFS[name].is_bloc == true or TYPEDEFS[name].is_template == true) {
             return ck_typed_construct(n, name, argtypes)
         }
     }
-    if (name == "print" and lookup(name) == null) {
+    if (name == "print" and known == null) {
         return "null"
     }
-    if (name == "input" and lookup(name) == null) {
+    if (name == "input" and known == null) {
         return "string"
     }
-    let fkey = "fn:{name}"
-    let fidx = scope_index(fkey)
-    if (fidx >= 0 and lookup(name) == "function") {
-        return ck_user_call(name, SCOPES[fidx][fkey], fidx, argtypes, n.line, n.args)
+    if (known == "function") {
+        let fkey = "fn:{name}"
+        let fidx = scope_index(fkey)
+        if (fidx >= 0) {
+            return ck_user_call(name, SCOPES[fidx][fkey], fidx, argtypes, n)
+        }
     }
-    if (lookup(name) == null and BUILTIN_NAMES[name] == true) {
+    if (known == null and BUILTIN_NAMES[name] == true) {
         return ck_builtin(n, name, argtypes)
     }
     return "any"
@@ -708,7 +932,10 @@ func ck_builtin(n, name, argtypes) {
         if (kind_of(first) == "list" and el != null) {
             let vt = adapt_expr(n.args[1], argtypes[1], el)
             if (not fits_slot(vt, el)) {
-                fail(n.line, "cannot append {describe(vt)} to {first}")
+                let d = fail_node(n.args[1], "cannot append {describe(vt)} to {first}")
+                diag_text(d, "this is {describe(vt)}")
+                diag_label(d, nspan(n.args[0]), "{first}")
+                diag_hint(d, convert_hint(el, vt, n.args[1]))
             }
         }
         return "any"
@@ -716,9 +943,9 @@ func ck_builtin(n, name, argtypes) {
     let result = "any"
     if (SIGS[name] != null) {
         if (STRICT) {
-            ck_strict_args(name, SIGS[name], argtypes, n.line)
+            ck_strict_args(n, name, SIGS[name], argtypes)
         }
-        result = ck_builtin_call(name, SIGS[name], argtypes, n.line)
+        result = ck_builtin_call(n, name, SIGS[name], argtypes)
     } else if (RESULTS[name] != null) {
         result = RESULTS[name]
     }
@@ -774,7 +1001,33 @@ func join_returns(rets) {
 
 # Checks the body of fn with its parameters bound to the argument types of this call, and returns
 # the type the call has. The body sees the scopes the function was defined in, not the caller's.
-func ck_user_call(name, fn, idx, argtypes, line, argnodes) {
+# "s" for a count other than one.
+func s_if(count) {
+    if (count == 1) {
+        return ""
+    }
+    return "s"
+}
+
+# The place of the type written for parameter i of fn, or null.
+func ptype_span(fn, i) {
+    if (fn.tspans == null) {
+        return null
+    }
+    return fn.tspans[i]
+}
+
+# The place of parameter i of fn, or null.
+func param_span(fn, i) {
+    if (fn.pspans == null) {
+        return null
+    }
+    return fn.pspans[i]
+}
+
+func ck_user_call(name, fn, idx, argtypes, call) {
+    let argnodes = call.args
+    let line = call.line
     let np = len(fn.params)
     let required = 0
     for (let d in fn.defaults) {
@@ -791,21 +1044,28 @@ func ck_user_call(name, fn, idx, argtypes, line, argnodes) {
         if (wanted == "1") {
             plural = ""
         }
-        fail(line, "{name}() expects {wanted} argument{plural}, but got {len(argtypes)}")
+        let d = fail_at(args_span(call), "{name}() expects {wanted} argument{plural}, but got {len(argtypes)}")
+        diag_text(d, "found {len(argtypes)}")
+        diag_label(d, fn.nspan, "{name} is defined here with {np} parameter{s_if(np)}")
+        diag_hint(d, "Usage: {name}({join(fn.params, ", ")})")
+        return "any"
     }
     let types = []
     for (let i = 0; i < np; i++) {
         let want = null
         if (fn.ptypes != null and fn.ptypes[i] != null) {
-            want = annot(fn.ptypes[i], fn.line, true)
+            want = annot(fn.ptypes[i], span_or(ptype_span(fn, i), fn), true)
         }
         if (i < len(argtypes)) {
             let at = argtypes[i]
             if (want != null) {
-                strict_known(at, line, "argument {i + 1} of {name}()")
+                strict_known(at, argnodes[i], "argument {i + 1} of {name}()")
                 at = adapt_expr(argnodes[i], at, want)
                 if (not fits_slot(at, want)) {
-                    fail(line, "{name}() argument {i + 1} must be {article(want)} {want}, got {describe(at)}")
+                    let d = fail_node(argnodes[i], "{name}() argument {i + 1} must be {article(want)} {want}, got {describe(at)}")
+                    diag_text(d, "expected {want}, found {describe(at)}")
+                    diag_label(d, ptype_span(fn, i), "parameter '{fn.params[i]}' is {want}")
+                    diag_hint(d, convert_hint(want, at, argnodes[i]))
                 }
                 at = want
             }
@@ -826,10 +1086,12 @@ func ck_user_call(name, fn, idx, argtypes, line, argnodes) {
     }
     INPROG[mkey] = true
     let saved = SCOPES
+    let saved_origins = ORIGINS
     SCOPES = slice(saved, 0, idx + 1)
+    ORIGINS = slice(saved_origins, 0, idx + 1)
     push_scope()
     for (let i = 0; i < np; i++) {
-        declare(fn.params[i], types[i])
+        declare(fn.params[i], types[i], param_span(fn, i))
     }
     append(CALLS, {"name": name, "types": types, "line": line})
     append(RETS, [])
@@ -837,6 +1099,7 @@ func ck_user_call(name, fn, idx, argtypes, line, argnodes) {
     let rets = remove(RETS, len(RETS) - 1)
     remove(CALLS, len(CALLS) - 1)
     SCOPES = saved
+    ORIGINS = saved_origins
     let result = join_returns(rets)
     MEMO[mkey] = result
     INPROG[mkey] = null
@@ -851,7 +1114,8 @@ func ck_func(n) {
                 if (n.name != null) {
                     who = n.name
                 }
-                fail(n.line, "strict mode: parameter '{n.params[i]}' of {who} needs a type, for example {n.params[i]}: int")
+                let d = fail_at(span_or(param_span(n, i), n), "strict mode: parameter '{n.params[i]}' of {who} needs a type, for example {n.params[i]}: int")
+                diag_text(d, "needs a type")
             }
         }
     }
@@ -862,9 +1126,9 @@ func ck_func(n) {
             ck_expr(n.defaults[i])
         }
         if (n.ptypes != null and n.ptypes[i] != null) {
-            declare(n.params[i], annot(n.ptypes[i], n.line, true))
+            declare(n.params[i], annot(n.ptypes[i], span_or(ptype_span(n, i), n), true), param_span(n, i))
         } else {
-            declare(n.params[i], "any")
+            declare(n.params[i], "any", param_span(n, i))
         }
     }
     ck_block(n.body)
@@ -902,6 +1166,9 @@ func ck_expr(n) {
             return "null"
         }
         let t = lookup(n.name)
+        if (t == null and check_name(n, "Variable")) {
+            return "any"
+        }
         if (t == null or t == "unset") {
             return "any"
         }
@@ -938,8 +1205,8 @@ func ck_expr(n) {
     }
     if (k == "index") {
         let t = ck_expr(n.target)
-        strict_known(t, n.line, "the value being indexed")
-        ck_index(t, ck_expr(n.index), n.line)
+        strict_known(t, n.target, "the value being indexed")
+        ck_index(t, ck_expr(n.index), n.index)
         if (t == "string") {
             return "char"
         }
@@ -951,12 +1218,14 @@ func ck_expr(n) {
     }
     if (k == "slice") {
         let t = ck_expr(n.target)
-        strict_known(t, n.line, "the value being sliced")
+        strict_known(t, n.target, "the value being sliced")
         for (let bound in [n.lo, n.hi]) {
             if (bound != null) {
                 let bt = ck_expr(bound)
                 if (bt != "any" and bt != "int" and bt != "int~") {
-                    fail(n.line, "slice position must be an int, got {describe(bt)}")
+                    let d = fail_node(bound, "slice position must be an int, got {describe(bt)}")
+                    diag_text(d, "this is {describe(bt)}")
+                    diag_hint(d, "A slice position is a whole number counting from 1, both ends included")
                 }
             }
         }
@@ -964,13 +1233,15 @@ func ck_expr(n) {
             return t
         }
         if (t != "any") {
-            fail(n.line, "cannot slice {describe(t)}")
+            let d = fail_node(n.target, "cannot slice {describe(t)}")
+            diag_text(d, "this is {describe(t)}")
+            diag_hint(d, "Only a string or a list can be sliced")
         }
         return "any"
     }
     if (k == "field") {
         let ft = ck_expr(n.target)
-        strict_known(ft, n.line, "the value whose field '{n.field}' is read")
+        strict_known(ft, n.target, "the value whose field '{n.field}' is read")
         let td = object_def(ft)
         if (td != null) {
             let fi = field_index(td, n.field)
@@ -982,8 +1253,16 @@ func ck_expr(n) {
     }
     if (k == "incdec") {
         let t = lookup(n.name)
+        if (t == null and BUILTIN_NAMES[n.name] != true) {
+            append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": slice(SCOPES, 0, len(SCOPES))})
+            return "any"
+        }
         if (t != null and t != "any" and t != "unset" and t != "int" and t != "float") {
-            fail(n.line, "cannot use '{n.op}' on {n.name}, which is {t}")
+            let d = fail_node(n, "cannot use '{n.op}' on {n.name}, which is {t}")
+            diag_text(d, "{n.name} is {t}")
+            diag_label(d, type_origin(n.name), "{n.name} became {t} here")
+            diag_hint(d, "'++' and '--' work on an int or a float variable")
+            return "any"
         }
         if (t == null or t == "unset") {
             return "any"
@@ -992,9 +1271,11 @@ func ck_expr(n) {
     }
     if (k == "not") {
         let t = ck_expr(n.e)
-        strict_known(t, n.line, "the operand of 'not'")
+        strict_known(t, n.e, "the operand of 'not'")
         if (t != "any" and t != "bool") {
-            fail(n.line, "'not' needs a bool, got {describe(t)}")
+            let d = fail_node(n.e, "'not' needs a bool, got {describe(t)}")
+            diag_text(d, "this is {describe(t)}")
+            diag_hint(d, "Use a comparison, for example not (x == 0)")
         }
         return "bool"
     }
@@ -1017,9 +1298,11 @@ func declare_func(n) {
 
 func ck_cond(e, what) {
     let t = ck_expr(e)
-    strict_known(t, e.line, "the condition of {what}")
+    strict_known(t, e, "the condition of {what}")
     if (t != "any" and t != "bool") {
-        fail(e.line, "{what} needs a bool, got {describe(t)}")
+        let d = fail_node(e, "{what} needs a bool, got {describe(t)}")
+        diag_text(d, "this is {describe(t)}")
+        diag_hint(d, "A condition must be true or false: compare with ==, != or <, for example x != 0 or len(s) > 0")
     }
 }
 
@@ -1027,28 +1310,44 @@ func ck_assign(n) {
     let et = ck_expr(n.e)
     let s = scope_of(n.name)
     if (s == null) {
+        if (BUILTIN_NAMES[n.name] != true) {
+            append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": slice(SCOPES, 0, len(SCOPES))})
+        }
         return null
     }
     let vt = s[n.name]
     if (vt == "unset") {
         s[n.name] = settle(et)
+        let si = scope_index(n.name)
+        if (ORIGINS[si] == null) {
+            ORIGINS[si] = {}
+        }
+        ORIGINS[si][n.name] = n.e
         return null
     }
-    strict_known(et, n.line, "the value assigned to '{n.name}'")
+    strict_known(et, n.e, "the value assigned to '{n.name}'")
     et = adapt_expr(n.e, et, vt)
     if (not fits_slot(et, vt)) {
         let hint = ""
         if (vt == "float" and et == "int~") {
             hint = ". Write the number with a decimal point, for example 2.0"
         }
-        fail(n.line, "cannot assign {describe(et)} to '{n.name}', which is {vt}{hint}")
+        let d = fail_node(n.e, "cannot assign {describe(et)} to '{n.name}', which is {vt}{hint}")
+        diag_text(d, "this is {describe(et)}")
+        diag_label(d, n.nspan, "'{n.name}' is {vt}")
+        diag_label(d, type_origin(n.name), "'{n.name}' became {vt} here")
+        let how = convert_hint(vt, et, n.e)
+        if (len(how) == 0) {
+            how = "Use another variable for the new value"
+        }
+        diag_hint(d, "A variable keeps the type of its first value. " + how)
     }
     return null
 }
 
 # let name: type = init. The declared type decides the variable's type.
 func ck_typed_let(n) {
-    let at = annot(n.type, n.line, true)
+    let at = annot(n.type, span_or(n.tspan, n), true)
     if (n.init != null) {
         let et = adapt_expr(n.init, ck_expr(n.init), at)
         if (et != "null" and not fits_slot(et, at)) {
@@ -1056,10 +1355,13 @@ func ck_typed_let(n) {
             if (at == "float" and et == "int~") {
                 hint = ". Write the number with a decimal point, for example 2.0"
             }
-            fail(n.line, "cannot assign {describe(et)} to '{n.name}', which is {at}{hint}")
+            let d = fail_node(n.init, "cannot assign {describe(et)} to '{n.name}', which is {at}{hint}")
+            diag_text(d, "this is {describe(et)}")
+            diag_label(d, n.tspan, "'{n.name}' is declared {at}")
+            diag_hint(d, convert_hint(at, et, n.init))
         }
     }
-    declare(n.name, at)
+    declare(n.name, at, n.tspan)
     mark_sty(n, at)
 }
 
@@ -1072,12 +1374,12 @@ func ck_stmt(n) {
             declare(n.name, "unset")
         } else {
             let it = settle(ck_expr(n.init))
-            strict_known(it, n.line, "the value given to '{n.name}'")
+            strict_known(it, n.init, "the value given to '{n.name}'")
             if (it == "null") {
                 # A variable that starts as null takes the type of its first real value.
                 it = "unset"
             }
-            declare(n.name, it)
+            declare(n.name, it, n.init)
             mark_sty(n, it)
         }
     } else if (k == "group") {
@@ -1155,7 +1457,7 @@ func ck_stmt(n) {
         }
     } else if (k == "setidx") {
         let tt = ck_expr(n.target)
-        ck_index(tt, ck_expr(n.index), n.line)
+        ck_index(tt, ck_expr(n.index), n.index)
         let et = ck_expr(n.e)
         let el = elem_of(tt)
         let od = object_def(tt)
@@ -1169,14 +1471,26 @@ func ck_stmt(n) {
                     if (od.is_bloc == true) {
                         kind = "Bloc"
                     }
-                    fail(n.line, "{kind} '{tt}' field '{od.fields[fi]}' must be {article(want)} {want}, got {describe(et)}")
+                    let d = fail_node(n.e, "{kind} '{tt}' field '{od.fields[fi]}' must be {article(want)} {want}, got {describe(et)}")
+                    diag_text(d, "expected {want}, found {describe(et)}")
+                    if (od.fspans != null) {
+                        diag_label(d, od.fspans[fi], "field '{od.fields[fi]}' of {tt} is {want}")
+                    }
+                    diag_hint(d, convert_hint(want, et, n.e))
                 }
             }
         }
         if (el != null and n.op == null) {
             et = adapt_expr(n.e, et, el)
             if (not fits_slot(et, el)) {
-                fail(n.line, "cannot store {describe(et)} in {tt}")
+                let d = fail_node(n.e, "cannot store {describe(et)} in {tt}")
+                diag_text(d, "this is {describe(et)}")
+                diag_label(d, nspan(n.target), "{tt}")
+                let how = convert_hint(el, et, n.e)
+                if (len(how) == 0) {
+                    how = "A {tt} holds only {el} items"
+                }
+                diag_hint(d, how)
             }
         }
     } else if (k == "block") {
@@ -1191,6 +1505,9 @@ func ck_stmt(n) {
         declare(n.name, "type")
         TYPEDEFS[n.name] = n
     } else if (k == "use") {
+        if (len(n.names) == 0) {
+            OPEN_IMPORT = true
+        }
         for (let nm in n.names) {
             declare(nm, "any")
         }
@@ -1205,14 +1522,27 @@ func ck_stmt(n) {
 # Names of functions and types are known before their definition runs.
 func ck_hoist(stmts) {
     for (let s in stmts) {
-        if (s.k == "func" and s.name != null) {
+        let k = s.k
+        if (k == "func" and s.name != null) {
             declare_func(s)
-        } else if (s.k == "typedef") {
+            HOISTED[s.name] = true
+        } else if (k == "typedef") {
             declare(s.name, "type")
             TYPEDEFS[s.name] = s
-        } else if (s.k == "use") {
+            HOISTED[s.name] = true
+        } else if (k == "use") {
+            if (len(s.names) == 0) {
+                OPEN_IMPORT = true
+            }
             for (let nm in s.names) {
                 declare(nm, "any")
+                HOISTED[nm] = true
+            }
+        } else if (k == "let") {
+            HOISTED[s.name] = true
+        } else if (k == "group") {
+            for (let item in s.items) {
+                HOISTED[item.name] = true
             }
         }
     }
@@ -1256,7 +1586,20 @@ func file_is_strict(lines) {
     return false
 }
 
-# Stops with a Type Error at the first problem it can prove.
+# Reports the names that were read or assigned and that nothing in the program declares.
+func report_undefined() {
+    if (OPEN_IMPORT) {
+        return null
+    }
+    for (let p in PENDING) {
+        if (HOISTED[p.name] != null) {
+            continue
+        }
+        undefined_error(p.span, p.name, p.what, p.scopes)
+    }
+}
+
+# Reports every Type Error it can prove, in source order, and ends the run if there is one.
 export func check_program(stmts) {
     STRICT = file_is_strict(ST.src_lines)
     SCOPES = []
@@ -1265,7 +1608,14 @@ export func check_program(stmts) {
     INPROG = {}
     CALLS = []
     RETS = []
+    REPORTED = {}
+    HOISTED = {}
+    ORIGINS = []
+    PENDING = []
+    OPEN_IMPORT = false
     push_scope()
     ck_block(stmts)
     pop_scope()
+    report_undefined()
+    diag_exit_if_errors()
 }

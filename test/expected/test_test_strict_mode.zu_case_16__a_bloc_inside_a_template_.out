@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 7:
   cannot assign float to 'worse', which is int
 
    7 | let worse: int = b.pos.y
+     |            ---   ^^^^^^^ this is float
+     |            |
+     |            'worse' is declared int
 
+Hint: A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)

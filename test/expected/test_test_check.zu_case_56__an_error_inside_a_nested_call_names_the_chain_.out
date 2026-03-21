@@ -4,4 +4,8 @@ Type Error in /tmp/zue_test_case.zu at line 2:
   in outer(string), called at line 7
 
    2 |     return a + 1
+     |            - ^ - an int constant
+     |            |
+     |            string
 
+Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with to_string(x)

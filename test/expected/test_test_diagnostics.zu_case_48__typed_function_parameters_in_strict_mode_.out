@@ -1,0 +1,25 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  strict mode: parameter 'a' of add needs a type, for example a: int
+
+   2 | func add(a, b) {
+     |          ^ needs a type
+
+Type Error in /tmp/zue_test_case.zu at line 2:
+  strict mode: parameter 'b' of add needs a type, for example b: int
+
+   2 | func add(a, b) {
+     |             ^ needs a type
+
+Type Error in /tmp/zue_test_case.zu at line 3:
+  strict mode: the type of the left operand of '+' is not known. Give it a type, for example let x: int = ...
+
+   3 |     return a + b
+     |            ^ type not known
+
+Type Error in /tmp/zue_test_case.zu at line 3:
+  strict mode: the type of the right operand of '+' is not known. Give it a type, for example let x: int = ...
+
+   3 |     return a + b
+     |                ^ type not known
+
+4 errors found.

@@ -2,11 +2,22 @@
 # Copyright (c) 2026 GibblyGobbly
 #
 # parser.zu: tokens to AST.
+#
+# Every node gets its place in the source (see ast_nodes.zu). A mistake is recorded with diag_new
+# and the parser goes on, so one run finds every syntax error:
+#
+#   - The first error in a statement puts the parser in panic mode. While it is on, further errors
+#     are not recorded (they would only follow from the first one), and the parser builds
+#     placeholder nodes without consuming input.
+#   - When the statement ends, p_recover skips to the start of the next statement and turns panic off.
+#   - At most one syntax error is recorded for a line.
+#
+# The tree of a program with errors is never used.
 
-use { die } from "util.zu"
+use { diag_new, diag_text, diag_hint, diag_label, diag_on_line, diag_exit_if_errors, span_at, span_line } from "diag.zu"
 use { lex } from "lexer.zu"
 use { KEYWORDS } from "token.zu"
-use { mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_slice, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_typedef, mk_use, mk_block, mk_return, mk_jump } from "ast_nodes.zu"
+use { mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_slice, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_typedef, mk_use, mk_block, mk_return, mk_jump, mk_neg } from "ast_nodes.zu"
 
 let P_toks = []
 let P_pos = 0
@@ -14,8 +25,48 @@ let P_pos = 0
 # Number of ( [ and literal { currently open. Inside them a line break is only white space.
 let P_depth = 0
 
-# Names declared so far in each open scope, innermost last; a name may be declared once per scope.
+# The last token that was consumed.
+let P_prev = null
+
+# True from the first error in a statement until p_recover.
+let P_panic = false
+
+# Closing braces to skip silently because their opening brace was skipped by p_recover.
+let P_ignore_close = 0
+
+# Names declared so far in each open scope, innermost last, each with the span of its declaration;
+# a name may be declared once per scope.
 let P_scopes = [{}]
+
+# Set when p_close_angle used up the first character of a token such as >> and left the rest.
+let P_split_tok = null
+
+# The place of a node as a span, or only its line when the node was made by the compiler.
+func node_span(n) {
+    if (n.col == 0) {
+        return span_line(n.line)
+    }
+    return span_at(n.line, n.col, n.eline, n.ecol)
+}
+
+# Records an error unless the parser is already in panic mode or the line has an error. A syntax
+# error puts the parser in panic mode (panic is true); a rule error such as a repeated name does not.
+func p_diag(span, msg, text, panic) {
+    if (P_panic or diag_on_line(span.line)) {
+        if (panic) {
+            P_panic = true
+        }
+        return null
+    }
+    let d = diag_new("Syntax Error", span, msg)
+    if (len(text) > 0) {
+        diag_text(d, text)
+    }
+    if (panic) {
+        P_panic = true
+    }
+    return d
+}
 
 func p_scope_push() {
     append(P_scopes, {})
@@ -25,12 +76,18 @@ func p_scope_pop() {
     remove(P_scopes, len(P_scopes) - 1)
 }
 
-func p_declare(name, line) {
+func p_declare(name, tk) {
     let top = P_scopes[len(P_scopes) - 1]
-    if (top[name] != null) {
-        die("Syntax Error", line, "'{name}' is already declared in this scope")
+    let first = top[name]
+    if (first != null) {
+        let d = p_diag(tk, "'{name}' is already declared in this scope", "declared again here", false)
+        if (d != null) {
+            diag_label(d, first, "first declared here")
+            diag_hint(d, "Use another name, or assign to the existing variable without 'let'")
+        }
+        return null
     }
-    top[name] = true
+    top[name] = tk
 }
 
 # The current token and its kind. While a bracket is open, line breaks are skipped before either is
@@ -58,6 +115,7 @@ func p_at(t) {
 
 func p_next() {
     let tk = P_tk
+    P_prev = tk
     if (P_pos < len(P_toks) - 1) {
         P_pos += 1
     }
@@ -97,6 +155,7 @@ func p_eat_word(w) {
 func p_expect_word(w, msg) {
     if (not p_at_word(w)) {
         p_fail(msg)
+        return P_tk
     }
     return p_next()
 }
@@ -110,17 +169,123 @@ func p_at_data() {
     return i + 1 < len(P_toks) and P_toks[i].t == "id" and P_toks[i + 1].t == "\{"
 }
 
+# True when the current token is the first on its line, inside brackets where line breaks are not
+# tokens the parser sees.
+func p_first_on_line() {
+    return P_depth > 0 and P_pos > 0 and P_toks[P_pos - 1].t == "nl"
+}
+
+# Where an error about the current token points. At the end of a line or of the file the token is
+# not text, so the error points at the place just after the last token that was read.
+func p_here() {
+    let tk = P_tk
+    if ((tk.t == "nl" or tk.t == "eof" or p_first_on_line()) and P_prev != null) {
+        return span_at(P_prev.eline, P_prev.ecol, P_prev.eline, P_prev.ecol + 1)
+    }
+    return tk
+}
+
+# What the current token is, for the text next to the carets.
+func p_found_text() {
+    let tk = P_tk
+    let t = tk.t
+    if (t == "nl" or p_first_on_line()) {
+        return "unexpected end of line"
+    }
+    if (t == "eof") {
+        return "unexpected end of file"
+    }
+    if (t == "str") {
+        return "unexpected string"
+    }
+    if (t == "num" or t == "float") {
+        return "unexpected number"
+    }
+    if (t == "char") {
+        return "unexpected character literal"
+    }
+    if (t == "id") {
+        return "unexpected name '{tk.v}'"
+    }
+    if (type(tk.v) == "string") {
+        return "unexpected '{tk.v}'"
+    }
+    return "unexpected '{t}'"
+}
+
+# Records a syntax error at the current token and puts the parser in panic mode. Returns the error,
+# or null when it was not recorded.
+func p_fail(msg) {
+    let d = p_diag(p_here(), msg, p_found_text(), true)
+    let tk = P_tk
+    if (d != null and type(tk.v) == "string" and KEYWORDS[tk.v] != null and index_of(msg, "name") >= 0) {
+        diag_hint(d, "'{tk.v}' is a keyword and cannot be used as a name; choose another")
+    }
+    return d
+}
+
+func p_fail_at(span, msg, text) {
+    return p_diag(span, msg, text, true)
+}
+
+# Consumes a token of kind t. When it is missing nothing is consumed and the current token is
+# returned, as if the missing token had been there.
+func p_expect(t, msg) {
+    if (P_kind != t) {
+        p_fail(msg)
+        return P_tk
+    }
+    return p_next()
+}
+
 # Consumes the opening bracket t, and line breaks stop mattering until p_close.
 func p_open(t, msg) {
-    p_expect(t, msg)
+    if (P_kind != t) {
+        p_fail(msg)
+        return null
+    }
+    p_next()
     p_enter()
 }
 
+# The opening bracket that the closer t should have matched: the nearest one before the current
+# token that has no closer of its own. Only used to describe an error.
+func p_find_opener(t) {
+    let open = "("
+    if (t == "]") {
+        open = "["
+    } else if (t == "}") {
+        open = "\{"
+    }
+    let depth = 0
+    let i = P_pos - 1
+    while (i >= 0) {
+        let k = P_toks[i].t
+        if (k == t) {
+            depth += 1
+        } else if (k == open) {
+            if (depth == 0) {
+                return P_toks[i]
+            }
+            depth -= 1
+        }
+        i -= 1
+    }
+    return null
+}
+
 # The closing bracket is checked first and the depth lowered before it is consumed, so a line break
-# after it still ends the statement.
+# after it still ends the statement. A missing one points at the bracket that was left open.
 func p_close(t, msg) {
     if (P_kind != t) {
-        p_fail(msg)
+        let d = p_fail(msg)
+        if (d != null) {
+            let opener = p_find_opener(t)
+            if (opener != null) {
+                diag_label(d, opener, "this '{opener.v}' is never closed")
+            }
+        }
+        return null
     }
     P_depth -= 1
     p_next()
@@ -132,23 +297,13 @@ func p_skip_nl() {
     }
 }
 
-func p_fail(msg) {
-    die("Syntax Error", P_tk.line, msg)
-}
-
-func p_expect(t, msg) {
-    if (P_kind != t) {
-        p_fail(msg)
-    }
-    return p_next()
-}
-
 # Parses source text with its own token stream, then restores the parser.
-func parse_inline(text, line) {
+func parse_inline(text, line, col) {
     let saved_toks = P_toks
     let saved_pos = P_pos
     let saved_depth = P_depth
-    P_toks = lex(text, line)
+    let saved_prev = P_prev
+    P_toks = lex(text, line, col)
     P_pos = 0
     P_depth = 1
     p_sync()
@@ -159,6 +314,7 @@ func parse_inline(text, line) {
     P_toks = saved_toks
     P_pos = saved_pos
     P_depth = saved_depth
+    P_prev = saved_prev
     p_sync()
     return e
 }
@@ -172,42 +328,45 @@ func p_string(tk) {
         }
     }
     if (not has_expr) {
-        return mk_lit("str", tk.line, parts[0])
+        return mk_lit("str", tk, tk, parts[0])
     }
     let items = []
     for (let part in parts) {
         if (type(part) == "map") {
-            append(items, parse_inline(part.expr, part.line))
+            append(items, parse_inline(part.expr, part.line, part.col))
         } else {
             append(items, part)
         }
     }
-    return mk_tmpl(tk.line, items)
+    return mk_tmpl(tk, tk, items)
 }
 
-func p_list_literal(line) {
+func p_list_literal(st) {
     p_enter()
     let items = []
-    while (not (P_kind == "]")) {
+    while (not (P_kind == "]") and not (P_kind == "eof")) {
         append(items, p_expr())
         if (not p_eat(",")) {
             break
         }
     }
     p_close("]", "Expected ']' at end of list")
-    return mk_list(line, items)
+    return mk_list(st, P_prev, items)
 }
-func p_map_literal(line) {
+
+func p_map_literal(st) {
     p_enter()
     let keys = []
     let vals = []
-    while (not (P_kind == "}")) {
+    while (not (P_kind == "}") and not (P_kind == "eof")) {
         if (not (P_kind == "str")) {
             p_fail("Map literal keys must be strings")
+            break
         }
         let kt = p_next()
         if (len(kt.v) != 1 or type(kt.v[0]) != "string") {
-            p_fail("Map literal keys must be plain strings")
+            p_fail_at(kt, "Map literal keys must be plain strings", "this key has an interpolation")
+            break
         }
         append(keys, kt.v[0])
         p_expect(":", "Expected ':' after map key")
@@ -217,13 +376,15 @@ func p_map_literal(line) {
         }
     }
     p_close("}", "Expected '}' at end of map literal")
-    return mk_map(line, keys, vals)
+    return mk_map(st, P_prev, keys, vals)
 }
+
 # A type annotation after ':' on a variable, a parameter or a field: a type name, and for list and
 # map an element type in angle brackets, as in list<int> or map<list<float>>. Returned as text.
 func p_type(what) {
     if (not (P_kind == "id")) {
         p_fail("Expected a type after ':' in {what}")
+        return "any"
     }
     let name = p_next().v
     if (not (P_kind == "<")) {
@@ -231,6 +392,7 @@ func p_type(what) {
     }
     if (name != "list" and name != "map") {
         p_fail("Only list and map take an element type, for example list<int>")
+        return name
     }
     p_next()
     let inner = p_type(what)
@@ -252,39 +414,60 @@ func p_close_angle() {
         }
         P_tk.t = rest
         P_tk.v = rest
+        P_tk.col += 1
         P_kind = rest
+        P_split_tok = P_tk
         return null
     }
     p_fail("Expected '>' to close the element type")
 }
 
-func p_func_rest(name, line, is_export) {
+# The span of the type annotation that started at token st and has just been read.
+func p_type_span(st) {
+    if (P_split_tok != null and P_split_tok == P_tk) {
+        return span_at(st.line, st.col, P_tk.line, P_tk.col)
+    }
+    return span_at(st.line, st.col, P_prev.eline, P_prev.ecol)
+}
+
+# nt is the name token of a named function, or null; st the token where the function starts.
+func p_func_rest(name, nt, st, is_export) {
     p_open("(", "Expected '('")
     p_scope_push()
     let params = []
     let defaults = []
     let ptypes = []
+    let pspans = []
+    let tspans = []
     let has_default = false
     let has_type = false
-    while (not (P_kind == ")")) {
+    while (not (P_kind == ")") and not (P_kind == "eof")) {
         if (not (P_kind == "id")) {
             p_fail("Expected parameter name")
+            break
         }
         let pt = p_next()
-        p_declare(pt.v, pt.line)
+        p_declare(pt.v, pt)
         append(params, pt.v)
+        append(pspans, pt)
         if (p_eat(":")) {
+            let ts = P_tk
             append(ptypes, p_type("a parameter"))
+            append(tspans, p_type_span(ts))
             has_type = true
         } else {
             append(ptypes, null)
+            append(tspans, null)
         }
         if (p_eat("=")) {
             append(defaults, p_expr())
             has_default = true
         } else {
             if (has_default) {
-                die("Syntax Error", pt.line, "Parameter '{pt.v}' needs a default value because an earlier parameter has one")
+                let d = p_diag(pt, "Parameter '{pt.v}' needs a default value because an earlier parameter has one", "no default value", false)
+                if (d != null) {
+                    diag_hint(d, "Give it a default, for example {pt.v} = 0, or move it before the parameters that have one")
+                }
             }
             append(defaults, null)
         }
@@ -300,19 +483,20 @@ func p_func_rest(name, line, is_export) {
     }
     let body = p_block_body()
     p_scope_pop()
-    return mk_func(line, name, params, defaults, declared, body, is_export)
+    return mk_func(st, P_prev, name, params, defaults, declared, body, is_export, nt, pspans, tspans)
 }
+
 func p_primary() {
     let tk = P_tk
     let line = tk.line
     let t = tk.t
     if (t == "num") {
         p_next()
-        return mk_lit("num", line, tk.v)
+        return mk_lit("num", tk, tk, tk.v)
     }
     if (t == "float") {
         p_next()
-        return mk_lit("float", line, tk.v)
+        return mk_lit("float", tk, tk, tk.v)
     }
     if (t == "str") {
         p_next()
@@ -320,15 +504,15 @@ func p_primary() {
     }
     if (t == "char") {
         p_next()
-        return mk_lit("char", line, tk.v)
+        return mk_lit("char", tk, tk, tk.v)
     }
     if (t == "true" or t == "false") {
         p_next()
-        return mk_lit("bool", line, t == "true")
+        return mk_lit("bool", tk, tk, t == "true")
     }
     if (t == "id") {
         p_next()
-        return mk_id(line, tk.v)
+        return mk_id(tk, tk, tk.v)
     }
     if (t == "(") {
         p_next()
@@ -339,33 +523,45 @@ func p_primary() {
     }
     if (t == "[") {
         p_next()
-        return p_list_literal(line)
+        return p_list_literal(tk)
     }
     if (t == "\{") {
         p_next()
-        return p_map_literal(line)
+        return p_map_literal(tk)
     }
     if (t == "func") {
         p_next()
-        return p_func_rest(null, line, false)
+        return p_func_rest(null, null, tk, false)
     }
     if (t == "box") {
         p_next()
         p_expect("[", "Expected '[' after 'box'")
         let size = p_expr()
         p_expect("]", "Expected ']' after box size")
-        return mk_box(line, size)
+        return mk_box(tk, P_prev, size)
     }
     if (t == ";") {
-        p_fail("Unexpected semicolon ';'")
+        let d = p_fail("Unexpected semicolon ';'")
+        diag_hint(d, "A statement ends at the end of the line. Put each statement on its own line")
+    } else {
+        let d = p_fail("Unexpected token '{t}': expected an expression")
+        if (t == "else") {
+            diag_hint(d, "'else' must follow the closing brace of an if block")
+        } else if (t == "case" or t == "default") {
+            diag_hint(d, "'{t}' belongs inside a switch block")
+        } else if (t == ")" or t == "]" or t == "}") {
+            diag_hint(d, "There is no matching opening bracket, or an expression is missing before it")
+        } else if (t == "eof" or t == "nl") {
+            diag_hint(d, "Finish the expression: a value, a name or a call is needed here")
+        }
     }
-    p_fail("Unexpected token '{t}': expected an expression")
+    return mk_lit("num", tk, tk, "0")
 }
 
 func p_args(closer, msg) {
     p_enter()
     let args = []
-    while (not p_at(closer)) {
+    while (not p_at(closer) and not p_at("eof")) {
         append(args, p_expr())
         if (not p_eat(",")) {
             break
@@ -376,15 +572,19 @@ func p_args(closer, msg) {
 }
 
 func p_postfix() {
-    let line = P_tk.line
+    let st = P_tk
     let e = p_primary()
     while (true) {
         if ((P_kind == "(")) {
+            let open = P_tk
             p_next()
-            e = mk_call(line, e, p_args(")", "Expected ')' after arguments"))
+            let args = p_args(")", "Expected ')' after arguments")
+            e = mk_call(st, P_prev, e, args, span_at(open.line, open.col, P_prev.eline, P_prev.ecol))
         } else if ((P_kind == "\{") and e.k == "id") {
+            let open = P_tk
             p_next()
-            e = mk_call(line, e, p_args("}", "Expected '}' after typed constructor arguments"))
+            let args = p_args("}", "Expected '}' after typed constructor arguments")
+            e = mk_call(st, P_prev, e, args, span_at(open.line, open.col, P_prev.eline, P_prev.ecol))
         } else if ((P_kind == "[")) {
             p_next()
             p_enter()
@@ -399,10 +599,10 @@ func p_postfix() {
                     hi = p_expr()
                 }
                 p_close("]", "Expected ']' after slice")
-                e = mk_slice(line, e, lo, hi)
+                e = mk_slice(st, P_prev, e, lo, hi)
             } else {
                 p_close("]", "Expected ']' after index")
-                e = mk_index(line, e, lo)
+                e = mk_index(st, P_prev, e, lo)
             }
         } else if ((P_kind == ".")) {
             p_next()
@@ -410,22 +610,28 @@ func p_postfix() {
             let is_word = tk.t == "id" or (type(tk.v) == "string" and KEYWORDS[tk.v] != null)
             if (not is_word) {
                 p_fail("Expected field name after '.'")
+                break
             }
-            e = mk_field(line, e, p_next().v)
+            p_next()
+            e = mk_field(st, P_prev, e, tk.v, tk)
         } else if ((P_kind == "++") or (P_kind == "--")) {
-            let op = p_next().t
+            let optk = P_tk
             if (e.k != "id") {
-                p_fail("'{op}' can only be applied to variables")
+                p_fail_at(optk, "'{optk.t}' can only be applied to variables", "this is not a variable")
+                p_next()
+                break
             }
-            e = mk_incdec(line, e.name, op, false)
+            p_next()
+            e = mk_incdec(st, P_prev, e.name, optk.t, false, st)
         } else {
             break
         }
     }
     return e
 }
+
 func p_unary() {
-    let line = P_tk.line
+    let st = P_tk
     if (p_eat("-")) {
         let r = p_unary()
         if (r.k == "num" or r.k == "float") {
@@ -435,18 +641,20 @@ func p_unary() {
             } else {
                 r.v = "-{r.v}"
             }
+            r.col = st.col
             return r
         }
-        let n = mk_bin(line, "-", mk_lit("num", line, "0"), r)
-        n.unary = true
-        return n
+        let zero = mk_lit("num", st, st, "0")
+        return mk_neg(st, P_prev, zero, r, st)
     }
     if ((P_kind == "++") or (P_kind == "--")) {
         let op = p_next().t
         if (not (P_kind == "id")) {
             p_fail("'{op}' can only be applied to variables")
+            return mk_lit("num", st, st, "0")
         }
-        return mk_incdec(line, p_next().v, op, true)
+        let nt = p_next()
+        return mk_incdec(st, P_prev, nt.v, op, true, nt)
     }
     if (p_eat("+")) {
         return p_unary()
@@ -455,14 +663,17 @@ func p_unary() {
         # ~x is x ^ -1
         p_next()
         let operand = p_unary()
-        return mk_bin(line, "^", operand, mk_lit("num", line, "-1"))
+        let one = mk_lit("num", st, st, "-1")
+        return mk_bin(st, P_prev, "^", operand, one, st)
     }
     let base = p_postfix()
     if (P_kind == "**") {
         # ** binds tighter than a unary minus on its left and is right-associative: -2 ** 2 is -4
+        let optk = P_tk
         p_next()
         p_skip_nl()
-        return mk_bin(line, "**", base, p_unary())
+        let rhs = p_unary()
+        return mk_bin(st, P_prev, "**", base, rhs, optk)
     }
     return base
 }
@@ -479,12 +690,13 @@ let BINARY = {
 
 # Parses an expression whose operators all bind at least as tight as min_bp.
 func p_expr_bp(min_bp) {
-    let line = P_tk.line
+    let st = P_tk
     let left = null
     if (min_bp <= 3 and (P_kind == "not")) {
         # not binds looser than a comparison and tighter than and: not a == b is not (a == b).
         p_next()
-        left = mk_not(line, p_expr_bp(3))
+        let operand = p_expr_bp(3)
+        left = mk_not(st, P_prev, operand)
     } else {
         left = p_unary()
     }
@@ -493,9 +705,11 @@ func p_expr_bp(min_bp) {
         if (bp == null or bp < min_bp) {
             break
         }
+        let optk = P_tk
         let op = p_next().t
         p_skip_nl()
-        left = mk_bin(line, op, left, p_expr_bp(bp + 1))
+        let right = p_expr_bp(bp + 1)
+        left = mk_bin(st, P_prev, op, left, right, optk)
     }
     return left
 }
@@ -511,39 +725,122 @@ func p_block() {
     return stmts
 }
 
+# After a statement: when it had an error, skip to the start of the next statement; a statement
+# that consumed nothing and had no error cannot happen, but one token is skipped so that a loop
+# over statements always ends.
+func p_stmt_end(before) {
+    if (P_panic) {
+        p_recover()
+    } else if (P_pos == before) {
+        p_next()
+    }
+}
+
+# Panic mode ends here. Skips tokens up to and including the line break that ends the statement.
+# Brackets that were open when the error happened are matched first, so a call that continues on the
+# next lines is skipped as a whole. A { that is not inside brackets opens a block whose statements
+# are parsed on their own; its } is then skipped silently. A } that closes the enclosing block stops
+# the skipping.
+func p_recover() {
+    P_panic = false
+    let depth = P_depth
+    P_depth = 0
+    p_sync()
+    if (depth > 0 and P_pos > 0 and P_toks[P_pos - 1].t == "nl" and P_kind != "eof") {
+        # The error is the first token of a line inside an unfinished bracket, as when a closing
+        # bracket was forgotten: the line is taken to start a new statement.
+        return null
+    }
+    let opened = 0
+    while (P_kind != "eof") {
+        let k = P_kind
+        if (k == "nl" and depth == 0) {
+            p_next()
+            break
+        }
+        if (k == "(" or k == "[") {
+            depth += 1
+        } else if (k == "\{") {
+            if (depth == 0) {
+                opened += 1
+            } else {
+                depth += 1
+            }
+        } else if (k == ")" or k == "]") {
+            if (depth > 0) {
+                depth -= 1
+            }
+        } else if (k == "}") {
+            if (depth > 0) {
+                depth -= 1
+            } else if (opened > 0) {
+                opened -= 1
+            } else {
+                break
+            }
+        }
+        p_next()
+    }
+    P_ignore_close += opened
+}
+
 func p_block_body() {
+    let open_tk = P_prev
     let saved_depth = P_depth
     P_depth = 0
     p_sync()
     let stmts = []
-    while (not (P_kind == "}") and not (P_kind == "eof")) {
+    while (not (P_kind == "eof")) {
+        if (P_kind == "}") {
+            if (P_ignore_close > 0) {
+                P_ignore_close -= 1
+                p_next()
+                continue
+            }
+            break
+        }
         if (p_eat("nl")) {
             continue
         }
+        let before = P_pos
         append(stmts, p_statement())
+        p_stmt_end(before)
     }
-    p_expect("}", "Expected '}'")
+    if (P_kind == "}") {
+        p_next()
+    } else {
+        let d = p_fail("Expected '}'")
+        if (d != null and open_tk != null and open_tk.t == "\{") {
+            diag_label(d, open_tk, "this '\{' is never closed")
+        }
+    }
     P_depth = saved_depth
     p_sync()
     return stmts
 }
 
-func p_declaration(is_const, is_export) {
-    let line = P_tk.line
+func p_declaration(st, is_const, is_export) {
     let names = []
     let types = []
+    let nspans = []
+    let tspans = []
     let more = true
     while (more) {
         if (not (P_kind == "id")) {
             p_fail("Expected variable name after 'let' or ','")
+            break
         }
         let nt = p_next()
-        p_declare(nt.v, nt.line)
+        p_declare(nt.v, nt)
         append(names, nt.v)
+        append(nspans, nt)
         if (p_eat(":")) {
+            let ts = P_tk
             append(types, p_type("a variable"))
+            append(tspans, p_type_span(ts))
         } else {
             append(types, null)
+            append(tspans, null)
         }
         more = p_eat(",")
         if (more) {
@@ -562,24 +859,34 @@ func p_declaration(is_const, is_export) {
             }
         }
     }
+    if (len(names) == 0) {
+        return mk_lit("num", st, st, "0")
+    }
     if (is_const and len(vals) != len(names)) {
-        p_fail("const declarations require an initializer for every name")
+        let d = p_fail_at(span_at(st.line, st.col, P_prev.eline, P_prev.ecol), "const declarations require an initializer for every name", "needs a value for every name")
+        diag_hint(d, "Write the value after the name, for example const limit = 10")
     }
     if (len(vals) > 0 and len(vals) != len(names)) {
-        p_fail("Variable count ({len(names)}) does not match value count ({len(vals)})")
+        let d = p_fail_at(span_at(st.line, st.col, P_prev.eline, P_prev.ecol), "Variable count ({len(names)}) does not match value count ({len(vals)})", "{len(names)} names, {len(vals)} values")
+        diag_hint(d, "Give one value for each name")
+    }
+    let end = P_prev
+    if (len(names) == 1) {
+        let init = null
+        if (len(vals) > 0) {
+            init = vals[0]
+        }
+        return mk_let(st, end, names[0], init, is_export, is_const, types[0], nspans[0], tspans[0])
     }
     let lets = []
     for (let i = 0; i < len(names); i++) {
         let init = null
-        if (len(vals) > 0) {
+        if (len(vals) > 0 and i < len(vals)) {
             init = vals[i]
         }
-        append(lets, mk_let(line, names[i], init, is_export, is_const, types[i]))
+        append(lets, mk_let(st, end, names[i], init, is_export, is_const, types[i], nspans[i], tspans[i]))
     }
-    if (len(lets) == 1) {
-        return lets[0]
-    }
-    return mk_group(line, lets)
+    return mk_group(st, end, lets)
 }
 
 func p_cond_paren(what) {
@@ -589,7 +896,7 @@ func p_cond_paren(what) {
     return c
 }
 
-func p_if(line) {
+func p_if(st) {
     let cond = p_cond_paren("if")
     p_eat("nl")
     p_expect("\{", "Expected '\{'")
@@ -605,50 +912,56 @@ func p_if(line) {
             els = p_block()
         }
     }
-    return mk_if(line, cond, then_body, els)
+    return mk_if(st, P_prev, cond, then_body, els)
 }
 
-func p_for(line) {
+func p_for(st) {
     p_scope_push()
-    let n = p_for_header(line)
+    let n = p_for_header(st)
     p_scope_pop()
     return n
 }
 
-func p_for_header(line) {
+func p_for_header(st) {
     p_open("(", "Expected '(' after for")
     if ((P_kind == "let")) {
-        p_next()
+        let lt = p_next()
         if (not (P_kind == "id")) {
             p_fail("Expected loop variable name in for loop")
+            return mk_while(st, st, mk_lit("bool", st, st, false), [])
         }
         let nt = p_next()
         let name = nt.v
-        p_declare(name, nt.line)
+        p_declare(name, nt)
         if (p_eat_word("in")) {
             let iter = p_expr()
             p_close(")", "Expected ')' after for-in iterable")
             p_eat("nl")
             p_expect("\{", "Expected '\{' for loop body")
-            return mk_forin(line, name, iter, p_block())
+            let body = p_block()
+            return mk_forin(st, P_prev, name, iter, body, nt)
         }
         let ty = null
+        let tspan = null
         if (p_eat(":")) {
+            let ts = P_tk
             ty = p_type("a variable")
+            tspan = p_type_span(ts)
         }
         let first = null
         if (p_eat("=")) {
             first = p_expr()
         }
-        return p_for_rest(line, mk_let(line, name, first, false, null, ty))
+        let init = mk_let(lt, P_prev, name, first, false, null, ty, nt, tspan)
+        return p_for_rest(st, init)
     }
     if ((P_kind == ";")) {
-        return p_for_rest(line, null)
+        return p_for_rest(st, null)
     }
-    return p_for_rest(line, p_statement())
+    return p_for_rest(st, p_statement())
 }
 
-func p_for_rest(line, init) {
+func p_for_rest(st, init) {
     p_expect(";", "Expected ';' after loop initializer")
     let cond = null
     if (not (P_kind == ";")) {
@@ -662,10 +975,11 @@ func p_for_rest(line, init) {
     p_close(")", "Expected ')' after loop increment")
     p_eat("nl")
     p_expect("\{", "Expected '\{' for loop body")
-    return mk_for(line, init, cond, incr, p_block())
+    let body = p_block()
+    return mk_for(st, P_prev, init, cond, incr, body)
 }
 
-func p_switch(line) {
+func p_switch(st) {
     p_open("(", "Expected '(' after switch")
     let e = p_expr()
     p_close(")", "Expected ')'")
@@ -686,20 +1000,23 @@ func p_switch(line) {
             continue
         } else {
             p_fail("Expected 'case' or 'default' inside switch")
+            p_recover()
         }
     }
     p_expect("}", "Expected '}' ending switch")
-    return mk_switch(line, e, cases, dflt)
+    return mk_switch(st, P_prev, e, cases, dflt)
 }
 
 func p_case_body() {
     p_scope_push()
     let body = []
-    while (not (P_kind == "case") and not (P_kind == "default") and not (P_kind == "}")) {
+    while (not (P_kind == "case") and not (P_kind == "default") and not (P_kind == "}") and not (P_kind == "eof")) {
         if (p_eat("nl")) {
             continue
         }
+        let before = P_pos
         append(body, p_statement())
+        p_stmt_end(before)
     }
     p_scope_pop()
     return body
@@ -724,59 +1041,70 @@ func compound_op(t) {
     return null
 }
 
-func p_simple(line) {
+func p_simple(st) {
     let e = p_expr()
-    if (p_eat("=")) {
+    if (P_kind == "=") {
+        p_next()
         p_skip_nl()
         let v = p_expr()
         if (e.k == "id") {
-            return mk_assign(line, e.name, v)
+            return mk_assign(st, P_prev, e.name, v, e)
         }
-        return make_setidx(e, v, null, line)
+        return make_setidx(st, e, v, null)
     }
     let op = compound_op(P_tk.t)
     if (op != null) {
-        p_next()
+        let optk = p_next()
         p_skip_nl()
         let rhs = p_expr()
         if (e.k == "id") {
-            return mk_assign(line, e.name, mk_bin(line, op, e, rhs))
+            let b = mk_bin(st, P_prev, op, e, rhs, optk)
+            return mk_assign(st, P_prev, e.name, b, e)
         }
-        return make_setidx(e, rhs, op, line)
+        return make_setidx(st, e, rhs, op)
     }
     return e
 }
 
 # target[index] = value  /  target.field = value, with an optional compound op.
-func make_setidx(e, v, op, line) {
+func make_setidx(st, e, v, op) {
     if (e.k == "index") {
-        return mk_setidx(line, e.target, e.index, v, op)
+        return mk_setidx(st, P_prev, e.target, e.index, v, op)
     }
     if (e.k == "field") {
-        return mk_setidx(line, e.target, mk_lit("str", line, e.field), v, op)
+        return mk_setidx(st, P_prev, e.target, mk_lit("str", e.fspan, e.fspan, e.field), v, op)
     }
-    p_fail("Invalid assignment target")
+    let d = p_fail_at(node_span(e), "Invalid assignment target", "cannot assign to this")
+    diag_hint(d, "Assign to a variable, an item such as list[0], or a field such as point.x")
+    return v
 }
 
-func p_typedef(line, word, is_export) {
+func p_typedef(st, word, is_export) {
     if (not (P_kind == "id")) {
         p_fail("Expected a name after '{word}'")
+        return mk_block("block", st, st, [])
     }
-    let name = p_next().v
-    p_declare(name, line)
-    let n = mk_typedef(line, is_export, name, word == "template", word == "bloc", [], [])
+    let nt = p_next()
+    let name = nt.v
+    p_declare(name, nt)
+    let fields = []
+    let ftypes = []
+    let fspans = []
     p_expect("\{", "Expected '\{' after type name")
     while (not (P_kind == "}") and not (P_kind == "eof")) {
         p_skip_nl()
         if (not (P_kind == "id")) {
             p_fail("Expected field name in {word} declaration")
+            break
         }
-        append(n.fields, p_next().v)
+        let ft = p_next()
+        append(fields, ft.v)
+        append(fspans, ft)
         if (P_kind == ":") {
             p_next()
-            append(n.ftypes, p_field_type(word))
+            append(ftypes, p_field_type(word))
         } else {
-            append(n.ftypes, null)
+            append(ftypes, null)
         }
         p_skip_nl()
         if (not p_eat(",")) {
@@ -784,6 +1112,7 @@ func p_typedef(line, word, is_export) {
         }
     }
     p_expect("}", "Expected '}' after {word} fields")
+    let n = mk_typedef(st, P_prev, is_export, name, word == "template", word == "bloc", fields, ftypes, nt, fspans)
     p_check_field_types(n, word)
     return n
 }
@@ -796,6 +1125,7 @@ func p_field_type(word) {
         p_expect("[", "Expected '[' after box in a field type")
         if (not (P_kind == "num")) {
             p_fail("A box field needs its size written as a number, for example box[16]")
+            return "box:0"
         }
         let size = p_next().v
         p_expect("]", "Expected ']' after the box size")
@@ -816,15 +1146,24 @@ func p_check_field_types(n, word) {
         return null
     }
     if (word == "data") {
-        die("Syntax Error", n.line, "data fields cannot have types; use a template for typed fields")
+        let d = p_diag(n.nspan, "data fields cannot have types; use a template for typed fields", "this is a data type", false)
+        diag_hint(d, "Change 'data' to 'template' to keep the field types")
+        return null
     }
     if (word == "bloc" and typed != len(n.fields)) {
-        die("Syntax Error", n.line, "bloc '{n.name}': give a type to every field or to none")
+        let d = p_diag(n.nspan, "bloc '{n.name}': give a type to every field or to none", "{typed} of {len(n.fields)} fields have a type", false)
+        if (d != null) {
+            for (let i = 0; i < len(n.fields); i++) {
+                if (n.ftypes[i] == null) {
+                    diag_label(d, n.fspans[i], "no type")
+                }
+            }
+        }
     }
     return null
 }
 
-func p_use(line, word) {
+func p_use(st, word) {
     let names = []
     if ((P_kind == "\{")) {
         p_next()
@@ -832,9 +1171,10 @@ func p_use(line, word) {
         while (not (P_kind == "}") and not (P_kind == "eof")) {
             if (not (P_kind == "id")) {
                 p_fail("Expected exported name inside use list")
+                break
             }
             let ut = p_next()
-            p_declare(ut.v, ut.line)
+            p_declare(ut.v, ut)
             append(names, ut.v)
             if (not p_eat(",")) {
                 break
@@ -845,63 +1185,73 @@ func p_use(line, word) {
     }
     if (not (P_kind == "str")) {
         p_fail("Expected string path after {word}")
+        return mk_use(st, st, names, "")
     }
-    return mk_use(line, names, p_next().v[0])
+    let path = p_next().v[0]
+    return mk_use(st, P_prev, names, path)
 }
 
+# One statement.
 func p_statement() {
     let tk = P_tk
-    let line = tk.line
     let t = tk.t
     if (t == "func") {
         p_next()
         if (not (P_kind == "id")) {
             p_fail("Expected function name after 'func'")
+            return mk_block("block", tk, tk, [])
         }
         let nt = p_next()
-        p_declare(nt.v, nt.line)
-        return p_func_rest(nt.v, line, false)
+        p_declare(nt.v, nt)
+        return p_func_rest(nt.v, nt, tk, false)
     }
     if (t == "let" or t == "const") {
         p_next()
-        return p_declaration(t == "const", false)
+        return p_declaration(tk, t == "const", false)
     }
     if (t == "export") {
         p_next()
         if ((P_kind == "let") or (P_kind == "const")) {
             let is_const = (P_kind == "const")
             p_next()
-            return p_declaration(is_const, true)
+            return p_declaration(tk, is_const, true)
         }
         if ((P_kind == "func")) {
             p_next()
+            if (not (P_kind == "id")) {
+                p_fail("Expected function name after 'func'")
+                return mk_block("block", tk, tk, [])
+            }
             let nt = p_next()
-            p_declare(nt.v, nt.line)
-            return p_func_rest(nt.v, line, true)
+            p_declare(nt.v, nt)
+            return p_func_rest(nt.v, nt, tk, true)
         }
         if (p_at_data() or (P_kind == "template") or (P_kind == "bloc")) {
             let word = p_next().v
-            return p_typedef(line, word, true)
+            return p_typedef(tk, word, true)
         }
         p_fail("export can only be used with let, const, func, data or bloc declarations")
+        return mk_block("block", tk, tk, [])
     }
     if (t == "use" or t == "import") {
         p_next()
-        return p_use(line, t)
+        return p_use(tk, t)
     }
     if (p_at_data() or t == "template" or t == "bloc") {
         p_next()
-        return p_typedef(line, tk.v, false)
+        return p_typedef(tk, tk.v, false)
     }
     if (t == "\{") {
         p_next()
-        return mk_block("block", line, p_block())
+        let body = p_block()
+        return mk_block("block", tk, P_prev, body)
     }
     if (t == "unsafe") {
         p_next()
         p_eat("nl")
         p_expect("\{", "Expected '\{' after unsafe")
-        return mk_block("unsafe", line, p_block())
+        let body = p_block()
+        return mk_block("unsafe", tk, P_prev, body)
     }
     if (t == "return") {
         p_next()
@@ -909,42 +1259,47 @@ func p_statement() {
         if (not (P_kind == "}") and not (P_kind == "nl") and not (P_kind == "eof")) {
             e = p_expr()
         }
-        return mk_return(line, e)
+        return mk_return(tk, P_prev, e)
     }
     if (t == "break") {
         p_next()
-        return mk_jump("break", line)
+        return mk_jump("break", tk, tk)
     }
     if (t == "continue") {
         p_next()
-        return mk_jump("continue", line)
+        return mk_jump("continue", tk, tk)
     }
     if (t == "if") {
         p_next()
-        return p_if(line)
+        return p_if(tk)
     }
     if (t == "while") {
         p_next()
         let cond = p_cond_paren("while")
         p_eat("nl")
         p_expect("\{", "Expected '\{'")
-        return mk_while(line, cond, p_block())
+        let body = p_block()
+        return mk_while(tk, P_prev, cond, body)
     }
     if (t == "for") {
         p_next()
-        return p_for(line)
+        return p_for(tk)
     }
     if (t == "switch") {
         p_next()
-        return p_switch(line)
+        return p_switch(tk)
     }
-    return p_simple(line)
+    return p_simple(tk)
 }
 
 export func parse_program(toks) {
     P_toks = toks
     P_pos = 0
     P_depth = 0
+    P_prev = null
+    P_panic = false
+    P_ignore_close = 0
+    P_split_tok = null
     P_scopes = [{}]
     p_sync()
     let stmts = []
@@ -952,7 +1307,28 @@ export func parse_program(toks) {
         if (p_eat("nl")) {
             continue
         }
+        if (P_kind == "}") {
+            if (P_ignore_close > 0) {
+                P_ignore_close -= 1
+            } else {
+                let d = p_fail("Unexpected '}': there is no block to close")
+                diag_hint(d, "Remove it, or add the '\{' that it should close")
+                P_panic = false
+            }
+            p_next()
+            continue
+        }
+        let before = P_pos
         append(stmts, p_statement())
+        p_stmt_end(before)
     }
+    return stmts
+}
+
+# Lexes and parses a whole source text. Every lexical and syntax error found is printed together and
+# the run ends if there was any.
+export func parse_source(text) {
+    let stmts = parse_program(lex(text, 1))
+    diag_exit_if_errors()
     return stmts
 }

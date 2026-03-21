@@ -2,4 +2,6 @@ Type Error in /tmp/zue_test_case.zu at line 2:
   'while' needs a bool, got int
 
    2 | while (k) { k = 0 }
+     |        ^ this is int
 
+Hint: A condition must be true or false: compare with ==, != or <, for example x != 0 or len(s) > 0

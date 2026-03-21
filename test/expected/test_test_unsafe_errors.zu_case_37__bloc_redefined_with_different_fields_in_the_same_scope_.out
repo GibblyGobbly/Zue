@@ -1,2 +1,9 @@
 Syntax Error in /tmp/zue_test_case.zu at line 2:
   'W' is already declared in this scope
+
+   1 | bloc W { x }
+     |      - first declared here
+   2 | bloc W { y }
+     |      ^ declared again here
+
+Hint: Use another name, or assign to the existing variable without 'let'

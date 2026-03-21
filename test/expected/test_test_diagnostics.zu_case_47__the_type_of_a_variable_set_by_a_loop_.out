@@ -1,0 +1,11 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot assign string to 'i', which is int
+
+   1 | for (let i = 0; i < 3; i++) {
+     |              - 'i' became int here
+   2 |     i = "x"
+     |     -   ^^^ this is string
+     |     |
+     |     'i' is int
+
+Hint: A variable keeps the type of its first value. Use another variable for the new value

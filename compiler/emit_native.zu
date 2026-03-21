@@ -23,7 +23,7 @@
 # p[i] = v writes the 64-bit word at p + 8 * i.
 
 use { die } from "util.zu"
-use { mk_id, node_children } from "ast_nodes.zu"
+use { mk_id_line, node_children } from "ast_nodes.zu"
 use { uid } from "shared.zu"
 use { ll, ll_alloca, ll_br, ll_condbr, ll_escape, ll_label, ll_new_ctx, ll_new_label } from "ll_state.zu"
 use { ll_reg } from "ll_state.zu"
@@ -688,7 +688,7 @@ func nx(n) {
     }
     if (k == "incdec") {
         nx_incdec(n)
-        return nx_id(mk_id(n.line, n.name))
+        return nx_id(mk_id_line(n.line, n.name))
     }
     if (k == "index") {
         let addr = word_addr(n)

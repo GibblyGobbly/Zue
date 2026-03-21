@@ -1,0 +1,8 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Expected ')' after arguments
+
+   1 | print((1 + 2)
+     |      -       ^ unexpected end of line
+     |      |
+     |      this '(' is never closed
+

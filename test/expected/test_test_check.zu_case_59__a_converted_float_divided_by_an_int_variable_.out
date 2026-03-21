@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 3:
   cannot use '/' on float and int
 
    3 | print(float(a) / b)
+     |       -------- ^ - int
+     |       |
+     |       float
 
+Hint: int and float never mix: convert one side explicitly with float(x) or int(x)

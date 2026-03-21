@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Parameter 'b' needs a default value because an earlier parameter has one
+
+   1 | func f(a = 1, b) {
+     |               ^ no default value
+
+Hint: Give it a default, for example b = 0, or move it before the parameters that have one

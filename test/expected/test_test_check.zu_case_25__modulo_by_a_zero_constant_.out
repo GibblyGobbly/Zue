@@ -2,4 +2,6 @@ Type Error in /tmp/zue_test_case.zu at line 1:
   division by zero
 
    1 | print(5 % 0)
+     |           ^ this is zero
 
+Hint: A divisor of 0 is always an error; check the value before dividing

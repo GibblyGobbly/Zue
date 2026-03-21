@@ -1,0 +1,10 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  area() expects 2 arguments, but got 3
+
+   1 | func area(w: int, h: int) {
+     |      ---- area is defined here with 2 parameters
+...
+   4 | print(area(1, 2, 3))
+     |           ^^^^^^^^^ found 3
+
+Hint: Usage: area(w, h)

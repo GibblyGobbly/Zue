@@ -1,0 +1,11 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  cannot assign string to 'n', which is int
+
+   3 | let n = 3
+     |         - 'n' became int here
+   4 | n = "three"
+     | -   ^^^^^^^ this is string
+     | |
+     | 'n' is int
+
+Hint: A variable keeps the type of its first value. Use another variable for the new value

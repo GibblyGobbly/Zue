@@ -1,0 +1,7 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  division by zero
+
+   2 | print(n / 0)
+     |           ^ this is zero
+
+Hint: A divisor of 0 is always an error; check the value before dividing

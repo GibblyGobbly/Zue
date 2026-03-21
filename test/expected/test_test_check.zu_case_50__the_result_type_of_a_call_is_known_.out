@@ -1,5 +1,11 @@
 Type Error in /tmp/zue_test_case.zu at line 5:
   cannot assign string to 'r', which is int
 
+   4 | let r = add(1, 2)
+     |         --------- 'r' became int here
    5 | r = "x"
+     | -   ^^^ this is string
+     | |
+     | 'r' is int
 
+Hint: A variable keeps the type of its first value. Use another variable for the new value

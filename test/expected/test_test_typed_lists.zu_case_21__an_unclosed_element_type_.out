@@ -1,2 +1,6 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Expected '>' to close the element type
+
+   1 | let x: list<int = [1]
+     |                 ^ unexpected '='
+

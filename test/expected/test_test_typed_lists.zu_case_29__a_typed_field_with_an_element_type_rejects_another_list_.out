@@ -1,5 +1,8 @@
 Type Error in /tmp/zue_test_case.zu at line 2:
   Template 'Bag' field 'items' must be a list<int>, got list<string>
 
+   1 | template Bag { items: list<int>, label: string }
+     |                ----- field 'items' of Bag is list<int>
    2 | let b = Bag{["a"], "bag"}
+     |             ^^^^^ expected list<int>, found list<string>
 

@@ -1,0 +1,7 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Unterminated string
+
+   1 | let s = "abc
+     |         ^^^^ this string has no closing quote
+
+Hint: Add a closing '"' at the end of the string

@@ -1,5 +1,9 @@
 Type Error in /tmp/zue_test_case.zu at line 3:
   Template 'Player' field 'hp' must be an int, got string
 
+   1 | template Player { name: string, hp: int }
+     |                                 -- field 'hp' of Player is int
+   2 | let p = Player("Ana", 10)
    3 | p.hp = "dead"
+     |        ^^^^^^ expected int, found string
 

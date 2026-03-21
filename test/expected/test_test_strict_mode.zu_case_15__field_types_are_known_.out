@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 4:
   cannot assign int to 'n', which is string
 
    4 | let n: string = p.hp
+     |        ------   ^^^^ this is int
+     |        |
+     |        'n' is declared string
 
+Hint: Convert a number to text with to_string(x), or write it inside a string: "{x}"

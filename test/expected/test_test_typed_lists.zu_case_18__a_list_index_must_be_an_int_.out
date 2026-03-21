@@ -2,4 +2,6 @@ Type Error in /tmp/zue_test_case.zu at line 2:
   list index must be an int, got a float constant
 
    2 | print(xs[1.5])
+     |          ^^^ this is a float constant
 
+Hint: An index is a whole number counting from 0; convert with int(x) if you mean that

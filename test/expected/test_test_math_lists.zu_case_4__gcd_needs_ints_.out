@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 4:
   gcd() argument 1 must be an int, got float
 
    4 | print(gcd(pass(1.5), 2))
+     |       --- ^^^^^^^^^ expected int, found float
+     |       |
+     |       argument 1 of gcd()
 
+Hint: A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)

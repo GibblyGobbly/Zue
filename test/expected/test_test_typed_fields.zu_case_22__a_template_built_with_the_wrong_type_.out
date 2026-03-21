@@ -1,5 +1,9 @@
 Type Error in /tmp/zue_test_case.zu at line 2:
   Template 'Player' field 'hp' must be an int, got a float constant
 
+   1 | template Player { name: string, hp: int }
+     |                                 -- field 'hp' of Player is int
    2 | let p = Player("Astra", 1.5)
+     |                         ^^^ expected int, found a float constant
 
+Hint: A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)

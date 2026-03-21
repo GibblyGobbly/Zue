@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Unclosed string interpolation expression
+
+   1 | let a = "x{1 +
+     |           ^ this '{' is never closed
+
+Hint: Close it with '}', or write '\{' for a literal brace

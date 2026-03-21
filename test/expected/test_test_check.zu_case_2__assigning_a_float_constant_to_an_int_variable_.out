@@ -1,5 +1,11 @@
 Type Error in /tmp/zue_test_case.zu at line 2:
   cannot assign a float constant to 'x', which is int
 
+   1 | let x = 10
+     |         -- 'x' became int here
    2 | x = 2.5
+     | -   ^^^ this is a float constant
+     | |
+     | 'x' is int
 
+Hint: A variable keeps the type of its first value. A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)

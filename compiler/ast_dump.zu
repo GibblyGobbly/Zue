@@ -59,7 +59,11 @@ func dump_node(n) {
     if (kind == null) {
         kind = "map"
     }
-    let parts = ["({kind}@{n.line}"]
+    let at = "{n.line}"
+    if (SHOW_SPANS and is_tree_node and n.col > 0) {
+        at = "{n.line}:{n.col}-{n.eline}:{n.ecol}"
+    }
+    let parts = ["({kind}@{at}"]
     for (let key in keys) {
         if (key != "k" and key != "line") {
             let value = n[key]
@@ -71,7 +75,12 @@ func dump_node(n) {
     return join(parts, " ") + ")"
 }
 
-export func dump_program(stmts) {
+# With spans on, each node also shows its place: @line:col-endline:endcol, the column just after its
+# last byte. A node the compiler made has col 0 and shows only @line.
+let SHOW_SPANS = false
+
+export func dump_program(stmts, spans = false) {
+    SHOW_SPANS = spans
     let lines = []
     for (let s in stmts) {
         append(lines, dump_value(s))

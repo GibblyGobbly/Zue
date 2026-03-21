@@ -1,0 +1,8 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  cannot use '*' on int and string
+
+   3 | print(price * name)
+     |       ----- ^ ---- string
+     |       |
+     |       int
+

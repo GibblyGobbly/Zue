@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Invalid number literal: '1e' is a number followed by a letter
+
+   1 | let a = 1e
+     |         ^^
+
+Hint: Put an operator or a space between a number and a name

@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Empty character literal
+
+   1 | let c = ''
+     |         ^^
+
+Hint: Put one character between the quotes, like 'a'

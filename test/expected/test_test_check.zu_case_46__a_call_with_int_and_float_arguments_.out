@@ -3,4 +3,8 @@ Type Error in /tmp/zue_test_case.zu at line 2:
   in area(int, float), called at line 4
 
    2 |     return w * h
+     |            - ^ - float
+     |            |
+     |            int
 
+Hint: int and float never mix: convert one side explicitly with float(x) or int(x)

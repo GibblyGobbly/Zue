@@ -1,0 +1,7 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot negate string
+
+   2 | print(-w)
+     |       ^- string
+
+Hint: Only an int or a float can be negated

@@ -1,2 +1,9 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   'a' is already declared in this scope
+
+   1 | func f(a, a) {
+     |        -  ^ declared again here
+     |        |
+     |        first declared here
+
+Hint: Use another name, or assign to the existing variable without 'let'

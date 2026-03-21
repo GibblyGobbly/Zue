@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Misplaced '_' in number
+
+   1 | let a = 1_
+     |         ^^
+
+Hint: Put a single '_' between two digits, like 1_000

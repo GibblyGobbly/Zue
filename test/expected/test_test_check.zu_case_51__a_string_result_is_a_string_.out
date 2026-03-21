@@ -1,5 +1,11 @@
 Type Error in /tmp/zue_test_case.zu at line 5:
   cannot assign an int constant to 's', which is string
 
+   4 | let s = add("a", "b")
+     |         ------------- 's' became string here
    5 | s = 5
+     | -   ^ this is an int constant
+     | |
+     | 's' is string
 
+Hint: A variable keeps the type of its first value. Convert a number to text with to_string(x), or write it inside a string: "{x}"

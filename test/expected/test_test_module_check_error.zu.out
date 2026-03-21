@@ -1,5 +1,11 @@
 Type Error in test/modules_fixtures/bad_types.zu at line 4:
   cannot assign string to 'count', which is int
 
+   3 | let count = 1
+     |             - 'count' became int here
    4 | count = "one"
+     | -----   ^^^^^ this is string
+     | |
+     | 'count' is int
 
+Hint: A variable keeps the type of its first value. Use another variable for the new value

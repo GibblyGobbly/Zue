@@ -2,4 +2,6 @@ Type Error in /tmp/zue_test_case.zu at line 2:
   cannot slice int
 
    2 | print(n[1:2])
+     |       ^ this is int
 
+Hint: Only a string or a list can be sliced

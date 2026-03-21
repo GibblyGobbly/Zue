@@ -1,0 +1,179 @@
+// Compile-time errors: where the carets point, the labels, the hints, and that one run reports every error.
+
+# CASE one error shows the line and the carets under the exact text
+let total = 10
+print(total + "a")
+# CASE operand labels on both sides of an operator
+let price = 5
+let name = "pen"
+print(price * name)
+# CASE a tab before the code keeps the carets aligned
+func f() {
+	let a = 1
+	return a + "x"
+}
+# CASE a non-ASCII character before the error keeps the carets aligned
+print("héllo" + 1)
+# CASE two errors in one file are both reported
+let a = 1 + "x"
+let b = 2
+let c = true + 1
+# CASE an error after a good statement is on its own line number
+print("fine")
+print("still fine")
+let n = 3
+n = "three"
+# CASE assigning the wrong type points at the place the type was set
+let count = 0
+count = "none"
+# CASE a typed variable points at its type annotation
+let age: int = "ten"
+# CASE calling a function with too many arguments points at the definition
+func area(w: int, h: int) {
+    return w * h
+}
+print(area(1, 2, 3))
+# CASE calling a function with an argument of the wrong type
+func area(w: int, h: int) {
+    return w * h
+}
+print(area("a", 2))
+# CASE a builtin with the wrong argument count
+print(sqrt(1, 2))
+# CASE a builtin with the wrong argument type suggests the conversion
+let n = 4
+print(sqrt(n))
+# CASE a condition that is not a bool
+let n = 1
+if (n) {
+    print("yes")
+}
+# CASE division by a zero literal
+let n = 4
+print(n / 0)
+# CASE a list index that is not an int
+let xs = [1, 2, 3]
+print(xs["a"])
+# CASE negating text
+let w = "x"
+print(-w)
+# CASE a name that is not declared suggests the closest one
+let items = [1, 2]
+print(itms[0])
+# CASE a function that is not declared suggests the closest one
+let word = "x"
+print(lenn(word))
+# CASE a name that is not close to anything gets no suggestion
+print(zzzzzz)
+# CASE assigning to a name that is not declared
+counter = 5
+# CASE a global used by a function before it is declared is fine
+func show() {
+    print(later)
+}
+let later = 7
+show()
+# CASE a typo inside a string interpolation points at the name
+let user = "ann"
+print("hello {usr}")
+# CASE an error in a function body is reported once however many calls reach it
+func g(v) {
+    return v * "a"
+}
+print(g(1))
+print(g(2.5))
+# CASE an unterminated string
+let s = "abc
+print(s)
+# CASE an unknown escape in a string
+print("a\qb")
+# CASE an unexpected character
+let x = 5 @ 3
+# CASE a number followed by a letter
+let x = 12abc
+# CASE several lexical errors in one file
+let a = 1 $ 2
+let b = 3 ? 4
+let c = "ok"
+# CASE a missing closing parenthesis names the one left open
+print((1 + 2)
+let y = 3
+# CASE a missing closing bracket across lines
+let xs = [1, 2,
+          3
+let y = 4
+# CASE a missing closing brace names the block it left open
+func f() {
+    if (true) {
+        print(1)
+    }
+print(f())
+# CASE a stray closing brace
+let a = 1
+}
+let b = 2
+# CASE one syntax error does not cause a cascade of errors
+let a = (1 + 2
+let b = 3
+let c = 4
+print(b + c)
+# CASE independent syntax errors are all reported
+let a = 1 +* 2
+let b = (3
+let c = 4
+func f(x {
+    return x
+}
+# CASE a repeated declaration points at both
+let x = 1
+let x = 2
+# CASE a parameter with no default after one with a default
+func f(a = 1, b) {
+    return a + b
+}
+# CASE assigning to something that is not a target
+func f() {
+    return 1
+}
+f() = 3
+# CASE incrementing something that is not a variable
+let xs = [1]
+xs[0]++
+# CASE a map literal key that is not a string
+let m = {1: 2}
+# CASE an expression is expected
+let a = 
+# CASE an error inside a string interpolation
+print("value {1 +}")
+# CASE a keyword used as a name
+let template = 3
+# CASE const without a value
+const k
+# CASE else without if
+else {
+    print(1)
+}
+# CASE a keyword used as a function name
+func case() {
+    return 1
+}
+# CASE a closing bracket with no opening one
+let a = 1)
+# CASE the type of a variable set by a loop
+for (let i = 0; i < 3; i++) {
+    i = "x"
+}
+# CASE typed function parameters in strict mode
+# strict
+func add(a, b) {
+    return a + b
+}
+# CASE errors in two functions are both reported
+func one() {
+    return 1 + "a"
+}
+func two() {
+    return 2 + "b"
+}
+one()
+two()

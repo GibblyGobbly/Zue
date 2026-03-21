@@ -1,2 +1,6 @@
 Syntax Error in /tmp/zue_test_case.zu at line 2:
   '--' can only be applied to variables
+
+   2 | xs[0]--
+     |      ^^ this is not a variable
+

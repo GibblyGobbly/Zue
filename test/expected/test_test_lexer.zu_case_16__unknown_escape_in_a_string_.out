@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Unknown escape '\q' in string
+
+   1 | print("\q")
+     |        ^^ not an escape
+
+Hint: The escapes are \n \t \r \\ \" \' \{ and \}

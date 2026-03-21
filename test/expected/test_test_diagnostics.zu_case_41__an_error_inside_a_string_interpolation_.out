@@ -1,0 +1,7 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Unexpected token 'eof': expected an expression
+
+   1 | print("value {1 +}")
+     |                  ^ unexpected end of file
+
+Hint: Finish the expression: a value, a name or a call is needed here

@@ -1,5 +1,9 @@
 Type Error in /tmp/zue_test_case.zu at line 4:
   total() argument 1 must be a list<int>, got list<string>
 
+   1 | func total(v: list<int>) {
+     |               --------- parameter 'v' is list<int>
+...
    4 | print(total(["a"]))
+     |             ^^^^^ expected list<int>, found list<string>
 

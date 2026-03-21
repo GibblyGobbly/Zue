@@ -1,5 +1,11 @@
 Type Error in /tmp/zue_test_case.zu at line 2:
   cannot assign string to 'n', which is int
 
+   1 | let n = len([1, 2])
+     |         ----------- 'n' became int here
    2 | n = "two"
+     | -   ^^^^^ this is string
+     | |
+     | 'n' is int
 
+Hint: A variable keeps the type of its first value. Use another variable for the new value

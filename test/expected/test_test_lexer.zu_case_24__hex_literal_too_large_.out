@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Integer literal does not fit in 64 bits
+
+   1 | let a = 0xFFFFFFFFFFFFFFFF
+     |         ^^^^^^^^^^^^^^^^^^
+
+Hint: The largest int is 9223372036854775807

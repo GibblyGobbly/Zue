@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   A character literal holds exactly one character
+
+   1 | let c = 'a
+     |         ^^
+
+Hint: Use double quotes for text: "ab"

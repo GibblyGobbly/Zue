@@ -1,0 +1,7 @@
+Name Error in /tmp/zue_test_case.zu at line 2:
+  Function 'lenn' is not defined
+
+   2 | print(lenn(word))
+     |       ^^^^ not declared anywhere
+
+Hint: Did you mean 'len'?

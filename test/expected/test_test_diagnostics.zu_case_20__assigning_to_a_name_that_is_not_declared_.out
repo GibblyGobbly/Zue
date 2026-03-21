@@ -1,0 +1,7 @@
+Name Error in /tmp/zue_test_case.zu at line 1:
+  Variable 'counter' is not defined
+
+   1 | counter = 5
+     | ^^^^^^^ not declared anywhere
+
+Hint: Declare variables with 'let' before using them

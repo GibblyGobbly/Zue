@@ -1,2 +1,10 @@
 Syntax Error in /tmp/zue_test_case.zu at line 4:
   'g' is already declared in this scope
+
+   1 | func g() {
+     |      - first declared here
+...
+   4 | func g() {
+     |      ^ declared again here
+
+Hint: Use another name, or assign to the existing variable without 'let'

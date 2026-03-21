@@ -1,5 +1,9 @@
 Type Error in /tmp/zue_test_case.zu at line 6:
   take() argument 1 must be an A, got B
 
+   3 | func take(a: A) {
+     |              - parameter 'a' is A
+...
    6 | print(take(B{1}))
+     |            ^^^^ expected A, found B
 

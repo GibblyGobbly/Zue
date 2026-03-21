@@ -1,0 +1,19 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  cannot use '+' on an int constant and string
+
+   1 | let a = 1 + "x"
+     |         - ^ --- string
+     |         |
+     |         an int constant
+
+Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with to_string(x)
+
+Type Error in /tmp/zue_test_case.zu at line 3:
+  cannot use '+' on bool and an int constant
+
+   3 | let c = true + 1
+     |         ---- ^ - an int constant
+     |         |
+     |         bool
+
+2 errors found.

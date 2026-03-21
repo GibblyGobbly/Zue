@@ -79,6 +79,7 @@ fuzz: $(BINDIR)/zue
 	@python3 tools/fuzz_expressions.py --programs 30 --per-program 100
 	@python3 tools/fuzz_programs.py --programs 40
 	@python3 tools/fuzz_annotations.py --count 60
+	@python3 tools/fuzz_syntax_errors.py --rounds 300
 
 round-trip: $(BINDIR)/zue
 	@tools/check_round_trip.sh

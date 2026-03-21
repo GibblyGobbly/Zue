@@ -1,0 +1,8 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Expected ')' after expression
+
+   1 | let a = (1 + 2
+     |         -     ^ unexpected end of line
+     |         |
+     |         this '(' is never closed
+

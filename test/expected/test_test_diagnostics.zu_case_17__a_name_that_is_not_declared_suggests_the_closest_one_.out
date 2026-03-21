@@ -1,0 +1,7 @@
+Name Error in /tmp/zue_test_case.zu at line 2:
+  Variable 'itms' is not defined
+
+   2 | print(itms[0])
+     |       ^^^^ not declared anywhere
+
+Hint: Did you mean 'items'?

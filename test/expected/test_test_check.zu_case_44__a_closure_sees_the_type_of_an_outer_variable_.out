@@ -1,5 +1,12 @@
 Type Error in /tmp/zue_test_case.zu at line 3:
   cannot assign string to 'n', which is int
 
+   1 | let n = 5
+     |         - 'n' became int here
+   2 | let f = func() {
    3 |     n = "a"
+     |     -   ^^^ this is string
+     |     |
+     |     'n' is int
 
+Hint: A variable keeps the type of its first value. Use another variable for the new value

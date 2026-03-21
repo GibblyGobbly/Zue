@@ -1,2 +1,9 @@
 Syntax Error in /tmp/zue_test_case.zu at line 2:
   'x' is already declared in this scope
+
+   1 | let x = 1
+     |     - first declared here
+   2 | let x = 2
+     |     ^ declared again here
+
+Hint: Use another name, or assign to the existing variable without 'let'

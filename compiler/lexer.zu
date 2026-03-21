@@ -3,12 +3,22 @@
 #
 # lexer.zu: source text to tokens.
 #
-# A token is {"t": kind, "v": value, "line": n}. Kinds: nl, str, char, num, float, id, eof, the
-# keywords, and the operator names from token.zu. A "num" value is decimal digit text (hex, binary
-# and underscores are resolved here), a "float" value is the number text, a "char" value is the code.
+# A token has a kind t, a value v, and its place: line and col (counting bytes from 1) where it starts,
+# eline and ecol where it ends (ecol is the column just after its last byte). Kinds: nl, str, char,
+# num, float, id, eof, the keywords, and the operator names from token.zu. A "num" value is decimal
+# digit text (hex, binary and underscores are resolved here), a "float" value is the number text, a
+# "char" value is the code.
+#
+# A mistake in the text is recorded with diag_new and the lexer goes on, so one run finds every
+# lexical error. Each case below says how the lexer resumes.
 
-use { die } from "util.zu"
+use { diag_new, diag_text, diag_hint, diag_on_line, span_tok } from "diag.zu"
 use { KEYWORDS, ONE_CHAR, TWO_CHAR } from "token.zu"
+
+# True for a byte that continues a UTF-8 character.
+func is_cont_byte(c) {
+    return c >= 128 and c < 192
+}
 
 func is_dig(c) {
     return c >= '0' and c <= '9'
@@ -26,6 +36,9 @@ func is_ident_char(c) {
 # inside an interpolation); lex_string then turns \" into " in the expression text.
 let ESCAPED_QUOTES = false
 
+# Set by interp_end when an interpolation has no closing brace.
+let INTERP_FAILED = false
+
 # The bytes a string literal scan stops at: the closing quote, an escape, a newline, an interpolation.
 let STRING_STOPS = "\"\\\n\{"
 # The bytes that may be in an identifier, and the bytes of a number's digits.
@@ -33,10 +46,33 @@ let IDENT_BYTES = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_01234567
 let DIGIT_BYTES = "0123456789"
 let NUMBER_BYTES = "0123456789_"
 
-template Token { t, v, line }
+template Token { t, v, line, col, eline, ecol }
 
-func make_tok(t, v, line) {
-    return Token(t, v, line)
+# The index of the first byte of the line being scanned. Inside a string interpolation it is chosen
+# so that columns count from the place of the expression in the file.
+let LS = 0
+
+# The column of the byte at index i on the current line.
+func col_of(i) {
+    return i - LS + 1
+}
+
+# Records a lexical error, unless the line already has one: the first error on a line is the cause,
+# and what follows it on that line is usually its effect. Returns the error, or null.
+func lex_error(line, col, ecol, msg) {
+    if (diag_on_line(line)) {
+        return null
+    }
+    return diag_new("Syntax Error", span_tok(line, col, ecol), msg)
+}
+
+# The index of the end of the line that holds index i.
+func line_end(src, i) {
+    let e = index_of(src, "\n", i)
+    if (e < 0) {
+        return len(src)
+    }
+    return e
 }
 
 # The value of a hex digit, or -1.
@@ -100,13 +136,15 @@ func skip_string(src, k, start_line) {
             k += 1
         }
     }
-    die("Syntax Error", start_line, "Unterminated string")
+    return n
 }
 
 # The index of the } that closes an interpolation whose text starts at k. Braces, strings and
 # character literals inside the expression are skipped over.
 func interp_end(src, k, start_line) {
     let n = len(src)
+    let open_at = k - 1
+    let open_col = col_of(open_at)
     let depth = 1
     while (k < n) {
         let c = src[k]
@@ -134,25 +172,35 @@ func interp_end(src, k, start_line) {
             k += 1
         }
     }
-    die("Syntax Error", start_line, "Unclosed string interpolation expression")
+    let d = lex_error(start_line, open_col, open_col + 1, "Unclosed string interpolation expression")
+    diag_text(d, "this '\{' is never closed")
+    diag_hint(d, "Close it with '\}', or write '\\\{' for a literal brace")
+    INTERP_FAILED = true
+    return open_at
 }
 
-func count_newlines(src, a, b) {
+# Counts the line breaks in src from index a up to index b, and moves LS to the start of the last line.
+func track_newlines(src, a, b) {
     let count = 0
     let k = index_of(src, "\n", a)
     while (k >= 0 and k < b) {
         count += 1
+        LS = k + 1
         k = index_of(src, "\n", k + 1)
     }
     return count
 }
 
 # Reads the string whose opening quote is at index i. Returns [parts, next_i, next_line]. A part
-# is either a string or {"expr": source, "line": n}. A { starts an interpolation unless it is
-# written \{ or is immediately followed by }.
+# is either a string or {"expr": source, "line": n, "col": c}. A { starts an interpolation unless it
+# is written \{ or is immediately followed by }. An unterminated string is reported and ends at the
+# end of the line it starts on.
 func lex_string(src, i, start_line) {
     let n = len(src)
     let line = start_line
+    let q_at = i
+    let ls0 = LS
+    let q_col = col_of(i)
     let parts = []
     let cur = []
     i += 1
@@ -160,7 +208,7 @@ func lex_string(src, i, start_line) {
     while (true) {
         i = index_of_any(src, STRING_STOPS, i)
         if (i < 0) {
-            die("Syntax Error", start_line, "Unterminated string")
+            return string_unterminated(src, q_at, q_col, ls0, start_line)
         }
         let c = src[i]
         if (c == '"') {
@@ -169,21 +217,40 @@ func lex_string(src, i, start_line) {
         if (c == '\n') {
             line += 1
             i += 1
+            LS = i
         } else if (c == '\\') {
             if (i + 1 >= n) {
-                die("Syntax Error", start_line, "Unterminated string")
+                return string_unterminated(src, q_at, q_col, ls0, start_line)
             }
             let text = escape_text(src[i + 1])
+            let width = 2
             if (text == null) {
-                die("Syntax Error", line, "Unknown escape '\\{src[i + 1]}' in string")
+                text = ""
+                if (src[i + 1] == '\n') {
+                    width = 1
+                    let d = lex_error(line, col_of(i), col_of(i) + 1, "A backslash at the end of a line is not an escape")
+                    diag_hint(d, "Write \\\\ for a backslash; a string may continue on the next line without one")
+                } else {
+                    let d = lex_error(line, col_of(i), col_of(i) + 2, "Unknown escape '\\{src[i + 1]}' in string")
+                    diag_text(d, "not an escape")
+                    diag_hint(d, "The escapes are \\n \\t \\r \\\\ \\\" \\' \\\{ and \\\}")
+                }
             }
             append(cur, slice(src, seg, i))
             append(cur, text)
-            i += 2
+            i += width
             seg = i
         } else if (c == '\{' and i + 1 < n and src[i + 1] == '\}') {
             i += 1
         } else {
+            ESCAPED_QUOTES = false
+            INTERP_FAILED = false
+            let stop = interp_end(src, i + 1, line)
+            if (INTERP_FAILED) {
+                INTERP_FAILED = false
+                i += 1
+                continue
+            }
             let before = slice(src, seg, i)
             if (len(cur) > 0) {
                 append(cur, before)
@@ -193,14 +260,12 @@ func lex_string(src, i, start_line) {
                 append(parts, before)
             }
             cur = []
-            ESCAPED_QUOTES = false
-            let stop = interp_end(src, i + 1, line)
             let expr = slice(src, i + 1, stop)
             if (ESCAPED_QUOTES) {
                 expr = replace(expr, "\\\"", "\"")
             }
-            append(parts, {"expr": expr, "line": line})
-            line += count_newlines(src, i + 1, stop)
+            append(parts, {"expr": expr, "line": line, "col": col_of(i + 1)})
+            line += track_newlines(src, i + 1, stop)
             i = stop + 1
             seg = i
         }
@@ -216,22 +281,47 @@ func lex_string(src, i, start_line) {
     return [parts, i + 1, line]
 }
 
+# Reports a string with no closing quote. The string is taken to end with its first line.
+func string_unterminated(src, q_at, q_col, ls0, start_line) {
+    LS = ls0
+    let e = line_end(src, q_at)
+    let d = lex_error(start_line, q_col, col_of(e), "Unterminated string")
+    diag_text(d, "this string has no closing quote")
+    diag_hint(d, "Add a closing '\"' at the end of the string")
+    return [[slice(src, q_at + 1, e)], e, start_line]
+}
+
 # Characters
+
+# Reports a bad character literal that starts at index i0 and returns [0, next_i]: the literal is
+# taken to end at its closing quote when there is one on the line, otherwise at the end of the line.
+func char_fail(src, i0, line, msg, hint) {
+    let e = line_end(src, i0)
+    let q = index_of(src, "'", i0 + 1)
+    let next = e
+    if (q >= 0 and q < e) {
+        next = q + 1
+    }
+    let d = lex_error(line, col_of(i0), col_of(next), msg)
+    diag_hint(d, hint)
+    return [0, next]
+}
 
 # Reads the character literal whose opening quote is at index i. Returns [code, next_i].
 func lex_char(src, i, line) {
     let n = len(src)
+    let i0 = i
     i += 1
     if (i >= n or src[i] == '\n') {
-        die("Syntax Error", line, "Unterminated character literal")
+        return char_fail(src, i0, line, "Unterminated character literal", "A character literal looks like 'a'")
     }
     let code = 0
     if (src[i] == '\'') {
-        die("Syntax Error", line, "Empty character literal")
+        return char_fail(src, i0, line, "Empty character literal", "Put one character between the quotes, like 'a'")
     }
     if (src[i] == '\\') {
         if (i + 1 >= n) {
-            die("Syntax Error", line, "Unterminated character literal")
+            return char_fail(src, i0, line, "Unterminated character literal", "A character literal looks like 'a'")
         }
         let e = src[i + 1]
         if (e == '0') {
@@ -239,7 +329,7 @@ func lex_char(src, i, line) {
         } else {
             let text = escape_text(e)
             if (text == null) {
-                die("Syntax Error", line, "Unknown escape '\\{e}' in character literal")
+                return char_fail(src, i0, line, "Unknown escape '\\{e}' in character literal", "The escapes are \\n \\t \\r \\\\ \\' \\\" and \\0")
             }
             code = int(text[0])
         }
@@ -249,7 +339,7 @@ func lex_char(src, i, line) {
         i += 1
     }
     if (i >= n or src[i] != '\'') {
-        die("Syntax Error", line, "A character literal holds exactly one character")
+        return char_fail(src, i0, line, "A character literal holds exactly one character", "Use double quotes for text: \"ab\"")
     }
     return [code, i + 1]
 }
@@ -257,8 +347,9 @@ func lex_char(src, i, line) {
 # Numbers
 
 # Reads the digits of a number in the given base starting at i, allowing single underscores
-# between digits. Returns [value or text, next_i]; for base 16 and 2 the value is a decimal int.
-func lex_based(src, i, base, line) {
+# between digits. s is the index where the literal starts. Returns [value, next_i]; for base 16 and
+# 2 the value is a decimal int. A bad literal is reported and read to its end, and its value is 0.
+func lex_based(src, s, i, base, line) {
     let n = len(src)
     let limit = 576460752303423487
     if (base == 2) {
@@ -267,11 +358,13 @@ func lex_based(src, i, base, line) {
     let value = 0
     let digits = 0
     let prev_underscore = false
+    let bad = null
     while (i < n) {
         let c = src[i]
         if (c == '_') {
-            if (digits == 0 or prev_underscore) {
-                die("Syntax Error", line, "Misplaced '_' in number")
+            if ((digits == 0 or prev_underscore) and bad == null) {
+                bad = lex_error(line, col_of(s), col_of(i) + 1, "Misplaced '_' in number")
+                diag_hint(bad, "Put a single '_' between two digits, like 1_000")
             }
             prev_underscore = true
             i += 1
@@ -280,33 +373,42 @@ func lex_based(src, i, base, line) {
             if (d < 0 or d >= base) {
                 break
             }
-            if (value > limit) {
-                die("Syntax Error", line, "Integer literal does not fit in 64 bits")
+            if (value > limit and bad == null) {
+                bad = lex_error(line, col_of(s), col_of(i) + 1, "Integer literal does not fit in 64 bits")
+                diag_hint(bad, "The largest int is 9223372036854775807")
             }
-            value = value * base + d
+            if (bad == null) {
+                value = value * base + d
+            }
             digits += 1
             prev_underscore = false
             i += 1
         }
     }
-    if (digits == 0 or prev_underscore) {
-        die("Syntax Error", line, "Invalid number literal")
+    if ((digits == 0 or prev_underscore) and bad == null) {
+        bad = lex_error(line, col_of(s), col_of(i), "Invalid number literal")
+        diag_hint(bad, "Digits are needed after 0x or 0b, and '_' goes between digits")
+    }
+    if (bad != null) {
+        bad.span.ecol = col_of(i)
+        value = 0
     }
     return [value, i]
 }
 
-# Reads the number starting at index i. Returns [token, next_i].
+# Reads the number starting at index i. Returns [token fields, next_i]: the kind and the text.
 func lex_number(src, i, line) {
     let n = len(src)
     let s = i
-    let tok = null
+    let kind = "num"
+    let text = ""
     if (src[i] == '0' and i + 1 < n and (src[i + 1] == 'x' or src[i + 1] == 'X' or src[i + 1] == 'b' or src[i + 1] == 'B')) {
         let base = 16
         if (src[i + 1] == 'b' or src[i + 1] == 'B') {
             base = 2
         }
-        let r = lex_based(src, i + 2, base, line)
-        tok = make_tok("num", "{r[0]}", line)
+        let r = lex_based(src, s, i + 2, base, line)
+        text = "{r[0]}"
         i = r[1]
     } else {
         i = skip_chars(src, NUMBER_BYTES, i)
@@ -325,23 +427,24 @@ func lex_number(src, i, line) {
                 i = skip_chars(src, DIGIT_BYTES, j)
             }
         }
-        let text = slice(src, s, i)
+        text = slice(src, s, i)
         if (index_of(text, "_") >= 0) {
             if (ends_with(text, "_") or index_of(text, "__") >= 0 or index_of(text, "_.") >= 0 or index_of(text, "._") >= 0) {
-                die("Syntax Error", line, "Misplaced '_' in number")
+                let d = lex_error(line, col_of(s), col_of(i), "Misplaced '_' in number")
+                diag_hint(d, "Put a single '_' between two digits, like 1_000")
             }
             text = replace(text, "_", "")
         }
         if (is_float) {
-            tok = make_tok("float", text, line)
-        } else {
-            tok = make_tok("num", text, line)
+            kind = "float"
         }
     }
     if (i < n and is_ident_char(src[i])) {
-        die("Syntax Error", line, "Invalid number literal: '{slice(src, s, i + 1)}' is a number followed by a letter")
+        let j = skip_chars(src, IDENT_BYTES, i)
+        let d = lex_error(line, col_of(s), col_of(j), "Invalid number literal: '{slice(src, s, i + 1)}' is a number followed by a letter")
+        diag_hint(d, "Put an operator or a space between a number and a name")
     }
-    return [tok, i]
+    return [kind, text, i]
 }
 
 # Tokens
@@ -433,11 +536,15 @@ let TWO_KIND = build_two_table(true)
 let TWO_TEXT = build_two_table(false)
 let CLASS = build_classes()
 
-export func lex(src, first_line) {
+# Tokens for src. first_line is the line number of its first line and first_col the column of its
+# first byte; both are 1 for a whole file and name the place of the expression for the text of a
+# string interpolation.
+export func lex(src, first_line, first_col = 1) {
     let toks = []
     let n = len(src)
     let i = 0
     let line = first_line
+    let ls = 1 - first_col
     while (i < n) {
         let c = src[i]
         let code = int(c)
@@ -451,54 +558,74 @@ export func lex(src, first_line) {
         }
         if (cls == 0) {
             let kind = null
+            let col = i - ls + 1
             let row = TWO_KIND[code]
             if (row != null and i + 1 < n) {
                 let second = int(src[i + 1])
                 kind = row[second]
                 if (kind != null) {
-                    append(toks, Token(kind, TWO_TEXT[code][second], line))
+                    append(toks, Token(kind, TWO_TEXT[code][second], line, col, line, col + 2))
                     i += 2
                     continue
                 }
             }
             kind = ONE_KIND[code]
             if (kind != null) {
-                append(toks, Token(kind, ONE_TEXT[code], line))
+                append(toks, Token(kind, ONE_TEXT[code], line, col, line, col + 1))
                 i += 1
             } else if (code >= 128) {
-                die("Syntax Error", line, "Unexpected character (byte {code}): only ASCII is allowed outside strings and comments")
+                let j = i + 1
+                while (j < n and is_cont_byte(int(src[j]))) {
+                    j += 1
+                }
+                let d = lex_error(line, col, col + j - i, "Unexpected character (byte {code}): only ASCII is allowed outside strings and comments")
+                diag_hint(d, "Put the character inside a string or a comment")
+                i = j
             } else {
-                die("Syntax Error", line, "Unexpected character '{c}'")
+                let d = lex_error(line, col, col + 1, "Unexpected character '{c}'")
+                diag_text(d, "not part of the language")
+                i += 1
             }
         } else if (cls == 1) {
             let s = i
             i = skip_chars(src, IDENT_BYTES, i + 1)
             let word = slice(src, s, i)
             let kw = KEYWORDS[word]
+            let col = s - ls + 1
             if (kw != null) {
-                append(toks, Token(kw, word, line))
+                append(toks, Token(kw, word, line, col, line, col + i - s))
             } else {
-                append(toks, Token("id", word, line))
+                append(toks, Token("id", word, line, col, line, col + i - s))
             }
         } else if (cls == 3) {
             i = skip_chars(src, " \t\r", i + 1)
         } else if (cls == 4) {
-            append(toks, Token("nl", null, line))
+            let col = i - ls + 1
+            append(toks, Token("nl", null, line, col, line, col + 1))
             line += 1
             i += 1
+            ls = i
         } else if (cls == 2) {
+            LS = ls
+            let col = i - ls + 1
             let r = lex_number(src, i, line)
-            append(toks, r[0])
-            i = r[1]
+            i = r[2]
+            append(toks, Token(r[0], r[1], line, col, line, i - ls + 1))
         } else if (cls == 5) {
+            LS = ls
+            let col = i - ls + 1
+            let start_line = line
             let r = lex_string(src, i, line)
-            append(toks, Token("str", r[0], line))
             i = r[1]
             line = r[2]
+            ls = LS
+            append(toks, Token("str", r[0], start_line, col, line, i - ls + 1))
         } else if (cls == 6) {
+            LS = ls
+            let col = i - ls + 1
             let r = lex_char(src, i, line)
-            append(toks, Token("char", r[0], line))
             i = r[1]
+            append(toks, Token("char", r[0], line, col, line, i - ls + 1))
         } else {
             i = index_of(src, "\n", i)
             if (i < 0) {
@@ -506,6 +633,6 @@ export func lex(src, first_line) {
             }
         }
     }
-    append(toks, Token("eof", null, line))
+    append(toks, Token("eof", null, line, n - ls + 1, line, n - ls + 1))
     return toks
 }

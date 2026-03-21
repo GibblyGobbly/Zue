@@ -18,13 +18,13 @@
 # names, and a literal { inside a string is written \{.
 
 use { read_file, split_lines } from "util.zu"
-use { lex } from "lexer.zu"
-use { parse_program } from "parser.zu"
+use { parse_source } from "parser.zu"
 use { compile_program_ll } from "emit_llvm.zu"
 use { compile_native } from "emit_native.zu"
 use { ST } from "state.zu"
 use { dump_program } from "ast_dump.zu"
 use { unparse_program } from "ast_unparse.zu"
+use { check_program } from "check.zu"
 
 # Name of a file without its directory and extension: "dir/prog.zu" is "prog".
 func base_name(path) {
@@ -62,7 +62,8 @@ func usage() {
     print("  build  compile to a native binary through LLVM IR")
     print("  run    build into C/run/ and run it with the given arguments")
     print("  emit   write LLVM IR only (default C/<name>.ll)")
-    print("  ast    print the parsed syntax tree, one statement per line")
+    print("  check  parse and type-check only; print every error found, nothing when there is none")
+    print("  ast    print the parsed syntax tree, one statement per line (--spans adds the places)")
     print("  unparse  print the parsed program as source again")
     print("  -o     where to write the program or the IR")
     print("  -S     with build: write C/<name>.ll and do not build")
@@ -74,7 +75,7 @@ func compile_file(path) {
     ST.src_file = path
     let text = read_file(path)
     ST.src_lines = split_lines(text)
-    return compile_program_ll(parse_program(lex(text, 1)))
+    return compile_program_ll(parse_source(text))
 }
 
 func write_text(path, text) {
@@ -166,12 +167,27 @@ func emit_main(a) {
     print("[OK] wrote {out_path}")
 }
 
-# zue ast prog.zu: the syntax tree as text (see ast_dump.zu).
+# zue ast [--spans] prog.zu: the syntax tree as text (see ast_dump.zu).
 func ast_main(a) {
+    let spans = false
+    let path = a[0]
+    if (len(a) == 2 and a[0] == "--spans") {
+        spans = true
+        path = a[1]
+    }
+    ST.src_file = path
+    let text = read_file(path)
+    ST.src_lines = split_lines(text)
+    print(dump_program(parse_source(text), spans))
+}
+
+# zue check prog.zu: finds the lexical, syntax and type errors of one file without compiling it. Every
+# error is printed together; the status is 1 if there was any.
+func check_main(a) {
     ST.src_file = a[0]
     let text = read_file(a[0])
     ST.src_lines = split_lines(text)
-    print(dump_program(parse_program(lex(text, 1))))
+    check_program(parse_source(text))
 }
 
 # zue unparse prog.zu: the program written back as source (see ast_unparse.zu).
@@ -179,7 +195,7 @@ func unparse_main(a) {
     ST.src_file = a[0]
     let text = read_file(a[0])
     ST.src_lines = split_lines(text)
-    print(unparse_program(parse_program(lex(text, 1))))
+    print(unparse_program(parse_source(text)))
 }
 
 # zue --native a.zu b.zu ... -o out.ll: compiles runtime files (emit_native.zu).
@@ -195,7 +211,7 @@ func native_main(a) {
             ST.src_file = a[i]
             let text = read_file(a[i])
             ST.src_lines = split_lines(text)
-            append(files, {"path": a[i], "stmts": parse_program(lex(text, 1))})
+            append(files, {"path": a[i], "stmts": parse_source(text)})
             i += 1
         }
     }
@@ -214,7 +230,7 @@ func positional_main(a) {
     if (len(a) >= 3) {
         ST.cwd = a[2]
     }
-    let code = compile_program_ll(parse_program(lex(text, 1)))
+    let code = compile_program_ll(parse_source(text))
     if (len(a) >= 2) {
         write_text(a[1], code)
     } else {
@@ -237,7 +253,9 @@ func main() {
         run_main(rest)
     } else if (cmd == "emit" and len(rest) >= 1) {
         emit_main(rest)
-    } else if (cmd == "ast" and len(rest) == 1) {
+    } else if (cmd == "check" and len(rest) == 1) {
+        check_main(rest)
+    } else if (cmd == "ast" and (len(rest) == 1 or (len(rest) == 2 and rest[0] == "--spans"))) {
         ast_main(rest)
     } else if (cmd == "unparse" and len(rest) == 1) {
         unparse_main(rest)

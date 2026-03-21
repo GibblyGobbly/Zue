@@ -1,5 +1,9 @@
 Type Error in /tmp/zue_test_case.zu at line 2:
   cannot use '++' on xs, which is list<int>
 
+   1 | let xs = [1]
+     |          --- xs became list<int> here
    2 | ++xs[0]
+     | ^^^^ xs is list<int>
 
+Hint: '++' and '--' work on an int or a float variable

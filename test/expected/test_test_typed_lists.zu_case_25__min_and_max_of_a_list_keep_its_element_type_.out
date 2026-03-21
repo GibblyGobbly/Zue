@@ -1,5 +1,11 @@
 Type Error in /tmp/zue_test_case.zu at line 3:
   cannot assign string to 'lo', which is int
 
+   2 | let lo = min(xs)
+     |          ------- 'lo' became int here
    3 | lo = "a"
+     | --   ^^^ this is string
+     | |
+     | 'lo' is int
 
+Hint: A variable keeps the type of its first value. Use another variable for the new value

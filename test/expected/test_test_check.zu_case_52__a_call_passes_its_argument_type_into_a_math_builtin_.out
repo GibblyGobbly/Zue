@@ -3,4 +3,8 @@ Type Error in /tmp/zue_test_case.zu at line 2:
   in root(int), called at line 4
 
    2 |     return sqrt(x)
+     |            ---- ^ expected float, found int
+     |            |
+     |            argument 1 of sqrt()
 
+Hint: An int never becomes a float by itself: convert it with float(x)

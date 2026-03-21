@@ -2,4 +2,7 @@ Type Error in /tmp/zue_test_case.zu at line 1:
   cannot assign list<string> to 'xs', which is list<int>
 
    1 | let xs: list<int> = ["a"]
+     |         ---------   ^^^^^ this is list<string>
+     |         |
+     |         'xs' is declared list<int>
 

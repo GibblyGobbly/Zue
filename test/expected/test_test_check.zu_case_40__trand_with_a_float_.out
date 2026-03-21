@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 1:
   trand() argument 1 must be an int, got a float constant
 
    1 | print(trand(5.5))
+     |       ----- ^^^ expected int, found a float constant
+     |       |
+     |       argument 1 of trand()
 
+Hint: A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)

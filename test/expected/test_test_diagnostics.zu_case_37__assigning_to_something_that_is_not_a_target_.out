@@ -1,0 +1,7 @@
+Syntax Error in /tmp/zue_test_case.zu at line 4:
+  Invalid assignment target
+
+   4 | f() = 3
+     | ^^^ cannot assign to this
+
+Hint: Assign to a variable, an item such as list[0], or a field such as point.x

@@ -1,0 +1,13 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Unexpected character '$'
+
+   1 | let a = 1 $ 2
+     |           ^ not part of the language
+
+Syntax Error in /tmp/zue_test_case.zu at line 2:
+  Unexpected character '?'
+
+   2 | let b = 3 ? 4
+     |           ^ not part of the language
+
+2 errors found.

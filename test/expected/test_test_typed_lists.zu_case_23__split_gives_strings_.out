@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 2:
   cannot use '+' on string and an int constant
 
    2 | print(parts[0] + 1)
+     |       -------- ^ - an int constant
+     |       |
+     |       string
 
+Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with to_string(x)

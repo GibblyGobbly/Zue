@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 2:
   cannot assign string to 'x', which is int
 
    2 |     x = "a"
+     |     -   ^^^ this is string
+     |     |
+     |     'x' is int
 
+Hint: A variable keeps the type of its first value. Use another variable for the new value

@@ -1,0 +1,7 @@
+Syntax Error in /tmp/zue_test_case.zu at line 2:
+  Unexpected '}': there is no block to close
+
+   2 | }
+     | ^ unexpected '}'
+
+Hint: Remove it, or add the '{' that it should close

@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 1:
   cannot use '==' on list<int> and list<string>
 
    1 | print([1] == ["a"])
+     |       --- ^^ ----- list<string>
+     |       |
+     |       list<int>
 
+Hint: '==' compares two values of the same kind; convert one side first

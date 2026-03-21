@@ -1,0 +1,6 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Map literal keys must be strings
+
+   1 | let m = {1: 2}
+     |          ^ unexpected number
+

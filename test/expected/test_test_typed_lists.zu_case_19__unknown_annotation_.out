@@ -2,4 +2,6 @@ Type Error in /tmp/zue_test_case.zu at line 1:
   unknown type 'strin'
 
    1 | let x: strin = "a"
+     |        ^^^^^ not a type
 
+Hint: The types are int, float, bool, char, string, list, map, function, and the names of your own bloc and template types

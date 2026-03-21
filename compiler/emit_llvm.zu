@@ -9,8 +9,7 @@
 # slots so the order of evaluation is exactly the order of the source.
 
 use { die, path_dir, path_join, path_norm, split_lines } from "util.zu"
-use { lex } from "lexer.zu"
-use { parse_program } from "parser.zu"
+use { parse_source } from "parser.zu"
 use { MODULES, MOD_LIST, uid } from "shared.zu"
 use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analysis.zu"
 use { LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS } from "ll_state.zu"
@@ -1280,7 +1279,7 @@ func compile_module(canon) {
     ST.src_file = canon
     ST.src_lines = split_lines(text)
     decl_module_source(m, ST.src_lines)
-    let stmts = parse_program(lex(text, 1))
+    let stmts = parse_source(text)
     check_program(stmts)
     collect_exports(stmts, m.exports)
     compile_module_body(m, stmts, "mod_{m.id}_run")

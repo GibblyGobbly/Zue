@@ -2,4 +2,6 @@ Type Error in /tmp/zue_test_case.zu at line 1:
   'not' needs a bool, got an int constant
 
    1 | print(not 1)
+     |           ^ this is an int constant
 
+Hint: Use a comparison, for example not (x == 0)

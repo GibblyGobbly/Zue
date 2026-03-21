@@ -1,0 +1,7 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Unexpected token 'else': expected an expression
+
+   1 | else {
+     | ^^^^ unexpected 'else'
+
+Hint: 'else' must follow the closing brace of an if block

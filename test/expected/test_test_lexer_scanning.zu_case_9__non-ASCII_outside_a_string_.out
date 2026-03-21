@@ -1,2 +1,7 @@
 Syntax Error in /tmp/zue_test_case.zu at line 1:
   Unexpected character (byte 195): only ASCII is allowed outside strings and comments
+
+   1 | let a = 1 é
+     |           ^
+
+Hint: Put the character inside a string or a comment

@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 2:
   cannot store string in list<int>
 
    2 | xs[1] = "two"
+     | --      ^^^^^ this is string
+     | |
+     | list<int>
 
+Hint: A list<int> holds only int items

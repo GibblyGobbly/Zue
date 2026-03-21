@@ -1,0 +1,36 @@
+// Where tokens and syntax tree nodes are: line, column (bytes from 1), and the end just after the last byte.
+
+use { lex } from "../compiler/lexer.zu"
+use { parse_program } from "../compiler/parser.zu"
+use { dump_program } from "../compiler/ast_dump.zu"
+
+func show_tokens(title, src) {
+    print("--- {title}")
+    for (let t in lex(src, 1)) {
+        let v = t.v
+        if (type(v) == "list") {
+            v = "<string>"
+        }
+        print("{pad_right(t.t, 6, " ")} {pad_right(to_string(v), 8, " ")} {t.line}:{t.col} to {t.eline}:{t.ecol}")
+    }
+}
+
+func show_tree(title, src) {
+    print("--- {title}")
+    for (let line in split(dump_program(parse_program(lex(src, 1)), true), "\n")) {
+        print(line)
+    }
+}
+
+show_tokens("tokens on one line", "let x = a + 12")
+show_tokens("operators of two characters and keywords", "if (a <= b and c != d) \{")
+show_tokens("a string, a character and a float", "s = \"hi\" + 'c' + 2.5")
+show_tokens("a string that continues on the next line", "a = \"one\ntwo\" + b")
+show_tokens("tokens after a line break", "a\n  b\n\tc")
+show_tokens("numbers with underscores and a hex number", "a = 1_000 + 0xff")
+show_tokens("a comment is not a token", "a # note\nb // more\nc")
+show_tree("the tree with the place of every node", "let total = price * 2 + tax\nprint(total, \"done\")\nxs[1] = f(a)[2:3]")
+show_tree("an expression inside a string interpolation", "print(\"sum \{a + b} ok\")")
+show_tree("a statement that continues on several lines", "let xs = [1,\n  2,\n  3]\nf(xs,\n  4)")
+show_tree("functions, blocks and declarations", "func add(a: int, b = 2) \{\n    return a + b\n}\nif (true) \{\n    add(1)\n}")
+show_tree("unary operators and compound assignment", "let n = -x\nn += 2 * y\nn++")

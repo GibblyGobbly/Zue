@@ -1,5 +1,9 @@
 Type Error in /tmp/zue_test_case.zu at line 2:
   cannot use '++' on s, which is string
 
+   1 | let s = "a"
+     |         --- s became string here
    2 | s++
+     | ^^^ s is string
 
+Hint: '++' and '--' work on an int or a float variable

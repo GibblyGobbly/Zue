@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 1:
   trand() expects 0, 1 or 2 arguments, but got 3
 
    1 | print(trand(1, 2, 3))
+     |       -----^^^^^^^^^ found 3
+     |       |
+     |       trand takes 0, 1 or 2
 
+Hint: Usage: trand() or trand(int) or trand(int, int)

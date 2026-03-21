@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 3:
   cannot use '*' on int and float
 
    3 | print(a * b)
+     |       - ^ - float
+     |       |
+     |       int
 
+Hint: int and float never mix: convert one side explicitly with float(x) or int(x)

@@ -1,5 +1,11 @@
 Type Error in /tmp/zue_test_case.zu at line 3:
   cannot assign string to 'x', which is int
 
+   2 | x = 1
+     |     - 'x' became int here
    3 | x = "s"
+     | -   ^^^ this is string
+     | |
+     | 'x' is int
 
+Hint: A variable keeps the type of its first value. Use another variable for the new value

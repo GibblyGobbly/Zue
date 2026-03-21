@@ -1,0 +1,458 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# diag.zu: compile-time diagnostics. An error is recorded with the place it points at (a span), may
+# carry labels on other places, a hint and notes, and is printed with the source line and carets
+# under the exact text. The lexer, the parser and the checker record errors and go on, so one run can
+# report every error; diag_exit_if_errors prints them all and ends the run.
+#
+# A span is a line, a column (counting bytes from 1) and an end line and end column (the column just
+# after the last byte). A span with column 0 names only a line: no carets are drawn for it.
+
+use { ST } from "state.zu"
+
+export template Span { line, col, eline, ecol }
+template Label { span, text }
+export template Diag { kind, file, lines, span, ptext, msg, labels, hint, notes, trace }
+
+# More errors than this are counted but not printed.
+let MAX_PRINTED = 100
+# A tab is shown as this many spaces so that the carets line up with the code.
+let TAB_WIDTH = 4
+
+let DIAGS = []
+
+export func span_at(line, col, eline, ecol) {
+    return Span(line, col, eline, ecol)
+}
+
+export func span_line(line) {
+    return Span(line, 0, line, 0)
+}
+
+# The span of one token that starts at line, col and ends before ecol on the same line.
+export func span_tok(line, col, ecol) {
+    return Span(line, col, line, ecol)
+}
+
+# From the start of a to the end of b.
+export func span_join(a, b) {
+    return Span(a.line, a.col, b.eline, b.ecol)
+}
+
+# Records an error and returns it, so the caller can add labels, a hint or notes.
+export func diag_new(kind, span, msg) {
+    let d = Diag(kind, ST.src_file, ST.src_lines, span, "", msg, [], "", [], [])
+    append(DIAGS, d)
+    return d
+}
+
+# Text printed next to the carets of the main span.
+export func diag_text(d, text) {
+    if (d == null) {
+        return null
+    }
+    d.ptext = text
+    return d
+}
+
+# Marks another place with dashes and a short text. The functions that take an error accept null
+# (an error that was not recorded) and then do nothing, so a caller need not test for it.
+export func diag_label(d, span, text) {
+    if (d == null or span == null) {
+        return d
+    }
+    append(d.labels, Label(span, text))
+    return d
+}
+
+export func diag_hint(d, text) {
+    if (d == null) {
+        return null
+    }
+    d.hint = text
+    return d
+}
+
+export func diag_note(d, text) {
+    if (d == null) {
+        return null
+    }
+    append(d.notes, text)
+    return d
+}
+
+# A line printed under the message, before the source: the chain of calls the checker followed.
+export func diag_trace(d, text) {
+    if (d == null) {
+        return null
+    }
+    append(d.trace, text)
+    return d
+}
+
+export func diag_count() {
+    return len(DIAGS)
+}
+
+# True when an error is already recorded on this line of the current file.
+export func diag_on_line(line) {
+    for (let d in DIAGS) {
+        if (d.span.line == line and d.file == ST.src_file) {
+            return true
+        }
+    }
+    return false
+}
+
+# True for a byte that continues a UTF-8 character.
+func is_cont(c) {
+    return c >= 128 and c < 192
+}
+
+# The number of screen columns taken by the first n bytes of text.
+func screen_width(text, n) {
+    let w = 0
+    let m = len(text)
+    if (n < m) {
+        m = n
+    }
+    for (let k = 0; k < m; k++) {
+        let ch = text[k]
+        if (ch == '\t') {
+            w += TAB_WIDTH
+        } else if (not is_cont(int(ch))) {
+            w += 1
+        }
+    }
+    return w
+}
+
+# The source line with each tab replaced by spaces.
+func shown_line(text) {
+    if (index_of(text, "\t") < 0) {
+        return text
+    }
+    return replace(text, "\t", repeat(" ", TAB_WIDTH))
+}
+
+# A mark under a line: where it starts on screen, how wide it is, its character and its text.
+template Mark { at, width, ch, text }
+
+# The marks of one source line: the main span (carets) and every label that sits on that line.
+func line_marks(d, line, text) {
+    let marks = []
+    let s = d.span
+    if (s.col > 0 and s.line == line) {
+        let first = s.col - 1
+        let last = len(text)
+        if (s.eline == s.line and s.ecol - 1 < last) {
+            last = s.ecol - 1
+        }
+        let w = screen_width(slice(text, first, last), last - first)
+        if (w < 1) {
+            w = 1
+        }
+        append(marks, Mark(screen_width(text, first), w, "^", d.ptext))
+    }
+    for (let lb in d.labels) {
+        let ls = lb.span
+        if (ls.col > 0 and ls.line == line) {
+            let first = ls.col - 1
+            let last = len(text)
+            if (ls.eline == ls.line and ls.ecol - 1 < last) {
+                last = ls.ecol - 1
+            }
+            let w = screen_width(slice(text, first, last), last - first)
+            if (w < 1) {
+                w = 1
+            }
+            append(marks, Mark(screen_width(text, first), w, "-", lb.text))
+        }
+    }
+    return marks
+}
+
+# Sorts marks by their start; a main mark goes before a label that starts at the same place.
+func sort_marks(marks) {
+    let out = []
+    for (let m in marks) {
+        let i = len(out)
+        while (i > 0 and out[i - 1].at > m.at) {
+            i -= 1
+        }
+        let rest = slice(out, i, len(out))
+        let head = slice(out, 0, i)
+        out = head
+        append(out, m)
+        for (let r in rest) {
+            append(out, r)
+        }
+    }
+    return out
+}
+
+# The row of carets and dashes, with the text of the last mark after it.
+func underline_row(marks) {
+    let row = ""
+    let pos = 0
+    for (let m in marks) {
+        let start = m.at
+        if (start < pos) {
+            start = pos
+        }
+        row = row + repeat(" ", start - pos)
+        let w = m.width - (start - m.at)
+        if (w < 1) {
+            w = 1
+        }
+        row = row + repeat(m.ch, w)
+        pos = start + w
+    }
+    return row
+}
+
+# A row with a bar at the start of each given mark.
+func bars_row(marks) {
+    let row = ""
+    let pos = 0
+    for (let m in marks) {
+        if (m.at >= pos) {
+            row = row + repeat(" ", m.at - pos) + "|"
+            pos = m.at + 1
+        }
+    }
+    return row
+}
+
+# The rows drawn under one source line, without the gutter.
+func mark_rows(marks) {
+    let sorted = sort_marks(marks)
+    let rows = []
+    let n = len(sorted)
+    let last = sorted[n - 1]
+    let first_row = underline_row(sorted)
+    if (len(last.text) > 0) {
+        first_row = first_row + " " + last.text
+    }
+    append(rows, first_row)
+    let pending = []
+    for (let i = 0; i < n - 1; i++) {
+        if (len(sorted[i].text) > 0) {
+            append(pending, sorted[i])
+        }
+    }
+    if (len(pending) > 0) {
+        append(rows, bars_row(pending))
+        let k = len(pending) - 1
+        while (k >= 0) {
+            let row = bars_row(slice(pending, 0, k))
+            let at = pending[k].at
+            row = row + repeat(" ", at - len(row)) + pending[k].text
+            append(rows, row)
+            k -= 1
+        }
+    }
+    return rows
+}
+
+func gutter_width(d) {
+    let top = d.span.line
+    for (let lb in d.labels) {
+        if (lb.span.line > top) {
+            top = lb.span.line
+        }
+    }
+    let w = len(to_string(top))
+    if (w < 4) {
+        w = 4
+    }
+    return w
+}
+
+# The lines of the source with their marks, for every line the error or a label points at.
+func excerpt_rows(d) {
+    let width = gutter_width(d)
+    let blank = repeat(" ", width) + " |"
+    let lines = [d.span.line]
+    for (let lb in d.labels) {
+        if (lb.span.col > 0 and not contains(lines, lb.span.line)) {
+            append(lines, lb.span.line)
+        }
+    }
+    sort(lines)
+    let out = []
+    let prev = 0
+    for (let ln in lines) {
+        if (ln < 1 or ln > len(d.lines)) {
+            continue
+        }
+        if (prev > 0 and ln - prev == 2) {
+            append(out, pad_left(to_string(prev + 1), width, " ") + " | " + shown_line(d.lines[prev]))
+        } else if (prev > 0 and ln - prev > 2) {
+            append(out, "...")
+        }
+        let text = d.lines[ln - 1]
+        append(out, pad_left(to_string(ln), width, " ") + " | " + shown_line(text))
+        let marks = line_marks(d, ln, text)
+        if (len(marks) > 0) {
+            for (let row in mark_rows(marks)) {
+                append(out, trim_right(blank + " " + row))
+            }
+        }
+        prev = ln
+    }
+    return out
+}
+
+# The printed form of one error, as a list of lines.
+export func render(d) {
+    let out = []
+    append(out, "{d.kind} in {d.file} at line {d.span.line}:")
+    append(out, "  {d.msg}")
+    for (let t in d.trace) {
+        append(out, t)
+    }
+    let line = d.span.line
+    if (line >= 1 and line <= len(d.lines)) {
+        append(out, "")
+        for (let row in excerpt_rows(d)) {
+            append(out, row)
+        }
+        append(out, "")
+    }
+    if (len(d.hint) > 0) {
+        append(out, "Hint: {d.hint}")
+    }
+    for (let n in d.notes) {
+        append(out, "Note: {n}")
+    }
+    return out
+}
+
+# Position order: by file as recorded, then line, then column.
+func before(a, b) {
+    if (a.span.line != b.span.line) {
+        return a.span.line < b.span.line
+    }
+    return a.span.col < b.span.col
+}
+
+func sorted_diags() {
+    let out = []
+    for (let d in DIAGS) {
+        let i = len(out)
+        while (i > 0 and before(d, out[i - 1])) {
+            i -= 1
+        }
+        let rest = slice(out, i, len(out))
+        out = slice(out, 0, i)
+        append(out, d)
+        for (let r in rest) {
+            append(out, r)
+        }
+    }
+    return out
+}
+
+# Prints every recorded error, in the order of the source, and forgets them.
+export func diag_print_all() {
+    let all = sorted_diags()
+    let shown = 0
+    let last_blank = true
+    for (let d in all) {
+        if (shown >= MAX_PRINTED) {
+            break
+        }
+        if (not last_blank) {
+            print("")
+        }
+        let rows = render(d)
+        for (let row in rows) {
+            print(row)
+        }
+        last_blank = len(rows) > 0 and rows[len(rows) - 1] == ""
+        shown += 1
+    }
+    let total = len(all)
+    if (total > shown) {
+        print("... and {total - shown} more errors not shown")
+    }
+    if (total > 1) {
+        print("{total} errors found.")
+    }
+    DIAGS = []
+}
+
+# Ends the run with status 1 if any error is recorded.
+export func diag_exit_if_errors() {
+    if (len(DIAGS) > 0) {
+        diag_print_all()
+        exit(1)
+    }
+}
+
+# Records one error that has only a line and stops at once. This is the old single error form.
+export func die_line(kind, line, msg) {
+    diag_new(kind, span_line(line), msg)
+    diag_exit_if_errors()
+}
+
+# The least number of edits that turn a into b, where an edit inserts, deletes or replaces one
+# character or swaps two neighbours.
+func edit_distance(a, b) {
+    let n = len(a)
+    let m = len(b)
+    let d = []
+    for (let i = 0; i <= n; i++) {
+        let row = []
+        for (let j = 0; j <= m; j++) {
+            if (i == 0) {
+                append(row, j)
+            } else if (j == 0) {
+                append(row, i)
+            } else {
+                let cost = 1
+                if (a[i - 1] == b[j - 1]) {
+                    cost = 0
+                }
+                let best = d[i - 1][j - 1] + cost
+                if (d[i - 1][j] + 1 < best) {
+                    best = d[i - 1][j] + 1
+                }
+                if (row[j - 1] + 1 < best) {
+                    best = row[j - 1] + 1
+                }
+                if (i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1] and d[i - 2][j - 2] + 1 < best) {
+                    best = d[i - 2][j - 2] + 1
+                }
+                append(row, best)
+            }
+        }
+        append(d, row)
+    }
+    return d[n][m]
+}
+
+# The candidate that is closest to word, or null when none is close enough to be a likely typo:
+# within a third of the length of word (at least one edit). A difference in case alone counts as close.
+export func suggest(word, candidates) {
+    let limit = len(word) / 3
+    if (limit < 1) {
+        limit = 1
+    }
+    let lower = to_lower(word)
+    let best = null
+    let best_d = limit + 1
+    for (let c in candidates) {
+        if (c == word) {
+            continue
+        }
+        let dist = edit_distance(lower, to_lower(c))
+        if (dist < best_d) {
+            best = c
+            best_d = dist
+        }
+    }
+    return best
+}

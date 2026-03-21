@@ -1,0 +1,7 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  list index must be an int, got string
+
+   2 | print(xs["a"])
+     |          ^^^ this is string
+
+Hint: An index is a whole number counting from 0; convert with int(x) if you mean that

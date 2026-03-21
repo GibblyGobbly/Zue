@@ -1,5 +1,11 @@
 Type Error in /tmp/zue_test_case.zu at line 2:
   cannot assign an int constant to 'x', which is float. Write the number with a decimal point, for example 2.0
 
+   1 | let x = 2.5
+     |         --- 'x' became float here
    2 | x = 7 / 2
+     | -   ^^^^^ this is an int constant
+     | |
+     | 'x' is float
 
+Hint: A variable keeps the type of its first value. Write the number with a decimal point, for example 2.0

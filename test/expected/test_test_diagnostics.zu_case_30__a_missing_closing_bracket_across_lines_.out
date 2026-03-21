@@ -1,0 +1,8 @@
+Syntax Error in /tmp/zue_test_case.zu at line 2:
+  Expected ']' at end of list
+
+   1 | let xs = [1, 2,
+     |          - this '[' is never closed
+   2 |           3
+     |            ^ unexpected end of line
+

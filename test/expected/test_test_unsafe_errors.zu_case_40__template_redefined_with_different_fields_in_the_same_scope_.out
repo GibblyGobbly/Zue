@@ -1,2 +1,9 @@
 Syntax Error in /tmp/zue_test_case.zu at line 2:
   'A' is already declared in this scope
+
+   1 | template A { x }
+     |          - first declared here
+   2 | template A { y }
+     |          ^ declared again here
+
+Hint: Use another name, or assign to the existing variable without 'let'

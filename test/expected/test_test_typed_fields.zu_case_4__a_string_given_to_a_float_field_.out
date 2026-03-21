@@ -1,5 +1,8 @@
 Type Error in /tmp/zue_test_case.zu at line 2:
   Bloc 'Vec' field 'y' must be a float, got string
 
+   1 | bloc Vec { x: float, y: float }
+     |                      - field 'y' of Vec is float
    2 | let v = Vec{1.0, "a"}
+     |                  ^^^ expected float, found string
 

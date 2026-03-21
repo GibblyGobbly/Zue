@@ -1,0 +1,7 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Expected function name after 'func'
+
+   1 | func case() {
+     |      ^^^^ unexpected 'case'
+
+Hint: 'case' is a keyword and cannot be used as a name; choose another

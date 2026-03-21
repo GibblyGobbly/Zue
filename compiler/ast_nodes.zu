@@ -3,40 +3,46 @@
 #
 # ast_nodes.zu: the syntax tree node types and the functions that build them.
 #
-# Every node is a template whose first two fields are k (the kind, a string) and line. A template
-# keeps its fields at fixed places, so a node costs less memory than a map and is built in one call.
-# A field a kind does not use is not declared; a field it may leave empty holds null. The checker
-# adds sty to let and for-in nodes. NODE_FIELDS lists the fields of each kind after k and line, in
-# the order of the template; ast_dump.zu and the tree walkers read it.
+# Every node is a template whose first two fields are k (the kind, a string) and line. After the fields
+# of its kind come col, eline and ecol: with line they are the place of the node in the source, the
+# line and column of its first byte and the line and column just after its last byte (columns count
+# bytes from 1). They come last because the tree walkers read fields by name, and a name near the
+# front is found faster. The parser fills them
+# in after the node is built; a node made by the compiler itself keeps col 0, which means "no place
+# known beyond the line". A template keeps its fields at fixed places, so a node costs less memory
+# than a map and is built in one call. A field a kind does not use is not declared; a field it may
+# leave empty holds null. The checker adds sty to let and for-in nodes. NODE_FIELDS lists the fields of
+# each kind after k and line, in the order of the template; ast_dump.zu and the tree walkers read it. Fields that end in span hold a Span from diag.zu, or null: they say where a name, an
+# operator, a type or an argument list is, so the checker can point at exactly that text.
 
-export template NLit { k, line, v }
-export template NId { k, line, name }
-export template NTmpl { k, line, parts }
-export template NList { k, line, items }
-export template NMap { k, line, keys, vals }
-export template NFunc { k, line, name, params, defaults, ptypes, body, exported }
-export template NBox { k, line, size }
-export template NCall { k, line, callee, args }
-export template NIndex { k, line, target, index }
-export template NSlice { k, line, target, lo, hi }
-export template NField { k, line, target, field }
-export template NIncdec { k, line, name, op, prefix }
-export template NBin { k, line, op, l, r, unary }
-export template NNot { k, line, e }
-export template NLet { k, line, name, init, exported, const_decl, type, sty }
-export template NGroup { k, line, items }
-export template NIf { k, line, cond, then, els }
-export template NForIn { k, line, name, iter, body, sty }
-export template NFor { k, line, init, cond, incr, body }
-export template NWhile { k, line, cond, body }
-export template NSwitch { k, line, e, cases, dflt }
-export template NAssign { k, line, name, e }
-export template NSetidx { k, line, target, index, e, op }
-export template NTypedef { k, line, exported, name, is_template, is_bloc, fields, ftypes }
-export template NUse { k, line, names, path }
-export template NBlock { k, line, body }
-export template NReturn { k, line, e }
-export template NJump { k, line }
+export template NLit { k, line, v, col, eline, ecol }
+export template NId { k, line, name, col, eline, ecol }
+export template NTmpl { k, line, parts, col, eline, ecol }
+export template NList { k, line, items, col, eline, ecol }
+export template NMap { k, line, keys, vals, col, eline, ecol }
+export template NFunc { k, line, name, params, defaults, ptypes, body, exported, col, eline, ecol, nspan, pspans, tspans }
+export template NBox { k, line, size, col, eline, ecol }
+export template NCall { k, line, callee, args, col, eline, ecol, aspan }
+export template NIndex { k, line, target, index, col, eline, ecol }
+export template NSlice { k, line, target, lo, hi, col, eline, ecol }
+export template NField { k, line, target, field, col, eline, ecol, fspan }
+export template NIncdec { k, line, name, op, prefix, col, eline, ecol, nspan }
+export template NBin { k, line, op, l, r, unary, col, eline, ecol, ospan }
+export template NNot { k, line, e, col, eline, ecol }
+export template NLet { k, line, name, init, exported, const_decl, type, sty, col, eline, ecol, nspan, tspan }
+export template NGroup { k, line, items, col, eline, ecol }
+export template NIf { k, line, cond, then, els, col, eline, ecol }
+export template NForIn { k, line, name, iter, body, sty, col, eline, ecol, nspan }
+export template NFor { k, line, init, cond, incr, body, col, eline, ecol }
+export template NWhile { k, line, cond, body, col, eline, ecol }
+export template NSwitch { k, line, e, cases, dflt, col, eline, ecol }
+export template NAssign { k, line, name, e, col, eline, ecol, nspan }
+export template NSetidx { k, line, target, index, e, op, col, eline, ecol }
+export template NTypedef { k, line, exported, name, is_template, is_bloc, fields, ftypes, col, eline, ecol, nspan, fspans }
+export template NUse { k, line, names, path, col, eline, ecol }
+export template NBlock { k, line, body, col, eline, ecol }
+export template NReturn { k, line, e, col, eline, ecol }
+export template NJump { k, line, col, eline, ecol }
 
 export let NODE_FIELDS = {
     "num": ["v"], "float": ["v"], "str": ["v"], "char": ["v"], "bool": ["v"],
@@ -72,119 +78,138 @@ export let NODE_FIELDS = {
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
 export let OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "sty"]
 
-export func mk_lit(k, line, v) {
-    return NLit(k, line, v)
+# The constructors take st and en, the first and the last token of the node (a node can stand for
+# either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and
+# its line is the line of st. An argument that ends in span is a token or a Span, or null.
+# Evaluate the children before reading the parser's last token for en: arguments are read in order.
+
+export func mk_lit(k, st, en, v) {
+    return NLit(k, st.line, v, st.col, en.eline, en.ecol)
 }
 
-export func mk_id(line, name) {
-    return NId("id", line, name)
+export func mk_id(st, en, name) {
+    return NId("id", st.line, name, st.col, en.eline, en.ecol)
 }
 
-export func mk_tmpl(line, parts) {
-    return NTmpl("tmpl", line, parts)
+# An id node for a name made by the compiler, with no place in the source but its line.
+export func mk_id_line(line, name) {
+    return NId("id", line, name, 0, line, 0)
 }
 
-export func mk_list(line, items) {
-    return NList("list", line, items)
+export func mk_tmpl(st, en, parts) {
+    return NTmpl("tmpl", st.line, parts, st.col, en.eline, en.ecol)
 }
 
-export func mk_map(line, keys, vals) {
-    return NMap("map", line, keys, vals)
+export func mk_list(st, en, items) {
+    return NList("list", st.line, items, st.col, en.eline, en.ecol)
 }
 
-export func mk_func(line, name, params, defaults, ptypes, body, exported) {
-    return NFunc("func", line, name, params, defaults, ptypes, body, exported)
+export func mk_map(st, en, keys, vals) {
+    return NMap("map", st.line, keys, vals, st.col, en.eline, en.ecol)
 }
 
-export func mk_box(line, size) {
-    return NBox("box", line, size)
+# nspan is the name of a named function; pspans the parameter names, tspans their type annotations.
+export func mk_func(st, en, name, params, defaults, ptypes, body, exported, nspan, pspans, tspans) {
+    return NFunc("func", st.line, name, params, defaults, ptypes, body, exported, st.col, en.eline, en.ecol, nspan, pspans, tspans)
 }
 
-export func mk_call(line, callee, args) {
-    return NCall("call", line, callee, args)
+export func mk_box(st, en, size) {
+    return NBox("box", st.line, size, st.col, en.eline, en.ecol)
 }
 
-export func mk_index(line, target, index) {
-    return NIndex("index", line, target, index)
+# aspan is the argument list with its brackets.
+export func mk_call(st, en, callee, args, aspan) {
+    return NCall("call", st.line, callee, args, st.col, en.eline, en.ecol, aspan)
+}
+
+export func mk_index(st, en, target, index) {
+    return NIndex("index", st.line, target, index, st.col, en.eline, en.ecol)
 }
 
 # target[lo:hi]: positions from lo to hi, counting from 1, both included. lo or hi is null when left out.
-export func mk_slice(line, target, lo, hi) {
-    return NSlice("slice", line, target, lo, hi)
+export func mk_slice(st, en, target, lo, hi) {
+    return NSlice("slice", st.line, target, lo, hi, st.col, en.eline, en.ecol)
 }
 
-export func mk_field(line, target, field) {
-    return NField("field", line, target, field)
+export func mk_field(st, en, target, field, fspan) {
+    return NField("field", st.line, target, field, st.col, en.eline, en.ecol, fspan)
 }
 
-export func mk_incdec(line, name, op, prefix) {
-    return NIncdec("incdec", line, name, op, prefix)
+export func mk_incdec(st, en, name, op, prefix, nspan) {
+    return NIncdec("incdec", st.line, name, op, prefix, st.col, en.eline, en.ecol, nspan)
 }
 
-export func mk_bin(line, op, l, r) {
-    return NBin("bin", line, op, l, r, null)
+# ospan is the operator.
+export func mk_bin(st, en, op, l, r, ospan) {
+    return NBin("bin", st.line, op, l, r, null, st.col, en.eline, en.ecol, ospan)
 }
 
-export func mk_not(line, e) {
-    return NNot("not", line, e)
+# Unary minus is stored as 0 - r, with unary set.
+export func mk_neg(st, en, zero, r, ospan) {
+    return NBin("bin", st.line, "-", zero, r, true, st.col, en.eline, en.ecol, ospan)
 }
 
-export func mk_let(line, name, init, exported, const_decl, type) {
-    return NLet("let", line, name, init, exported, const_decl, type, null)
+export func mk_not(st, en, e) {
+    return NNot("not", st.line, e, st.col, en.eline, en.ecol)
 }
 
-export func mk_group(line, items) {
-    return NGroup("group", line, items)
+export func mk_let(st, en, name, init, exported, const_decl, type, nspan, tspan) {
+    return NLet("let", st.line, name, init, exported, const_decl, type, null, st.col, en.eline, en.ecol, nspan, tspan)
 }
 
-export func mk_if(line, cond, then, els) {
-    return NIf("if", line, cond, then, els)
+export func mk_group(st, en, items) {
+    return NGroup("group", st.line, items, st.col, en.eline, en.ecol)
 }
 
-export func mk_forin(line, name, iter, body) {
-    return NForIn("forin", line, name, iter, body, null)
+export func mk_if(st, en, cond, then, els) {
+    return NIf("if", st.line, cond, then, els, st.col, en.eline, en.ecol)
 }
 
-export func mk_for(line, init, cond, incr, body) {
-    return NFor("for", line, init, cond, incr, body)
+export func mk_forin(st, en, name, iter, body, nspan) {
+    return NForIn("forin", st.line, name, iter, body, null, st.col, en.eline, en.ecol, nspan)
 }
 
-export func mk_while(line, cond, body) {
-    return NWhile("while", line, cond, body)
+export func mk_for(st, en, init, cond, incr, body) {
+    return NFor("for", st.line, init, cond, incr, body, st.col, en.eline, en.ecol)
 }
 
-export func mk_switch(line, e, cases, dflt) {
-    return NSwitch("switch", line, e, cases, dflt)
+export func mk_while(st, en, cond, body) {
+    return NWhile("while", st.line, cond, body, st.col, en.eline, en.ecol)
 }
 
-export func mk_assign(line, name, e) {
-    return NAssign("assign", line, name, e)
+export func mk_switch(st, en, e, cases, dflt) {
+    return NSwitch("switch", st.line, e, cases, dflt, st.col, en.eline, en.ecol)
 }
 
-export func mk_setidx(line, target, index, e, op) {
-    return NSetidx("setidx", line, target, index, e, op)
+export func mk_assign(st, en, name, e, nspan) {
+    return NAssign("assign", st.line, name, e, st.col, en.eline, en.ecol, nspan)
 }
 
-export func mk_typedef(line, exported, name, is_template, is_bloc, fields, ftypes) {
-    return NTypedef("typedef", line, exported, name, is_template, is_bloc, fields, ftypes)
+export func mk_setidx(st, en, target, index, e, op) {
+    return NSetidx("setidx", st.line, target, index, e, op, st.col, en.eline, en.ecol)
 }
 
-export func mk_use(line, names, path) {
-    return NUse("use", line, names, path)
+# nspan is the name; fspans the field names.
+export func mk_typedef(st, en, exported, name, is_template, is_bloc, fields, ftypes, nspan, fspans) {
+    return NTypedef("typedef", st.line, exported, name, is_template, is_bloc, fields, ftypes, st.col, en.eline, en.ecol, nspan, fspans)
+}
+
+export func mk_use(st, en, names, path) {
+    return NUse("use", st.line, names, path, st.col, en.eline, en.ecol)
 }
 
 # k is "block" for a bare { } block and "unsafe" for an unsafe block.
-export func mk_block(k, line, body) {
-    return NBlock(k, line, body)
+export func mk_block(k, st, en, body) {
+    return NBlock(k, st.line, body, st.col, en.eline, en.ecol)
 }
 
-export func mk_return(line, e) {
-    return NReturn("return", line, e)
+export func mk_return(st, en, e) {
+    return NReturn("return", st.line, e, st.col, en.eline, en.ecol)
 }
 
 # k is "break" or "continue".
-export func mk_jump(k, line) {
-    return NJump(k, line)
+export func mk_jump(k, st, en) {
+    return NJump(k, st.line, st.col, en.eline, en.ecol)
 }
 
 export func is_node(x) {

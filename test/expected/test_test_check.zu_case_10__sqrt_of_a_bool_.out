@@ -2,4 +2,7 @@ Type Error in /tmp/zue_test_case.zu at line 1:
   sqrt() argument 1 must be a float, got bool
 
    1 | print(sqrt(true))
+     |       ---- ^^^^ expected float, found bool
+     |       |
+     |       argument 1 of sqrt()
 

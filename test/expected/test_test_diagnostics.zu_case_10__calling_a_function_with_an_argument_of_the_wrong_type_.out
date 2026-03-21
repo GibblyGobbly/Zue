@@ -1,0 +1,9 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  area() argument 1 must be an int, got string
+
+   1 | func area(w: int, h: int) {
+     |              --- parameter 'w' is int
+...
+   4 | print(area("a", 2))
+     |            ^^^ expected int, found string
+

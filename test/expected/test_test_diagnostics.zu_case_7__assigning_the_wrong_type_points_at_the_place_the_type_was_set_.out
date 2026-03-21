@@ -1,0 +1,11 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot assign string to 'count', which is int
+
+   1 | let count = 0
+     |             - 'count' became int here
+   2 | count = "none"
+     | -----   ^^^^^^ this is string
+     | |
+     | 'count' is int
+
+Hint: A variable keeps the type of its first value. Use another variable for the new value

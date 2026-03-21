@@ -1,0 +1,9 @@
+Syntax Error in /tmp/zue_test_case.zu at line 5:
+  Expected '}'
+
+   1 | func f() {
+     |          - this '{' is never closed
+...
+   5 | print(f())
+     |           ^ unexpected end of file
+

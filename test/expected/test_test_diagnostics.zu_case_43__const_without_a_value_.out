@@ -1,0 +1,7 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  const declarations require an initializer for every name
+
+   1 | const k
+     | ^^^^^^^ needs a value for every name
+
+Hint: Write the value after the name, for example const limit = 10

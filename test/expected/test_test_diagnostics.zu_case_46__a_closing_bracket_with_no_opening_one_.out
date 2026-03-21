@@ -1,0 +1,7 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Unexpected token ')': expected an expression
+
+   1 | let a = 1)
+     |          ^ unexpected ')'
+
+Hint: There is no matching opening bracket, or an expression is missing before it

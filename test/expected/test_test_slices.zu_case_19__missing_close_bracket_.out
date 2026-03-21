@@ -1,2 +1,8 @@
-Syntax Error in /tmp/zue_test_case.zu at line 3:
+Syntax Error in /tmp/zue_test_case.zu at line 2:
   Expected ']' after slice
+
+   2 | print(s[1:2
+     |        -   ^ unexpected end of line
+     |        |
+     |        this '[' is never closed
+

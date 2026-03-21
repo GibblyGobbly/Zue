@@ -4,10 +4,11 @@
 # util.zu: compile errors, path handling and file reading.
 
 use { ST } from "state.zu"
+use { die_line } from "diag.zu"
 
+# Reports one error that has only a line and ends the run.
 export func die(kind, line, msg) {
-    print("{kind} in {ST.src_file} at line {line}:\n  {msg}")
-    exit(1)
+    die_line(kind, line, msg)
 }
 
 export func path_dir(p) {

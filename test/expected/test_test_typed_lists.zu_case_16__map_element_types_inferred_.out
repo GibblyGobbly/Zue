@@ -2,4 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 4:
   cannot store string in map<float>
 
    4 | m["b"] = "x"
+     | -        ^^^ this is string
+     | |
+     | map<float>
 
+Hint: A map<float> holds only float items

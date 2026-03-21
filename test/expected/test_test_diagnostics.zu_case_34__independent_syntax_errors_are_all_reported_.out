@@ -1,0 +1,23 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Unexpected token '*': expected an expression
+
+   1 | let a = 1 +* 2
+     |            ^ unexpected '*'
+
+Syntax Error in /tmp/zue_test_case.zu at line 2:
+  Expected ')' after expression
+
+   2 | let b = (3
+     |         - ^ unexpected end of line
+     |         |
+     |         this '(' is never closed
+
+Syntax Error in /tmp/zue_test_case.zu at line 4:
+  Expected ')'
+
+   4 | func f(x {
+     |       -  ^ unexpected '{'
+     |       |
+     |       this '(' is never closed
+
+3 errors found.

@@ -1,0 +1,9 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot use '*' on int and string
+  in g(int), called at line 4
+
+   2 |     return v * "a"
+     |            - ^ --- string
+     |            |
+     |            int
+

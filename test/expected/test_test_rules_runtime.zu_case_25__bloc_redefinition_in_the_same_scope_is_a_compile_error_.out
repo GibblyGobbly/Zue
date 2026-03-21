@@ -1,2 +1,9 @@
 Syntax Error in /tmp/zue_test_case.zu at line 2:
   'Pt' is already declared in this scope
+
+   1 | bloc Pt { x, y }
+     |      -- first declared here
+   2 | bloc Pt { x, y }
+     |      ^^ declared again here
+
+Hint: Use another name, or assign to the existing variable without 'let'
