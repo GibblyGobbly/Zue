@@ -42,7 +42,10 @@ func _arg_fail(self_p, argv, i, what) {
     let msg = stack_buf(256)
     snprintf(msg, 256, cstr("%s() argument %d must be %s %s, got %s"), _fname(self_p), i + 1, _article(what), what,
              _type_name(argv + 16 * i))
-    lv_error(E_TYPE, msg, 0)
+    let lab = stack_buf(96)
+    snprintf(lab, 96, cstr("expected %s, found %s"), what, _type_name(argv + 16 * i))
+    st64(addr_of("lv_err_arg"), i + 1)
+    lv_error_labeled(E_TYPE, msg, 0, lab, 0, 0)
 }
 
 # The LvStr of argument i.

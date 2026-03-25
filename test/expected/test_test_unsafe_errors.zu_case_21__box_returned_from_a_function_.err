@@ -4,3 +4,5 @@ Runtime Error in /tmp/zue_test_case.zu at line 3:
    3 |     return x
 
 Hint: Keep the box in a local variable, or store it in a template field.
+Call stack, innermost call first:
+  in mk(), called at line 5: let r = mk()

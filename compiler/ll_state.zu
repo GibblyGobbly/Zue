@@ -231,10 +231,75 @@ export func ll_copy(dst, src) {
     ll("store i64 {w}, ptr {dp}")
 }
 
-export func ll_mark(line) {
-    if (ST.ctx.line != line) {
-        ll("store i32 {line}, ptr @lv_pos_line")
-        ST.ctx.line = line
+# The place of a node as the number the runtime reads from @lv_pos when it reports an error. Bits 0-21
+# are the line, 22-33 the column, 34-45 the length on the first line, 46-57 the offset of the operator
+# from the column (0 when the node has none) and 58-59 the operator length minus one. A node with no
+# column, or one too far along its line, is only a line.
+export func ll_pos(n) {
+    let line = n.line
+    if (line > 4194303) {
+        return 0
+    }
+    let col = n.col
+    if (col == 0 or col > 4095) {
+        return line
+    }
+    let width = 4095
+    if (n.eline == line) {
+        width = n.ecol - col
+        if (width > 4095) {
+            width = 4095
+        }
+        if (width < 1) {
+            width = 1
+        }
+    }
+    let p = line + col * 4194304 + width * 17179869184
+    if (n.k == "bin" and n.ospan != null and n.ospan.line == line) {
+        let off = n.ospan.col - col
+        let oplen = n.ospan.ecol - n.ospan.col
+        if (off > 0 and off <= 4095 and oplen >= 1 and oplen <= 4) {
+            p = p + off * 70368744177664 + (oplen - 1) * 288230376151711744
+        }
+    }
+    return p
+}
+
+# The place that runs from the start of node a to the end of node b plus extra bytes (a closing bracket).
+export func ll_pos_range(a, b, extra) {
+    let line = a.line
+    if (a.col == 0 or a.col > 4095 or line > 4194303) {
+        return line
+    }
+    let width = 4095
+    if (b.eline == line) {
+        width = b.ecol + extra - a.col
+        if (width > 4095) {
+            width = 4095
+        }
+        if (width < 1) {
+            width = 1
+        }
+    }
+    return line + a.col * 4194304 + width * 17179869184
+}
+
+# Records where the next operations run, so a runtime error can name the exact text. The store is
+# left out when the place is the one already recorded.
+export func ll_mark(n) {
+    ll_mark_pos(ll_pos(n))
+}
+
+# The same for a statement: only its line is recorded, so that an error no operation inside it claims
+# is not drawn under the wrong text.
+export func ll_mark_line(n) {
+    ll_mark_pos(n.line)
+}
+
+export func ll_mark_pos(p) {
+    if (ST.ctx.line != p) {
+        ll("store i64 {p}, ptr @lv_pos")
+        ST.ctx.line = p
     }
 }
 

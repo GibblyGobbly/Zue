@@ -2,5 +2,6 @@ Type Error in /tmp/zue_test_case.zu at line 5:
   cannot order boolean and boolean with <, <=, > or >=
 
    5 | sort(l)
+     | ^^^^^^^
 
 Hint: Ordering works on two numbers, two strings or two chars.

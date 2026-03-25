@@ -2,5 +2,6 @@ Index Error in /tmp/zue_test_case.zu at line 2:
   Slice 1:4 is out of bounds for a string of length 3
 
    2 | print(s[1:4])
+     |       ^^^^^^
 
 Hint: Positions start at 1 and both ends are included, so a slice stays within 1 to the length

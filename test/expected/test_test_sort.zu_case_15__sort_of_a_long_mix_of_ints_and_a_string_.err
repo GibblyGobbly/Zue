@@ -2,5 +2,6 @@ Type Error in /tmp/zue_test_case.zu at line 9:
   cannot order int and string with <, <=, > or >=
 
    9 | sort(pass(l))
+     | ^^^^^^^^^^^^^
 
 Hint: Ordering works on two numbers, two strings or two chars.

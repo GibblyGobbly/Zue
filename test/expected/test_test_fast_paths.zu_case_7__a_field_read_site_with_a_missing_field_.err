@@ -2,5 +2,8 @@ Name Error in /tmp/zue_test_case.zu at line 3:
   Template field 'q' does not exist
 
    3 |     return o.q
+     |            ^^^
 
 Hint: Access only declared fields for this template
+Call stack, innermost call first:
+  in get_q(), called at line 6: print(get_q(P(1)))

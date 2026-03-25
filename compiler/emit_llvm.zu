@@ -15,7 +15,7 @@ use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analys
 use { LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS } from "ll_state.zu"
 use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.zu"
 use { ll_call_out, ll_char, ll_condbr, ll_copy, ll_cstr, ll_float, ll_gname, ll_int } from "ll_state.zu"
-use { ll_ic, ll_kstr, ll_label, ll_mark, ll_new_ctx, ll_new_label, ll_null, ll_reg } from "ll_state.zu"
+use { ll_ic, ll_kstr, ll_label, ll_mark, ll_mark_line, ll_mark_pos, ll_new_ctx, ll_new_label, ll_null, ll_pos, ll_pos_range, ll_reg } from "ll_state.zu"
 use { ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } from "ll_state.zu"
 use { at_top, cap_cell, declare, find_local_index, pop_scope, push_scope, resolve, run_defers } from "ll_scope.zu"
 use { declare_typed, find_local, var_get, var_set } from "ll_scope.zu"
@@ -46,12 +46,13 @@ let LL_INT_COMPARE = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt
 # Integer operations are done in line when both operands are ints (tag 2) and an arithmetic
 # result does not overflow. Everything else, including the errors, goes to the runtime call.
 # Constant operands are folded by LLVM because their tags are known.
-func ll_binop(op, a, b) {
+func ll_binop(op, a, b, pos) {
     let arith = LL_INT_ARITH[op]
     let compare = LL_INT_COMPARE[op]
     let divide = LL_INT_DIVIDE[op]
     let bitwise = LL_INT_BITWISE[op]
     if (arith == null and compare == null and divide == null and bitwise == null) {
+        ll("store i64 {pos}, ptr @lv_pos")
         return ll_call_out(LL_BINOPS[op], "ptr {a}, ptr {b}")
     }
     let t = ll_slot()
@@ -190,6 +191,8 @@ func ll_binop(op, a, b) {
         }
     }
     ll_label(slow)
+    # The place is recorded only here, where an error can be raised, so the in-line path stays free of it.
+    ll("store i64 {pos}, ptr @lv_pos")
     # The slow path passes the operands by value, so no operand slot has its address taken.
     let sa = ll_reg()
     let sb = ll_reg()
@@ -295,7 +298,7 @@ func ex_id(n) {
         return ll_call_lv("lv_native", "ptr @lb_{n.name}, ptr {ll_cstr(n.name)}")
     }
     ll_reg_global(n.name)
-    ll_mark(n.line)
+    ll_mark(n)
     return global_get(n.name)
 }
 
@@ -306,7 +309,7 @@ func call_builtin(name, argv) {
 }
 
 func ex_call(n) {
-    ll_mark(n.line)
+    ll_mark(n)
     let callee = n.callee
     if (callee.k == "id") {
         if (callee.name == "defer" and len(n.args) == 1 and n.args[0].k == "call") {
@@ -318,19 +321,19 @@ func ex_call(n) {
         if (callee.name == "append" and len(n.args) == 2 and resolve("append").kind == "builtin") {
             let argv = ex_list(n.args)
             ll("call void @lvp_container_check(ptr {argv[1]})")
-            ll_mark(n.line)
+            ll_mark(n)
             return call_builtin("append", argv)
         }
         let r = resolve(callee.name)
         if (r.kind == "builtin") {
             let argv = ex_list(n.args)
-            ll_mark(n.line)
+            ll_mark(n)
             return call_builtin(callee.name, argv)
         }
     }
     let f = ex(callee)
     let argv = ex_list(n.args)
-    ll_mark(n.line)
+    ll_mark(n)
     let arr = ll_args_array(argv)
     return ll_call_out("lvp_call", "ptr {f}, i32 {len(argv)}, ptr {arr}")
 }
@@ -340,7 +343,7 @@ func ex_address_of(n) {
     if (len(n.args) == 1 and n.args[0].k == "id") {
         let name = n.args[0].name
         let r = resolve(name)
-        ll_mark(n.line)
+        ll_mark(n)
         if (r.kind == "local") {
             if (r.v.cell) {
                 let cell = ll_reg()
@@ -357,7 +360,7 @@ func ex_address_of(n) {
             return ll_call_lv("lv_addr", "ptr {ll_gname(name)}")
         }
     }
-    ll_mark(n.line)
+    ll_mark(n)
     return ll_call_lv("lv_addr_invalid", "i32 {len(n.args)}")
 }
 
@@ -385,7 +388,7 @@ func ex_defer(n) {
 func ex_bin(n) {
     if (n.op == "and" or n.op == "or") {
         let a = ex(n.l)
-        ll_mark(n.line)
+        ll_mark(n.l)
         let t = copy_slot(a)
         let rhs = ll_new_label("rhs")
         let done = ll_new_label("done")
@@ -404,17 +407,19 @@ func ex_bin(n) {
     }
     let a = ex(n.l)
     let b = ex(n.r)
-    ll_mark(n.line)
     if (n.op == "**") {
+        ll_mark(n)
         return call_builtin("pow", [a, b])
     }
-    return ll_binop(n.op, a, b)
+    let r = ll_binop(n.op, a, b, ll_pos(n))
+    ST.ctx.line = -1
+    return r
 }
 
 # x++ and x-- as a value give the old value; ++x and --x give the new one. as_statement skips
 # keeping the old value.
 func ex_incdec(n, as_statement) {
-    ll_mark(n.line)
+    let pos = ll_pos(n)
     let op = "+"
     if (n.op == "--") {
         op = "-"
@@ -423,7 +428,7 @@ func ex_incdec(n, as_statement) {
     if (r.kind == "local" and (r.v.ty == "int" or r.v.ty == "float")) {
         let kind = r.v.ty
         let raw = ty_load(r.v)
-        let stepped = tex_step(kind, op, raw)
+        let stepped = tex_step(kind, op, raw, pos)
         ty_store(r.v, stepped)
         if (as_statement) {
             return ll_null()
@@ -439,7 +444,8 @@ func ex_incdec(n, as_statement) {
         old = copy_slot(cur)
     }
     let one = ll_int("1")
-    let t = ll_binop(op, cur, one)
+    let t = ll_binop(op, cur, one, pos)
+    ST.ctx.line = -1
     store_name(n.name, t)
     if (old != null) {
         return old
@@ -458,7 +464,7 @@ func ex_tmpl(n) {
             append(items, ex(part))
         }
     }
-    ll_mark(n.line)
+    ll_mark(n)
     let arr = ll_args_array(items)
     return ll_call_lv("lv_interp", "i32 {len(items)}, ptr {arr}")
 }
@@ -497,7 +503,7 @@ func ex(n) {
     }
     if (k == "not") {
         let a = ex(n.e)
-        ll_mark(n.line)
+        ll_mark(n)
         return ll_call_out("lvp_not", "ptr {a}")
     }
     if (k == "call") {
@@ -506,7 +512,7 @@ func ex(n) {
     if (k == "index") {
         let t = ex(n.target)
         let i = ex(n.index)
-        ll_mark(n.line)
+        ll_mark(n)
         return ll_call_out("lvp_index", "ptr {t}, ptr {i}")
     }
     if (k == "slice") {
@@ -519,12 +525,12 @@ func ex(n) {
         if (n.hi != null) {
             hi = ex(n.hi)
         }
-        ll_mark(n.line)
+        ll_mark(n)
         return ll_call_out("lvp_slice", "ptr {t}, ptr {lo}, ptr {hi}")
     }
     if (k == "field") {
         let t = ex(n.target)
-        ll_mark(n.line)
+        ll_mark(n)
         return ll_call_out("lvp_field_ic", "ptr {t}, ptr {ll_kstr(n.field)}, ptr {ll_ic()}")
     }
     if (k == "list") {
@@ -555,7 +561,7 @@ func ex(n) {
     }
     if (k == "box") {
         let size = ex(n.size)
-        ll_mark(n.line)
+        ll_mark(n)
         let id = box_scope_id()
         # A box whose size is written as a number lives in the function's own stack frame.
         if (n.size.k == "num" and len(n.size.v) <= 4) {
@@ -789,7 +795,7 @@ func raw_kind(n) {
 }
 
 func st_let(n) {
-    ll_mark(n.line)
+    ll_mark_line(n)
     if (not at_top() and n.init != null) {
         let kind = raw_kind(n)
         if (kind != null) {
@@ -817,7 +823,7 @@ func st_let(n) {
 }
 
 func st_funcdef(n) {
-    ll_mark(n.line)
+    ll_mark_line(n)
     if (n.name == null) {
         ex(n)
         return null
@@ -837,28 +843,28 @@ func st_setidx(n) {
     let t = ex(n.target)
     let i = ex(n.index)
     let v = ex(n.e)
-    ll_mark(n.line)
+    ll_mark_pos(ll_pos_range(n.target, n.index, 1))
     if (n.op != null) {
         let cur = ll_call_out("lvp_index", "ptr {t}, ptr {i}")
-        v = ll_binop(n.op, cur, v)
+        v = ll_binop(n.op, cur, v, ll_pos(n))
+        ST.ctx.line = -1
     }
     ll("call void @lvp_index_set(ptr {t}, ptr {i}, ptr {v})")
 }
 
 # The i1 for a condition. A condition computed raw needs no LV; any other goes through the check
 # that it is a boolean.
-func cond_flag(e, line) {
+func cond_flag(e) {
     if (skind(e) == "bool") {
-        ll_mark(line)
         return tex(e)
     }
     let c = ex(e)
-    ll_mark(line)
+    ll_mark(e)
     return ll_truth_flag(c)
 }
 
 func st_if(n) {
-    let flag = cond_flag(n.cond, n.line)
+    let flag = cond_flag(n.cond)
     let yes = ll_new_label("then")
     let no = ll_new_label("else")
     let done = ll_new_label("endif")
@@ -889,7 +895,7 @@ func st_while(n) {
     loop_push("loop", done, cond)
     ll_br(cond)
     ll_label(cond)
-    ll_condbr(cond_flag(n.cond, n.line), body, done)
+    ll_condbr(cond_flag(n.cond), body, done)
     ll_label(body)
     st_block(n.body)
     ll_br(cond)
@@ -912,7 +918,7 @@ func st_for(n) {
     if (n.cond == null) {
         ll_br(body)
     } else {
-        ll_condbr(cond_flag(n.cond, n.line), body, done)
+        ll_condbr(cond_flag(n.cond), body, done)
     }
     ll_label(body)
     st_block(n.body)
@@ -930,7 +936,7 @@ func st_for(n) {
 func st_forin(n) {
     push_scope()
     let it = ex(n.iter)
-    ll_mark(n.line)
+    ll_mark(n.iter)
     let prepared = ll_call_out("lvp_iter_prepare", "ptr {it}")
     let count = ll_reg()
     ll("{count} = call i64 @lvp_iter_len(ptr {prepared})")
@@ -950,7 +956,7 @@ func st_forin(n) {
     ll_condbr(more, body, done)
     ll_label(body)
     push_scope()
-    ll_mark(n.line)
+    ll_mark_line(n)
     let at = ll_reg()
     ll("{at} = load i64, ptr {idx}")
     let item = ll_call_out("lvp_iter_at", "ptr {prepared}, i64 {at}")
@@ -992,7 +998,7 @@ func st_switch(n) {
     loop_push("switch", done, null)
     for (let c in n.cases) {
         let cv = ex(c.value)
-        ll_mark(c.line)
+        ll_mark(c.value)
         let r = ll_reg()
         ll("{r} = call i32 @lvp_eq_b(ptr {sv}, ptr {cv})")
         let flag = ll_reg()
@@ -1016,7 +1022,7 @@ func st_unsafe(n) {
     if (len(ST.ctx.unsafe_marks) > 0) {
         die("Syntax Error", n.line, "unsafe blocks cannot be nested: the enclosing unsafe block already allows unsafe operations")
     }
-    ll_mark(n.line)
+    ll_mark_line(n)
     ll("call void @lv_unsafe_begin()")
     push_scope()
     # Variables in scopes below this index were declared outside the block.
@@ -1052,7 +1058,7 @@ func st_continue(n) {
 }
 
 func st_return(n) {
-    ll_mark(n.line)
+    ll_mark_line(n)
     let v = ll_null()
     if (n.e != null) {
         v = ex(n.e)
@@ -1102,12 +1108,13 @@ func st(n) {
     } else if (k == "func") {
         st_funcdef(n)
     } else if (k == "assign") {
-        ll_mark(n.line)
+        ll_mark_line(n)
         let r = resolve(n.name)
         if (r.kind == "local" and r.v.ty != null and skind(n.e) == r.v.ty) {
             ty_store(r.v, tex(n.e))
         } else {
             let v = copy_if_box(n.e, ex(n.e))
+            ll_mark(n.e)
             store_name(n.name, v)
         }
     } else if (k == "setidx") {
@@ -1133,13 +1140,13 @@ func st(n) {
     } else if (k == "unsafe") {
         st_unsafe(n)
     } else if (k == "typedef") {
-        ll_mark(n.line)
+        ll_mark_line(n)
     } else if (k == "block") {
         st_scoped(n.body)
     } else if (k == "incdec") {
         ex_incdec(n, true)
     } else {
-        ll_mark(n.line)
+        ll_mark_line(n)
         ex(n)
     }
 }
@@ -1219,7 +1226,7 @@ func define_types(stmts) {
                 let joined_types = join(type_texts, ", ")
                 append(LL_MODDECLS, "{ftypes} = private constant [{len(type_texts)} x ptr] [{joined_types}]")
             }
-            ll_mark(s.line)
+            ll_mark_line(s)
             let r = ll_reg()
             if (s.is_bloc and typed) {
                 ll("{r} = call %LV @lv_define_bloc_typed(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields}, ptr {ftypes})")
@@ -1304,7 +1311,7 @@ func emit_name_error(hint, fmt_text, arg_a, arg_b) {
 }
 
 func st_use(n) {
-    ll_mark(n.line)
+    ll_mark_line(n)
     let canon = path_norm(path_join(path_dir(ST.mod.canon), n.path))
     let m2 = MODULES[canon]
     if (m2 == null) {
@@ -1336,7 +1343,7 @@ func st_use(n) {
     ll_label(done)
     ll("store ptr @mod_{ST.mod.id}, ptr @lv_pos_mod")
     ST.ctx.line = -1
-    ll_mark(n.line)
+    ll_mark_line(n)
     let names = n.names
     if (len(names) == 0) {
         names = m2.exports
@@ -1447,7 +1454,7 @@ export func compile_program_ll(stmts) {
     append(out, "%LvFunc = type \{ ptr, ptr, i32, i32, ptr }")
     append(out, "%LvModule = type \{ ptr, ptr, i32 }")
     append(out, "@lv_pos_mod = external global ptr")
-    append(out, "@lv_pos_line = external global i32")
+    append(out, "@lv_pos = external global i64")
     for (let d in declarations()) {
         append(out, d)
     }

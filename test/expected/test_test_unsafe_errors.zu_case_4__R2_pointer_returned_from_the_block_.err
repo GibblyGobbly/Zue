@@ -4,3 +4,5 @@ Runtime Error in /tmp/zue_test_case.zu at line 5:
    5 |         return a
 
 Hint: Pointers must stay inside the current unsafe block. Copy the pointed-to value out instead.
+Call stack, innermost call first:
+  in return_inside(), called at line 8: return_inside()

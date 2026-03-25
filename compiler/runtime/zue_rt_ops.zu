@@ -20,9 +20,10 @@ func _operand_error(op, a, b) {
     let msg = stack_buf(160)
     snprintf(msg, 160, cstr("cannot use '%s' on %s and %s"), op, _type_name(a), _type_name(b))
     if (ld8(op) == 43 and ld8(op + 1) == 0) {
-        lv_error(E_TYPE, msg, cstr("Both sides must be numbers, or both strings. Build text with \"\{x}\" or to_string(x)."))
+        lv_error_labeled(E_TYPE, msg, cstr("Both sides must be numbers, or both strings. Build text with \"\{x}\" or to_string(x)."),
+                         0, _type_name(a), _type_name(b))
     }
-    lv_error(E_TYPE, msg, cstr("Both sides must be numbers."))
+    lv_error_labeled(E_TYPE, msg, cstr("Both sides must be numbers."), 0, _type_name(a), _type_name(b))
 }
 
 func _overflow(op) {
@@ -884,21 +885,26 @@ func lvp_call(o, f, argc_i, argv) {
               cstr("cannot call %s"), _type_name(f), 0, 0)
     }
     let mod = ld64(addr_of("lv_pos_mod"))
-    let line = ld32(addr_of("lv_pos_line"))
+    let pos = ld64(addr_of("lv_pos"))
     let fn = _val(f)
-    st32(addr_of("lv_depth"), ld32(addr_of("lv_depth")) + 1)
-    if (ld32(addr_of("lv_depth")) > MAX_DEPTH) {
+    let depth = ld32(addr_of("lv_depth")) + 1
+    st32(addr_of("lv_depth"), depth)
+    if (depth > MAX_DEPTH) {
         lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
                  cstr("Zue allows 100000 nested calls. Check for a recursion that never stops."))
     }
+    let fr = addr_of("lv_frames") + depth * FRAME_SIZE
+    st64(fr, pos)
+    st64(fr + 8, mod)
+    st64(fr + 16, ld64(fn + F_NAME))
     if (g_stack_low != 0 and ult(stack_ptr(), g_stack_low)) {
         lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
                  cstr("The program ran out of stack. Check for a recursion that never stops."))
     }
     callv(o, ld64(fn + F_FN), fn, argc_i, argv)
-    st32(addr_of("lv_depth"), ld32(addr_of("lv_depth")) - 1)
+    st32(addr_of("lv_depth"), depth - 1)
     st64(addr_of("lv_pos_mod"), mod)
-    st32(addr_of("lv_pos_line"), line)
+    st64(addr_of("lv_pos"), pos)
 }
 
 func lv_arity(self_p, argc_i, min_i, max_i) {

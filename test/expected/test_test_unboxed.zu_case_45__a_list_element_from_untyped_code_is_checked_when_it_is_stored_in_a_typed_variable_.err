@@ -2,5 +2,8 @@ Type Error in /tmp/zue_test_case.zu at line 6:
   variable 'y' must be an int, got string
 
    6 |     let y = xs[1]
+     |             ^^^^^
 
 Hint: The type checker could not follow where this value came from
+Call stack, innermost call first:
+  in second(), called at line 9: print(second())

@@ -2,5 +2,8 @@ Runtime Error in /tmp/zue_test_case.zu at line 7:
   integer overflow in '/'
 
    7 |     print(m / b)
+     |           - ^ -
 
 Hint: The result does not fit in a 64-bit int. Use floats for very large numbers.
+Call stack, innermost call first:
+  in f(), called at line 9: f()

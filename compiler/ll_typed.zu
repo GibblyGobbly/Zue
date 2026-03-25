@@ -10,7 +10,7 @@
 # call, which reports the error.
 
 use { die } from "util.zu"
-use { ll, ll_alloca, ll_br, ll_condbr, ll_float_text, ll_label, ll_mark, ll_new_label, ll_reg } from "ll_state.zu"
+use { ll, ll_alloca, ll_br, ll_condbr, ll_float_text, ll_label, ll_new_label, ll_pos, ll_reg } from "ll_state.zu"
 use { find_local } from "ll_scope.zu"
 use { ty_load } from "ll_unbox.zu"
 
@@ -162,7 +162,6 @@ func tex_bin(n) {
     let u = operand_kind(n)
     let a = tex_as(n.l, u)
     let b = tex_as(n.r, u)
-    ll_mark(n.line)
     if (T_INT_CMP[op] != null) {
         let r = ll_reg()
         if (u == "float") {
@@ -180,17 +179,17 @@ func tex_bin(n) {
         return r
     }
     if (u == "float") {
-        return tex_float_arith(op, a, b)
+        return tex_float_arith(op, a, b, ll_pos(n))
     }
-    return tex_int_arith(op, a, b)
+    return tex_int_arith(op, a, b, ll_pos(n))
 }
 
 # cur plus or minus one, for ++ and --, in the machine type of kind.
-export func tex_step(kind, op, cur) {
+export func tex_step(kind, op, cur, pos) {
     if (kind == "float") {
-        return tex_float_arith(op, cur, "1.0")
+        return tex_float_arith(op, cur, "1.0", pos)
     }
-    return tex_int_arith(op, cur, "1")
+    return tex_int_arith(op, cur, "1", pos)
 }
 
 # a and b / a or b: the right side runs only when the left does not decide.
@@ -223,7 +222,7 @@ func tex_logic(n) {
 
 # + - * with an overflow check, and / % where a divisor of 0 or -1 is left to the runtime (the two
 # that raise an error or overflow). The runtime call returns the result or raises.
-func tex_int_arith(op, a, b) {
+func tex_int_arith(op, a, b, pos) {
     let fast = ll_new_label("tfast")
     let slow = ll_new_label("tslow")
     let done = ll_new_label("tdone")
@@ -243,6 +242,7 @@ func tex_int_arith(op, a, b) {
         ll_condbr(usable, fast, slow)
     }
     ll_label(slow)
+    ll("store i64 {pos}, ptr @lv_pos")
     let sres = ll_reg()
     let spay = ll_reg()
     ll("{sres} = call %LV @lvv_{T_VALUE_CALL[op]}(i64 2, i64 {a}, i64 2, i64 {b})")
@@ -265,7 +265,7 @@ func tex_int_arith(op, a, b) {
 
 # + - * / on doubles. A zero divisor and a result that is not finite go to the runtime, which
 # raises the error. Adding 0.0 turns -0.0 into 0.0.
-func tex_float_arith(op, a, b) {
+func tex_float_arith(op, a, b, pos) {
     let compute = ll_new_label("tcomp")
     let store = ll_new_label("tstore")
     let slow = ll_new_label("tslow")
@@ -290,6 +290,7 @@ func tex_float_arith(op, a, b) {
     ll("{clean} = fadd double {res}, 0.0")
     ll_br(done)
     ll_label(slow)
+    ll("store i64 {pos}, ptr @lv_pos")
     let abits = ll_reg()
     let bbits = ll_reg()
     let sres = ll_reg()

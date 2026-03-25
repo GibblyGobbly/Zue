@@ -2,5 +2,6 @@ Index Error in /tmp/zue_test_case.zu at line 2:
   Slice start 3 is after its end 2
 
    2 | print(s[3:2])
+     |       ^^^^^^
 
 Hint: The start of a slice must not come after its end

@@ -1485,7 +1485,7 @@ func _register_alloc_meta(p, cells) {
     st32(m + PM_OWNS, 1)
     st32(m + PM_FREED, 0)
     st64(m + PM_FLAGS, calloc(cells, 1))
-    st32(m + PM_LINE, ld32(addr_of("lv_pos_line")))
+    st32(m + PM_LINE, band(ld64(addr_of("lv_pos")), 4194303))
     st32(m + PM_OBJ, 0)
 }
 
@@ -1655,7 +1655,7 @@ func _check_leaks(first) {
         }
     }
     if (leaks != 0) {
-        st32(addr_of("lv_pos_line"), line)
+        st64(addr_of("lv_pos"), line)
         let msg = stack_buf(256)
         snprintf(msg, 256, cstr("%d alloc() call(s) in this unsafe block were never freed; the first is at line %d"), leaks, line)
         lv_error(E_RUNTIME, msg, _unsafe_hint(12))

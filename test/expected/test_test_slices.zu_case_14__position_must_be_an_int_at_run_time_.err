@@ -2,5 +2,6 @@ Type Error in /tmp/zue_test_case.zu at line 5:
   slice start must be an int, got string
 
    5 | print(s[pass("1"):2])
+     |       ^^^^^^^^^^^^^^
 
 Hint: Use an int index

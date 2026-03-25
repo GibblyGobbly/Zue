@@ -2,5 +2,17 @@ Runtime Error in /tmp/zue_test_case.zu at line 5:
   stack overflow: recursion is too deep
 
    5 |     return 1 + f(n - 1)
+     |                ^^^^^^^^
 
 Hint: Zue allows 100000 nested calls. Check for a recursion that never stops.
+Call stack, innermost call first:
+  in a function, called at line 0
+  in f(), called at line 5: return 1 + f(n - 1)
+  in f(), called at line 5: return 1 + f(n - 1)
+  in f(), called at line 5: return 1 + f(n - 1)
+  in f(), called at line 5: return 1 + f(n - 1)
+  in f(), called at line 5: return 1 + f(n - 1)
+  ... 99992 more calls ...
+  in f(), called at line 5: return 1 + f(n - 1)
+  in f(), called at line 5: return 1 + f(n - 1)
+  in f(), called at line 8: print(f(100000))
