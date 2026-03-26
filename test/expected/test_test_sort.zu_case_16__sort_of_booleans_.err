@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 5:
+Type Error [E0211] in /tmp/zue_test_case.zu at line 5:
   cannot order boolean and boolean with <, <=, > or >=
 
    5 | sort(l)

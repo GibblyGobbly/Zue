@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0106] in /tmp/zue_test_case.zu at line 1:
   Unclosed string interpolation expression
 
    1 | print("{")

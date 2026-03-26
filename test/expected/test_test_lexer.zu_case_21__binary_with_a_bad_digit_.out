@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0104] in /tmp/zue_test_case.zu at line 1:
   Invalid number literal: '0b102' is a number followed by a letter
 
    1 | let a = 0b102

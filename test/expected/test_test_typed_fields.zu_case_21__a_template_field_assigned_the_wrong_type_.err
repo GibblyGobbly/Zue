@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 6:
+Type Error [E0210] in /tmp/zue_test_case.zu at line 6:
   Template 'Player' field 'hp' must be an int, got string
 
    6 | p.hp = pass("dead")

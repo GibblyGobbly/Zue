@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 2:
+Type Error [E0210] in /tmp/zue_test_case.zu at line 2:
   Template 'Bag' field 'items' must be a list<int>, got list<string>
 
    1 | template Bag { items: list<int>, label: string }

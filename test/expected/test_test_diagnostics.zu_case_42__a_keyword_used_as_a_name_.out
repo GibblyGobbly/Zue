@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0114] in /tmp/zue_test_case.zu at line 1:
   Expected variable name after 'let' or ','
 
    1 | let template = 3

@@ -1,4 +1,4 @@
-Argument Error in /tmp/zue_test_case.zu at line 4:
+Argument Error [E0203] in /tmp/zue_test_case.zu at line 4:
   sort() expects 1 argument, but got 0
 
    4 | sort()

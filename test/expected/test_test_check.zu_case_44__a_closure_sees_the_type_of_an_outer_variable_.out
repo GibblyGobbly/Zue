@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 3:
+Type Error [E0204] in /tmp/zue_test_case.zu at line 3:
   cannot assign string to 'n', which is int
 
    1 | let n = 5

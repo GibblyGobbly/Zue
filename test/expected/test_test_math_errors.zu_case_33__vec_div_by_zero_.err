@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 1:
+Runtime Error [E0207] in /tmp/zue_test_case.zu at line 1:
   division by zero
 
    1 | print(vec_div([1, 2], [0, 1]))

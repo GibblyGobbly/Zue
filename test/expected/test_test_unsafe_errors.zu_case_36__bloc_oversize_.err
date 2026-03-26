@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 1:
+Type Error [E0470] in /tmp/zue_test_case.zu at line 1:
   bloc exceeds the cache-line size limit (64 bytes)
 
    1 | bloc B { a, b, c, d, e, f, g, h, i }

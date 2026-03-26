@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 1:
+Runtime Error [E0410] in /tmp/zue_test_case.zu at line 1:
   integer overflow in 'floor_div'
 
    1 | print(floor_div(-9223372036854775807 - 1, -1))

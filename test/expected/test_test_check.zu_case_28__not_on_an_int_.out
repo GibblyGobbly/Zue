@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 1:
+Type Error [E0205] in /tmp/zue_test_case.zu at line 1:
   'not' needs a bool, got an int constant
 
    1 | print(not 1)

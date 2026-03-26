@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0118] in /tmp/zue_test_case.zu at line 1:
   Only list and map take an element type, for example list<int>
 
    1 | let x: int<string> = 1

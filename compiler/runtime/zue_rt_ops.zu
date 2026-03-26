@@ -54,8 +54,15 @@ func _div_zero() {
 }
 
 func _oob(idx, len, what) {
-    _errf(E_INDEX, cstr("Ensure your index is between 0 and len-1"),
-          cstr("Index %lld is out of bounds for %s of length %lld"), idx, what, len)
+    let msg = stack_buf(160)
+    snprintf(msg, 160, cstr("Index %lld is out of bounds for %s of length %lld"), idx, what, len)
+    let lab = stack_buf(96)
+    if (len == 0) {
+        snprintf(lab, 96, cstr("index %lld, but the %s is empty"), idx, what)
+    } else {
+        snprintf(lab, 96, cstr("index %lld, valid indexes are 0 to %lld"), idx, len - 1)
+    }
+    lv_error_labeled(E_INDEX, msg, cstr("Ensure your index is between 0 and len-1"), lab, 0, 0)
 }
 
 # Arithmetic
@@ -929,7 +936,61 @@ func lv_arity(self_p, argc_i, min_i, max_i) {
 
 # Program entry
 
+# A crash (an invalid memory access, an arithmetic fault) is reported like any other error: where in
+# the program it happened, and the calls that were running. The handler runs on its own small stack so
+# that it still works when the crash is the program running out of stack.
+extern("sigaction", "i32", "i32,ptr,ptr")
+extern("sigaltstack", "i32", "ptr,ptr")
+
+func _crash_name(sig) {
+    if (sig == 11) {
+        return cstr("invalid memory access (segmentation fault)")
+    }
+    if (sig == 7) {
+        return cstr("invalid memory access (bus error)")
+    }
+    if (sig == 8) {
+        return cstr("arithmetic fault")
+    }
+    return cstr("the program was stopped by a signal")
+}
+
+func _crash_handler(sig) {
+    fflush(_stdout())
+    let m = ld64(addr_of("lv_pos_mod"))
+    let pos = ld64(addr_of("lv_pos"))
+    fprintf(_stderr(), cstr("Fatal Error"))
+    _put_code(_crash_name(sig))
+    if (m != 0 and ld64(m + MOD_PATH) != 0) {
+        fprintf(_stderr(), cstr(" in %s"), ld64(m + MOD_PATH))
+    }
+    fprintf(_stderr(), cstr(" near line %d:\n  %s\n"), band(pos, 4194303), _crash_name(sig))
+    _error_source(pos)
+    fprintf(_stderr(), cstr("Hint: This is a bug in the program's unsafe code or in the Zue runtime. Look for a pointer used after free() or outside its block.\n"))
+    _print_stack()
+    exit(128 + sig)
+}
+
+# Installs the handler for the calling thread's crashes.
+func _crash_setup() {
+    let size = 65536
+    let stk = stack_buf(24)
+    st64(stk, malloc(size))
+    st64(stk + 8, 0)
+    st64(stk + 16, size)
+    sigaltstack(stk, 0)
+    let act = stack_buf(160)
+    memset(act, 0, 160)
+    st64(act, fn_addr("_crash_handler"))
+    # SA_ONSTACK | SA_RESETHAND: run on the spare stack, and a crash inside the handler is fatal.
+    st32(act + 136, 134217728 + 2147483648)
+    sigaction(11, act, 0)
+    sigaction(7, act, 0)
+    sigaction(8, act, 0)
+}
+
 func _thread_main(start) {
+    _crash_setup()
     lv_gc_start()
     call_ptr(ld64(start))
     fflush(_stdout())
@@ -959,6 +1020,7 @@ func lv_main(argc_i, argv_p, entry_p) {
         }
     }
     if (rc != 0) {
+        _crash_setup()
         lv_gc_start()
         call_ptr(entry_p)
     } else {

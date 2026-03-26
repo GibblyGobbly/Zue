@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 5:
+Type Error [E0430] in /tmp/zue_test_case.zu at line 5:
   load() cannot be used on a whole object
 
    5 |     print(load(p))

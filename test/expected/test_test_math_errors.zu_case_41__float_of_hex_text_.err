@@ -1,4 +1,4 @@
-Argument Error in /tmp/zue_test_case.zu at line 1:
+Argument Error [E0413] in /tmp/zue_test_case.zu at line 1:
   float() cannot read "0x10" as a float
 
    1 | print(float("0x10"))

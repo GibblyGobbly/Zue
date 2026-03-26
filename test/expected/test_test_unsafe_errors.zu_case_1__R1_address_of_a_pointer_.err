@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 4:
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 4:
   cannot take address_of() of a pointer value
 
    4 |     let b = address_of(a)

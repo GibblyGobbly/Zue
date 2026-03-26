@@ -1,6 +1,7 @@
-Type Error in /tmp/zue_test_case.zu at line 4:
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
   trand() argument 1 must be an int, got float
 
    4 | print(trand(pass(2.5), 9))
      |             ^^^^^^^^^ expected int, found float
 
+Hint: A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)

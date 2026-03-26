@@ -33,7 +33,7 @@ check_one() {
         if grep -q "not supported by zuec" "$TMP/cerr"; then
             skip=$((skip + 1)); echo "[SKIP] $label"; return
         fi
-        if ! head -1 "$TMP/cerr" | grep -q '^[A-Za-z ]* Error in '; then
+        if ! head -1 "$TMP/cerr" | grep -qE '^[A-Za-z ]* Error( \[E[0-9]+\])? in '; then
             fail=$((fail + 1)); echo "[FAIL] $label (zuec)"; head -3 "$TMP/cerr"; return
         fi
         cp "$TMP/cerr" "$TMP/c.out"; : > "$TMP/c.err"; cc=1

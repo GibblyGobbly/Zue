@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 4:
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 4:
   a box cannot be assigned to a global from inside a function; it is freed when its scope ends
 
    4 |     g = y

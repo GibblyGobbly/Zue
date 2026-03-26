@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 4:
+Syntax Error [E0116] in /tmp/zue_test_case.zu at line 4:
   Invalid assignment target
 
    4 | f() = 3

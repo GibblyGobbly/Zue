@@ -15,7 +15,7 @@ use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analys
 use { LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS } from "ll_state.zu"
 use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.zu"
 use { ll_call_out, ll_char, ll_condbr, ll_copy, ll_cstr, ll_float, ll_gname, ll_int } from "ll_state.zu"
-use { ll_ic, ll_kstr, ll_label, ll_mark, ll_mark_line, ll_mark_pos, ll_new_ctx, ll_new_label, ll_null, ll_pos, ll_pos_range, ll_reg } from "ll_state.zu"
+use { DBG, dbg_function, dbg_module_text, ll_store_pos, ll_ic, ll_kstr, ll_label, ll_mark, ll_mark_line, ll_mark_pos, ll_new_ctx, ll_new_label, ll_null, ll_pos, ll_pos_range, ll_reg } from "ll_state.zu"
 use { ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } from "ll_state.zu"
 use { at_top, cap_cell, declare, find_local_index, pop_scope, push_scope, resolve, run_defers } from "ll_scope.zu"
 use { declare_typed, find_local, var_get, var_set } from "ll_scope.zu"
@@ -52,7 +52,7 @@ func ll_binop(op, a, b, pos) {
     let divide = LL_INT_DIVIDE[op]
     let bitwise = LL_INT_BITWISE[op]
     if (arith == null and compare == null and divide == null and bitwise == null) {
-        ll("store i64 {pos}, ptr @lv_pos")
+        ll_store_pos(pos)
         return ll_call_out(LL_BINOPS[op], "ptr {a}, ptr {b}")
     }
     let t = ll_slot()
@@ -192,7 +192,7 @@ func ll_binop(op, a, b, pos) {
     }
     ll_label(slow)
     # The place is recorded only here, where an error can be raised, so the in-line path stays free of it.
-    ll("store i64 {pos}, ptr @lv_pos")
+    ll_store_pos(pos)
     # The slow path passes the operands by value, so no operand slot has its address taken.
     let sa = ll_reg()
     let sb = ll_reg()
@@ -602,6 +602,9 @@ func box_scope_id() {
 
 # Puts a finished function together: signature, entry-block allocas, then the body.
 func finish_function(header, ctx) {
+    if (ctx.dbg != 0) {
+        header = "{slice(header, 0, len(header) - 2)} !dbg !{ctx.dbg} \{"
+    }
     let lines = [header, "entry:"]
     for (let a in ctx.allocas) {
         append(lines, a)
@@ -634,6 +637,13 @@ func compile_function(n) {
     }
 
     let child = ll_new_ctx(false)
+    if (DBG.on) {
+        let shown = "<anonymous>"
+        if (n.name != null) {
+            shown = n.name
+        }
+        child.dbg = dbg_function(shown, n.line)
+    }
     let nested = {}
     walk_nested(n.body, nested)
     walk_nested(n.defaults, nested)
@@ -1251,6 +1261,9 @@ func define_types(stmts) {
 # Compiles the statements of module m into a function named `fname`.
 func compile_module_body(m, stmts, fname) {
     ST.ctx = ll_new_ctx(true)
+    if (DBG.on) {
+        ST.ctx.dbg = dbg_function("<module {ST.src_file}>", 1)
+    }
     ST.ctx.no_unbox = uses_address(stmts)
     walk_nested(stmts, ST.ctx.nested)
     prescan_globals(stmts)
@@ -1484,5 +1497,8 @@ export func compile_program_ll(stmts) {
     append(out, "  %r = call i32 @lv_main(i32 %argc, ptr %argv, ptr @entry)")
     append(out, "  ret i32 %r")
     append(out, "}")
+    if (DBG.on) {
+        append(out, dbg_module_text())
+    }
     return join(out, "\n") + "\n"
 }

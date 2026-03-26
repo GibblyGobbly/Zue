@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 4:
+Runtime Error [E0410] in /tmp/zue_test_case.zu at line 4:
   integer overflow in '*'
 
    4 |     return x * k

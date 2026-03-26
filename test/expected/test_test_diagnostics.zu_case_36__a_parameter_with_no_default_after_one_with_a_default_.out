@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0115] in /tmp/zue_test_case.zu at line 1:
   Parameter 'b' needs a default value because an earlier parameter has one
 
    1 | func f(a = 1, b) {

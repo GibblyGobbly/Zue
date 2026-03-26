@@ -1,4 +1,4 @@
-Argument Error in /tmp/zue_test_case.zu at line 4:
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 4:
   round() digits must be between 0 and 15
 
    4 | print(round(1.5, pass(16)))

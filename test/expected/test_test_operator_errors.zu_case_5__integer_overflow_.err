@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 2:
+Runtime Error [E0410] in /tmp/zue_test_case.zu at line 2:
   integer overflow in '+'
 
    2 | let s = big + 1

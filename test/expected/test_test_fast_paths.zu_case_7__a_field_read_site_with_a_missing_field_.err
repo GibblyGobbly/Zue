@@ -1,4 +1,4 @@
-Name Error in /tmp/zue_test_case.zu at line 3:
+Name Error [E0402] in /tmp/zue_test_case.zu at line 3:
   Template field 'q' does not exist
 
    3 |     return o.q

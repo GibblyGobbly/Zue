@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 6:
+Type Error [E0204] in /tmp/zue_test_case.zu at line 6:
   variable 'x' must be a float, got int
 
    6 | print(g(3))

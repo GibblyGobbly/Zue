@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 2:
+Runtime Error [E0401] in /tmp/zue_test_case.zu at line 2:
   box index 2 is out of bounds for a box of 2 bytes
 
    2 | b[2] = 1

@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 2:
+Type Error [E0204] in /tmp/zue_test_case.zu at line 2:
   cannot assign string to 'i', which is int
 
    1 | for (let i = 0; i < 3; i++) {

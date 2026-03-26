@@ -491,11 +491,20 @@ func _print_stack() {
     }
 }
 
+# " [E0201]" after the name of the error, for a message that belongs to a family of errors.
+func _put_code(msg_p) {
+    let c = lv_code_for(msg_p)
+    if (c != 0) {
+        fprintf(_stderr(), cstr(" [%s]"), c)
+    }
+}
+
 func lv_error(kind_i, msg_p, hint_p) {
     fflush(_stdout())
     let m = ld64(addr_of("lv_pos_mod"))
     let pos = ld64(addr_of("lv_pos"))
     fprintf(_stderr(), cstr("%s"), _err_name(kind_i))
+    _put_code(msg_p)
     if (m != 0 and ld64(m + MOD_PATH) != 0) {
         fprintf(_stderr(), cstr(" in %s"), ld64(m + MOD_PATH))
     }
@@ -522,6 +531,7 @@ func lv_static_error(line_i, msg_p, hint_p) {
     fflush(_stdout())
     let m = ld64(addr_of("lv_pos_mod"))
     fprintf(_stderr(), cstr("Static Error"))
+    _put_code(msg_p)
     if (m != 0 and ld64(m + MOD_PATH) != 0) {
         fprintf(_stderr(), cstr(" in %s"), ld64(m + MOD_PATH))
     }

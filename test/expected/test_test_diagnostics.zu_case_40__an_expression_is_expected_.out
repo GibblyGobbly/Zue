@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0110] in /tmp/zue_test_case.zu at line 1:
   Unexpected token 'eof': expected an expression
 
    1 | let a = 

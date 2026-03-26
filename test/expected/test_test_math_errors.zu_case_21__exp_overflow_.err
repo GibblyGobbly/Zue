@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 1:
+Runtime Error [E0411] in /tmp/zue_test_case.zu at line 1:
   float overflow in exp()
 
    1 | print(exp(710))

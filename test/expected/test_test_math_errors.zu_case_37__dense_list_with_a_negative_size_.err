@@ -1,4 +1,4 @@
-Argument Error in /tmp/zue_test_case.zu at line 1:
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 1:
   dense_list() size must not be negative
 
    1 | print(dense_list(-1, 0.0))

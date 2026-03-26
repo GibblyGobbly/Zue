@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 1:
+Type Error [E0203] in /tmp/zue_test_case.zu at line 1:
   sqrt() expects 1 argument, but got 2
 
    1 | print(sqrt(1.0, 2.0))

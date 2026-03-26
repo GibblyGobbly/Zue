@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0120] in /tmp/zue_test_case.zu at line 1:
   bloc 'Half': give a type to every field or to none
 
    1 | bloc Half { a: int, b }

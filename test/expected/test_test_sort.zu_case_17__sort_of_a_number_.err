@@ -1,6 +1,7 @@
-Type Error in /tmp/zue_test_case.zu at line 4:
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
   sort() argument 1 must be a list, got int
 
    4 | sort(pass(5))
      |      ^^^^^^^ expected list, found int
 
+Hint: Pass a list such as [1, 2, 3]

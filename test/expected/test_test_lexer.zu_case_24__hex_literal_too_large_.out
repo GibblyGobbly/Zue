@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0104] in /tmp/zue_test_case.zu at line 1:
   Integer literal does not fit in 64 bits
 
    1 | let a = 0xFFFFFFFFFFFFFFFF

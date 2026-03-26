@@ -62,7 +62,7 @@ def check(path):
     return p, None
 
 
-HEADER = re.compile(r'^(\w[\w ]* Error) in (.*) at line (\d+):$')
+HEADER = re.compile(r'^(\w[\w ]* Error)(?: \[E\d+\])? in (.*) at line (\d+):$')
 CARET = re.compile(r'^\s*\d*\s*\| ?(\s*)([\^-]+)')
 
 

@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 3:
+Type Error [E0460] in /tmp/zue_test_case.zu at line 3:
   this box belongs to a bloc, and a bloc is immutable
 
    3 | p.payload[0] = 7

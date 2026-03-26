@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 4:
+Syntax Error [E0460] in /tmp/zue_test_case.zu at line 4:
   unsafe blocks cannot be nested: the enclosing unsafe block already allows unsafe operations
 
    4 |     unsafe {

@@ -1,10 +1,10 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0103] in /tmp/zue_test_case.zu at line 1:
   Unexpected character '$'
 
    1 | let a = 1 $ 2
      |           ^ not part of the language
 
-Syntax Error in /tmp/zue_test_case.zu at line 2:
+Syntax Error [E0103] in /tmp/zue_test_case.zu at line 2:
   Unexpected character '?'
 
    2 | let b = 3 ? 4

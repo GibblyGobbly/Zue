@@ -10,6 +10,7 @@
 # after the last byte). A span with column 0 names only a line: no carets are drawn for it.
 
 use { ST } from "state.zu"
+use { code_for } from "error_codes.zu"
 
 export template Span { line, col, eline, ecol }
 template Label { span, text }
@@ -305,10 +306,19 @@ func excerpt_rows(d) {
     return out
 }
 
+# " [E0201]" for a message that belongs to a family of errors, else "".
+func code_text(msg) {
+    let c = code_for(msg)
+    if (c == null) {
+        return ""
+    }
+    return " [{c}]"
+}
+
 # The printed form of one error, as a list of lines.
 export func render(d) {
     let out = []
-    append(out, "{d.kind} in {d.file} at line {d.span.line}:")
+    append(out, "{d.kind}{code_text(d.msg)} in {d.file} at line {d.span.line}:")
     append(out, "  {d.msg}")
     for (let t in d.trace) {
         append(out, t)

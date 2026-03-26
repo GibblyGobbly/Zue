@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 5:
+Runtime Error [E0410] in /tmp/zue_test_case.zu at line 5:
   integer overflow in '*'
 
    5 |     let r = n * fact(n - 1)

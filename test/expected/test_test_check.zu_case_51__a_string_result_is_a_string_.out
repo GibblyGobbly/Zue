@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 5:
+Type Error [E0204] in /tmp/zue_test_case.zu at line 5:
   cannot assign an int constant to 's', which is string
 
    4 | let s = add("a", "b")

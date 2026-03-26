@@ -1,4 +1,4 @@
-Name Error in /tmp/zue_test_case.zu at line 1:
+Name Error [E0301] in /tmp/zue_test_case.zu at line 1:
   Variable 'zzzzzz' is not defined
 
    1 | print(zzzzzz)

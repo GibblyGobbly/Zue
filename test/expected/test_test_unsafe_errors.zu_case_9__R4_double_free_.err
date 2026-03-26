@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 4:
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 4:
   pointer was freed or freed twice
 
    4 |     free(a)

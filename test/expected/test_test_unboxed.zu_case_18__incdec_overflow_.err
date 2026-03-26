@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 3:
+Runtime Error [E0410] in /tmp/zue_test_case.zu at line 3:
   integer overflow in '+'
 
    3 |     a++

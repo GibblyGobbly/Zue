@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 2:
+Type Error [E0210] in /tmp/zue_test_case.zu at line 2:
   Bloc 'Packet' field 'payload' must be a box[8], got box[4]
 
    2 | let p = Packet{1, box[4]}

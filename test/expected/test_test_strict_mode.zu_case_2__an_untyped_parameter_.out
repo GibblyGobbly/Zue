@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 2:
+Type Error [E0208] in /tmp/zue_test_case.zu at line 2:
   strict mode: parameter 'a' of add needs a type, for example a: int
 
    2 | func add(a, b: int) {

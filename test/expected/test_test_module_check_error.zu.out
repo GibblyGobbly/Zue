@@ -1,4 +1,4 @@
-Type Error in test/modules_fixtures/bad_types.zu at line 4:
+Type Error [E0204] in test/modules_fixtures/bad_types.zu at line 4:
   cannot assign string to 'count', which is int
 
    3 | let count = 1

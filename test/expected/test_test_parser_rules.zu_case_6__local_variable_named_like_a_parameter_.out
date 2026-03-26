@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 2:
+Syntax Error [E0113] in /tmp/zue_test_case.zu at line 2:
   'a' is already declared in this scope
 
    1 | func p(a) {

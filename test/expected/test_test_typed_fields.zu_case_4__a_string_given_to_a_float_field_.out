@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 2:
+Type Error [E0210] in /tmp/zue_test_case.zu at line 2:
   Bloc 'Vec' field 'y' must be a float, got string
 
    1 | bloc Vec { x: float, y: float }

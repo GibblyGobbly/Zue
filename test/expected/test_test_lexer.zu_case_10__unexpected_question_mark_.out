@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 1:
+Syntax Error [E0103] in /tmp/zue_test_case.zu at line 1:
   Unexpected character '?'
 
    1 | print(1 ? 2)

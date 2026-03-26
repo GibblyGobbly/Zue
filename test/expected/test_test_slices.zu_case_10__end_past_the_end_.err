@@ -1,4 +1,4 @@
-Index Error in /tmp/zue_test_case.zu at line 2:
+Index Error [E0401] in /tmp/zue_test_case.zu at line 2:
   Slice 1:4 is out of bounds for a string of length 3
 
    2 | print(s[1:4])

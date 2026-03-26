@@ -1,6 +1,7 @@
-Type Error in /tmp/zue_test_case.zu at line 4:
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
   skip_chars() argument 3 must be an int, got string
 
    4 | print(skip_chars("abc", "a", pass("1")))
      |                              ^^^^^^^^^ expected int, found string
 
+Hint: Convert text to a number with to_int(s)

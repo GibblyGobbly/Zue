@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 1:
+Type Error [E0205] in /tmp/zue_test_case.zu at line 1:
   'and' needs bool operands, got an int constant
 
    1 | print(1 and true)

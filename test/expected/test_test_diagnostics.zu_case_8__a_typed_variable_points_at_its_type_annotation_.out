@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 1:
+Type Error [E0204] in /tmp/zue_test_case.zu at line 1:
   cannot assign string to 'age', which is int
 
    1 | let age: int = "ten"

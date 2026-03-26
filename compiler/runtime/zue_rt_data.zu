@@ -892,7 +892,7 @@ func _box_alloc_slot() {
         }
         let mem = calloc(BOX_CHUNK, BS_SIZE)
         if (mem == 0) {
-            lv_error(E_RUNTIME, cstr("out of memory"), 0)
+            lv_error(E_RUNTIME, cstr("out of memory"), cstr("The system could not give the program more memory. Free values you no longer need, or work on smaller data."))
         }
         st64(addr_of("_box_chunks") + chunk * 8, mem)
     }
@@ -912,7 +912,7 @@ func _box_stack_push(index, gen) {
         }
         g_box_stack = realloc(g_box_stack, cap * 8)
         if (g_box_stack == 0) {
-            lv_error(E_RUNTIME, cstr("out of memory"), 0)
+            lv_error(E_RUNTIME, cstr("out of memory"), cstr("The system could not give the program more memory. Free values you no longer need, or work on smaller data."))
         }
         g_box_stack_cap = cap
     }
@@ -951,7 +951,7 @@ func _box_new(o, size, scope_id, mem) {
         st32(s + BS_STACK, 1)
     }
     if (ld64(s + BS_BYTES) == 0) {
-        lv_error(E_RUNTIME, cstr("out of memory"), 0)
+        lv_error(E_RUNTIME, cstr("out of memory"), cstr("The system could not give the program more memory. Free values you no longer need, or work on smaller data."))
     }
     st32(s + BS_IN_USE, 1)
     st32(s + BS_OWNED, 0)
@@ -1034,7 +1034,7 @@ func _box_promote(bx) {
         # A template takes the box with it past the end of the frame, so its bytes move to the heap.
         let heap = calloc(ld64(s + BS_LEN), 1)
         if (heap == 0) {
-            lv_error(E_RUNTIME, cstr("out of memory"), 0)
+            lv_error(E_RUNTIME, cstr("out of memory"), cstr("The system could not give the program more memory. Free values you no longer need, or work on smaller data."))
         }
         memcpy(heap, ld64(s + BS_BYTES), ld64(s + BS_LEN))
         st64(s + BS_BYTES, heap)
@@ -1055,7 +1055,7 @@ func _box_promote_owned(bx, owner) {
         }
         g_owners = realloc(g_owners, 16 * g_owner_cap)
         if (g_owners == 0) {
-            lv_error(E_RUNTIME, cstr("out of memory"), 0)
+            lv_error(E_RUNTIME, cstr("out of memory"), cstr("The system could not give the program more memory. Free values you no longer need, or work on smaller data."))
         }
     }
     st64(g_owners + g_owner_count * 16, owner)

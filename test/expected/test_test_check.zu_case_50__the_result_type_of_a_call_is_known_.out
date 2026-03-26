@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 5:
+Type Error [E0204] in /tmp/zue_test_case.zu at line 5:
   cannot assign string to 'r', which is int
 
    4 | let r = add(1, 2)

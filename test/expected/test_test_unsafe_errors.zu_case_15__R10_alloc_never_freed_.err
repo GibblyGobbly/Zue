@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 2:
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 2:
   1 alloc() call(s) in this unsafe block were never freed; the first is at line 2
 
    2 |     let a = alloc(1)

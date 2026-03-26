@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 2:
+Type Error [E0211] in /tmp/zue_test_case.zu at line 2:
   cannot negate string
 
    2 | print(-w)

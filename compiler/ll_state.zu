@@ -161,10 +161,90 @@ export func ll_use_native(name) {
     }
 }
 
-template Ctx { out, allocas, scopes, defers, nested, capmap, is_main, line, loops, dead, unsafe_marks, no_unbox, lv, spills }
+template Ctx { out, allocas, scopes, defers, nested, capmap, is_main, line, loops, dead, unsafe_marks, no_unbox, lv, spills, dbg, dbg_locs }
 
 export func ll_new_ctx(is_main) {
-    return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, null, null)
+    return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, null, null, 0, {})
+}
+
+# Debug information, for zue build -g: a line table, so that gdb, valgrind and perf name the Zue
+# line and function. Metadata nodes are numbered from 5 (0 to 4 are fixed, see dbg_module_text).
+# DBG is a map so that every module sees the same one.
+export let DBG = {"on": false, "next": 5, "lines": [], "files": {}}
+
+export func dbg_enable() {
+    DBG.on = true
+}
+
+func dbg_id() {
+    let id = DBG.next
+    DBG.next = id + 1
+    return id
+}
+
+func dbg_quote(text) {
+    return replace(replace(text, "\\", "\\\\"), "\"", "\\\"")
+}
+
+# The metadata node for the file path, made on first use.
+func dbg_file(path) {
+    let known = DBG.files[path]
+    if (known != null) {
+        return known
+    }
+    let id = dbg_id()
+    append(DBG.lines, "!{id} = !DIFile(filename: \"{dbg_quote(path)}\", directory: \".\")")
+    DBG.files[path] = id
+    return id
+}
+
+# Starts the debug scope of a function: returns its node, or 0 when debug information is off.
+export func dbg_function(name, line) {
+    if (not DBG.on) {
+        return 0
+    }
+    let file = dbg_file(ST.src_file)
+    let id = dbg_id()
+    append(DBG.lines, "!{id} = distinct !DISubprogram(name: \"{dbg_quote(name)}\", scope: !{file}, file: !{file}, line: {line}, type: !2, scopeLine: {line}, spFlags: DISPFlagDefinition, unit: !0)")
+    return id
+}
+
+# ", !dbg !N" for the position p in the running function, or "" when there is no debug information.
+export func dbg_at(p) {
+    let c = ST.ctx
+    if (c.dbg == 0) {
+        return ""
+    }
+    let key = "{p}"
+    let known = c.dbg_locs[key]
+    if (known == null) {
+        let line = p % 4194304
+        let col = (p / 4194304) % 4096
+        known = dbg_id()
+        append(DBG.lines, "!{known} = !DILocation(line: {line}, column: {col}, scope: !{c.dbg})")
+        c.dbg_locs[key] = known
+    }
+    return ", !dbg !{known}"
+}
+
+# The metadata that goes at the end of the module.
+export func dbg_module_text() {
+    let out = ["!llvm.dbg.cu = !\{!0}", "!llvm.module.flags = !\{!3}"]
+    append(out, "!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !{dbg_file(ST.src_file)}, producer: \"zue\", isOptimized: false, runtimeVersion: 0, emissionKind: LineTablesOnly)")
+    append(out, "!1 = !DIFile(filename: \"{dbg_quote(ST.src_file)}\", directory: \".\")")
+    append(out, "!2 = !DISubroutineType(types: !4)")
+    append(out, "!3 = !\{i32 2, !\"Debug Info Version\", i32 3}")
+    append(out, "!4 = !\{}")
+    for (let l in DBG.lines) {
+        append(out, l)
+    }
+    return join(out, "\n")
+}
+
+# Records the position p where an error can be raised: one store, which also carries the line table
+# entry when debug information is on.
+export func ll_store_pos(p) {
+    ll("store i64 {p}, ptr @lv_pos{dbg_at(p)}")
 }
 
 # One instruction. After a terminator a fresh block starts first, so unreachable code
@@ -298,7 +378,7 @@ export func ll_mark_line(n) {
 
 export func ll_mark_pos(p) {
     if (ST.ctx.line != p) {
-        ll("store i64 {p}, ptr @lv_pos")
+        ll_store_pos(p)
         ST.ctx.line = p
     }
 }

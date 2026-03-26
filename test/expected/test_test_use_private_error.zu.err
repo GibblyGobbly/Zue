@@ -1,4 +1,4 @@
-Name Error in test/test_use_private_error.zu at line 2:
+Name Error [E0301] in test/test_use_private_error.zu at line 2:
   Variable 'scale' is not defined
 
    2 | scale(3)

@@ -1,4 +1,4 @@
-Name Error in /tmp/zue_test_case.zu at line 2:
+Name Error [E0301] in /tmp/zue_test_case.zu at line 2:
   Variable 'usr' is not defined
 
    2 | print("hello {usr}")

@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 1:
+Type Error [E0210] in /tmp/zue_test_case.zu at line 1:
   Bloc 'B' field 'items' cannot be a list, map or function: a bloc is an immutable value
 
    1 | bloc B { items: list }

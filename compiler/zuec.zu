@@ -25,6 +25,8 @@ use { ST } from "state.zu"
 use { dump_program } from "ast_dump.zu"
 use { unparse_program } from "ast_unparse.zu"
 use { check_program } from "check.zu"
+use { dbg_enable } from "ll_state.zu"
+use { ERROR_CODES } from "error_codes.zu"
 
 # Name of a file without its directory and extension: "dir/prog.zu" is "prog".
 func base_name(path) {
@@ -63,9 +65,11 @@ func usage() {
     print("  run    build into C/run/ and run it with the given arguments")
     print("  emit   write LLVM IR only (default C/<name>.ll)")
     print("  check  parse and type-check only; print every error found, nothing when there is none")
+    print("  explain [code]  describe an error code such as E0201; without a code, list them all")
     print("  ast    print the parsed syntax tree, one statement per line (--spans adds the places)")
     print("  unparse  print the parsed program as source again")
     print("  -o     where to write the program or the IR")
+    print("  -g     with build, run and emit: add line tables so that gdb, valgrind and perf name the Zue line")
     print("  -S     with build: write C/<name>.ll and do not build")
     exit(1)
 }
@@ -101,7 +105,10 @@ func build_program(path, out_path, stop) {
     }
     let rc = system(build_command(code_path, out_path))
     if (rc != 0) {
-        print("[ERROR] build failed (exit {rc}); the generated IR is in {code_path}")
+        print("")
+        print("Internal compiler error: clang rejected the code Zue generated (exit {rc}).")
+        print("This is a bug in Zue, not in your program. Please report it with {ST.src_file} and the generated IR, which was kept in {code_path}.")
+        print("To look at the IR: opt-18 -passes=verify {code_path} -disable-output")
         exit(1)
     }
     print("[OK] built {out_path} from {code_path}")
@@ -118,6 +125,9 @@ func build_main(a) {
             i += 2
         } else if (a[i] == "-S") {
             stop = true
+            i += 1
+        } else if (a[i] == "-g") {
+            dbg_enable()
             i += 1
         } else {
             usage()
@@ -139,7 +149,9 @@ func run_main(a) {
     write_text("C/{name}.ll", code)
     let rc = system(build_command("C/{name}.ll", out_path))
     if (rc != 0) {
-        print("[ERROR] build failed (exit {rc}); the generated IR is in C/{name}.ll")
+        print("")
+        print("Internal compiler error: clang rejected the code Zue generated (exit {rc}).")
+        print("This is a bug in Zue, not in your program. Please report it with {ST.src_file} and the generated IR, which was kept in C/{name}.ll.")
         exit(1)
     }
     let words = [shell_quote("./{out_path}")]
@@ -157,6 +169,9 @@ func emit_main(a) {
         if (a[i] == "-o" and i + 1 < len(a)) {
             out_path = a[i + 1]
             i += 2
+        } else if (a[i] == "-g") {
+            dbg_enable()
+            i += 1
         } else {
             usage()
         }
@@ -165,6 +180,44 @@ func emit_main(a) {
     system("mkdir -p C")
     write_text(out_path, code)
     print("[OK] wrote {out_path}")
+}
+
+# zue explain [E0201]: what an error code means, with an example and the fix. No code lists them all.
+func explain_main(a) {
+    if (len(a) == 0 or a[0] == "list") {
+        print("Error codes (zue explain CODE for details):")
+        print("")
+        for (let e in ERROR_CODES) {
+            print("  {e.code}  {e.title}")
+        }
+        return null
+    }
+    let want = to_upper(a[0])
+    for (let e in ERROR_CODES) {
+        if (e.code == want) {
+            print("{e.code}: {e.title}")
+            print("")
+            print("Why it happens:")
+            for (let line in split(e.text, "\n")) {
+                print("  {line}")
+            }
+            if (len(e.example) > 0) {
+                print("")
+                print("Example:")
+                for (let line in split(e.example, "\n")) {
+                    print("    {line}")
+                }
+            }
+            print("")
+            print("How to fix it:")
+            for (let line in split(e.fix, "\n")) {
+                print("  {line}")
+            }
+            return null
+        }
+    }
+    print("No error code {a[0]}. Run zue explain to list them.")
+    exit(1)
 }
 
 # zue ast [--spans] prog.zu: the syntax tree as text (see ast_dump.zu).
@@ -245,6 +298,10 @@ func main() {
     }
     let cmd = a[0]
     let rest = slice(a, 1, len(a))
+    if (len(rest) >= 2 and rest[0] == "-g" and (cmd == "run" or cmd == "build" or cmd == "emit")) {
+        dbg_enable()
+        rest = slice(rest, 1, len(rest))
+    }
     if (cmd == "--native") {
         native_main(a)
     } else if (cmd == "build" and len(rest) >= 1) {
@@ -253,6 +310,8 @@ func main() {
         run_main(rest)
     } else if (cmd == "emit" and len(rest) >= 1) {
         emit_main(rest)
+    } else if (cmd == "explain" and len(rest) <= 1) {
+        explain_main(rest)
     } else if (cmd == "check" and len(rest) == 1) {
         check_main(rest)
     } else if (cmd == "ast" and (len(rest) == 1 or (len(rest) == 2 and rest[0] == "--spans"))) {

@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 1:
+Type Error [E0209] in /tmp/zue_test_case.zu at line 1:
   unknown type 'strin'
 
    1 | let x: strin = "a"

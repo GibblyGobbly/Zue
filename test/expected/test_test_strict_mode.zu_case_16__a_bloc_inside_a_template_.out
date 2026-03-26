@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 7:
+Type Error [E0204] in /tmp/zue_test_case.zu at line 7:
   cannot assign float to 'worse', which is int
 
    7 | let worse: int = b.pos.y

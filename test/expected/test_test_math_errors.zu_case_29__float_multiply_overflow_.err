@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 1:
+Runtime Error [E0411] in /tmp/zue_test_case.zu at line 1:
   float overflow in '*'
 
    1 | print(pow(10.0, 300.0) * pow(10.0, 300.0))

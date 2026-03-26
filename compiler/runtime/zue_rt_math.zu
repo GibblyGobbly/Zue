@@ -63,7 +63,7 @@ func lb_abs(self_p, argc_i, argv_p) {
 func _number_list(self_p, argv_p) {
     let t = _tag(argv_p)
     if (t != T_LIST and t != T_DENSE) {
-        _errf(E_TYPE, 0, cstr("%s() needs a list of numbers, got %s"), _fname(self_p), _type_name(argv_p), 0)
+        _errf(E_TYPE, cstr("Pass a list such as [1, 2, 3]"), cstr("%s() needs a list of numbers, got %s"), _fname(self_p), _type_name(argv_p), 0)
     }
     let n = lvp_iter_len(argv_p)
     if (n == 0) {
@@ -76,7 +76,7 @@ func _number_list(self_p, argv_p) {
     for (let i = 0; i < n; i++) {
         lvp_iter_at(item, argv_p, i)
         if (_is_num(item) == 0) {
-            _errf(E_TYPE, 0, cstr("%s() list items must be numbers, got %s"), _fname(self_p), _type_name(item), 0)
+            _errf(E_TYPE, cstr("Every item must be an int or a float; convert text with to_int() or to_float()"), cstr("%s() list items must be numbers, got %s"), _fname(self_p), _type_name(item), 0)
         }
         if (_tag(item) != _tag(first)) {
             _errf(E_TYPE, cstr("Convert the items with int() or float() so that all have the same type."),
@@ -438,7 +438,7 @@ func lb_round(self_p, argc_i, argv_p) {
     }
     let x = _arg_num(self_p, argv_p, 0)
     if (_tag(argv_p + 16) != T_INT) {
-        _errf(E_TYPE, 0, cstr("round() digits must be an int, got %s"), _type_name(argv_p + 16), 0, 0)
+        _errf(E_TYPE, cstr("The second argument is the number of decimal places, a whole number from 0 to 15"), cstr("round() digits must be an int, got %s"), _type_name(argv_p + 16), 0, 0)
     }
     let digits = _val(argv_p + 16)
     if (digits < 0 or digits > 15) {
@@ -679,7 +679,7 @@ func _arg_file(self_p, argv, i) {
     }
     let f = _val(argv + 16 * i)
     if (ld32(f + FI_CLOSED) != 0) {
-        _errf(E_RUNTIME, 0, cstr("%s() on a closed file"), _fname(self_p), 0, 0)
+        _errf(E_RUNTIME, cstr("The file was closed earlier. Open it again with open() before using it"), cstr("%s() on a closed file"), _fname(self_p), 0, 0)
     }
     return f
 }
@@ -923,7 +923,7 @@ func lb_mat_mul(self_p, argc_i, argv_p) {
     let fb = lv_alloc(8 * rows_b * cols_b)
     let fc = calloc(rows_a * cols_b, 8)
     if (fc == 0) {
-        lv_error(E_RUNTIME, cstr("out of memory"), 0)
+        lv_error(E_RUNTIME, cstr("out of memory"), cstr("The system could not give the program more memory. Free values you no longer need, or work on smaller data."))
     }
     for (let i = 0; i < rows_a; i++) {
         let row = a
@@ -1248,7 +1248,7 @@ func _gcd_int(x, y) {
 func _int_pair(self_p, argv_p) {
     for (let i = 0; i < 2; i++) {
         if (_tag(argv_p + 16 * i) != T_INT) {
-            _errf(E_TYPE, 0, cstr("%s() argument %d must be an int, got %s"), _fname(self_p), i + 1,
+            _errf(E_TYPE, cstr("Whole numbers only; a float never becomes an int by itself, so use int(x), floor(x) or round(x)"), cstr("%s() argument %d must be an int, got %s"), _fname(self_p), i + 1,
                   _type_name(argv_p + 16 * i))
         }
     }
@@ -1305,7 +1305,7 @@ func lb_lcm(self_p, argc_i, argv_p) {
 func lb_isqrt(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     if (_tag(argv_p) != T_INT) {
-        _errf(E_TYPE, 0, cstr("isqrt() argument must be an int, got %s"), _type_name(argv_p), 0, 0)
+        _errf(E_TYPE, cstr("isqrt works on whole numbers; for a float use sqrt(x) or convert with int(x)"), cstr("isqrt() argument must be an int, got %s"), _type_name(argv_p), 0, 0)
     }
     let n = _val(argv_p)
     if (n < 0) {

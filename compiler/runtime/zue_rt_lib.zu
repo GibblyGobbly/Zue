@@ -38,6 +38,52 @@ func _article(what) {
     return cstr("a")
 }
 
+func _is(a, b) {
+    return strcmp(a, b) == 0
+}
+
+# What to write to get a value of type want from one of type got, or 0.
+func _convert_hint(want, got) {
+    let num_got = _is(got, cstr("int")) or _is(got, cstr("float"))
+    if (_is(want, cstr("string"))) {
+        if (num_got) {
+            return cstr("Convert a number to text with to_string(x), or write it inside a string: \"\{x}\"")
+        }
+        return cstr("Pass a string such as \"abc\"")
+    }
+    if (_is(want, cstr("int"))) {
+        if (_is(got, cstr("float"))) {
+            return cstr("A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)")
+        }
+        if (_is(got, cstr("string"))) {
+            return cstr("Convert text to a number with to_int(s)")
+        }
+        return cstr("Pass a whole number such as 3")
+    }
+    if (_is(want, cstr("float"))) {
+        if (_is(got, cstr("int"))) {
+            return cstr("An int never becomes a float by itself: convert it with float(x), or write 2.0")
+        }
+        if (_is(got, cstr("string"))) {
+            return cstr("Convert text to a number with to_float(s)")
+        }
+        return cstr("Pass a number with a decimal point such as 2.5")
+    }
+    if (_is(want, cstr("number"))) {
+        if (_is(got, cstr("string"))) {
+            return cstr("Convert text to a number with to_int(s) or to_float(s)")
+        }
+        return cstr("Pass an int such as 3 or a float such as 2.5")
+    }
+    if (_is(want, cstr("list"))) {
+        return cstr("Pass a list such as [1, 2, 3]")
+    }
+    if (_is(want, cstr("map"))) {
+        return cstr("Pass a map such as \{\"key\": 1}")
+    }
+    return 0
+}
+
 func _arg_fail(self_p, argv, i, what) {
     let msg = stack_buf(256)
     snprintf(msg, 256, cstr("%s() argument %d must be %s %s, got %s"), _fname(self_p), i + 1, _article(what), what,
@@ -45,7 +91,7 @@ func _arg_fail(self_p, argv, i, what) {
     let lab = stack_buf(96)
     snprintf(lab, 96, cstr("expected %s, found %s"), what, _type_name(argv + 16 * i))
     st64(addr_of("lv_err_arg"), i + 1)
-    lv_error_labeled(E_TYPE, msg, 0, lab, 0, 0)
+    lv_error_labeled(E_TYPE, msg, _convert_hint(what, _type_name(argv + 16 * i)), lab, 0, 0)
 }
 
 # The LvStr of argument i.
@@ -119,7 +165,7 @@ func lb_len(self_p, argc_i, argv_p) {
         _data_len(argv_p, n)
         _int(o, ld64(n))
     } else {
-        _errf(E_TYPE, 0, cstr("len() needs a string, list or map, got %s"), _type_name(argv_p), 0, 0)
+        _errf(E_TYPE, cstr("len works on a string, a list, a map or a box"), cstr("len() needs a string, list or map, got %s"), _type_name(argv_p), 0, 0)
     }
     retp(o)
 }
@@ -237,7 +283,7 @@ func lb_int(self_p, argc_i, argv_p) {
     } else if (t == T_FLOAT) {
         let f = _val(argv_p)
         if (fge(f, -9223372036854775808.0) == 0 or flt(f, 9223372036854775808.0) == 0) {
-            lv_error(E_RUNTIME, cstr("int() of a float that does not fit in 64 bits"), 0)
+            lv_error(E_RUNTIME, cstr("int() of a float that does not fit in 64 bits"), cstr("The largest int is 9223372036854775807. Keep very large numbers as floats"))
         }
         _int(o, f2i(f))
     } else if (t == T_CHAR) {
@@ -247,7 +293,7 @@ func lb_int(self_p, argc_i, argv_p) {
     } else if (t == T_STR) {
         _int(o, _parse_int(self_p, _val(argv_p) + S_DATA))
     } else {
-        _errf(E_TYPE, 0, cstr("int() cannot convert %s"), _type_name(argv_p), 0, 0)
+        _errf(E_TYPE, cstr("int() takes a float, a char, a bool or text that is a whole number, such as int(\"42\")"), cstr("int() cannot convert %s"), _type_name(argv_p), 0, 0)
     }
     retp(o)
 }
@@ -311,7 +357,7 @@ func lb_float(self_p, argc_i, argv_p) {
     } else if (t == T_STR) {
         _flt(o, _parse_float(self_p, _val(argv_p) + S_DATA))
     } else {
-        _errf(E_TYPE, 0, cstr("float() cannot convert %s"), _type_name(argv_p), 0, 0)
+        _errf(E_TYPE, cstr("float() takes an int, a char, a bool or text that is a number, such as float(\"2.5\")"), cstr("float() cannot convert %s"), _type_name(argv_p), 0, 0)
     }
     retp(o)
 }
@@ -438,7 +484,7 @@ func lb_range(self_p, argc_i, argv_p) {
         }
     }
     if (step == 0) {
-        lv_error(E_ARGUMENT, cstr("range() step must not be 0"), 0)
+        lv_error(E_ARGUMENT, cstr("range() step must not be 0"), cstr("A step of 0 never reaches the end. Use 1, or a negative step to count down"))
     }
     let n = 0
     if (step > 0 and end > start) {

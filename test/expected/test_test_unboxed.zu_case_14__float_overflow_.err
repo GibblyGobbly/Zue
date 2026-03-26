@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 3:
+Runtime Error [E0411] in /tmp/zue_test_case.zu at line 3:
   float overflow in '*'
 
    3 |     x = x * 10.0

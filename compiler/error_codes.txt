@@ -1,0 +1,439 @@
+# The error codes of Zue. One entry per family of errors:
+#   == CODE            starts an entry
+#   title:             one line that names the family
+#   match:             pieces of the error message, separated by " | "; the first entry (in file
+#                      order) with a piece found in a message gives the message its code
+#   text:              why the error happens
+#   example:           a short program that causes it (lines indented by four spaces)
+#   fix:               what to change
+# A field continues on the lines below it that start with four spaces.
+# tools/gen_error_codes.py turns this file into compiler/error_codes.zu (used by `zue explain` and
+# by the compile-time errors) and compiler/runtime/zue_rt_codes.zu (used by the runtime errors).
+# Run it after changing this file; make codes-check fails if the generated files are out of date.
+
+== E0101
+title: A string has no closing quote
+match: Unterminated string | Unterminated character literal
+text: A string literal starts with a double quote and must end with another one on the same
+    line, or on a later line if the text goes on. The end of the file was reached first.
+example:
+    let name = "Ann
+    print(name)
+fix: Add the closing quote: let name = "Ann"
+
+== E0102
+title: An escape sequence is not known
+match: Unknown escape | A backslash at the end of a line
+text: Inside a string or a character, a backslash starts an escape such as \n for a new line.
+    Only a few escapes exist: \n \t \r \\ \" \' \{ \} and, in characters, \0.
+example:
+    print("a\qb")
+fix: Write \\ for a backslash, or remove it.
+
+== E0103
+title: A character is not part of the language
+match: Unexpected character
+text: The source holds a character that Zue does not use outside a string or a comment, such as
+    @, $, ? or a letter with an accent.
+example:
+    let x = 5 @ 3
+fix: Remove the character, or put it inside a string or a comment.
+
+== E0104
+title: A number is written wrongly
+match: number literal | Misplaced '_' | Integer literal does not fit
+text: A number is digits, optionally with a single _ between two digits (1_000), a decimal
+    point with digits on both sides (2.5), 0x or 0b followed by digits, and it must fit in 64 bits.
+example:
+    let a = 12abc
+    let b = 1__000
+fix: Put a space or an operator between a number and a name, and use one _ between digits.
+
+== E0105
+title: A character literal is not one character
+match: character literal
+text: A character literal has exactly one character between single quotes, like 'a'. Text with
+    more than one character is a string and goes between double quotes.
+example:
+    let c = 'ab'
+fix: Use double quotes for text: "ab"
+
+== E0106
+title: A string interpolation is not closed or not valid
+match: Unclosed string interpolation | Invalid expression inside string interpolation
+text: Inside a string, { starts an expression whose value is put into the text, and } ends it.
+    The braces must match and what is between them must be a valid expression.
+example:
+    print("total: {1 +}")
+    print("open: {x")
+fix: Close the brace and write a complete expression, or write \{ for a brace that is only text.
+
+== E0110
+title: An expression was expected
+match: expected an expression | Unexpected semicolon
+text: The program has a token where a value, a name or a call should be. A statement ends at the
+    end of the line, so a semicolon is not needed.
+example:
+    let a = 1 +* 2
+    let b =
+fix: Write the missing value, or remove the extra operator or token.
+
+== E0111
+title: A closing bracket, brace or parenthesis is missing
+match: Expected ')' | Expected ']' | Expected '}' | Expected '>'
+text: Every ( [ and { must be closed by ) ] and } in the right order. The message points at the
+    place where the closer was expected and at the opener that was never closed.
+example:
+    print((1 + 2)
+fix: Add the closing bracket where it belongs.
+
+== E0112
+title: A closing brace has no opening brace
+match: there is no block to close
+text: A } ends a block that a { started, but there is no open block here.
+example:
+    let a = 1
+    }
+fix: Remove the extra }, or add the { that it should close.
+
+== E0113
+title: A name is declared twice in one scope
+match: is already declared
+text: Inside one block, a variable, parameter, function or type name can be declared once.
+example:
+    let x = 1
+    let x = 2
+fix: Use another name, or assign to the existing variable without let: x = 2
+
+== E0114
+title: A name was expected
+match: Expected variable name | Expected parameter name | Expected function name | Expected a name after | Expected field name | Expected loop variable name | Expected exported name
+text: A declaration needs a name made of letters, digits and _, not starting with a digit. Words
+    such as let, func, if, template, bloc, box, unsafe, use, export and case are keywords and cannot
+    be names.
+example:
+    let template = 3
+    func case() { return 1 }
+fix: Choose another name.
+
+== E0115
+title: A parameter without a default follows one with a default
+match: needs a default value
+text: Once a parameter has a default, every parameter after it must have one too.
+example:
+    func f(a = 1, b) { return a + b }
+fix: Give b a default, or put it before a.
+
+== E0116
+title: Something that is not a variable is changed
+match: Invalid assignment target | can only be applied to variables
+text: The left side of = and the operand of ++ and -- must be a variable, an item such as
+    list[0], or a field such as point.x.
+example:
+    f() = 3
+    xs[0]++
+fix: Assign to a variable, an item or a field.
+
+== E0117
+title: A declaration has the wrong number of values
+match: Variable count | const declarations require
+text: let a, b = 1, 2 needs one value for each name, and a const needs a value.
+example:
+    let a, b = 1, 2, 3
+    const k
+fix: Give one value for each name.
+
+== E0118
+title: A type annotation is not valid
+match: Expected a type after | take an element type | to close the element type
+text: After a colon you may write int, float, bool, char, string, list, map, function or the name
+    of one of your types. Only list and map take an element type in angle brackets.
+example:
+    let x: int< = 1
+fix: Write a type such as list<int>.
+
+== E0119
+title: A map literal key is not a string
+match: Map literal keys
+text: In a map literal such as {"a": 1}, each key is a plain string.
+example:
+    let m = {1: 2}
+fix: Write the key as a string: {"1": 2}
+
+== E0120
+title: A field declaration is not allowed
+match: fields cannot have types | give a type to every field | box field needs
+text: A data type has untyped fields; use a template for typed fields. A bloc types all its fields
+    or none. A box field is written box[16] with a number.
+example:
+    data D { a: int }
+fix: Use template, or type every field of the bloc.
+
+== E0121
+title: A use or export is not valid
+match: export can only be used | Expected string path | Expected 'from'
+text: use { name } from "file.zu" brings names in, and export may go before let, const, func,
+    data, template and bloc.
+example:
+    export print(1)
+fix: Write a declaration after export.
+
+== E0122
+title: A switch has something other than case or default
+match: Expected 'case' or 'default'
+text: Inside switch (x) { ... } only case and default clauses may appear.
+example:
+    switch (x) { print(1) }
+fix: Put the statements under a case or default.
+
+== E0123
+title: A token other than the expected one was found
+match: Expected
+text: The parser needed a particular token here (such as a brace after a function header) and
+    found something else.
+example:
+    if (true)
+        print(1)
+fix: Add the missing token shown in the message.
+
+== E0420
+title: Two lists have different sizes
+match: different lengths | dimension mismatch
+text: Element-wise operations and matrix products need lists of matching sizes.
+example:
+    print([1, 2] + [1, 2, 3])
+fix: Make the lists the same length.
+
+== E0201
+title: An operator is used on values of the wrong types
+match: cannot use '
+text: Arithmetic needs two numbers of the same type (two ints or two floats); + also joins two
+    strings. int and float never mix, and nothing is converted for you.
+example:
+    print(1 + "a")
+    print(2 * 1.5)
+fix: Convert one side on purpose: to_string(x), float(x), int(x).
+
+== E0202
+title: A function was given the wrong kind of value
+match: argument 1 must be | argument 2 must be | argument 3 must be | argument 4 must be | argument must be an int | digits must be an int
+text: The function needs a value of a certain type for this argument and got another one.
+example:
+    print(sqrt("a"))
+fix: Convert the value, as the hint says, for example with float(x) or to_int(s).
+
+== E0203
+title: A function was called with the wrong number of arguments
+match: but got | expects exactly | expects 1 pointer | takes exactly
+text: Each function takes a fixed number of arguments (some allow a range). The call has too many
+    or too few.
+example:
+    print(sqrt(1, 2))
+fix: Pass exactly the arguments that the function takes.
+
+== E0204
+title: A value of the wrong type is stored
+match: cannot assign | cannot store | cannot append | must be a bool, got | variable '
+text: A variable keeps the type of its first value, and a list or typed field holds one type.
+example:
+    let n = 1
+    n = "one"
+fix: Use another variable for the new value, or convert it to the type the variable has.
+
+== E0205
+title: A condition is not true or false
+match: needs a bool | needs bool operands | condition must be a boolean
+text: if, while, for, and, or and not need a bool. A number or text is never turned into one.
+example:
+    let n = 1
+    if (n) { print("yes") }
+fix: Write a comparison: if (n != 0).
+
+== E0206
+title: An index or a slice position is not valid
+match: list index must be | slice position must be | cannot slice | Use an int index | cannot index | map key must be
+text: A list is indexed by a whole number counting from 0, a map by a string, and a slice
+    s[a:b] takes whole numbers counting from 1.
+example:
+    let xs = [1, 2]
+    print(xs["a"])
+fix: Use an int index, or a string key for a map.
+
+== E0207
+title: A division by zero
+match: division by zero
+text: Dividing or taking a remainder with 0 is always an error, because Zue has no infinity.
+example:
+    print(10 / 0)
+fix: Check the divisor before dividing.
+
+== E0208
+title: Strict mode needs a type that is not known
+match: strict mode
+text: A file that starts with the comment # strict must give a type to every parameter and to
+    every value whose type the checker cannot work out.
+example:
+    # strict
+    func add(a, b) { return a + b }
+fix: Add types: func add(a: int, b: int).
+
+== E0209
+title: A type name is not known
+match: unknown type
+text: The name after a colon is not a built-in type or one of your types.
+example:
+    let x: integer = 1
+fix: Use int, float, bool, char, string, list, map, function, or a type you defined.
+
+== E0210
+title: A typed field is given the wrong type
+match: ' field '
+text: A bloc or template with typed fields checks each value when you build it or change it.
+example:
+    template P { x: float }
+    P("a")
+fix: Pass a value of the declared type. Write 2.0, not 2, for a float.
+
+== E0211
+title: A call or value cannot be used this way
+match: cannot call | cannot compare | cannot order | cannot read field | for-in expects | cannot negate | cannot convert
+text: Only functions can be called, only numbers, strings and chars are ordered, and only lists,
+    strings and numbers can be iterated or converted.
+example:
+    let n = 3
+    n()
+fix: Check the type of the value; the message names it.
+
+== E0301
+title: A name is not defined
+match: is not defined
+text: The program uses a name that no let, func, parameter or use declares. Often it is a typo.
+example:
+    let items = [1, 2]
+    print(itms[0])
+fix: Fix the spelling (the hint suggests the closest name) or declare it with let.
+
+== E0401
+title: An index or slice is outside its list or string
+match: is out of bounds | Slice start
+text: Positions in a list or string count from 0 up to length - 1. A slice s[a:b] counts from 1
+    and includes both ends. A position past either end stops the program.
+example:
+    let xs = [1, 2, 3]
+    print(xs[3])
+fix: Check len(xs) first, or use an index from 0 to len(xs) - 1.
+
+== E0402
+title: A field or key does not exist
+match: does not exist
+text: A template, bloc or box has only the fields that were declared.
+example:
+    template P { x }
+    let p = P(1)
+    print(p.y)
+fix: Use a field that was declared, or add it to the declaration.
+
+== E0410
+title: An integer calculation overflowed
+match: integer overflow | does not fit in a 64-bit int | shift count
+text: Ints are 64 bits (about 9.2 quintillion). A result that does not fit is an error, never a
+    wrap-around.
+example:
+    print(9223372036854775807 + 1)
+fix: Use floats for very large numbers.
+
+== E0411
+title: A float calculation went out of range or outside its domain
+match: float overflow | does not fit in a 64-bit float
+text: Zue has no infinity and no NaN. A float result that is too large, or an input outside what
+    a function accepts (the square root of a negative number), is an error.
+example:
+    print(exp(1000.0))
+fix: Check the range of the input before calling.
+
+== E0412
+title: A function was given a value it cannot work with
+match: must not be negative | must not be 0 | is greater than the upper | needs a list with at least one | digits must be between | exponent of an int | mode '
+text: The type is right but the value is not allowed, such as a negative size or an empty list.
+example:
+    print(range(0, 10, 0))
+fix: Pass a value in the range the function accepts; the hint says which.
+
+== E0413
+title: Text cannot be read as a number
+match: cannot read
+text: to_int, to_float, int and float need the whole text to be a number.
+example:
+    print(to_int("12abc"))
+fix: Check the text first with is_digit(s), or fix the value.
+
+== E0430
+title: A function was given a list or value of the wrong shape
+match: needs a list | list items must | must be numbers | cannot store a | a whole object | expects a list | must be ints
+text: The function works on a list of numbers (or another shape) and the value is not.
+example:
+    print(sum([1, "a"]))
+fix: Pass a list whose items are all ints or all floats.
+
+== E0440
+title: The program ran out of stack or memory
+match: stack overflow | out of memory | too many boxes
+text: A recursion that never stops uses up the stack. Very large data can use up memory.
+example:
+    func f(n) { return f(n + 1) }
+    f(0)
+fix: Give the recursion a base case, or work on smaller data.
+
+== E0450
+title: A file operation failed
+match: on a closed file | cannot open | cannot read file | No such file
+text: The file was closed, does not exist, or cannot be opened with that mode.
+example:
+    let f = open("out.txt", "w")
+    close(f)
+    write(f, "x")
+fix: Open the file again, and check the path with file_exists(path).
+
+== E0451
+title: The operating system could not give random bytes
+match: cannot read system entropy
+text: trand() and tshuffle() read the kernel's entropy source and report a failure instead of
+    returning a number that is not random.
+fix: Check that the program is allowed to use getrandom, or use rand() with srand(seed).
+
+== E0460
+title: An unsafe rule was broken
+match: unsafe | alloc() | free() | box | pointer | address_of | defer() | double free | use-after-free
+text: Raw memory is only allowed inside unsafe blocks, and the ten rules there are checked: no
+    use after free, no double free, no pointer that outlives its block, and every alloc() freed.
+example:
+    unsafe { let p = alloc(8) }
+fix: Free what you allocate, keep pointers inside their block, and read docs/unsafe.md.
+
+== E0470
+title: A bloc or template rule was broken
+match: bloc | Bloc | template | Template | Data constructor
+text: A bloc is immutable and holds only simple values; a template holds anything and is checked
+    when it is built and changed.
+example:
+    bloc P { x: int }
+    let p = P(1)
+    p.x = 2
+fix: Build a new bloc instead of changing one, or use a template.
+
+== E0480
+title: An assertion failed
+match: Assertion failed
+text: assert(condition) stops the program when the condition is false.
+example:
+    assert(1 == 2)
+fix: Find out why the condition is false.
+
+== E0490
+title: Crash
+match: invalid memory access | arithmetic fault
+text: The program touched memory it does not own. In ordinary Zue code this cannot happen; it
+    points to unsafe code or to a bug in the runtime.
+example:
+    unsafe { ... }
+fix: Check pointers in unsafe code, and report the problem if there is none.

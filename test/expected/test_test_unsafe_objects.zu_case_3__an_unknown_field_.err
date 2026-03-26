@@ -1,4 +1,4 @@
-Name Error in /tmp/zue_test_case.zu at line 5:
+Name Error [E0402] in /tmp/zue_test_case.zu at line 5:
   Template field 'mana' does not exist
 
    5 |     print(p.mana)

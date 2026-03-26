@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 1:
+Type Error [E0470] in /tmp/zue_test_case.zu at line 1:
   bloc has duplicate field names
 
    1 | bloc B { x, x }

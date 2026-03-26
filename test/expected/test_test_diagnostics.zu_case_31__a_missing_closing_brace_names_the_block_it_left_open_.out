@@ -1,4 +1,4 @@
-Syntax Error in /tmp/zue_test_case.zu at line 5:
+Syntax Error [E0111] in /tmp/zue_test_case.zu at line 5:
   Expected '}'
 
    1 | func f() {

@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 4:
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 4:
   this box belongs to a template and is freed with it
 
    4 |     free(h.bytes)

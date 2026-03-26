@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 2:
+Type Error [E0203] in /tmp/zue_test_case.zu at line 2:
   Bloc 'P' expects 2 field value(s), but got 1
 
    2 | let p = P{1}

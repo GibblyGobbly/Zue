@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 5:
+Type Error [E0211] in /tmp/zue_test_case.zu at line 5:
   cannot order int and string with <, <=, > or >=
 
    5 | sort(l)

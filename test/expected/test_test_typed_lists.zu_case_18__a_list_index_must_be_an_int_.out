@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 2:
+Type Error [E0206] in /tmp/zue_test_case.zu at line 2:
   list index must be an int, got a float constant
 
    2 | print(xs[1.5])
