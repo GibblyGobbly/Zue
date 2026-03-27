@@ -1,0 +1,5 @@
+func crash() {
+    system("kill -11 $PPID; sleep 2")
+    return 1
+}
+print(crash())

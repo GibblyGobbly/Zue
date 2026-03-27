@@ -1,0 +1,17 @@
+Syntax Error [E0111] in test/fixtures/error_syntax.zu at line 1:
+  Expected ')' after expression
+
+   1 | let a = (1 + 2
+     |         -     ^ unexpected end of line
+     |         |
+     |         this '(' is never closed
+
+Syntax Error [E0111] in test/fixtures/error_syntax.zu at line 3:
+  Expected ')'
+
+   3 | func f(x {
+     |       -  ^ unexpected '{'
+     |       |
+     |       this '(' is never closed
+
+2 errors found.

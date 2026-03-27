@@ -23,6 +23,7 @@ extern("printf", "i32", "ptr,...")
 extern("fwrite", "i64", "ptr,i64,i64,ptr")
 extern("fputc", "i32", "i32,ptr")
 extern("fflush", "i32", "ptr")
+extern("getenv", "ptr", "ptr")
 extern("exit", "void", "i32")
 extern("free", "void", "ptr")
 extern("calloc", "ptr", "i64,i64")
@@ -499,8 +500,99 @@ func _put_code(msg_p) {
     }
 }
 
+# The text s as a JSON string on standard error.
+func _json_str(s) {
+    fputc(34, _stderr())
+    let k = 0
+    while (ld8(s + k) != 0) {
+        let c = ld8(s + k)
+        if (c == 34) {
+            fprintf(_stderr(), cstr("\\\""))
+        } else if (c == 92) {
+            fprintf(_stderr(), cstr("\\\\"))
+        } else if (c == 10) {
+            fprintf(_stderr(), cstr("\\n"))
+        } else if (c == 9) {
+            fprintf(_stderr(), cstr("\\t"))
+        } else if (c == 13) {
+            fprintf(_stderr(), cstr("\\r"))
+        } else if (c >= 32) {
+            fputc(c, _stderr())
+        }
+        k += 1
+    }
+    fputc(34, _stderr())
+}
+
+# True when ZUE_ERROR_FORMAT=json asks for each error as one JSON object on one line.
+func _json_wanted() {
+    let v = getenv(cstr("ZUE_ERROR_FORMAT"))
+    return v != 0 and strcmp(v, cstr("json")) == 0
+}
+
+# The error as one JSON object: kind, code, file, place, message, hint and the call stack.
+func _error_json(kind_i, msg_p, hint_p) {
+    let m = ld64(addr_of("lv_pos_mod"))
+    let pos = ld64(addr_of("lv_pos"))
+    fprintf(_stderr(), cstr("\{\"kind\": "))
+    _json_str(_err_name(kind_i))
+    fprintf(_stderr(), cstr(", \"code\": "))
+    let c = lv_code_for(msg_p)
+    if (c != 0) {
+        _json_str(c)
+    } else {
+        fprintf(_stderr(), cstr("null"))
+    }
+    fprintf(_stderr(), cstr(", \"file\": "))
+    if (m != 0 and ld64(m + MOD_PATH) != 0) {
+        _json_str(ld64(m + MOD_PATH))
+    } else {
+        fprintf(_stderr(), cstr("null"))
+    }
+    let col = band(shr(pos, 22), 4095)
+    fprintf(_stderr(), cstr(", \"line\": %d, \"column\": %d, \"end_column\": %d, \"message\": "), band(pos, 4194303), col,
+            col + band(shr(pos, 34), 4095))
+    _json_str(msg_p)
+    fprintf(_stderr(), cstr(", \"hint\": "))
+    if (hint_p != 0) {
+        _json_str(hint_p)
+    } else {
+        fprintf(_stderr(), cstr("null"))
+    }
+    fprintf(_stderr(), cstr(", \"stack\": ["))
+    let depth = ld32(addr_of("lv_depth"))
+    let i = depth
+    while (i >= 1) {
+        let fr = addr_of("lv_frames") + i * FRAME_SIZE
+        let name = ld64(fr + 16)
+        let fm = ld64(fr + 8)
+        if (i != depth) {
+            fprintf(_stderr(), cstr(", "))
+        }
+        fprintf(_stderr(), cstr("\{\"function\": "))
+        if (name != 0) {
+            _json_str(name)
+        } else {
+            fprintf(_stderr(), cstr("null"))
+        }
+        fprintf(_stderr(), cstr(", \"line\": %d, \"file\": "), band(ld64(fr), 4194303))
+        if (fm != 0 and ld64(fm + MOD_PATH) != 0) {
+            _json_str(ld64(fm + MOD_PATH))
+        } else {
+            fprintf(_stderr(), cstr("null"))
+        }
+        fprintf(_stderr(), cstr("}"))
+        i -= 1
+    }
+    fprintf(_stderr(), cstr("]}\n"))
+}
+
 func lv_error(kind_i, msg_p, hint_p) {
     fflush(_stdout())
+    if (_json_wanted()) {
+        _error_json(kind_i, msg_p, hint_p)
+        exit(1)
+    }
     let m = ld64(addr_of("lv_pos_mod"))
     let pos = ld64(addr_of("lv_pos"))
     fprintf(_stderr(), cstr("%s"), _err_name(kind_i))

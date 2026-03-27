@@ -26,6 +26,7 @@ use { dump_program } from "ast_dump.zu"
 use { unparse_program } from "ast_unparse.zu"
 use { check_program } from "check.zu"
 use { dbg_enable } from "ll_state.zu"
+use { diag_set_format } from "diag.zu"
 use { ERROR_CODES } from "error_codes.zu"
 
 # Name of a file without its directory and extension: "dir/prog.zu" is "prog".
@@ -70,6 +71,7 @@ func usage() {
     print("  unparse  print the parsed program as source again")
     print("  -o     where to write the program or the IR")
     print("  -g     with build, run and emit: add line tables so that gdb, valgrind and perf name the Zue line")
+    print("  --error-format=json  before the file: print each compile error as one JSON object per line")
     print("  -S     with build: write C/<name>.ll and do not build")
     exit(1)
 }
@@ -298,6 +300,10 @@ func main() {
     }
     let cmd = a[0]
     let rest = slice(a, 1, len(a))
+    if (len(rest) >= 2 and rest[0] == "--error-format=json") {
+        diag_set_format("json")
+        rest = slice(rest, 1, len(rest))
+    }
     if (len(rest) >= 2 and rest[0] == "-g" and (cmd == "run" or cmd == "build" or cmd == "emit")) {
         dbg_enable()
         rest = slice(rest, 1, len(rest))

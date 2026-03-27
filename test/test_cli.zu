@@ -1,0 +1,26 @@
+// The command line: zue explain, zue check, the JSON error formats, and a crash report.
+
+# CASE explain describes a code
+system("bin/zue explain E0201")
+# CASE explain accepts a code in lower case
+system("bin/zue explain e0301")
+# CASE explain with no code lists every code
+system("bin/zue explain | head -6")
+# CASE explain says when a code does not exist
+system("bin/zue explain E9999")
+# CASE check prints every compile error and exits with status 1
+system("bin/zue check test/fixtures/error_type.zu")
+# CASE check prints every syntax error
+system("bin/zue check test/fixtures/error_syntax.zu")
+# CASE check prints nothing for a good program
+system("bin/zue check examples/hello.zu")
+# CASE compile errors as JSON, one object per line
+system("bin/zue check --error-format=json test/fixtures/error_type.zu")
+# CASE a runtime error shows the exact place and the call stack
+system("bin/zue run test/fixtures/error_runtime.zu 2>&1")
+# CASE a runtime error as JSON
+system("ZUE_ERROR_FORMAT=json bin/zue run test/fixtures/error_runtime.zu 2>&1")
+# CASE a crash is reported with the line and the calls that were running
+system("bin/zue run test/fixtures/error_crash.zu 2>&1; echo status $?")
+# CASE build -g keeps the line table
+system("bin/zue build -g examples/hello.zu -o C/hello_g > /dev/null && objdump --dwarf=decodedline C/hello_g | grep -c hello.zu")

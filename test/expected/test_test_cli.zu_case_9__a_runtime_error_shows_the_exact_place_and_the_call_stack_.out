@@ -1,0 +1,10 @@
+Index Error [E0401] in test/fixtures/error_runtime.zu at line 6:
+  Index 6 is out of bounds for list of length 3
+
+   6 |     return xs[n]
+     |            ^^^^^ index 6, valid indexes are 0 to 2
+
+Hint: Ensure your index is between 0 and len-1
+Call stack, innermost call first:
+  in inner(), called at line 9: return inner(n + 5)
+  in outer(), called at line 11: print(outer(pass(1)))

@@ -31,10 +31,12 @@ compiler in detail.
 | File | Role |
 |---|---|
 | `zuec.zu` | Driver: `build`, `run`, `emit`, and the internal `--native` and positional forms. Builds the clang command line |
-| `lexer.zu`, `token.zu` | Source text to tokens; keyword and operator tables, including the keyword aliases |
-| `parser.zu` | Recursive descent with precedence climbing; produces the AST. `x[a:b]` becomes an `NSlice` node, `x[i]` an `NIndex` node |
-| `ast_nodes.zu` | The AST node types: one `template` per kind of node (`NBin`, `NLet`, ...) with its `mk_*` constructor, and `NODE_FIELDS`, the fields of each kind. A node always has `k` (the kind) and `line`; reading a field its kind does not have is an error |
-| `check.zu` | The compile-time type checker for the main program and imported modules: variable types, operators, conditions and the signatures of the math builtins. See [syntax](syntax.md#type-checking) |
+| `lexer.zu`, `token.zu` | Source text to tokens, each with its line, column and end; keyword and operator tables, including the keyword aliases. A lexical error is recorded and lexing goes on |
+| `diag.zu` | The error reporter shared by the lexer, the parser and the checker: an error has a place (a span), labels, a hint and notes; they are collected, sorted by position and printed with the source line and carets. Also `suggest`, the "did you mean" search |
+| `error_codes.zu` | Generated from `error_codes.txt` by `tools/gen_error_codes.py`: the error codes with their explanations, and `code_for(message)`. The runtime has the matching `zue_rt_codes.zu` |
+| `parser.zu` | Recursive descent with precedence climbing; produces the AST. `x[a:b]` becomes an `NSlice` node, `x[i]` an `NIndex` node. After an error it skips to the next statement (panic mode) so that one run reports every syntax error without false follow-up errors |
+| `ast_nodes.zu` | The AST node types: one `template` per kind of node (`NBin`, `NLet`, ...) with its `mk_*` constructor, and `NODE_FIELDS`, the fields of each kind. A node always has `k` (the kind) and `line`, then the fields of its kind, then `col`, `eline` and `ecol`, its place in the source. Some kinds also hold the places of a name, an operator or a type for the checker. Reading a field its kind does not have is an error |
+| `check.zu` | The compile-time type checker for the main program and imported modules: variable types, operators, conditions, the signatures of the math builtins, and names that are declared nowhere. It reports every error it can prove, in source order. See [syntax](syntax.md#type-checking) and [errors](errors.md) |
 | `analysis.zu` | Which names a function reads and writes, exports, and which variables closures capture |
 | `emit_llvm.zu`, `ll_state.zu`, `ll_scope.zu` | The LLVM IR backend: expressions, statements, functions, modules, scopes and deferred calls |
 | `emit_native.zu` | The native backend, used to compile the runtime (see [zuec](architecture.md)) |
@@ -50,6 +52,17 @@ token starts with, and the runs inside a token (identifier bytes, digits, blanks
 bodies) are skipped by the builtins `skip_chars` and `index_of_any`, which scan in native code and
 keep a lookup table for each recent set string. Operator tokens reuse tables built at start-up
 (`ONE_TEXT`, `TWO_KIND`, `TWO_TEXT`), so lexing an operator allocates nothing but the token.
+
+## How errors get their place
+
+The lexer gives each token a line, a column and an end (columns count bytes from 1). The parser gives
+each node the same, and the checker and the reporter in `diag.zu` use them to draw carets under the
+exact text. At run time the generated code records where the running operation is: one 64-bit number
+(line, column, length, and for a binary operation the offset of its operator) stored in the global
+`lv_pos` before an operation that can fail. The in-line fast paths for int and float arithmetic store
+it only on their slow path, so a loop of additions pays nothing. `lvp_call` also keeps a shadow stack
+of the calls that are running (the place of the call, the module and the function name), and `lv_error`
+prints the source line, the carets and that stack. See [errors](errors.md).
 
 ## The runtime (`compiler/runtime/`)
 

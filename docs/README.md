@@ -9,6 +9,7 @@
 | [builtins](builtins.md) | Every builtin function: core, strings, math, files |
 | [math](math.md) | Every math function, the number rules, and five worked programs |
 | [string](string.md) | Every string function, slices, and five worked programs |
+| [errors](errors.md) | How errors are reported, how to read them, every error code, `zue check` and `zue explain` |
 | [memory](memory.md) | Where values live, the stack, the heap, boxes, raw memory, limits |
 | [unsafe](unsafe.md) | `unsafe` blocks and the 10 safety rules |
 | [architecture](architecture.md) | How a program becomes a binary; the compiler, the runtime, the bootstrap |

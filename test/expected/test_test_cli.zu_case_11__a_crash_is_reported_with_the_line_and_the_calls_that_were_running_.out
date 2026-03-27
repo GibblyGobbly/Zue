@@ -1,0 +1,10 @@
+Fatal Error [E0490] in test/fixtures/error_crash.zu near line 2:
+  invalid memory access (segmentation fault)
+
+   2 |     system("kill -11 $PPID; sleep 2")
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: This is a bug in the program's unsafe code or in the Zue runtime. Look for a pointer used after free() or outside its block.
+Call stack, innermost call first:
+  in crash(), called at line 5: print(crash())
+status 139

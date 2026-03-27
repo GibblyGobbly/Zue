@@ -1,0 +1,4 @@
+let total = 10
+let name = "pen"
+print(total + name)
+print(lenn(name))

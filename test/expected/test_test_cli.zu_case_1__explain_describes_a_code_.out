@@ -1,0 +1,12 @@
+E0201: An operator is used on values of the wrong types
+
+Why it happens:
+  Arithmetic needs two numbers of the same type (two ints or two floats); + also joins two
+  strings. int and float never mix, and nothing is converted for you.
+
+Example:
+    print(1 + "a")
+    print(2 * 1.5)
+
+How to fix it:
+  Convert one side on purpose: to_string(x), float(x), int(x).

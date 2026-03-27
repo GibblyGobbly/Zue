@@ -19,13 +19,24 @@ compared with a recorded copy.
 | `zue unparse prog.zu` | Writes the program back as source, with every binary expression parenthesized |
 | `make round-trip` | Runs `tools/check_round_trip.sh`: for every Zue file in the project, parse, unparse, parse again, and require the same tree |
 | `make verify-ir` | Runs the tests and checks every generated IR file with LLVM's verifier (`opt-18`) |
-| `make fuzz` | Needs `python3`. `tools/fuzz_expressions.py` builds random int and bool expressions and compares what Zue prints with an independent evaluator; `tools/fuzz_programs.py` does the same for whole programs with loops, branches, functions and scoping, and also runs each program after `zue unparse`; `tools/fuzz_annotations.py` builds random type annotations such as `list<map<float>>` and checks parsing, the unparse round trip, the result, and that a wrong element type is a Type Error |
+| `make codes-check` | Checks that the error code files are generated from `compiler/error_codes.txt` and that every example of the table causes the error it names |
+| `make verify-debug` | Builds the examples with `zue build -g` and checks the line tables and the IR |
+| `make fuzz` | Needs `python3`. `tools/fuzz_expressions.py` builds random int and bool expressions and compares what Zue prints with an independent evaluator; `tools/fuzz_programs.py` does the same for whole programs with loops, branches, functions and scoping, and also runs each program after `zue unparse`; `tools/fuzz_annotations.py` builds random type annotations such as `list<map<float>>` and checks parsing, the unparse round trip, the result, and that a wrong element type is a Type Error; `tools/fuzz_syntax_errors.py` breaks real programs (deleting, swapping and adding tokens and brackets, cutting the file short) and checks that `zue check` never crashes or hangs, always reports a line that exists, and reports at most one syntax error per line |
 | `zue run bench/frontend_phases.zu file.zu` | Times the lexer, the parser and the type checker on a file |
 | `bench/instruction_count.sh [file.zu]` | Counts the machine instructions the lexer, parser and checker execute (needs valgrind). Counts do not depend on machine load, so they compare cleanly between changes |
 
 `test/test_lexer.zu`, `test/test_syntax.zu` and `test/test_parser_rules.zu` hold the lexer and
 parser cases. A case whose recorded output is a `Syntax Error` or `Type Error` is a program the
 compiler is meant to reject.
+
+## Tests for errors
+
+| File | Covers |
+|---|---|
+| `test/test_diagnostics.zu` | The compile-time errors: carets, labels on both operands, tabs and non-ASCII text, several errors in one file, no cascade after a missing bracket, "did you mean", the first declaration of a repeated name |
+| `test/test_positions.zu` | The line, column and end of every token and syntax tree node, including multi-line strings, interpolation and unary operators (`zue ast --spans`) |
+| `test/test_cli.zu` | `zue explain`, `zue check`, both JSON formats, a run-time error with its call stack, a crash report and `build -g` |
+| `test/expected/*.err` | Every run-time error test records the carets and the call stack too |
 
 ## Tests for strings, slices, sorting and random numbers
 

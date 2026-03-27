@@ -34,6 +34,21 @@ covered by tests in `test/`.
 | Runs inside a token (identifier, digits, blanks, string bodies, comments) skipped by native builtins `skip_chars`, `index_of_any` and `index_of`, which keeps a 256-byte lookup table for each recent set and uses `memmem` | `compiler/runtime/zue_rt_lib.zu` | The lexer is about 1.85 times faster with identical tokens on 90 files |
 | Slice syntax `x[a:b]` parsed in the same postfix branch as `x[i]`; one runtime function `lvp_slice` for strings and lists | `compiler/parser.zu`, `compiler/runtime/zue_rt_ops.zu` | A slice is an `NSlice` node, checked by the type checker and printed back by `unparse` |
 
+### Errors
+
+| Technique | Where | Why |
+|---|---|---|
+| Every token and node knows its line, column and end; the node constructors take them, instead of setting fields afterwards | `compiler/lexer.zu`, `compiler/ast_nodes.zu` | Setting three fields after building a node cost about 50 ns a node against 13 ns in the constructor; the parser's extra cost fell from 36 % to 16 % |
+| A token is used as a span (it has the same line, col, eline and ecol), so no span object is allocated for names, operators and arguments | `compiler/parser.zu` | Nothing extra to allocate or mark in the garbage collector |
+| Panic-mode recovery: the first error in a statement mutes the parser until the statement ends; a forgotten closing bracket is found where the next line starts; at most one syntax error per line | `compiler/parser.zu` | Several real errors in one run, no false follow-up errors (the idea Go's parser and rustc use) |
+| Declarations are noted when a block starts, and a name used but declared nowhere is judged at the end of the check | `compiler/check.zu` | A function may use a global declared below it; only real typos are reported, with no extra walk of the tree |
+| Edit distance with swapped neighbours for "did you mean" | `compiler/diag.zu` | `itms` suggests `items`; a difference in case alone counts |
+| The place of a running operation is one 64-bit store (line, column, length, operator offset); in-line int and float arithmetic stores it only on its slow path | `compiler/ll_state.zu`, `compiler/runtime/zue_rt_core.zu` | Exact carets at run time with no cost on the fast path; run speed is unchanged |
+| A shadow stack in `lvp_call` (place, module, function name) | `compiler/runtime/zue_rt_ops.zu` | The call stack under every run-time error costs three stores a call |
+| The error codes come from one text file; a script generates the compiler table, the runtime lookup and the list in `errors.md` | `compiler/error_codes.txt`, `tools/gen_error_codes.py` | One place to edit; `make codes-check` runs every example |
+| A signal handler on its own stack | `compiler/runtime/zue_rt_ops.zu` | A crash, including running out of stack, is reported with the line and the calls |
+| Line tables in the IR, attached to the existing position stores | `compiler/ll_state.zu` | `zue build -g` costs one metadata node per distinct place and nothing when it is off |
+
 ### Type checking
 
 | Technique | Where |
@@ -74,6 +89,7 @@ covered by tests in `test/`.
 | Golden-file tests: output, errors and exit status of every program are recorded and compared | Behaviour does not change by accident |
 | Syntax matrix (`test/test_syntax.zu`) with hand-checked outputs | Every construct and every precedence pair |
 | Round trip (`make round-trip`): parse, print back as source, parse again, require the same tree | The parser and the printer agree on all 620 project files and cases |
+| Mutation fuzzing (`tools/fuzz_syntax_errors.py`): real programs are broken at random and `zue check` must not crash, hang or name a line that does not exist | The error paths of the lexer, the parser and the checker hold up on thousands of broken programs |
 | Differential fuzzing (`make fuzz`): random expressions and whole programs are run by Zue and by an independent Python model | Precedence, scoping, loops and functions are right. Runs of 12,000 expressions and 750 programs found no compiler bug |
 | LLVM verifier (`make verify-ir`) on the IR of every test | The code generator never writes malformed IR |
 | Testing the tests: a deliberately wrong rule is fed to each fuzzer, which must fail | A passing run means something |
@@ -97,6 +113,8 @@ Measured on a 188 KB file of 56,000 tokens, and by instruction count.
 | String benchmark | 450 ms | 230 ms |
 | `sort` of 1,000,000 random ints | 95 ms | 23 ms |
 | `trand()` | 12 microseconds | about 0.5 microseconds |
+| Compiling the compiler after the error work (instructions) | 2,191 M | 2,228 M (+1.7 %); the IR grows 2.9 % because of the position stores, and the compile takes about 10 % longer |
+| Programs at run time (fib 32 and a list loop) | 0.071 s | 0.071 s |
 
 The runtime figures compare the commit before the runtime work (`6a3b3b9`) with the current one,
 on the same machine (an AMD Ryzen 7 7435HS).

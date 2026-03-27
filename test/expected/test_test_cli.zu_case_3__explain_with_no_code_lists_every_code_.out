@@ -1,0 +1,6 @@
+Error codes (zue explain CODE for details):
+
+  E0101  A string has no closing quote
+  E0102  An escape sequence is not known
+  E0103  A character is not part of the language
+  E0104  A number is written wrongly

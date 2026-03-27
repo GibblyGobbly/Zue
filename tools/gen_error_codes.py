@@ -5,6 +5,7 @@
 # gen_error_codes.py: turns compiler/error_codes.txt into the two Zue files that use it:
 #   compiler/error_codes.zu            the table for `zue explain` and the compile-time errors
 #   compiler/runtime/zue_rt_codes.zu   lv_code_for(message), for the errors a running program raises
+#   docs/errors.md                     the list of codes between its codes:start and codes:end markers
 #   python3 tools/gen_error_codes.py [--check]    --check only reports whether the files are current
 import os, sys
 
@@ -12,6 +13,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "compiler", "error_codes.txt")
 OUT_COMPILER = os.path.join(ROOT, "compiler", "error_codes.zu")
 OUT_RUNTIME = os.path.join(ROOT, "compiler", "runtime", "zue_rt_codes.zu")
+DOC = os.path.join(ROOT, "docs", "errors.md")
 HEADER = """# SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 #
@@ -98,9 +100,20 @@ def build_runtime(entries):
     return "\n".join(out)
 
 
+def build_doc(entries):
+    text = open(DOC).read()
+    a = text.index("<!-- codes:start -->")
+    b = text.index("<!-- codes:end -->")
+    rows = ["", "| Code | Meaning |", "|---|---|"]
+    for e in entries:
+        rows.append("| `%s` | %s |" % (e["code"], e["title"]))
+    rows.append("")
+    return text[:a] + "<!-- codes:start -->" + "\n".join(rows) + text[b:]
+
+
 def main():
     entries = parse()
-    files = {OUT_COMPILER: build_compiler(entries), OUT_RUNTIME: build_runtime(entries)}
+    files = {OUT_COMPILER: build_compiler(entries), OUT_RUNTIME: build_runtime(entries), DOC: build_doc(entries)}
     stale = [p for p, t in files.items() if not os.path.exists(p) or open(p).read() != t]
     if "--check" in sys.argv:
         if stale:

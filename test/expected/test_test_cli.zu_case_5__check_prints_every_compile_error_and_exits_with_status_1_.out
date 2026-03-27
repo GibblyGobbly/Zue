@@ -1,0 +1,18 @@
+Type Error [E0201] in test/fixtures/error_type.zu at line 3:
+  cannot use '+' on int and string
+
+   3 | print(total + name)
+     |       ----- ^ ---- string
+     |       |
+     |       int
+
+Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with to_string(x)
+
+Name Error [E0301] in test/fixtures/error_type.zu at line 4:
+  Function 'lenn' is not defined
+
+   4 | print(lenn(name))
+     |       ^^^^ not declared anywhere
+
+Hint: Did you mean 'len'?
+2 errors found.

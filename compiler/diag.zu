@@ -23,6 +23,13 @@ let TAB_WIDTH = 4
 
 let DIAGS = []
 
+# "text" for the usual layout, "json" for one JSON object per error on its own line (for editors).
+let FORMAT = {"mode": "text"}
+
+export func diag_set_format(mode) {
+    FORMAT.mode = mode
+}
+
 export func span_at(line, col, eline, ecol) {
     return Span(line, col, eline, ecol)
 }
@@ -365,9 +372,51 @@ func sorted_diags() {
     return out
 }
 
+func json_str(s) {
+    let t = replace(s, "\\", "\\\\")
+    t = replace(t, "\"", "\\\"")
+    t = replace(t, "\n", "\\n")
+    t = replace(t, "\t", "\\t")
+    t = replace(t, "\r", "\\r")
+    return "\"" + t + "\""
+}
+
+func json_span(sp) {
+    return "\"line\": {sp.line}, \"column\": {sp.col}, \"end_line\": {sp.eline}, \"end_column\": {sp.ecol}"
+}
+
+func json_list(items) {
+    let out = []
+    for (let x in items) {
+        append(out, json_str(x))
+    }
+    return "[" + join(out, ", ") + "]"
+}
+
+# One error as a JSON object on one line.
+func render_json(d) {
+    let labels = []
+    for (let lb in d.labels) {
+        append(labels, "\{{json_span(lb.span)}, \"text\": {json_str(lb.text)}}")
+    }
+    let c = code_for(d.msg)
+    let code = "null"
+    if (c != null) {
+        code = json_str(c)
+    }
+    return "\{\"kind\": {json_str(d.kind)}, \"code\": {code}, \"file\": {json_str(d.file)}, {json_span(d.span)}, \"message\": {json_str(d.msg)}, \"text\": {json_str(d.ptext)}, \"hint\": {json_str(d.hint)}, \"labels\": [{join(labels, ", ")}], \"notes\": {json_list(d.notes)}, \"trace\": {json_list(d.trace)}}"
+}
+
 # Prints every recorded error, in the order of the source, and forgets them.
 export func diag_print_all() {
     let all = sorted_diags()
+    if (FORMAT.mode == "json") {
+        for (let d in all) {
+            print(render_json(d))
+        }
+        DIAGS = []
+        return null
+    }
     let shown = 0
     let last_blank = true
     for (let d in all) {

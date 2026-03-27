@@ -75,6 +75,12 @@ the new seeds together with the change that needs them. See [architecture](archi
 | `zue build prog.zu -S` | Write `C/prog.ll` and stop |
 | `zue run prog.zu [args...]` | Build into `C/run/prog`, run it, and exit with its status |
 | `zue emit prog.zu [-o out.ll]` | Write the IR only; the default is `C/prog.ll` |
+| `zue check prog.zu` | Find every lexical, syntax and type error without compiling; prints nothing when there is none |
+| `zue explain [CODE]` | Describe an error code such as `E0201`, with an example and the fix; without a code, list them all |
+| `zue build -g prog.zu` | Add line tables so that gdb, valgrind and perf show Zue lines (`run` and `emit` take `-g` too) |
+| `zue --error-format=json check prog.zu` | Print each compile error as one JSON object per line, for editors |
+
+How errors look and how to read them is in [errors](errors.md).
 
 Generated IR is written to a `C/` directory in the current directory (it is git-ignored in this
 repository), so it can be read before a binary exists. Set `CC` to use another C compiler

@@ -1,0 +1,11 @@
+E0301: A name is not defined
+
+Why it happens:
+  The program uses a name that no let, func, parameter or use declares. Often it is a typo.
+
+Example:
+    let items = [1, 2]
+    print(itms[0])
+
+How to fix it:
+  Fix the spelling (the hint suggests the closest name) or declare it with let.

@@ -1,0 +1,11 @@
+func pass(v) {
+    return [v, null][0]
+}
+func inner(n) {
+    let xs = [1, 2, 3]
+    return xs[n]
+}
+func outer(n) {
+    return inner(n + 5)
+}
+print(outer(pass(1)))
