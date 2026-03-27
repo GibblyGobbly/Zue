@@ -40,6 +40,7 @@ compiler in detail.
 | `analysis.zu` | Which names a function reads and writes, exports, and which variables closures capture |
 | `emit_llvm.zu`, `ll_state.zu`, `ll_scope.zu` | The LLVM IR backend: expressions, statements, functions, modules, scopes and deferred calls |
 | `emit_native.zu` | The native backend, used to compile the runtime (see [zuec](architecture.md)) |
+| `ranges.zu` | `cut(x, a, b)`: part of a string or list from offset a to b, counting from 0, clamped. The compiler uses it where the builtin `slice` (from 1, both ends included) would not fit |
 | `state.zu`, `shared.zu`, `util.zu` | Shared state, the list of builtin names (`BUILTINS`), path and file helpers, error formatting |
 | `build_runtime.sh` | Builds `C/zue_rt_native.o` from the runtime sources when they changed and prints the link input |
 | `run_tests.sh` | The test runner behind `make test` |

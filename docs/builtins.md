@@ -40,7 +40,7 @@ Floats are printed with up to six significant digits and always show a point or 
 | `append(list, v)` / `list_append(list, v)` | Add to the end |
 | `remove(list, i)` | Remove and return the element at `i` (negative counts from the end); an index out of range is an `Index Error` |
 | `find(list, v)` | Index of the first equal element, or `-1`. Lists only |
-| `slice(list, a, b)` | New list of elements `a` to `b - 1`; the bounds are clamped, and `a >= b` gives `[]`. Also works on strings |
+| `slice(list, a, b)` | New list of the elements at positions `a` to `b`, counting from 1 and including both ends; same as `list[a:b]`. A position outside the list, or `a` after `b`, is an `Index Error`. Also works on strings |
 | `range(end)`, `range(start, end)`, `range(start, end, step)` | List of integers; `step` may be negative and must not be 0 |
 | `map(list, fn)`, `filter(list, fn)`, `reduce(list, fn, init)` | Higher-order helpers; return new values. `reduce` needs all three arguments |
 | `sort(list)` | In-place ascending, stable sort of numbers, strings or chars; returns `null`. Mixing numbers and strings is an error. A list of 256 or more non-negative ints is sorted by radix sort (no comparisons, several times faster); everything else by insertion sort for 16 items or fewer and merge sort above that |
@@ -94,7 +94,7 @@ byte strings: `len("héllo")` is 6, and indexing is zero-based by byte. `to_uppe
 |---|---|---|
 | `char_at(s, i)` | The character at index `i` as a one-character string; `""` when out of range | `char_at("ABC", 1)` is `"B"` |
 | `substring(s, start, n)` | `n` characters starting at `start`; the result is cut at the end of the string | `substring("Hello", 0, 2)` is `"He"` |
-| `slice(s, start, end)` | From `start` up to, not including, `end` (bounds are clamped) | `slice("Hello", 1, 4)` is `"ell"` |
+| `slice(s, start, end)` | Positions `start` to `end`, from 1, both included | `slice("Hello", 2, 4)` is `"ell"` |
 
 For a slice written as an expression, with positions from 1 and both ends included, see [slices](syntax.md#slices): `"Hello"[2:4]` is `"ell"`.
 

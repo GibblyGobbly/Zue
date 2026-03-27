@@ -5,6 +5,7 @@
 
 use { ST } from "state.zu"
 use { die_line } from "diag.zu"
+use { cut } from "ranges.zu"
 
 # Reports one error that has only a line and ends the run.
 export func die(kind, line, msg) {
@@ -19,7 +20,7 @@ export func path_dir(p) {
     if (i == 0) {
         return "/"
     }
-    return slice(p, 0, i)
+    return cut(p, 0, i)
 }
 
 export func path_join(dir, rel) {
@@ -73,12 +74,12 @@ export func split_lines(text) {
     let n = len(text)
     for (let i = 0; i < n; i++) {
         if (text[i] == '\n') {
-            append(lines, slice(text, start, i))
+            append(lines, cut(text, start, i))
             start = i + 1
         }
     }
     if (start < n) {
-        append(lines, slice(text, start, n))
+        append(lines, cut(text, start, n))
     }
     return lines
 }

@@ -686,40 +686,13 @@ func lb_find(self_p, argc_i, argv_p) {
 
 func lb_slice(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 3, 3)
-    let a = _arg_int(self_p, argv_p, 1)
-    let b = _arg_int(self_p, argv_p, 2)
+    _arg_int(self_p, argv_p, 1)
+    _arg_int(self_p, argv_p, 2)
+    if (_tag(argv_p) != T_LIST) {
+        _arg_str(self_p, argv_p, 0)
+    }
     let o = stack_buf(16)
-    let len = 0
-    if (_tag(argv_p) == T_LIST) {
-        len = ld64(_val(argv_p) + L_COUNT)
-    } else {
-        len = ld64(_arg_str(self_p, argv_p, 0))
-    }
-    if (a < 0) {
-        a += len
-    }
-    if (b < 0) {
-        b += len
-    }
-    if (a < 0) {
-        a = 0
-    }
-    if (b > len) {
-        b = len
-    }
-    if (_tag(argv_p) == T_LIST) {
-        if (a >= b) {
-            _list_new(o, 0)
-        } else {
-            _list_of(o, b - a, ld64(_val(argv_p) + L_ITEMS) + 16 * a)
-        }
-        retp(o)
-    }
-    if (a >= b) {
-        _str(o, cstr(""))
-    } else {
-        _str_n(o, _val(argv_p) + S_DATA + a, b - a)
-    }
+    lvp_slice(o, argv_p, argv_p + 16, argv_p + 32)
     retp(o)
 }
 

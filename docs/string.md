@@ -31,7 +31,7 @@ Any expression inside `{ }` in a string literal is evaluated and its text insert
 | `s[:]` | `bug` |
 
 A start of 0 or less, an end past `len`, or a start after the end is an `Index Error`. The builtin
-`slice(s, start, end)` is different: it starts at 0, leaves out `end`, and clamps its bounds.
+`slice(s, start, end)` follows the same rules: `slice(s, 2, 3)` is `s[2:3]`.
 
 ## Function reference
 
@@ -50,7 +50,7 @@ A start of 0 or less, an end past `len`, or a start after the end is an `Index E
 | `s[i]` | char | Zero-based; a negative `i` counts from the end |
 | `char_at(s, i)` | string | One character; `""` when out of range |
 | `substring(s, start, n)` | string | `n` bytes from `start`, cut at the end |
-| `slice(s, start, end)` | string | From `start` up to, not including, `end`; clamped |
+| `slice(s, start, end)` | string | Positions from 1, both ends included; same as `s[a:b]` |
 | `s[a:b]` | string | Positions from 1, both ends included |
 
 ### Searching
@@ -375,7 +375,7 @@ func tokens(src) {
             i = j
         } else if (is_alpha(src[i])) {
             let j = skip_chars(src, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", i)
-            append(out, "name:{slice(src, i, j)}")
+            append(out, "name:{slice(src, i + 1, j)}")
             i = j
         } else {
             append(out, "op:{substring(src, i, 1)}")
@@ -390,7 +390,7 @@ print(tokens("total = price * 12 + tax"))
 # key=value lines
 let line = "mode = fast"
 let eq = index_of(line, "=")
-print("key '{trim(substring(line, 0, eq))}' value '{trim(slice(line, eq + 1, len(line)))}'")
+print("key '{trim(substring(line, 0, eq))}' value '{trim(slice(line, eq + 2, len(line)))}'")
 
 # Slices count from 1 and include both ends.
 let word = "language"
@@ -422,7 +422,7 @@ true
 How it works:
 
 - `skip_chars(src, set, i)` returns the first index at or after `i` whose character is not in `set`. It skips blanks and finds the end of a number or a name in one native call.
-- `substring(src, i, n)` takes `n` bytes from `i`, and `slice(src, i, j)` takes from `i` up to, but not including, `j`. Both count from 0.
+- `substring(src, i, n)` takes `n` bytes from `i`, and `slice(src, a, b)` takes positions `a` to `b`, counting from 1 and including both. `substring` counts from 0.
 - `index_of(line, "=")` splits `mode = fast` into the key and the value, and `trim` removes the spaces around each.
 - `word[1:4]` is `lang`: positions start at 1 and both ends are included. `word[5:]` runs to the end and `word[:3]` starts at the first character.
 - `index_of_any("name@host.com", "@.")` finds the first of several characters, `last_index_of` finds the last match, and `split("2026-10-26", "-")` gives a list of text pieces that `to_int` can read.

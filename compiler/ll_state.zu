@@ -10,6 +10,7 @@
 
 use { MODULES, MOD_LIST, uid } from "shared.zu"
 use { ST } from "state.zu"
+use { cut } from "ranges.zu"
 
 export let LL_STRS = []        # private string constants
 export let LL_STR_IDS = {}
@@ -94,7 +95,7 @@ export func ll_float_text(text) {
             }
         }
         if (not nonzero) {
-            t = slice(t, 1, len(t))
+            t = cut(t, 1, len(t))
         }
     }
     if (index_of(t, ".") < 0) {
@@ -105,8 +106,8 @@ export func ll_float_text(text) {
         if (e < 0) {
             t = "{t}.0"
         } else {
-            let head = slice(t, 0, e)
-            let tail = slice(t, e, len(t))
+            let head = cut(t, 0, e)
+            let tail = cut(t, e, len(t))
             t = "{head}.0{tail}"
         }
     }

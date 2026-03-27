@@ -28,13 +28,14 @@ use { check_program } from "check.zu"
 use { dbg_enable } from "ll_state.zu"
 use { diag_set_format } from "diag.zu"
 use { ERROR_CODES } from "error_codes.zu"
+use { cut } from "ranges.zu"
 
 # Name of a file without its directory and extension: "dir/prog.zu" is "prog".
 func base_name(path) {
     let slash = last_index_of(path, "/")
-    let name = slice(path, slash + 1, len(path))
+    let name = cut(path, slash + 1, len(path))
     if (ends_with(name, ".zu") or ends_with(name, ".zu")) {
-        name = slice(name, 0, len(name) - 3)
+        name = cut(name, 0, len(name) - 3)
     }
     return name
 }
@@ -299,14 +300,14 @@ func main() {
         usage()
     }
     let cmd = a[0]
-    let rest = slice(a, 1, len(a))
+    let rest = cut(a, 1, len(a))
     if (len(rest) >= 2 and rest[0] == "--error-format=json") {
         diag_set_format("json")
-        rest = slice(rest, 1, len(rest))
+        rest = cut(rest, 1, len(rest))
     }
     if (len(rest) >= 2 and rest[0] == "-g" and (cmd == "run" or cmd == "build" or cmd == "emit")) {
         dbg_enable()
-        rest = slice(rest, 1, len(rest))
+        rest = cut(rest, 1, len(rest))
     }
     if (cmd == "--native") {
         native_main(a)

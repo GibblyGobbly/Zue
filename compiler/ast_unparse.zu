@@ -5,6 +5,8 @@
 # expression is parenthesized, so the text means exactly what the tree says. Parsing the output
 # must give the same tree as the original (see tools/check_round_trip.sh).
 
+use { cut } from "ranges.zu"
+
 let PRINTABLE = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz\{|}~"
 
 # The text of a string value with the escapes the lexer reads back.
@@ -351,7 +353,7 @@ func stmt_body(n, depth) {
             } else {
                 let kind = n.ftypes[i]
                 if (starts_with(kind, "box:")) {
-                    kind = "box[{slice(kind, 4, len(kind))}]"
+                    kind = "box[{cut(kind, 4, len(kind))}]"
                 }
                 append(fields, "{n.fields[i]}: {kind}")
             }

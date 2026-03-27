@@ -100,3 +100,20 @@ print(s[1:2
 # CASE slice is not assignable
 let s = "bug"
 s[1:2] = "x"
+# CASE the slice builtin matches the slice syntax
+let s = "abcdef"
+let l = [10, 20, 30, 40]
+print(slice(s, 2, 4))
+print(slice(s, 1, 6))
+print(slice(l, 2, 3))
+print(slice(l, 4, 4))
+print(slice(s, 2, 4) == s[2:4])
+# CASE the slice builtin stays within the text
+func pass(v) { return [v, null][0] }
+print(slice("abc", pass(0), 2))
+# CASE the slice builtin does not take an end before its start
+func pass(v) { return [v, null][0] }
+print(slice([1, 2, 3], pass(3), 2))
+# CASE the slice builtin needs ints
+func pass(v) { return [v, null][0] }
+print(slice("abc", pass("1"), 2))

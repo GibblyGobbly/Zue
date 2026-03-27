@@ -116,7 +116,7 @@ print([10, 20, 30, 40][2:3])     # [20, 30]
 | Anything but a string or a list | `Type Error` |
 
 A slice of a list is a new list (the items are not copied deeply). A slice cannot be assigned to.
-The builtin `slice(x, a, b)` is separate: it starts at 0, leaves out `b`, and clamps its bounds.
+The builtin `slice(x, a, b)` is the same operation: `slice(x, 2, 3)` is `x[2:3]`, with the same errors.
 
 ## Operators
 

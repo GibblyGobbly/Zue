@@ -23,6 +23,7 @@ use { box_raw, ty_load, ty_store, unbox_checked, uses_address } from "ll_unbox.z
 use { lit_int, skind, tex, tex_step } from "ll_typed.zu"
 use { check_program } from "check.zu"
 use { ST } from "state.zu"
+use { cut } from "ranges.zu"
 
 let LL_BINOPS = {
     "+": "lvp_add_fast", "-": "lvp_sub_fast", "*": "lvp_mul_fast", "/": "lvp_div", "%": "lvp_mod",
@@ -603,7 +604,7 @@ func box_scope_id() {
 # Puts a finished function together: signature, entry-block allocas, then the body.
 func finish_function(header, ctx) {
     if (ctx.dbg != 0) {
-        header = "{slice(header, 0, len(header) - 2)} !dbg !{ctx.dbg} \{"
+        header = "{cut(header, 0, len(header) - 2)} !dbg !{ctx.dbg} \{"
     }
     let lines = [header, "entry:"]
     for (let a in ctx.allocas) {
@@ -1226,7 +1227,7 @@ func define_types(stmts) {
                     # The runtime checks the container only; list<int> is judged at compile time.
                     let lt = index_of(ft, "<")
                     if (lt >= 0) {
-                        ft = slice(ft, 0, lt)
+                        ft = cut(ft, 0, lt)
                     }
                     append(type_texts, "ptr {ll_cstr(ft)}")
                 }

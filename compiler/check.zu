@@ -15,6 +15,7 @@
 use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
 use { diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, span_at, span_line, suggest } from "diag.zu"
+use { cut } from "ranges.zu"
 
 let SCOPES = []
 
@@ -160,7 +161,7 @@ func kind_of(t) {
     if (i < 0) {
         return t
     }
-    return slice(t, 0, i)
+    return cut(t, 0, i)
 }
 
 func elem_of(t) {
@@ -168,7 +169,7 @@ func elem_of(t) {
     if (i < 0) {
         return null
     }
-    return slice(t, i + 1, len(t) - 1)
+    return cut(t, i + 1, len(t) - 1)
 }
 
 # The element type of a list or map literal whose items have types ts, or null when they differ.
@@ -251,8 +252,8 @@ func adapt_expr(n, et, want) {
 func annot(text, span, strict) {
     let i = index_of(text, "<")
     if (i >= 0) {
-        let kind = slice(text, 0, i)
-        let inner = annot(slice(text, i + 1, len(text) - 1), span, strict)
+        let kind = cut(text, 0, i)
+        let inner = annot(cut(text, i + 1, len(text) - 1), span, strict)
         if (inner == "any") {
             return kind
         }
@@ -420,7 +421,7 @@ func check_name(n, what) {
     if (BUILTIN_NAMES[name] == true or name == "null") {
         return false
     }
-    append(PENDING, {"span": nspan(n), "name": name, "what": what, "scopes": slice(SCOPES, 0, len(SCOPES))})
+    append(PENDING, {"span": nspan(n), "name": name, "what": what, "scopes": cut(SCOPES, 0, len(SCOPES))})
     return true
 }
 
@@ -1087,8 +1088,8 @@ func ck_user_call(name, fn, idx, argtypes, call) {
     INPROG[mkey] = true
     let saved = SCOPES
     let saved_origins = ORIGINS
-    SCOPES = slice(saved, 0, idx + 1)
-    ORIGINS = slice(saved_origins, 0, idx + 1)
+    SCOPES = cut(saved, 0, idx + 1)
+    ORIGINS = cut(saved_origins, 0, idx + 1)
     push_scope()
     for (let i = 0; i < np; i++) {
         declare(fn.params[i], types[i], param_span(fn, i))
@@ -1254,7 +1255,7 @@ func ck_expr(n) {
     if (k == "incdec") {
         let t = lookup(n.name)
         if (t == null and BUILTIN_NAMES[n.name] != true) {
-            append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": slice(SCOPES, 0, len(SCOPES))})
+            append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": cut(SCOPES, 0, len(SCOPES))})
             return "any"
         }
         if (t != null and t != "any" and t != "unset" and t != "int" and t != "float") {
@@ -1311,7 +1312,7 @@ func ck_assign(n) {
     let s = scope_of(n.name)
     if (s == null) {
         if (BUILTIN_NAMES[n.name] != true) {
-            append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": slice(SCOPES, 0, len(SCOPES))})
+            append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": cut(SCOPES, 0, len(SCOPES))})
         }
         return null
     }

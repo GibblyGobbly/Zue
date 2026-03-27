@@ -13,6 +13,7 @@ use { die } from "util.zu"
 use { ll, ll_alloca, ll_br, ll_condbr, ll_float_text, ll_label, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
 use { find_local } from "ll_scope.zu"
 use { ty_load } from "ll_unbox.zu"
+use { cut } from "ranges.zu"
 
 let T_VALUE_CALL = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod"}
 let T_INT_OP = {"+": "sadd", "-": "ssub", "*": "smul"}
@@ -26,11 +27,11 @@ export func lit_int(n) {
     let digits = n.v
     let limit = "9223372036854775807"
     if (starts_with(digits, "-")) {
-        digits = slice(digits, 1, len(digits))
+        digits = cut(digits, 1, len(digits))
         limit = "9223372036854775808"
     }
     while (len(digits) > 1 and starts_with(digits, "0")) {
-        digits = slice(digits, 1, len(digits))
+        digits = cut(digits, 1, len(digits))
     }
     if (len(digits) > 19 or (len(digits) == 19 and digits > limit)) {
         die("Syntax Error", n.line, "Integer literal {n.v} does not fit in 64 bits")

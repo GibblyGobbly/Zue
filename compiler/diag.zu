@@ -11,6 +11,7 @@
 
 use { ST } from "state.zu"
 use { code_for } from "error_codes.zu"
+use { cut } from "ranges.zu"
 
 export template Span { line, col, eline, ecol }
 template Label { span, text }
@@ -157,7 +158,7 @@ func line_marks(d, line, text) {
         if (s.eline == s.line and s.ecol - 1 < last) {
             last = s.ecol - 1
         }
-        let w = screen_width(slice(text, first, last), last - first)
+        let w = screen_width(cut(text, first, last), last - first)
         if (w < 1) {
             w = 1
         }
@@ -171,7 +172,7 @@ func line_marks(d, line, text) {
             if (ls.eline == ls.line and ls.ecol - 1 < last) {
                 last = ls.ecol - 1
             }
-            let w = screen_width(slice(text, first, last), last - first)
+            let w = screen_width(cut(text, first, last), last - first)
             if (w < 1) {
                 w = 1
             }
@@ -189,8 +190,8 @@ func sort_marks(marks) {
         while (i > 0 and out[i - 1].at > m.at) {
             i -= 1
         }
-        let rest = slice(out, i, len(out))
-        let head = slice(out, 0, i)
+        let rest = cut(out, i, len(out))
+        let head = cut(out, 0, i)
         out = head
         append(out, m)
         for (let r in rest) {
@@ -254,7 +255,7 @@ func mark_rows(marks) {
         append(rows, bars_row(pending))
         let k = len(pending) - 1
         while (k >= 0) {
-            let row = bars_row(slice(pending, 0, k))
+            let row = bars_row(cut(pending, 0, k))
             let at = pending[k].at
             row = row + repeat(" ", at - len(row)) + pending[k].text
             append(rows, row)
@@ -362,8 +363,8 @@ func sorted_diags() {
         while (i > 0 and before(d, out[i - 1])) {
             i -= 1
         }
-        let rest = slice(out, i, len(out))
-        out = slice(out, 0, i)
+        let rest = cut(out, i, len(out))
+        out = cut(out, 0, i)
         append(out, d)
         for (let r in rest) {
             append(out, r)
