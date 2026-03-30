@@ -1,0 +1,7 @@
+Type Error [E0205] in /tmp/zue_test_case.zu at line 2:
+  condition must be a boolean, got int
+
+   2 | print(true and pass(5))
+     |                ^^^^^^^
+
+Hint: Write the test explicitly, for example x != 0, len(s) > 0 or v != null.

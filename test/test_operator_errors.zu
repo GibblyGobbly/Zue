@@ -69,3 +69,15 @@ func pass(v) {
 }
 let t = pass("x")
 let s = -t
+# CASE the right side of and must be a bool
+func pass(v) { return [v, null][0] }
+print(true and pass(5))
+# CASE the right side of or must be a bool
+func pass(v) { return [v, null][0] }
+print(false or pass("x"))
+# CASE and and or give a bool when both sides are bools
+func pass(v) { return [v, null][0] }
+print(true and pass(true))
+print(false or pass(false))
+print(false and pass(5))
+print(true or pass(5))

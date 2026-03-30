@@ -401,6 +401,8 @@ func ex_bin(n) {
         }
         ll_label(rhs)
         let b = ex(n.r)
+        ll_mark(n.r)
+        ll_truth_flag(b)
         ll_copy(t, b)
         ll_br(done)
         ll_label(done)
