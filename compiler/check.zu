@@ -643,9 +643,9 @@ func ck_bin(n) {
         return "string"
     }
     if (kind_of(a) == "list" and kind_of(b) == "list") {
-        # Element-wise: + - * keep the element type, while / gives floats even for int lists.
-        if (a == b and (op == "+" or op == "-" or op == "*")) {
-            return a
+        # Element-wise arithmetic gives a dense list, which holds floats even when both lists hold ints.
+        if (op == "+" or op == "-" or op == "*" or op == "/") {
+            return "list<float>"
         }
         return "list"
     }

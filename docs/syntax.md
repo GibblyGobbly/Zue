@@ -146,7 +146,7 @@ Operators do no hidden conversions. From loosest to tightest: `or`, `and`, `== !
 `1 == 1.0` is `true`. Two lists or maps are equal only when they are the same object.
 
 Between two lists of numbers, `+ - * /` work element by element and return a dense list:
-`[1, 2] + [3, 4]` gives `d[4, 6]`.
+`[1, 2] + [3, 4]` gives `d[4.0, 6.0]`: the items are floats even when both lists hold ints.
 
 ## Lists and maps
 

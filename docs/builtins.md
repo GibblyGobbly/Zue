@@ -348,11 +348,11 @@ list, and its size is fixed: `append` does not accept it.
 | `mat_mul(a, b)` | Matrix product of two lists of rows (lists or dense lists); returns a list of dense rows |
 
 `+ - * /` between two lists of numbers do the same as the `vec_*` functions:
-`[1, 2] + [3, 4]` is `d[4, 6]`.
+`[1, 2] + [3, 4]` is `d[4.0, 6.0]`: the result holds floats even when both lists hold ints, and the checker types it as `list<float>`.
 
 ```javascript
-print(vec_mul([1, 2], [3, 4]))                      # d[3, 8]
-print(mat_mul([[1, 2], [3, 4]], [[5, 6], [7, 8]]))  # [d[19, 22], d[43, 50]]
+print(vec_mul([1, 2], [3, 4]))                      # d[3.0, 8.0]
+print(mat_mul([[1, 2], [3, 4]], [[5, 6], [7, 8]]))  # [d[19.0, 22.0], d[43.0, 50.0]]
 ```
 
 `mat_mul` is a plain triple loop that runs on one thread. If the column count of `a` does not

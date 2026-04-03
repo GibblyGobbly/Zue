@@ -116,7 +116,7 @@ let xs: list<int> = make()
 print(len(xs))
 # CASE equality of lists of different element types
 print([1] == ["a"])
-# CASE adding lists keeps the element type
+# CASE adding lists gives a list of floats
 let a = [1, 2]
 let b = [3, 4]
 let c = a + b
