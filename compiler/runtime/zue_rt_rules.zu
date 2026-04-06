@@ -376,8 +376,8 @@ func _rl_schema_find(name) {
 
 # Data runtime: bloc, box, template rules
 
-# Name not blank, no duplicate fields, and the fields (8 bytes each, the worst case) fit in 32
-# bytes. Duplicates are checked before the size at each field, as the layout builder did.
+# Name not blank, no duplicate fields, and the fields (8 bytes each, the worst case) fit in 64
+# bytes (BLOC_MAX_INLINE_BYTES). Duplicates are checked before the size at each field, as the layout builder did.
 func zue_data_bloc_validate(name, fields, count) {
     if (_rl_name_ok(name) == 0) {
         return DERR_BLOC_EMPTY_NAME
@@ -498,8 +498,7 @@ func zue_data_template_field_ok(name, field) {
     return DERR_TEMPLATE_UNKNOWN_FIELD
 }
 
-# Containment: a template holds blocs and boxes, a box holds blocs, a bloc is a leaf.
-# What a type may hold: a box holds nothing, a bloc may hold a box, a template may hold a bloc, a box
+# Containment, what a type may hold: a box holds nothing, a bloc may hold a box, a template may hold a bloc, a box
 # or another template (a reference to it).
 func zue_data_containment_ok(outer, inner) {
     if (outer == KIND_TEMPLATE and (inner == KIND_BLOC or inner == KIND_BOX or inner == KIND_TEMPLATE)) {
@@ -518,12 +517,12 @@ const MERR_ESCAPE = 2
 const MERR_OUT_OF_BOUNDS = 3
 const MERR_USE_AFTER_FREE = 4
 const MERR_ADDR_TEMPORARY = 5
-const MERR_NESTED_UNSAFE = 6    # no longer produced: unsafe blocks may nest
+const MERR_NESTED_UNSAFE = 6    # not raised here: the compiler rejects an unsafe block written inside another (R6)
 const MERR_GC_STORE = 7
 const MERR_ALLOC_SIZE = 8
 const MERR_CMP_BASE = 9
 const MERR_CAST = 10
-const MERR_CALL = 11            # no longer produced: any function may be called inside unsafe
+const MERR_CALL = 11            # not raised: any function may be called inside unsafe
 const MERR_LEAK = 12
 const MERR_UNKNOWN_POINTER = 13
 
@@ -653,7 +652,8 @@ func _rl_owner(ptr) {
 
 # Unsafe runtime: rules
 
-# Unsafe blocks nest. Each block remembers how many deferred frees were pending when it began, and
+# A function with its own unsafe block can be called from inside another one, so blocks nest at
+# run time (an unsafe block written inside another is rejected by the compiler, rule R6). Each block remembers how many deferred frees were pending when it began, and
 # at its end frees only the ones added since.
 func zue_mem_begin() {
     if (rl_inside == rl_mark_cap) {
@@ -744,7 +744,7 @@ func zue_mem_escape_ok(ptr) {
     return MERR_ESCAPE
 }
 
-# R9: == and != compare any pointers; ordered comparisons need one allocation.
+# R8: == and != compare any pointers; ordered comparisons need one allocation.
 func zue_mem_cmp_ok(ptr_a, ptr_b, op) {
     if (op == 0 or op == 1) {
         return 0
@@ -763,7 +763,7 @@ func zue_mem_cmp_ok(ptr_a, ptr_b, op) {
     return MERR_CMP_BASE
 }
 
-# R10: only int(ptr), target type 0, casts a pointer.
+# R9: only int(ptr), target type 0, casts a pointer.
 func zue_mem_cast_ok(ptr, target_type) {
     if (target_type == 0) {
         return 0
@@ -771,7 +771,7 @@ func zue_mem_cast_ok(ptr, target_type) {
     return MERR_CAST
 }
 
-# R8: alloc takes a positive integer.
+# R7: alloc takes a positive integer.
 func zue_mem_alloc_size_ok(n, is_integer) {
     if (is_integer == 0 or n <= 0) {
         return MERR_ALLOC_SIZE
@@ -800,7 +800,7 @@ func zue_mem_run_defers(mark) {
     }
 }
 
-# R7: a pointer may not be stored in a GC-managed value.
+# R2: a pointer may not be stored in a GC-managed value.
 func zue_mem_gc_store_ok(ptr) {
     return MERR_GC_STORE
 }

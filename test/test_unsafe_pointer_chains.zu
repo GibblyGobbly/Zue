@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// ptr_add on a pointer that ptr_add made: the offset counts from the start of the allocation.
+
+# CASE chained ptr_add
+unsafe {
+    let p = alloc(4)
+    store(p, 7)
+    let q = ptr_add(ptr_add(p, 1), 1)
+    store(q, 9)
+    print(load(ptr_add(p, 2)), load(p))
+    let r = ptr_add(q, -1)
+    store(r, 8)
+    print(load(ptr_add(p, 1)))
+    free(p)
+}
+# CASE chained ptr_add past the end
+unsafe {
+    let p = alloc(4)
+    let q = ptr_add(ptr_add(p, 2), 2)
+    print(q)
+    free(p)
+}
+# CASE chained ptr_add before the start
+unsafe {
+    let p = alloc(4)
+    let q = ptr_add(ptr_add(p, 1), -2)
+    print(q)
+    free(p)
+}

@@ -8,6 +8,8 @@
 #   zue build prog.zu -o prog [-S]     build a binary; -S keeps C/prog.ll and stops
 #   zue run prog.zu [args...]          build into C/run/ and run it
 #   zue emit prog.zu [-o out.ll]       write the LLVM IR only
+#   zue check prog.zu                  report the errors without building
+#   zue explain [CODE]                 explain an error code, or list them all
 #   zue ast prog.zu                    print the syntax tree as text
 #   zue unparse prog.zu                print the program as source again
 #   zue --native a.zu b.zu -o out.ll   compile runtime source (see emit_native.zu)
@@ -34,7 +36,7 @@ use { cut } from "ranges.zu"
 func base_name(path) {
     let slash = last_index_of(path, "/")
     let name = cut(path, slash + 1, len(path))
-    if (ends_with(name, ".zu") or ends_with(name, ".zu")) {
+    if (ends_with(name, ".zu")) {
         name = cut(name, 0, len(name) - 3)
     }
     return name

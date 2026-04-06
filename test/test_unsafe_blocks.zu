@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
-# What unsafe blocks allow: nesting, calls to your own functions, and freeing under any condition.
+# What unsafe blocks allow: calls to your own functions (even ones with their own unsafe block), and freeing under any condition.
 
 func square(x) {
     return x * x

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 GibblyGobbly
 #
 # zue_gc.zu: memory management for compiled Zue programs: a conservative,
-# non-moving mark-and-sweep collector. Compiled with `zuec --native`.
+# non-moving mark-and-sweep collector. Compiled with `zue --native`.
 #
 # Every runtime object is allocated here. Small objects come from 64 KB pages split
 # into size classes; large ones get pages of their own. A collection marks everything
@@ -13,7 +13,7 @@
 #
 # Environment:
 #   ZUE_RT_GC_STRESS=N  collect every N allocations (testing)
-#   ZUE_RT_GC_STATS=1   print collection counts at exit
+#   ZUE_RT_GC_STATS=1   print the collection count, live bytes, pages and the total and longest pause at exit
 
 extern("malloc", "ptr", "i64")
 extern("calloc", "ptr", "i64,i64")

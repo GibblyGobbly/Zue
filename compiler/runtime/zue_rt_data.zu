@@ -1641,7 +1641,7 @@ func lv_unsafe_begin() {
     g_block_depth += 1
 }
 
-# R9: memory from alloc() that is still live when its block ends is a leak.
+# R10: memory from alloc() that is still live when its block ends is a leak.
 func _check_leaks(first) {
     let leaks = 0
     let line = 0
@@ -1681,7 +1681,7 @@ func lvp_ptr_escape_check(v) {
     }
 }
 
-# R7: a pointer may not be stored in a GC-managed value.
+# R2: a pointer may not be stored in a GC-managed value.
 func _ptr_store_check(v) {
     if (g_block_depth == 0 or _tag(v) != T_PTR or _is_pointer(v) == 0) {
         return 0
@@ -1689,7 +1689,7 @@ func _ptr_store_check(v) {
     _unsafe_check(zue_mem_gc_store_ok(_val(v)))
 }
 
-# Stores into lists and maps: no raw pointers (R7) and no scoped boxes.
+# Stores into lists and maps: no raw pointers (R2) and no scoped boxes.
 func lvp_container_check(v) {
     _ptr_store_check(v)
     lvp_box_escape_check(v, cstr("stored in a list or map"))
@@ -1706,7 +1706,7 @@ func lvp_global_store_check(v, in_function_i) {
     }
 }
 
-# R9: ordered comparison of pointers needs one allocation. op: 0 ==, 1 !=, 2 <, 3 >, 4 <=, 5 >=.
+# R8: ordered comparison of pointers needs one allocation. op: 0 ==, 1 !=, 2 <, 3 >, 4 <=, 5 >=.
 func _ptr_compare_check(a, b, op) {
     if (_is_pointer(a) == 0 or _is_pointer(b) == 0) {
         return 0
@@ -1714,7 +1714,7 @@ func _ptr_compare_check(a, b, op) {
     _unsafe_check(zue_mem_cmp_ok(_val(a), _val(b), op))
 }
 
-# R10: only int(ptr) may cast a pointer.
+# R9: only int(ptr) may cast a pointer.
 func _ptr_cast_check(v, target) {
     if (_is_pointer(v) == 0) {
         return 0
@@ -1936,7 +1936,10 @@ func lb_ptr_offset(self_p, argc_i, argv_p) {
     st64(result, 0)
     let byte_offset = _val(argv_p + 16) * 16
     if (ld32(owner + PM_KIND) == PTR_ALLOC) {
-        _unsafe_check(zue_mem_ptr_add_ok(_val(argv_p), byte_offset, result))
+        # The rules know an allocation by its start, so an offset from a pointer made by ptr_add is
+        # counted from the start of the allocation.
+        let root = ld64(owner + PM_BASE)
+        _unsafe_check(zue_mem_ptr_add_ok(root, _val(argv_p) - root + byte_offset, result))
     } else {
         st64(result, _val(argv_p) + byte_offset)
     }

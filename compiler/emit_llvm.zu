@@ -1031,6 +1031,7 @@ func st_switch(n) {
     pop_scope()
 }
 
+# Rule R6: an unsafe block inside another one in the same function is an error.
 func st_unsafe(n) {
     if (len(ST.ctx.unsafe_marks) > 0) {
         die("Syntax Error", n.line, "unsafe blocks cannot be nested: the enclosing unsafe block already allows unsafe operations")
