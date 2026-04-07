@@ -1,11 +1,14 @@
 # Modules
 
 A module is any `.zu` file. It marks its public names with `export`. Everything else stays
-private to the file.
+private to the file. `export` goes before `func`, `const`, `template`, `bloc` and `data`. It does
+not go before `let`: a variable can change, and an importer would keep a stale copy. That is a
+syntax error (`export cannot be used with let`); use `export const`, or export a function that
+returns the value.
 
 ```javascript
 # math_mod.zu
-export let BASE = 10
+export const BASE = 10
 export func scale(x) {
     return x * BASE
 }
@@ -37,21 +40,22 @@ in the importing file, even with `use "file.zu"`.
 - **Modules are part of the binary.** The compiler reads every imported file while it compiles
   the program, and compiles it into the same executable. The `.zu` files are not read again at
   run time, and a program built from `main.zu` runs without the sources next to it. A file
-  that cannot be read at compile time is reported when the `use` statement runs, not when the
-  program is compiled: `Could not import file 'nope.zu'`.
+  that cannot be read is a compile error at the `use` line, even when that line is in a branch
+  that never runs: `Could not import file 'nope.zu'`.
 - **Each file runs once.** The first `use` executes the module's top-level statements. Later
   imports, from any file, reuse the same bindings. Module-level state therefore persists: an
   exported counter function keeps counting across every importer.
 - **Only exported names are visible.** Asking for a name the module does not export with
-  `use { name } from` is an error: `Module 'helper.zu' does not export 'hidden'`. Using a name
+  `use { name } from` is a compile error: `Module 'helper.zu' does not export 'hidden'`, with a "Did you mean" hint
+  when a similar name is exported. Using a name
   that was never imported is `Variable 'name' is not defined`.
-- **Circular imports are reported** as an error (`Circular import detected: 'a.zu' is already
+- **Circular imports are reported** as a compile error (`Circular import detected: 'a.zu' is already
   loading`) instead of recursing.
 - `import "util.zu"` is an older spelling of `use "util.zu"`: it brings in the exported names
   only.
-- An imported name is a copy of the module's binding made when `use` runs. If the module
-  later reassigns an exported variable, the importer's copy does not change. Export a function
-  that reads or updates the state instead (see below).
+- An imported name is a copy of the module's binding made when `use` runs. Exported constants
+  and functions never change, so the copy is always right. State that changes stays behind an
+  exported function (see below).
 
 ## State shared between modules
 
@@ -77,3 +81,4 @@ and pass it to the functions that need it.
 - `test/test_use_private_error.zu`: a non-exported name is undefined after `use "file.zu"`
 - `test/test_import_private_error.zu`: the same for `import`
 - `test/test_qol.zu`: `import` and `use` together
+- `test/test_import_errors.zu`, `test_import_missing_export_error.zu`, `test_import_cycle_error.zu`: a missing file, a missing export and a cycle are compile errors; `export let` is a syntax error

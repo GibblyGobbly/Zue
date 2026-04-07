@@ -1,0 +1,7 @@
+Syntax Error [E0121] in /tmp/zue_test_case.zu at line 1:
+  export cannot be used with let
+
+   1 | export let counter = 1
+     |        ^^^ this variable can change
+
+Hint: Use export const for a value that stays the same, or export a function that returns the value: an importer gets a copy of an exported let that does not follow later changes

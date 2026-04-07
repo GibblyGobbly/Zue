@@ -39,12 +39,12 @@ export template NSwitch { k, line, e, cases, dflt, col, eline, ecol }
 export template NAssign { k, line, name, e, col, eline, ecol, nspan }
 export template NSetidx { k, line, target, index, e, op, col, eline, ecol }
 export template NTypedef { k, line, exported, name, is_template, is_bloc, fields, ftypes, col, eline, ecol, nspan, fspans }
-export template NUse { k, line, names, path, col, eline, ecol }
+export template NUse { k, line, names, path, col, eline, ecol, pspan, nspans }
 export template NBlock { k, line, body, col, eline, ecol }
 export template NReturn { k, line, e, col, eline, ecol }
 export template NJump { k, line, col, eline, ecol }
 
-export let NODE_FIELDS = {
+export const NODE_FIELDS = {
     "num": ["v"], "float": ["v"], "str": ["v"], "char": ["v"], "bool": ["v"],
     "id": ["name"],
     "tmpl": ["parts"],
@@ -76,7 +76,7 @@ export let NODE_FIELDS = {
 }
 
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
-export let OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "sty"]
+export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "sty"]
 
 # The constructors take st and en, the first and the last token of the node (a node can stand for
 # either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and
@@ -194,8 +194,9 @@ export func mk_typedef(st, en, exported, name, is_template, is_bloc, fields, fty
     return NTypedef("typedef", st.line, exported, name, is_template, is_bloc, fields, ftypes, st.col, en.eline, en.ecol, nspan, fspans)
 }
 
-export func mk_use(st, en, names, path) {
-    return NUse("use", st.line, names, path, st.col, en.eline, en.ecol)
+# pspan is the path string; nspans the imported names.
+export func mk_use(st, en, names, path, pspan, nspans) {
+    return NUse("use", st.line, names, path, st.col, en.eline, en.ecol, pspan, nspans)
 }
 
 # k is "block" for a bare { } block and "unsafe" for an unsafe block.

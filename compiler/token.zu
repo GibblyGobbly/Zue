@@ -3,7 +3,7 @@
 #
 # token.zu: keyword and operator tables.
 
-export let KEYWORDS = {
+export const KEYWORDS = {
     "and": "and", "or": "or", "not": "not",
     "let": "let", "balls": "let", "big_balls": "let", "shared_balls": "let",
     "const": "const",
@@ -19,12 +19,12 @@ export let KEYWORDS = {
     "template": "template", "bloc": "bloc", "box": "box", "unsafe": "unsafe"
 }
 
-export let TWO_CHAR = {
+export const TWO_CHAR = {
     "==": "==", "!=": "!=", "<=": "<=", ">=": ">=", "++": "++", "+=": "+=",
     "--": "--", "-=": "-=", "*=": "*=", "/=": "/=", "%=": "%=", "&&": "and", "||": "or", "**": "**", "<<": "<<", ">>": ">>"
 }
 
-export let ONE_CHAR = {
+export const ONE_CHAR = {
     "=": "=", "+": "+", "-": "-", "*": "*", "/": "/", "%": "%", "<": "<", ">": ">",
     "(": "(", ")": ")", "\{": "\{", "}": "}", "[": "[", "]": "]", ",": ",", ".": ".",
     ":": ":", ";": ";", "!": "not", "&": "&", "|": "|", "^": "^", "~": "~"

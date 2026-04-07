@@ -1166,6 +1166,7 @@ func p_check_field_types(n, word) {
 
 func p_use(st, word) {
     let names = []
+    let nspans = []
     if ((P_kind == "\{")) {
         p_next()
         p_enter()
@@ -1177,6 +1178,7 @@ func p_use(st, word) {
             let ut = p_next()
             p_declare(ut.v, ut)
             append(names, ut.v)
+            append(nspans, ut)
             if (not p_eat(",")) {
                 break
             }
@@ -1186,10 +1188,10 @@ func p_use(st, word) {
     }
     if (not (P_kind == "str")) {
         p_fail("Expected string path after {word}")
-        return mk_use(st, st, names, "")
+        return mk_use(st, st, names, "", st, nspans)
     }
-    let path = p_next().v[0]
-    return mk_use(st, P_prev, names, path)
+    let pt = p_next()
+    return mk_use(st, P_prev, names, pt.v[0], pt, nspans)
 }
 
 # One statement.
@@ -1214,6 +1216,10 @@ func p_statement() {
         p_next()
         if ((P_kind == "let") or (P_kind == "const")) {
             let is_const = (P_kind == "const")
+            if (not is_const) {
+                let d = p_fail_at(P_tk, "export cannot be used with let", "this variable can change")
+                diag_hint(d, "Use export const for a value that stays the same, or export a function that returns the value: an importer gets a copy of an exported let that does not follow later changes")
+            }
             p_next()
             return p_declaration(tk, is_const, true)
         }
@@ -1231,7 +1237,7 @@ func p_statement() {
             let word = p_next().v
             return p_typedef(tk, word, true)
         }
-        p_fail("export can only be used with let, const, func, data or bloc declarations")
+        p_fail("export can only be used with func, const, template, bloc or data declarations")
         return mk_block("block", tk, tk, [])
     }
     if (t == "use" or t == "import") {

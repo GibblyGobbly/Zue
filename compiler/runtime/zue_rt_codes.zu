@@ -124,6 +124,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("export can only be used")) != 0) {
         return cstr("E0121")
     }
+    if (strstr(msg, cstr("export cannot be used")) != 0) {
+        return cstr("E0121")
+    }
     if (strstr(msg, cstr("Expected string path")) != 0) {
         return cstr("E0121")
     }
@@ -252,6 +255,15 @@ func lv_code_for(msg) {
     }
     if (strstr(msg, cstr("is not defined")) != 0) {
         return cstr("E0301")
+    }
+    if (strstr(msg, cstr("Could not import")) != 0) {
+        return cstr("E0302")
+    }
+    if (strstr(msg, cstr("Circular import")) != 0) {
+        return cstr("E0302")
+    }
+    if (strstr(msg, cstr("does not export")) != 0) {
+        return cstr("E0302")
     }
     if (strstr(msg, cstr("is out of bounds")) != 0) {
         return cstr("E0401")

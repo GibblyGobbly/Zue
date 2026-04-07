@@ -171,9 +171,9 @@ fix: Use template, or type every field of the bloc.
 
 == E0121
 title: A use or export is not valid
-match: export can only be used | Expected string path | Expected 'from'
-text: use { name } from "file.zu" brings names in, and export may go before let, const, func,
-    data, template and bloc.
+match: export can only be used | export cannot be used | Expected string path | Expected 'from'
+text: use { name } from "file.zu" brings names in, and export may go before func, const, template,
+    bloc and data. A let is not exported: it can change, and an importer would keep a stale copy.
 example:
     export print(1)
 fix: Write a declaration after export.
@@ -312,6 +312,17 @@ example:
     let items = [1, 2]
     print(itms[0])
 fix: Fix the spelling (the hint suggests the closest name) or declare it with let.
+
+== E0302
+title: An import cannot be resolved
+match: Could not import | Circular import | does not export
+text: A use statement names a file that does not exist, a file that imports back into the one that
+    is loading it, or a name the file does not export. The compiler reports it at the use line,
+    even when that line is in a branch that never runs.
+example:
+    use { helper } from "missing.zu"
+fix: Check the path (it is relative to the file with the use), mark the name with export in the
+    module, or move shared code to a third module to break a cycle.
 
 == E0401
 title: An index or slice is outside its list or string

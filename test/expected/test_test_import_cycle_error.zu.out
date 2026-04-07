@@ -1,0 +1,7 @@
+Name Error [E0302] in test/modules_fixtures/cycle_b.zu at line 1:
+  Circular import detected: 'cycle_a.zu' is already loading
+
+   1 | use { from_a } from "cycle_a.zu"
+     |                     ^^^^^^^^^^^^ this file is already being compiled
+
+Hint: Modules must not import each other in a cycle; move shared code to a third module

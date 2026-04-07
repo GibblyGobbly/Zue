@@ -1,0 +1,2 @@
+print("never printed: the import is checked before the program runs")
+use { aera, UNIT, nothing } from "modules_fixtures/shapes.zu"

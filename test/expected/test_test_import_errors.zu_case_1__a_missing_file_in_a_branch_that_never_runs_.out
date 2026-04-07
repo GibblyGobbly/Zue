@@ -1,0 +1,7 @@
+Name Error [E0302] in /tmp/zue_test_case.zu at line 3:
+  Could not import file 'no_such_file.zu'
+
+   3 |     use { helper } from "no_such_file.zu"
+     |                         ^^^^^^^^^^^^^^^^^ no such file
+
+Hint: Check that the import path exists, relative to this file, and ends with .zu

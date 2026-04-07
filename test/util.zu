@@ -1,5 +1,5 @@
-export let util_answer = 42
-export let util_module_loaded = "module-loaded"
+export const util_answer = 42
+export const util_module_loaded = "module-loaded"
 
 export func util_ping() {
     return "util-ok"

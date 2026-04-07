@@ -24,6 +24,7 @@ use { lit_int, skind, tex, tex_step } from "ll_typed.zu"
 use { check_program } from "check.zu"
 use { ST } from "state.zu"
 use { cut } from "ranges.zu"
+use { diag_new, diag_text, diag_hint, diag_exit_if_errors, suggest } from "diag.zu"
 
 let LL_BINOPS = {
     "+": "lvp_add_fast", "-": "lvp_sub_fast", "*": "lvp_mul_fast", "/": "lvp_div", "%": "lvp_mod",
@@ -1315,16 +1316,12 @@ func compile_module(canon) {
     return m
 }
 
-func emit_name_error(hint, fmt_text, arg_a, arg_b) {
-    let a_text = "null"
-    let b_text = "null"
-    if (arg_a != null) {
-        a_text = ll_cstr(arg_a)
-    }
-    if (arg_b != null) {
-        b_text = ll_cstr(arg_b)
-    }
-    ll("call void @lv_name_error(ptr {ll_cstr(hint)}, ptr {ll_cstr(fmt_text)}, ptr {a_text}, ptr {b_text})")
+# A bad import is a compile error at the use statement, even in a branch that never runs.
+func import_error(span, msg, text, hint) {
+    let d = diag_new("Name Error", span, msg)
+    diag_text(d, text)
+    diag_hint(d, hint)
+    return d
 }
 
 func st_use(n) {
@@ -1335,14 +1332,12 @@ func st_use(n) {
         m2 = compile_module(canon)
     }
     if (m2 == null) {
-        let hint = "Check that the import path exists and ends with .zu"
-        emit_name_error(hint, "Could not import file '%s'", n.path, null)
-        return null
+        import_error(n.pspan, "Could not import file '{n.path}'", "no such file", "Check that the import path exists, relative to this file, and ends with .zu")
+        diag_exit_if_errors()
     }
     if (m2.state == "compiling") {
-        let hint = "Modules must not import each other in a cycle; move shared code to a third module"
-        emit_name_error(hint, "Circular import detected: '%s' is already loading", n.path, null)
-        return null
+        import_error(n.pspan, "Circular import detected: '{n.path}' is already loading", "this file is already being compiled", "Modules must not import each other in a cycle; move shared code to a third module")
+        diag_exit_if_errors()
     }
     let id = m2.id
     let flag = ll_reg()
@@ -1365,12 +1360,19 @@ func st_use(n) {
     if (len(names) == 0) {
         names = m2.exports
     }
-    for (let name in names) {
+    for (let i = 0; i < len(names); i++) {
+        let name = names[i]
         if (find(m2.exports, name) < 0) {
-            let hint = "Export names explicitly in the module before using them"
-            emit_name_error(hint, "Module '%s' does not export '%s'", n.path, name)
-            return null
+            let hint = "Mark the function, type or constant with export in the module before importing it"
+            let guess = suggest(name, m2.exports)
+            if (guess != null) {
+                hint = "Did you mean '{guess}'? {hint}"
+            }
+            import_error(n.nspans[i], "Module '{n.path}' does not export '{name}'", "not exported by {n.path}", hint)
         }
+    }
+    diag_exit_if_errors()
+    for (let name in names) {
         ll_reg_global(name)
         ll_copy(ll_gname(name), "@{m2.prefix}{name}")
     }

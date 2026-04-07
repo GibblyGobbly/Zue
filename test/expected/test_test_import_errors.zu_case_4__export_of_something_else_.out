@@ -1,0 +1,6 @@
+Syntax Error [E0121] in /tmp/zue_test_case.zu at line 1:
+  export can only be used with func, const, template, bloc or data declarations
+
+   1 | export print(1)
+     |        ^^^^^ unexpected name 'print'
+

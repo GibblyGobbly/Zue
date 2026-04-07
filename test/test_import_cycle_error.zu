@@ -1,0 +1,2 @@
+use { from_a } from "modules_fixtures/cycle_a.zu"
+print(from_a())

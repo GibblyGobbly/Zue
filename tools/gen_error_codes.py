@@ -66,7 +66,7 @@ def lit(text):
 
 
 def build_compiler(entries):
-    out = [HEADER.format(name="error_codes.zu"), "export let ERROR_CODES = ["]
+    out = [HEADER.format(name="error_codes.zu"), "export const ERROR_CODES = ["]
     for i, e in enumerate(entries):
         sep = "," if i + 1 < len(entries) else ""
         out.append("    {%s: %s, %s: %s, %s: [%s], %s: %s, %s: %s, %s: %s}%s" % (

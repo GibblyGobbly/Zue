@@ -1,0 +1,16 @@
+Name Error [E0302] in test/test_import_missing_export_error.zu at line 2:
+  Module 'modules_fixtures/shapes.zu' does not export 'aera'
+
+   2 | use { aera, UNIT, nothing } from "modules_fixtures/shapes.zu"
+     |       ^^^^ not exported by modules_fixtures/shapes.zu
+
+Hint: Did you mean 'area'? Mark the function, type or constant with export in the module before importing it
+
+Name Error [E0302] in test/test_import_missing_export_error.zu at line 2:
+  Module 'modules_fixtures/shapes.zu' does not export 'nothing'
+
+   2 | use { aera, UNIT, nothing } from "modules_fixtures/shapes.zu"
+     |                   ^^^^^^^ not exported by modules_fixtures/shapes.zu
+
+Hint: Mark the function, type or constant with export in the module before importing it
+2 errors found.

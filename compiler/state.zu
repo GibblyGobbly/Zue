@@ -11,4 +11,4 @@
 #   mod                  the module being compiled
 #   uid                  counter for unique names
 template State { src_file, src_lines, cwd, ctx, mod, uid }
-export let ST = State("", [], "", null, null, 0)
+export const ST = State("", [], "", null, null, 0)

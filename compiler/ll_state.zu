@@ -12,20 +12,20 @@ use { MODULES, MOD_LIST, uid } from "shared.zu"
 use { ST } from "state.zu"
 use { cut } from "ranges.zu"
 
-export let LL_STRS = []        # private string constants
-export let LL_STR_IDS = {}
-export let LL_CONSTS = []      # private constant LV values
-export let LL_CONST_IDS = {}
-export let LL_GLOBALS = []     # one definition per Zue global
-export let LL_MODDECLS = []    # per-module state, source tables and descriptors
-export let LL_FUNCS = []       # finished function bodies
-export let LL_KSTRS = []       # text of each K[] string constant
-export let LL_K_IDS = {}
-export let LL_ICS = []         # one inline cache per field read: a template type and a field index
-export let LL_BUILTINS = []    # builtin names whose lb_ function is declared
-export let LL_BUILTIN_IDS = {}
-export let LL_NATIVES = []     # builtins called directly: names that need an nf_ global
-export let LL_NATIVE_IDS = {}
+export const LL_STRS = []        # private string constants
+export const LL_STR_IDS = {}
+export const LL_CONSTS = []      # private constant LV values
+export const LL_CONST_IDS = {}
+export const LL_GLOBALS = []     # one definition per Zue global
+export const LL_MODDECLS = []    # per-module state, source tables and descriptors
+export const LL_FUNCS = []       # finished function bodies
+export const LL_KSTRS = []       # text of each K[] string constant
+export const LL_K_IDS = {}
+export const LL_ICS = []         # one inline cache per field read: a template type and a field index
+export const LL_BUILTINS = []    # builtin names whose lb_ function is declared
+export const LL_BUILTIN_IDS = {}
+export const LL_NATIVES = []     # builtins called directly: names that need an nf_ global
+export const LL_NATIVE_IDS = {}
 
 func ll_hex_digit(n) {
     return "0123456789ABCDEF"[n]
@@ -171,7 +171,7 @@ export func ll_new_ctx(is_main) {
 # Debug information, for zue build -g: a line table, so that gdb, valgrind and perf name the Zue
 # line and function. Metadata nodes are numbered from 5 (0 to 4 are fixed, see dbg_module_text).
 # DBG is a map so that every module sees the same one.
-export let DBG = {"on": false, "next": 5, "lines": [], "files": {}}
+export const DBG = {"on": false, "next": 5, "lines": [], "files": {}}
 
 export func dbg_enable() {
     DBG.on = true

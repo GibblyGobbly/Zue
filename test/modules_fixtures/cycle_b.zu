@@ -1,0 +1,2 @@
+use { from_a } from "cycle_a.zu"
+export func from_b() { return 2 }

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// A bad use statement is a compile error, even in a branch that never runs, and export is for
+// functions, types and constants.
+
+# CASE a missing file in a branch that never runs
+print("never printed")
+if (false) {
+    use { helper } from "no_such_file.zu"
+}
+# CASE export of a let
+export let counter = 1
+print(counter)
+# CASE export of a const and a function is fine
+export const LIMIT = 10
+export func double(x) { return x * 2 }
+print(LIMIT, double(4))
+# CASE export of something else
+export print(1)
