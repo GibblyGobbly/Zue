@@ -166,6 +166,18 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("digits must be an int")) != 0) {
         return cstr("E0202")
     }
+    if (strstr(msg, cstr("cannot be called with")) != 0) {
+        return cstr("E0202")
+    }
+    if (strstr(msg, cstr("arguments must both be")) != 0) {
+        return cstr("E0202")
+    }
+    if (strstr(msg, cstr("slice start must be")) != 0) {
+        return cstr("E0202")
+    }
+    if (strstr(msg, cstr("slice end must be")) != 0) {
+        return cstr("E0202")
+    }
     if (strstr(msg, cstr("but got")) != 0) {
         return cstr("E0203")
     }
@@ -295,6 +307,12 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("must not be 0")) != 0) {
         return cstr("E0412")
     }
+    if (strstr(msg, cstr("argument must be greater than")) != 0) {
+        return cstr("E0412")
+    }
+    if (strstr(msg, cstr("argument must be between")) != 0) {
+        return cstr("E0412")
+    }
     if (strstr(msg, cstr("is greater than the upper")) != 0) {
         return cstr("E0412")
     }
@@ -371,6 +389,9 @@ func lv_code_for(msg) {
         return cstr("E0460")
     }
     if (strstr(msg, cstr("pointer")) != 0) {
+        return cstr("E0460")
+    }
+    if (strstr(msg, cstr("ptr_add()")) != 0) {
         return cstr("E0460")
     }
     if (strstr(msg, cstr("address_of")) != 0) {

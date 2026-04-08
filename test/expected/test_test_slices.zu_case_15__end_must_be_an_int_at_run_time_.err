@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 5:
+Type Error [E0202] in /tmp/zue_test_case.zu at line 5:
   slice end must be an int, got float
 
    5 | print(s[1:pass(2.0)])

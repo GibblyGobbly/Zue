@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 3:
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 3:
   ptr_add() moved outside the allocation bounds
 
    3 |     let bad = ptr_offset(a, -1)

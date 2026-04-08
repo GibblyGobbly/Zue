@@ -216,7 +216,7 @@ fix: Convert one side on purpose: to_string(x), float(x), int(x).
 
 == E0202
 title: A function was given the wrong kind of value
-match: argument 1 must be | argument 2 must be | argument 3 must be | argument 4 must be | argument must be an int | digits must be an int
+match: argument 1 must be | argument 2 must be | argument 3 must be | argument 4 must be | argument must be an int | digits must be an int | cannot be called with | arguments must both be | slice start must be | slice end must be
 text: The function needs a value of a certain type for this argument and got another one.
 example:
     print(sqrt("a"))
@@ -364,7 +364,7 @@ fix: Check the range of the input before calling.
 
 == E0412
 title: A function was given a value it cannot work with
-match: must not be negative | must not be 0 | is greater than the upper | needs a list with at least one | digits must be between | exponent of an int | mode '
+match: must not be negative | must not be 0 | argument must be greater than | argument must be between | is greater than the upper | needs a list with at least one | digits must be between | exponent of an int | mode '
 text: The type is right but the value is not allowed, such as a negative size or an empty list.
 example:
     print(range(0, 10, 0))
@@ -414,7 +414,7 @@ fix: Check that the program is allowed to use getrandom, or use rand() with sran
 
 == E0460
 title: An unsafe rule was broken
-match: unsafe | alloc() | free() | box | pointer | address_of | defer() | double free | use-after-free
+match: unsafe | alloc() | free() | box | pointer | ptr_add() | address_of | defer() | double free | use-after-free
 text: Raw memory is only allowed inside unsafe blocks, and the ten rules there are checked: no
     use after free, no double free, no pointer that outlives its block, and every alloc() freed.
 example:
