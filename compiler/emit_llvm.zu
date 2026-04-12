@@ -810,7 +810,8 @@ func raw_kind(n) {
 
 func st_let(n) {
     ll_mark_line(n)
-    if (not at_top() and n.init != null) {
+    # A variable of the main program that no function uses and no module imports needs no global.
+    if (n.init != null and (not at_top() or n.exported != true)) {
         let kind = raw_kind(n)
         if (kind != null) {
             let raw = null

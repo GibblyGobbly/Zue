@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// Variables of the main program that no function uses are kept raw, like locals.
+
+# CASE a loop at the top level
+let total = 0
+let i = 1
+let f = 0.5
+let flag = false
+while (i <= 10) {
+    total += i
+    f = f * 2.0
+    flag = i > 5
+    i++
+}
+print(total, i, f, flag)
+# CASE a variable that a function reads stays visible to it
+let count = 0
+func bump() {
+    count += 1
+    return count
+}
+bump()
+bump()
+count += 10
+print(count, bump())
+# CASE overflow at the top level is still an error
+let big = 9223372036854775807
+let more = big + 1
+# CASE a top-level variable inside a string and a loop body
+let n = 3
+let out = []
+for (let k = 0; k < n; k++) {
+    append(out, "{k}:{n}")
+}
+print(out)
