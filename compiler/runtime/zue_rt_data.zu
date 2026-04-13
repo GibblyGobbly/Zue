@@ -1434,20 +1434,31 @@ func _ptrs_reserve() {
     g_ptr_cap = next
 }
 
+# A hash from a pointer to the number (index + 1) of its newest record, so that a lookup does not
+# scan every allocation ever made.
+space("g_ptr_map", 32)
+
+func _ptr_index_put(p, index) {
+    _rl_hm_put(addr_of("g_ptr_map"), p, index + 1)
+}
+
 # The newest record of a pointer: a freed address can be handed out again, and then the newest
 # record is the live one.
 func _find_exact(p) {
-    let i = g_ptr_count - 1
-    while (i >= 0) {
-        if (ld64(g_ptrs + i * PM_SIZE + PM_PTR) == p) {
-            return g_ptrs + i * PM_SIZE
-        }
-        i -= 1
+    let found = _rl_hm_get(addr_of("g_ptr_map"), p)
+    if (found == 0) {
+        return 0
     }
-    return 0
+    return g_ptrs + (found - 1) * PM_SIZE
 }
 
+# The record of the allocation that holds p. A pointer that was registered (every base pointer and
+# every result of ptr_add) is found by the hash; the scan is for any other address.
 func _find_owner(p) {
+    let exact = _find_exact(p)
+    if (exact != 0) {
+        return exact
+    }
     let i = g_ptr_count - 1
     while (i >= 0) {
         let m = g_ptrs + i * PM_SIZE
@@ -1478,6 +1489,7 @@ func _register_alloc_meta(p, cells) {
     }
     let m = g_ptrs + g_ptr_count * PM_SIZE
     g_ptr_count += 1
+    _ptr_index_put(p, g_ptr_count - 1)
     st64(m + PM_PTR, p)
     st64(m + PM_BASE, p)
     st64(m + PM_CELLS, cells)
@@ -1499,6 +1511,7 @@ func _register_addr_meta(p) {
     }
     let m = g_ptrs + g_ptr_count * PM_SIZE
     g_ptr_count += 1
+    _ptr_index_put(p, g_ptr_count - 1)
     st64(m + PM_PTR, p)
     st64(m + PM_BASE, p)
     st64(m + PM_CELLS, 1)
@@ -1523,6 +1536,7 @@ func _register_alias_meta(p, owner) {
     owner = g_ptrs + owner_index * PM_SIZE
     let m = g_ptrs + g_ptr_count * PM_SIZE
     g_ptr_count += 1
+    _ptr_index_put(p, g_ptr_count - 1)
     st64(m + PM_PTR, p)
     st64(m + PM_BASE, ld64(owner + PM_BASE))
     st64(m + PM_CELLS, ld64(owner + PM_CELLS))
@@ -1944,6 +1958,9 @@ func lb_ptr_offset(self_p, argc_i, argv_p) {
         st64(result, _val(argv_p) + byte_offset)
     }
     _register_alias_meta(ld64(result), _find_owner(_val(argv_p)))
+    if (ld32(owner + PM_KIND) == PTR_ALLOC) {
+        zue_mem_track_alias(ld64(result), ld64(owner + PM_BASE))
+    }
     let o = stack_buf(16)
     _set(o, T_PTR, ld64(result))
     retp(o)

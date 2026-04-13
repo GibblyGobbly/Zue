@@ -29,3 +29,27 @@ unsafe {
     print(q)
     free(p)
 }
+# CASE an old pointer after many allocations
+func main() {
+    unsafe {
+        let first = alloc(4)
+        store(first, 1)
+        store(ptr_add(first, 3), 4)
+        let i = 0
+        while (i < 20000) {
+            let p = alloc(2)
+            store(p, i)
+            free(p)
+            i++
+        }
+        let total = 0
+        let j = 0
+        while (j < 20000) {
+            total += load(first) + load(ptr_add(first, 3))
+            j++
+        }
+        print(total)
+        free(first)
+    }
+}
+main()

@@ -580,6 +580,7 @@ const AE_POISON = 16
 const AE_WORDS = 3
 
 space("rl_alloc_map", 32)
+space("rl_alias_map", 32)
 let rl_entries = 0
 let rl_entry_n = 0
 let rl_entry_cap = 0
@@ -592,6 +593,7 @@ let rl_mark_cap = 0
 
 func zue_mem_init() {
     _rl_hm_clear(addr_of("rl_alloc_map"))
+    _rl_hm_clear(addr_of("rl_alias_map"))
     rl_entry_n = 0
     rl_defer_n = 0
     rl_inside = 0
@@ -631,9 +633,27 @@ func _rl_exact(ptr) {
     return rl_entries + (found - 1) * AE_WORDS * 8
 }
 
-# The entry whose allocation contains ptr, or 0. The newest allocation wins when freed memory
-# has been handed out again.
+# Remembers that alias, a pointer made by ptr_add, points into the allocation that starts at base.
+func zue_mem_track_alias(alias, base) {
+    let e = _rl_exact(base)
+    if (e == 0) {
+        return 0
+    }
+    _rl_hm_put(addr_of("rl_alias_map"), alias, (e - rl_entries) / (AE_WORDS * 8) + 1)
+}
+
+# The entry whose allocation contains ptr, or 0. A base pointer and a pointer made by ptr_add are
+# found by hash; for any other address the newest allocation that holds it wins, which matters
+# when freed memory has been handed out again.
 func _rl_owner(ptr) {
+    let e = _rl_exact(ptr)
+    if (e != 0) {
+        return e
+    }
+    let found = _rl_hm_get(addr_of("rl_alias_map"), ptr)
+    if (found != 0) {
+        return rl_entries + (found - 1) * AE_WORDS * 8
+    }
     let i = rl_entry_n - 1
     while (i >= 0) {
         let e = rl_entries + i * AE_WORDS * 8
