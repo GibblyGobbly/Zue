@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// Raw float arithmetic: float(int) is a plain conversion, and a -0.0 result prints as 0.0.
+
+# CASE float of an int in a loop
+func main() {
+    let s = 0.0
+    let i = 1
+    while (i <= 4) {
+        s = s + float(i) * 0.5
+        i++
+    }
+    print(s, float(7), float(-3) / 2.0)
+}
+main()
+# CASE negative zero never shows
+func main() {
+    let a = 0.0
+    let b = a * -1.0
+    let c = -1.0 * a + 0.0 * -2.0
+    print(b, c, b == 0.0, 1.0 + b)
+    let xs = [b, c]
+    print(xs)
+}
+main()
+# CASE float of an int variable that a function shadows
+func float(x) { return x }
+func main() {
+    let i = 3
+    print(float(i))
+}
+main()
+# CASE float overflow in a chain is still reported
+func main() {
+    let big = 1.0e308
+    let k = 1
+    let r = big * 10.0 - big
+    print(r)
+}
+main()

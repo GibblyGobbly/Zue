@@ -11,7 +11,7 @@
 
 use { die } from "util.zu"
 use { ll, ll_alloca, ll_br, ll_condbr, ll_float_text, ll_label, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
-use { find_local } from "ll_scope.zu"
+use { find_local, resolve } from "ll_scope.zu"
 use { ty_load } from "ll_unbox.zu"
 use { cut } from "ranges.zu"
 
@@ -67,7 +67,23 @@ export func skind(n) {
     if (k == "bin") {
         return bin_kind(n)
     }
+    if (k == "call" and is_float_of_int(n)) {
+        return "float"
+    }
     return null
+}
+
+# float(x) where x is computed raw as an int and float is the builtin: a plain conversion that
+# cannot fail.
+func is_float_of_int(n) {
+    let c = n.callee
+    if (c.k != "id" or c.name != "float" or len(n.args) != 1) {
+        return false
+    }
+    if (resolve("float").kind != "builtin") {
+        return false
+    }
+    return skind(n.args[0]) == "int"
 }
 
 # The kind both operands of a binary node are computed in, or null. A whole-number literal next to a
@@ -142,6 +158,12 @@ export func tex(n) {
         let e = tex(n.e)
         let r = ll_reg()
         ll("{r} = xor i1 {e}, true")
+        return r
+    }
+    if (k == "call") {
+        let raw = tex(n.args[0])
+        let r = ll_reg()
+        ll("{r} = sitofp i64 {raw} to double")
         return r
     }
     return tex_bin(n)
@@ -265,7 +287,8 @@ func tex_int_arith(op, a, b, pos) {
 }
 
 # + - * / on doubles. A zero divisor and a result that is not finite go to the runtime, which
-# raises the error. Adding 0.0 turns -0.0 into 0.0.
+# raises the error. A result may be -0.0; ty_store and box_raw turn it into 0.0 where it leaves the
+# chain of operations.
 func tex_float_arith(op, a, b, pos) {
     let compute = ll_new_label("tcomp")
     let store = ll_new_label("tstore")
@@ -287,8 +310,6 @@ func tex_float_arith(op, a, b, pos) {
     ll("{finite} = fcmp olt double {mag}, 0x7FF0000000000000")
     ll_condbr(finite, store, slow)
     ll_label(store)
-    let clean = ll_reg()
-    ll("{clean} = fadd double {res}, 0.0")
     ll_br(done)
     ll_label(slow)
     ll_store_pos(pos)
@@ -305,6 +326,6 @@ func tex_float_arith(op, a, b, pos) {
     ll_br(done)
     ll_label(done)
     let r = ll_reg()
-    ll("{r} = phi double [ {clean}, %{store} ], [ {sval}, %{slow} ]")
+    ll("{r} = phi double [ {res}, %{store} ], [ {sval}, %{slow} ]")
     return r
 }

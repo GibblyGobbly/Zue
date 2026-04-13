@@ -1,0 +1,9 @@
+Runtime Error [E0411] in /tmp/zue_test_case.zu at line 4:
+  float overflow in '*'
+
+   4 |     let r = big * 10.0 - big
+     |             --- ^ ----
+
+Hint: Zue has no infinity: the result must fit in a 64-bit float.
+Call stack, innermost call first:
+  in main(), called at line 7: main()

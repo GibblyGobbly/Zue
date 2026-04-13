@@ -75,7 +75,9 @@ export func ty_load(v) {
 # Stores a raw SSA operand (i64, double or i1 by the variable's kind).
 export func ty_store(v, raw) {
     if (v.ty == "float") {
-        ll("store double {raw}, ptr {v.c}")
+        let clean = ll_reg()
+        ll("{clean} = fadd double {raw}, 0.0")
+        ll("store double {clean}, ptr {v.c}")
     } else if (v.ty == "bool") {
         let w = ll_reg()
         ll("{w} = zext i1 {raw} to i64")
@@ -92,8 +94,10 @@ export func box_raw(kind, raw) {
     let p = ll_reg()
     ll("{p} = getelementptr inbounds i8, ptr {t}, i64 8")
     if (kind == "float") {
+        let clean = ll_reg()
         let bits = ll_reg()
-        ll("{bits} = bitcast double {raw} to i64")
+        ll("{clean} = fadd double {raw}, 0.0")
+        ll("{bits} = bitcast double {clean} to i64")
         ll("store i64 {bits}, ptr {p}")
     } else if (kind == "bool") {
         let w = ll_reg()
