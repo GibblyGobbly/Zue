@@ -1,0 +1,4 @@
+print("not run")
+if (false) {
+    use { helper } from "missing_module.zu"
+}

@@ -44,7 +44,7 @@ and print all of them in the order of the source, followed by `N errors found.`
 - A function body is checked once for each set of argument types, but a mistake in it is reported once.
 - A name that is declared nowhere in the file is reported with a suggestion: `Did you mean 'items'?`
 
-`zue check prog.zu` finds the lexical, syntax and type errors without compiling. It prints nothing and
+`zue check prog.zu` finds the lexical, syntax, type and import errors without building. It prints nothing and
 exits with status 0 when there are none.
 
 ## Errors while the program runs

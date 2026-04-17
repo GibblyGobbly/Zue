@@ -239,13 +239,10 @@ func ast_main(a) {
     print(dump_program(parse_source(text), spans))
 }
 
-# zue check prog.zu: finds the lexical, syntax and type errors of one file without compiling it. Every
+# zue check prog.zu: finds the lexical, syntax, type and import errors of a program without building it. Every
 # error is printed together; the status is 1 if there was any.
 func check_main(a) {
-    ST.src_file = a[0]
-    let text = read_file(a[0])
-    ST.src_lines = split_lines(text)
-    check_program(parse_source(text))
+    compile_file(a[0])
 }
 
 # zue unparse prog.zu: the program written back as source (see ast_unparse.zu).
@@ -327,7 +324,7 @@ func main() {
         ast_main(rest)
     } else if (cmd == "unparse" and len(rest) == 1) {
         unparse_main(rest)
-    } else if (ends_with(cmd, ".zu") or ends_with(cmd, ".zu")) {
+    } else if (ends_with(cmd, ".zu")) {
         positional_main(a)
     } else {
         usage()

@@ -1,0 +1,7 @@
+Name Error [E0302] in test/fixtures/error_import.zu at line 3:
+  Could not import file 'missing_module.zu'
+
+   3 |     use { helper } from "missing_module.zu"
+     |                         ^^^^^^^^^^^^^^^^^^^ no such file
+
+Hint: Check that the import path exists, relative to this file, and ends with .zu

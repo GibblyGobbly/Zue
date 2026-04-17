@@ -296,14 +296,14 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s169 = private unnamed_addr constant [21 x i8] c"        spans = true\00"
 @.s170 = private unnamed_addr constant [20 x i8] c"        path = a[1]\00"
 @.s171 = private unnamed_addr constant [51 x i8] c"    print(dump_program(parse_source(text), spans))\00"
-@.s172 = private unnamed_addr constant [103 x i8] c"# zue check prog.zu: finds the lexical, syntax and type errors of one file without compiling it. Every\00"
+@.s172 = private unnamed_addr constant [111 x i8] c"# zue check prog.zu: finds the lexical, syntax, type and import errors of a program without building it. Every\00"
 @.s173 = private unnamed_addr constant [63 x i8] c"# error is printed together; the status is 1 if there was any.\00"
 @.s174 = private unnamed_addr constant [21 x i8] c"func check_main(a) {\00"
-@.s175 = private unnamed_addr constant [23 x i8] c"    ST.src_file = a[0]\00"
-@.s176 = private unnamed_addr constant [31 x i8] c"    let text = read_file(a[0])\00"
-@.s177 = private unnamed_addr constant [38 x i8] c"    check_program(parse_source(text))\00"
-@.s178 = private unnamed_addr constant [80 x i8] c"# zue unparse prog.zu: the program written back as source (see ast_unparse.zu).\00"
-@.s179 = private unnamed_addr constant [23 x i8] c"func unparse_main(a) {\00"
+@.s175 = private unnamed_addr constant [23 x i8] c"    compile_file(a[0])\00"
+@.s176 = private unnamed_addr constant [80 x i8] c"# zue unparse prog.zu: the program written back as source (see ast_unparse.zu).\00"
+@.s177 = private unnamed_addr constant [23 x i8] c"func unparse_main(a) {\00"
+@.s178 = private unnamed_addr constant [23 x i8] c"    ST.src_file = a[0]\00"
+@.s179 = private unnamed_addr constant [31 x i8] c"    let text = read_file(a[0])\00"
 @.s180 = private unnamed_addr constant [47 x i8] c"    print(unparse_program(parse_source(text)))\00"
 @.s181 = private unnamed_addr constant [81 x i8] c"# zue --native a.zu b.zu ... -o out.ll: compiles runtime files (emit_native.zu).\00"
 @.s182 = private unnamed_addr constant [22 x i8] c"func native_main(a) {\00"
@@ -351,7 +351,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s224 = private unnamed_addr constant [23 x i8] c"        ast_main(rest)\00"
 @.s225 = private unnamed_addr constant [54 x i8] c"    } else if (cmd == \22unparse\22 and len(rest) == 1) {\00"
 @.s226 = private unnamed_addr constant [27 x i8] c"        unparse_main(rest)\00"
-@.s227 = private unnamed_addr constant [65 x i8] c"    } else if (ends_with(cmd, \22.zu\22) or ends_with(cmd, \22.zu\22)) {\00"
+@.s227 = private unnamed_addr constant [40 x i8] c"    } else if (ends_with(cmd, \22.zu\22)) {\00"
 @.s228 = private unnamed_addr constant [27 x i8] c"        positional_main(a)\00"
 @.s229 = private unnamed_addr constant [17 x i8] c"compiler/zuec.zu\00"
 @.s230 = private unnamed_addr constant [59 x i8] c"# util.zu: compile errors, path handling and file reading.\00"
@@ -8035,8 +8035,8 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.c62 = private constant %LV { i64 2, i64 32 }
 @.c63 = private constant %LV { i64 2, i64 126 }
 @mod_0_state = internal global i32 0
-@srcl_0 = internal constant [336 x ptr] [ptr @.s0, ptr @.s1, ptr @.s2, ptr @.s3, ptr @.s4, ptr @.s5, ptr @.s2, ptr @.s6, ptr @.s7, ptr @.s8, ptr @.s9, ptr @.s10, ptr @.s11, ptr @.s12, ptr @.s13, ptr @.s2, ptr @.s14, ptr @.s15, ptr @.s16, ptr @.s17, ptr @.s18, ptr @.s19, ptr @.s20, ptr @.s21, ptr @.s22, ptr @.s23, ptr @.s24, ptr @.s25, ptr @.s26, ptr @.s27, ptr @.s28, ptr @.s29, ptr @.s30, ptr @.s18, ptr @.s31, ptr @.s32, ptr @.s33, ptr @.s34, ptr @.s35, ptr @.s36, ptr @.s37, ptr @.s38, ptr @.s39, ptr @.s18, ptr @.s40, ptr @.s41, ptr @.s42, ptr @.s43, ptr @.s44, ptr @.s39, ptr @.s18, ptr @.s45, ptr @.s46, ptr @.s47, ptr @.s48, ptr @.s49, ptr @.s50, ptr @.s51, ptr @.s39, ptr @.s18, ptr @.s52, ptr @.s53, ptr @.s54, ptr @.s55, ptr @.s56, ptr @.s57, ptr @.s58, ptr @.s59, ptr @.s60, ptr @.s61, ptr @.s62, ptr @.s63, ptr @.s64, ptr @.s65, ptr @.s66, ptr @.s67, ptr @.s68, ptr @.s69, ptr @.s70, ptr @.s39, ptr @.s18, ptr @.s71, ptr @.s72, ptr @.s73, ptr @.s74, ptr @.s75, ptr @.s76, ptr @.s39, ptr @.s18, ptr @.s77, ptr @.s78, ptr @.s79, ptr @.s80, ptr @.s81, ptr @.s37, ptr @.s82, ptr @.s83, ptr @.s39, ptr @.s18, ptr @.s84, ptr @.s85, ptr @.s86, ptr @.s87, ptr @.s88, ptr @.s89, ptr @.s90, ptr @.s91, ptr @.s92, ptr @.s93, ptr @.s37, ptr @.s94, ptr @.s95, ptr @.s96, ptr @.s97, ptr @.s98, ptr @.s99, ptr @.s81, ptr @.s37, ptr @.s100, ptr @.s39, ptr @.s18, ptr @.s101, ptr @.s102, ptr @.s103, ptr @.s104, ptr @.s105, ptr @.s106, ptr @.s107, ptr @.s108, ptr @.s109, ptr @.s110, ptr @.s111, ptr @.s112, ptr @.s113, ptr @.s114, ptr @.s112, ptr @.s115, ptr @.s116, ptr @.s117, ptr @.s37, ptr @.s118, ptr @.s119, ptr @.s37, ptr @.s120, ptr @.s39, ptr @.s18, ptr @.s121, ptr @.s122, ptr @.s123, ptr @.s124, ptr @.s125, ptr @.s126, ptr @.s88, ptr @.s127, ptr @.s128, ptr @.s95, ptr @.s96, ptr @.s97, ptr @.s129, ptr @.s81, ptr @.s37, ptr @.s130, ptr @.s131, ptr @.s132, ptr @.s37, ptr @.s133, ptr @.s39, ptr @.s18, ptr @.s134, ptr @.s135, ptr @.s136, ptr @.s105, ptr @.s106, ptr @.s107, ptr @.s108, ptr @.s109, ptr @.s113, ptr @.s114, ptr @.s112, ptr @.s115, ptr @.s116, ptr @.s117, ptr @.s37, ptr @.s126, ptr @.s88, ptr @.s137, ptr @.s138, ptr @.s39, ptr @.s18, ptr @.s139, ptr @.s140, ptr @.s141, ptr @.s142, ptr @.s96, ptr @.s143, ptr @.s144, ptr @.s117, ptr @.s93, ptr @.s37, ptr @.s145, ptr @.s146, ptr @.s147, ptr @.s148, ptr @.s149, ptr @.s150, ptr @.s151, ptr @.s152, ptr @.s153, ptr @.s154, ptr @.s155, ptr @.s156, ptr @.s157, ptr @.s158, ptr @.s159, ptr @.s153, ptr @.s149, ptr @.s160, ptr @.s161, ptr @.s152, ptr @.s153, ptr @.s162, ptr @.s117, ptr @.s37, ptr @.s163, ptr @.s70, ptr @.s39, ptr @.s18, ptr @.s164, ptr @.s165, ptr @.s166, ptr @.s167, ptr @.s168, ptr @.s169, ptr @.s170, ptr @.s37, ptr @.s73, ptr @.s74, ptr @.s75, ptr @.s171, ptr @.s39, ptr @.s18, ptr @.s172, ptr @.s173, ptr @.s174, ptr @.s175, ptr @.s176, ptr @.s75, ptr @.s177, ptr @.s39, ptr @.s18, ptr @.s178, ptr @.s179, ptr @.s175, ptr @.s176, ptr @.s75, ptr @.s180, ptr @.s39, ptr @.s18, ptr @.s181, ptr @.s182, ptr @.s183, ptr @.s103, ptr @.s105, ptr @.s106, ptr @.s107, ptr @.s108, ptr @.s109, ptr @.s115, ptr @.s184, ptr @.s185, ptr @.s186, ptr @.s187, ptr @.s112, ptr @.s117, ptr @.s37, ptr @.s188, ptr @.s189, ptr @.s37, ptr @.s190, ptr @.s39, ptr @.s18, ptr @.s191, ptr @.s192, ptr @.s193, ptr @.s175, ptr @.s176, ptr @.s75, ptr @.s194, ptr @.s195, ptr @.s37, ptr @.s196, ptr @.s197, ptr @.s198, ptr @.s199, ptr @.s200, ptr @.s37, ptr @.s39, ptr @.s18, ptr @.s201, ptr @.s202, ptr @.s203, ptr @.s189, ptr @.s37, ptr @.s204, ptr @.s205, ptr @.s206, ptr @.s207, ptr @.s208, ptr @.s37, ptr @.s209, ptr @.s210, ptr @.s208, ptr @.s37, ptr @.s211, ptr @.s212, ptr @.s213, ptr @.s214, ptr @.s215, ptr @.s216, ptr @.s217, ptr @.s218, ptr @.s219, ptr @.s220, ptr @.s221, ptr @.s222, ptr @.s223, ptr @.s224, ptr @.s225, ptr @.s226, ptr @.s227, ptr @.s228, ptr @.s199, ptr @.s189, ptr @.s37, ptr @.s39, ptr null]
-@mod_0 = internal constant %LvModule { ptr @.s229, ptr @srcl_0, i32 335 }
+@srcl_0 = internal constant [333 x ptr] [ptr @.s0, ptr @.s1, ptr @.s2, ptr @.s3, ptr @.s4, ptr @.s5, ptr @.s2, ptr @.s6, ptr @.s7, ptr @.s8, ptr @.s9, ptr @.s10, ptr @.s11, ptr @.s12, ptr @.s13, ptr @.s2, ptr @.s14, ptr @.s15, ptr @.s16, ptr @.s17, ptr @.s18, ptr @.s19, ptr @.s20, ptr @.s21, ptr @.s22, ptr @.s23, ptr @.s24, ptr @.s25, ptr @.s26, ptr @.s27, ptr @.s28, ptr @.s29, ptr @.s30, ptr @.s18, ptr @.s31, ptr @.s32, ptr @.s33, ptr @.s34, ptr @.s35, ptr @.s36, ptr @.s37, ptr @.s38, ptr @.s39, ptr @.s18, ptr @.s40, ptr @.s41, ptr @.s42, ptr @.s43, ptr @.s44, ptr @.s39, ptr @.s18, ptr @.s45, ptr @.s46, ptr @.s47, ptr @.s48, ptr @.s49, ptr @.s50, ptr @.s51, ptr @.s39, ptr @.s18, ptr @.s52, ptr @.s53, ptr @.s54, ptr @.s55, ptr @.s56, ptr @.s57, ptr @.s58, ptr @.s59, ptr @.s60, ptr @.s61, ptr @.s62, ptr @.s63, ptr @.s64, ptr @.s65, ptr @.s66, ptr @.s67, ptr @.s68, ptr @.s69, ptr @.s70, ptr @.s39, ptr @.s18, ptr @.s71, ptr @.s72, ptr @.s73, ptr @.s74, ptr @.s75, ptr @.s76, ptr @.s39, ptr @.s18, ptr @.s77, ptr @.s78, ptr @.s79, ptr @.s80, ptr @.s81, ptr @.s37, ptr @.s82, ptr @.s83, ptr @.s39, ptr @.s18, ptr @.s84, ptr @.s85, ptr @.s86, ptr @.s87, ptr @.s88, ptr @.s89, ptr @.s90, ptr @.s91, ptr @.s92, ptr @.s93, ptr @.s37, ptr @.s94, ptr @.s95, ptr @.s96, ptr @.s97, ptr @.s98, ptr @.s99, ptr @.s81, ptr @.s37, ptr @.s100, ptr @.s39, ptr @.s18, ptr @.s101, ptr @.s102, ptr @.s103, ptr @.s104, ptr @.s105, ptr @.s106, ptr @.s107, ptr @.s108, ptr @.s109, ptr @.s110, ptr @.s111, ptr @.s112, ptr @.s113, ptr @.s114, ptr @.s112, ptr @.s115, ptr @.s116, ptr @.s117, ptr @.s37, ptr @.s118, ptr @.s119, ptr @.s37, ptr @.s120, ptr @.s39, ptr @.s18, ptr @.s121, ptr @.s122, ptr @.s123, ptr @.s124, ptr @.s125, ptr @.s126, ptr @.s88, ptr @.s127, ptr @.s128, ptr @.s95, ptr @.s96, ptr @.s97, ptr @.s129, ptr @.s81, ptr @.s37, ptr @.s130, ptr @.s131, ptr @.s132, ptr @.s37, ptr @.s133, ptr @.s39, ptr @.s18, ptr @.s134, ptr @.s135, ptr @.s136, ptr @.s105, ptr @.s106, ptr @.s107, ptr @.s108, ptr @.s109, ptr @.s113, ptr @.s114, ptr @.s112, ptr @.s115, ptr @.s116, ptr @.s117, ptr @.s37, ptr @.s126, ptr @.s88, ptr @.s137, ptr @.s138, ptr @.s39, ptr @.s18, ptr @.s139, ptr @.s140, ptr @.s141, ptr @.s142, ptr @.s96, ptr @.s143, ptr @.s144, ptr @.s117, ptr @.s93, ptr @.s37, ptr @.s145, ptr @.s146, ptr @.s147, ptr @.s148, ptr @.s149, ptr @.s150, ptr @.s151, ptr @.s152, ptr @.s153, ptr @.s154, ptr @.s155, ptr @.s156, ptr @.s157, ptr @.s158, ptr @.s159, ptr @.s153, ptr @.s149, ptr @.s160, ptr @.s161, ptr @.s152, ptr @.s153, ptr @.s162, ptr @.s117, ptr @.s37, ptr @.s163, ptr @.s70, ptr @.s39, ptr @.s18, ptr @.s164, ptr @.s165, ptr @.s166, ptr @.s167, ptr @.s168, ptr @.s169, ptr @.s170, ptr @.s37, ptr @.s73, ptr @.s74, ptr @.s75, ptr @.s171, ptr @.s39, ptr @.s18, ptr @.s172, ptr @.s173, ptr @.s174, ptr @.s175, ptr @.s39, ptr @.s18, ptr @.s176, ptr @.s177, ptr @.s178, ptr @.s179, ptr @.s75, ptr @.s180, ptr @.s39, ptr @.s18, ptr @.s181, ptr @.s182, ptr @.s183, ptr @.s103, ptr @.s105, ptr @.s106, ptr @.s107, ptr @.s108, ptr @.s109, ptr @.s115, ptr @.s184, ptr @.s185, ptr @.s186, ptr @.s187, ptr @.s112, ptr @.s117, ptr @.s37, ptr @.s188, ptr @.s189, ptr @.s37, ptr @.s190, ptr @.s39, ptr @.s18, ptr @.s191, ptr @.s192, ptr @.s193, ptr @.s178, ptr @.s179, ptr @.s75, ptr @.s194, ptr @.s195, ptr @.s37, ptr @.s196, ptr @.s197, ptr @.s198, ptr @.s199, ptr @.s200, ptr @.s37, ptr @.s39, ptr @.s18, ptr @.s201, ptr @.s202, ptr @.s203, ptr @.s189, ptr @.s37, ptr @.s204, ptr @.s205, ptr @.s206, ptr @.s207, ptr @.s208, ptr @.s37, ptr @.s209, ptr @.s210, ptr @.s208, ptr @.s37, ptr @.s211, ptr @.s212, ptr @.s213, ptr @.s214, ptr @.s215, ptr @.s216, ptr @.s217, ptr @.s218, ptr @.s219, ptr @.s220, ptr @.s221, ptr @.s222, ptr @.s223, ptr @.s224, ptr @.s225, ptr @.s226, ptr @.s227, ptr @.s228, ptr @.s199, ptr @.s189, ptr @.s37, ptr @.s39, ptr null]
+@mod_0 = internal constant %LvModule { ptr @.s229, ptr @srcl_0, i32 332 }
 @mod_1_state = internal global i32 0
 @srcl_1 = internal constant [86 x ptr] [ptr @.s0, ptr @.s1, ptr @.s2, ptr @.s230, ptr @.s18, ptr @.s23, ptr @.s231, ptr @.s30, ptr @.s18, ptr @.s232, ptr @.s233, ptr @.s234, ptr @.s39, ptr @.s18, ptr @.s235, ptr @.s236, ptr @.s237, ptr @.s238, ptr @.s37, ptr @.s239, ptr @.s240, ptr @.s37, ptr @.s241, ptr @.s39, ptr @.s18, ptr @.s242, ptr @.s243, ptr @.s244, ptr @.s37, ptr @.s245, ptr @.s246, ptr @.s37, ptr @.s247, ptr @.s39, ptr @.s18, ptr @.s248, ptr @.s249, ptr @.s250, ptr @.s251, ptr @.s252, ptr @.s253, ptr @.s254, ptr @.s117, ptr @.s255, ptr @.s256, ptr @.s257, ptr @.s254, ptr @.s115, ptr @.s258, ptr @.s117, ptr @.s37, ptr @.s259, ptr @.s260, ptr @.s261, ptr @.s37, ptr @.s262, ptr @.s39, ptr @.s18, ptr @.s263, ptr @.s264, ptr @.s79, ptr @.s265, ptr @.s81, ptr @.s37, ptr @.s266, ptr @.s83, ptr @.s267, ptr @.s39, ptr @.s18, ptr @.s268, ptr @.s269, ptr @.s270, ptr @.s271, ptr @.s272, ptr @.s273, ptr @.s274, ptr @.s275, ptr @.s276, ptr @.s117, ptr @.s37, ptr @.s277, ptr @.s278, ptr @.s37, ptr @.s279, ptr @.s39, ptr null]
 @mod_1 = internal constant %LvModule { ptr @.s280, ptr @srcl_1, i32 85 }
@@ -336099,21 +336099,8 @@ entry:
   %a216702 = alloca %LV, align 8
   %t216707 = alloca %LV, align 8
   %t216716 = alloca %LV, align 8
-  %t216717 = alloca %LV, align 8
-  %t216726 = alloca %LV, align 8
-  %a216727 = alloca [1 x %LV], align 8
-  %t216733 = alloca %LV, align 8
-  %a216735 = alloca %LV, align 8
-  %t216740 = alloca %LV, align 8
-  %t216749 = alloca %LV, align 8
-  %a216758 = alloca [1 x %LV], align 8
-  %t216764 = alloca %LV, align 8
-  %t216765 = alloca %LV, align 8
-  %t216774 = alloca %LV, align 8
-  %a216783 = alloca [1 x %LV], align 8
-  %t216789 = alloca %LV, align 8
-  %a216790 = alloca [1 x %LV], align 8
-  %t216796 = alloca %LV, align 8
+  %a216717 = alloca [1 x %LV], align 8
+  %t216723 = alloca %LV, align 8
   store ptr @mod_0, ptr @lv_pos_mod
   call void @lv_arity(ptr %self, i32 %argc, i32 1, i32 1)
   %r216700 = getelementptr inbounds %LV, ptr %argv, i64 0
@@ -336123,4431 +336110,4257 @@ entry:
   store i64 %r216703, ptr %a216702
   %r216705 = getelementptr inbounds i8, ptr %a216702, i64 8
   store i64 %r216706, ptr %r216705
-  store i64 34380710133, ptr @lv_pos
-  %r216708 = load i64, ptr @g_ST
+  store i64 245, ptr @lv_pos
+  store i64 309258617077, ptr @lv_pos
+  store i64 206179401973, ptr @lv_pos
+  %r216708 = load i64, ptr @g_compile_file
   %r216709 = icmp eq i64 %r216708, 17
   br i1 %r216709, label %gundef216710, label %gdef216711
 gundef216710:
-  call void @lvp_gundef(ptr @g_ST, ptr @.s728)
+  call void @lvp_gundef(ptr @g_compile_file, ptr @.s6242)
   br label %gdef216711
 gdef216711:
-  %r216712 = load i64, ptr @g_ST
-  %r216713 = getelementptr inbounds i8, ptr @g_ST, i64 8
+  %r216712 = load i64, ptr @g_compile_file
+  %r216713 = getelementptr inbounds i8, ptr @g_compile_file, i64 8
   %r216715 = load i64, ptr %r216713
   store i64 %r216712, ptr %t216707
   %r216714 = getelementptr inbounds i8, ptr %t216707, i64 8
   store i64 %r216715, ptr %r216714
-  store i64 68799168757, ptr @lv_pos
+  store i64 68794974453, ptr @lv_pos
   call void @lvp_index(ptr %t216716, ptr %a216702, ptr @.c1)
-  store i64 206179401973, ptr @lv_pos
-  call void @lvp_index_set(ptr %t216707, ptr getelementptr inbounds (%LV, ptr @K, i64 393), ptr %t216716)
-  store i64 246, ptr @lv_pos
-  store i64 257765146870, ptr @lv_pos
-  store i64 154685931766, ptr @lv_pos
-  %r216718 = load i64, ptr @g_read_file
-  %r216719 = icmp eq i64 %r216718, 17
-  br i1 %r216719, label %gundef216720, label %gdef216721
-gundef216720:
-  call void @lvp_gundef(ptr @g_read_file, ptr @.s779)
-  br label %gdef216721
-gdef216721:
-  %r216722 = load i64, ptr @g_read_file
-  %r216723 = getelementptr inbounds i8, ptr @g_read_file, i64 8
-  %r216725 = load i64, ptr %r216723
-  store i64 %r216722, ptr %t216717
-  %r216724 = getelementptr inbounds i8, ptr %t216717, i64 8
-  store i64 %r216725, ptr %r216724
-  store i64 68828528886, ptr @lv_pos
-  call void @lvp_index(ptr %t216726, ptr %a216702, ptr @.c1)
-  store i64 257765146870, ptr @lv_pos
-  %r216728 = getelementptr inbounds [1 x %LV], ptr %a216727, i64 0, i64 0
-  %r216729 = load i64, ptr %t216726
-  %r216730 = getelementptr inbounds i8, ptr %t216726, i64 8
-  %r216732 = load i64, ptr %r216730
-  store i64 %r216729, ptr %r216728
-  %r216731 = getelementptr inbounds i8, ptr %r216728, i64 8
-  store i64 %r216732, ptr %r216731
-  call void @lvp_call(ptr %t216733, ptr %t216717, i32 1, ptr %a216727)
-  %r216736 = load i64, ptr %t216733
-  %r216737 = getelementptr inbounds i8, ptr %t216733, i64 8
-  %r216739 = load i64, ptr %r216737
-  store i64 %r216736, ptr %a216735
-  %r216738 = getelementptr inbounds i8, ptr %a216735, i64 8
-  store i64 %r216739, ptr %r216738
-  store i64 34380710135, ptr @lv_pos
-  %r216741 = load i64, ptr @g_ST
-  %r216742 = icmp eq i64 %r216741, 17
-  br i1 %r216742, label %gundef216743, label %gdef216744
-gundef216743:
+  store i64 309258617077, ptr @lv_pos
+  %r216718 = getelementptr inbounds [1 x %LV], ptr %a216717, i64 0, i64 0
+  %r216719 = load i64, ptr %t216716
+  %r216720 = getelementptr inbounds i8, ptr %t216716, i64 8
+  %r216722 = load i64, ptr %r216720
+  store i64 %r216719, ptr %r216718
+  %r216721 = getelementptr inbounds i8, ptr %r216718, i64 8
+  store i64 %r216722, ptr %r216721
+  call void @lvp_call(ptr %t216723, ptr %t216707, i32 1, ptr %a216717)
+  ret %LV zeroinitializer
+}
+define internal %LV @fn_216730(ptr %self, i32 %argc, ptr %argv) {
+entry:
+  %a216733 = alloca %LV, align 8
+  %t216738 = alloca %LV, align 8
+  %t216747 = alloca %LV, align 8
+  %t216748 = alloca %LV, align 8
+  %t216757 = alloca %LV, align 8
+  %a216758 = alloca [1 x %LV], align 8
+  %t216764 = alloca %LV, align 8
+  %a216766 = alloca %LV, align 8
+  %t216771 = alloca %LV, align 8
+  %t216780 = alloca %LV, align 8
+  %a216789 = alloca [1 x %LV], align 8
+  %t216795 = alloca %LV, align 8
+  %t216796 = alloca %LV, align 8
+  %t216805 = alloca %LV, align 8
+  %a216814 = alloca [1 x %LV], align 8
+  %t216820 = alloca %LV, align 8
+  %a216821 = alloca [1 x %LV], align 8
+  %t216827 = alloca %LV, align 8
+  %a216828 = alloca [1 x %LV], align 8
+  %t216835 = alloca %LV, align 8
+  store ptr @mod_0, ptr @lv_pos_mod
+  call void @lv_arity(ptr %self, i32 %argc, i32 1, i32 1)
+  %r216731 = getelementptr inbounds %LV, ptr %argv, i64 0
+  %r216734 = load i64, ptr %r216731
+  %r216735 = getelementptr inbounds i8, ptr %r216731, i64 8
+  %r216737 = load i64, ptr %r216735
+  store i64 %r216734, ptr %a216733
+  %r216736 = getelementptr inbounds i8, ptr %a216733, i64 8
+  store i64 %r216737, ptr %r216736
+  store i64 34380710138, ptr @lv_pos
+  %r216739 = load i64, ptr @g_ST
+  %r216740 = icmp eq i64 %r216739, 17
+  br i1 %r216740, label %gundef216741, label %gdef216742
+gundef216741:
   call void @lvp_gundef(ptr @g_ST, ptr @.s728)
-  br label %gdef216744
-gdef216744:
-  %r216745 = load i64, ptr @g_ST
-  %r216746 = getelementptr inbounds i8, ptr @g_ST, i64 8
-  %r216748 = load i64, ptr %r216746
-  store i64 %r216745, ptr %t216740
-  %r216747 = getelementptr inbounds i8, ptr %t216740, i64 8
-  store i64 %r216748, ptr %r216747
-  store i64 292141662455, ptr @lv_pos
-  store i64 189062447351, ptr @lv_pos
-  %r216750 = load i64, ptr @g_split_lines
-  %r216751 = icmp eq i64 %r216750, 17
-  br i1 %r216751, label %gundef216752, label %gdef216753
-gundef216752:
-  call void @lvp_gundef(ptr @g_split_lines, ptr @.s780)
-  br label %gdef216753
-gdef216753:
-  %r216754 = load i64, ptr @g_split_lines
-  %r216755 = getelementptr inbounds i8, ptr @g_split_lines, i64 8
-  %r216757 = load i64, ptr %r216755
-  store i64 %r216754, ptr %t216749
-  %r216756 = getelementptr inbounds i8, ptr %t216749, i64 8
-  store i64 %r216757, ptr %r216756
-  store i64 292141662455, ptr @lv_pos
+  br label %gdef216742
+gdef216742:
+  %r216743 = load i64, ptr @g_ST
+  %r216744 = getelementptr inbounds i8, ptr @g_ST, i64 8
+  %r216746 = load i64, ptr %r216744
+  store i64 %r216743, ptr %t216738
+  %r216745 = getelementptr inbounds i8, ptr %t216738, i64 8
+  store i64 %r216746, ptr %r216745
+  store i64 68799168762, ptr @lv_pos
+  call void @lvp_index(ptr %t216747, ptr %a216733, ptr @.c1)
+  store i64 206179401978, ptr @lv_pos
+  call void @lvp_index_set(ptr %t216738, ptr getelementptr inbounds (%LV, ptr @K, i64 393), ptr %t216747)
+  store i64 251, ptr @lv_pos
+  store i64 257765146875, ptr @lv_pos
+  store i64 154685931771, ptr @lv_pos
+  %r216749 = load i64, ptr @g_read_file
+  %r216750 = icmp eq i64 %r216749, 17
+  br i1 %r216750, label %gundef216751, label %gdef216752
+gundef216751:
+  call void @lvp_gundef(ptr @g_read_file, ptr @.s779)
+  br label %gdef216752
+gdef216752:
+  %r216753 = load i64, ptr @g_read_file
+  %r216754 = getelementptr inbounds i8, ptr @g_read_file, i64 8
+  %r216756 = load i64, ptr %r216754
+  store i64 %r216753, ptr %t216748
+  %r216755 = getelementptr inbounds i8, ptr %t216748, i64 8
+  store i64 %r216756, ptr %r216755
+  store i64 68828528891, ptr @lv_pos
+  call void @lvp_index(ptr %t216757, ptr %a216733, ptr @.c1)
+  store i64 257765146875, ptr @lv_pos
   %r216759 = getelementptr inbounds [1 x %LV], ptr %a216758, i64 0, i64 0
-  %r216760 = load i64, ptr %a216735
-  %r216761 = getelementptr inbounds i8, ptr %a216735, i64 8
+  %r216760 = load i64, ptr %t216757
+  %r216761 = getelementptr inbounds i8, ptr %t216757, i64 8
   %r216763 = load i64, ptr %r216761
   store i64 %r216760, ptr %r216759
   %r216762 = getelementptr inbounds i8, ptr %r216759, i64 8
   store i64 %r216763, ptr %r216762
-  call void @lvp_call(ptr %t216764, ptr %t216749, i32 1, ptr %a216758)
-  store i64 223359271159, ptr @lv_pos
-  call void @lvp_index_set(ptr %t216740, ptr getelementptr inbounds (%LV, ptr @K, i64 394), ptr %t216764)
-  store i64 248, ptr @lv_pos
-  store i64 566956654840, ptr @lv_pos
-  store i64 223359271160, ptr @lv_pos
-  %r216766 = load i64, ptr @g_check_program
-  %r216767 = icmp eq i64 %r216766, 17
-  br i1 %r216767, label %gundef216768, label %gdef216769
-gundef216768:
-  call void @lvp_gundef(ptr @g_check_program, ptr @.s5228)
-  br label %gdef216769
-gdef216769:
-  %r216770 = load i64, ptr @g_check_program
-  %r216771 = getelementptr inbounds i8, ptr @g_check_program, i64 8
-  %r216773 = load i64, ptr %r216771
-  store i64 %r216770, ptr %t216765
-  %r216772 = getelementptr inbounds i8, ptr %t216765, i64 8
-  store i64 %r216773, ptr %r216772
-  store i64 309317337336, ptr @lv_pos
-  store i64 206238122232, ptr @lv_pos
-  %r216775 = load i64, ptr @g_parse_source
-  %r216776 = icmp eq i64 %r216775, 17
-  br i1 %r216776, label %gundef216777, label %gdef216778
-gundef216777:
-  call void @lvp_gundef(ptr @g_parse_source, ptr @.s2405)
-  br label %gdef216778
-gdef216778:
-  %r216779 = load i64, ptr @g_parse_source
-  %r216780 = getelementptr inbounds i8, ptr @g_parse_source, i64 8
-  %r216782 = load i64, ptr %r216780
-  store i64 %r216779, ptr %t216774
-  %r216781 = getelementptr inbounds i8, ptr %t216774, i64 8
-  store i64 %r216782, ptr %r216781
-  store i64 309317337336, ptr @lv_pos
-  %r216784 = getelementptr inbounds [1 x %LV], ptr %a216783, i64 0, i64 0
-  %r216785 = load i64, ptr %a216735
-  %r216786 = getelementptr inbounds i8, ptr %a216735, i64 8
+  call void @lvp_call(ptr %t216764, ptr %t216748, i32 1, ptr %a216758)
+  %r216767 = load i64, ptr %t216764
+  %r216768 = getelementptr inbounds i8, ptr %t216764, i64 8
+  %r216770 = load i64, ptr %r216768
+  store i64 %r216767, ptr %a216766
+  %r216769 = getelementptr inbounds i8, ptr %a216766, i64 8
+  store i64 %r216770, ptr %r216769
+  store i64 34380710140, ptr @lv_pos
+  %r216772 = load i64, ptr @g_ST
+  %r216773 = icmp eq i64 %r216772, 17
+  br i1 %r216773, label %gundef216774, label %gdef216775
+gundef216774:
+  call void @lvp_gundef(ptr @g_ST, ptr @.s728)
+  br label %gdef216775
+gdef216775:
+  %r216776 = load i64, ptr @g_ST
+  %r216777 = getelementptr inbounds i8, ptr @g_ST, i64 8
+  %r216779 = load i64, ptr %r216777
+  store i64 %r216776, ptr %t216771
+  %r216778 = getelementptr inbounds i8, ptr %t216771, i64 8
+  store i64 %r216779, ptr %r216778
+  store i64 292141662460, ptr @lv_pos
+  store i64 189062447356, ptr @lv_pos
+  %r216781 = load i64, ptr @g_split_lines
+  %r216782 = icmp eq i64 %r216781, 17
+  br i1 %r216782, label %gundef216783, label %gdef216784
+gundef216783:
+  call void @lvp_gundef(ptr @g_split_lines, ptr @.s780)
+  br label %gdef216784
+gdef216784:
+  %r216785 = load i64, ptr @g_split_lines
+  %r216786 = getelementptr inbounds i8, ptr @g_split_lines, i64 8
   %r216788 = load i64, ptr %r216786
-  store i64 %r216785, ptr %r216784
-  %r216787 = getelementptr inbounds i8, ptr %r216784, i64 8
+  store i64 %r216785, ptr %t216780
+  %r216787 = getelementptr inbounds i8, ptr %t216780, i64 8
   store i64 %r216788, ptr %r216787
-  call void @lvp_call(ptr %t216789, ptr %t216774, i32 1, ptr %a216783)
-  store i64 566956654840, ptr @lv_pos
-  %r216791 = getelementptr inbounds [1 x %LV], ptr %a216790, i64 0, i64 0
-  %r216792 = load i64, ptr %t216789
-  %r216793 = getelementptr inbounds i8, ptr %t216789, i64 8
-  %r216795 = load i64, ptr %r216793
-  store i64 %r216792, ptr %r216791
-  %r216794 = getelementptr inbounds i8, ptr %r216791, i64 8
-  store i64 %r216795, ptr %r216794
-  call void @lvp_call(ptr %t216796, ptr %t216765, i32 1, ptr %a216790)
-  ret %LV zeroinitializer
-}
-define internal %LV @fn_216803(ptr %self, i32 %argc, ptr %argv) {
-entry:
-  %a216806 = alloca %LV, align 8
-  %t216811 = alloca %LV, align 8
-  %t216820 = alloca %LV, align 8
-  %t216821 = alloca %LV, align 8
-  %t216830 = alloca %LV, align 8
-  %a216831 = alloca [1 x %LV], align 8
-  %t216837 = alloca %LV, align 8
-  %a216839 = alloca %LV, align 8
-  %t216844 = alloca %LV, align 8
-  %t216853 = alloca %LV, align 8
-  %a216862 = alloca [1 x %LV], align 8
-  %t216868 = alloca %LV, align 8
-  %t216869 = alloca %LV, align 8
-  %t216878 = alloca %LV, align 8
-  %a216887 = alloca [1 x %LV], align 8
-  %t216893 = alloca %LV, align 8
-  %a216894 = alloca [1 x %LV], align 8
-  %t216900 = alloca %LV, align 8
-  %a216901 = alloca [1 x %LV], align 8
-  %t216908 = alloca %LV, align 8
-  store ptr @mod_0, ptr @lv_pos_mod
-  call void @lv_arity(ptr %self, i32 %argc, i32 1, i32 1)
-  %r216804 = getelementptr inbounds %LV, ptr %argv, i64 0
-  %r216807 = load i64, ptr %r216804
-  %r216808 = getelementptr inbounds i8, ptr %r216804, i64 8
-  %r216810 = load i64, ptr %r216808
-  store i64 %r216807, ptr %a216806
-  %r216809 = getelementptr inbounds i8, ptr %a216806, i64 8
-  store i64 %r216810, ptr %r216809
-  store i64 34380710141, ptr @lv_pos
-  %r216812 = load i64, ptr @g_ST
-  %r216813 = icmp eq i64 %r216812, 17
-  br i1 %r216813, label %gundef216814, label %gdef216815
-gundef216814:
-  call void @lvp_gundef(ptr @g_ST, ptr @.s728)
-  br label %gdef216815
-gdef216815:
-  %r216816 = load i64, ptr @g_ST
-  %r216817 = getelementptr inbounds i8, ptr @g_ST, i64 8
-  %r216819 = load i64, ptr %r216817
-  store i64 %r216816, ptr %t216811
-  %r216818 = getelementptr inbounds i8, ptr %t216811, i64 8
-  store i64 %r216819, ptr %r216818
-  store i64 68799168765, ptr @lv_pos
-  call void @lvp_index(ptr %t216820, ptr %a216806, ptr @.c1)
-  store i64 206179401981, ptr @lv_pos
-  call void @lvp_index_set(ptr %t216811, ptr getelementptr inbounds (%LV, ptr @K, i64 393), ptr %t216820)
-  store i64 254, ptr @lv_pos
-  store i64 257765146878, ptr @lv_pos
-  store i64 154685931774, ptr @lv_pos
-  %r216822 = load i64, ptr @g_read_file
-  %r216823 = icmp eq i64 %r216822, 17
-  br i1 %r216823, label %gundef216824, label %gdef216825
-gundef216824:
-  call void @lvp_gundef(ptr @g_read_file, ptr @.s779)
-  br label %gdef216825
-gdef216825:
-  %r216826 = load i64, ptr @g_read_file
-  %r216827 = getelementptr inbounds i8, ptr @g_read_file, i64 8
-  %r216829 = load i64, ptr %r216827
-  store i64 %r216826, ptr %t216821
-  %r216828 = getelementptr inbounds i8, ptr %t216821, i64 8
-  store i64 %r216829, ptr %r216828
-  store i64 68828528894, ptr @lv_pos
-  call void @lvp_index(ptr %t216830, ptr %a216806, ptr @.c1)
-  store i64 257765146878, ptr @lv_pos
-  %r216832 = getelementptr inbounds [1 x %LV], ptr %a216831, i64 0, i64 0
-  %r216833 = load i64, ptr %t216830
-  %r216834 = getelementptr inbounds i8, ptr %t216830, i64 8
-  %r216836 = load i64, ptr %r216834
-  store i64 %r216833, ptr %r216832
-  %r216835 = getelementptr inbounds i8, ptr %r216832, i64 8
-  store i64 %r216836, ptr %r216835
-  call void @lvp_call(ptr %t216837, ptr %t216821, i32 1, ptr %a216831)
-  %r216840 = load i64, ptr %t216837
-  %r216841 = getelementptr inbounds i8, ptr %t216837, i64 8
-  %r216843 = load i64, ptr %r216841
-  store i64 %r216840, ptr %a216839
-  %r216842 = getelementptr inbounds i8, ptr %a216839, i64 8
-  store i64 %r216843, ptr %r216842
-  store i64 34380710143, ptr @lv_pos
-  %r216845 = load i64, ptr @g_ST
-  %r216846 = icmp eq i64 %r216845, 17
-  br i1 %r216846, label %gundef216847, label %gdef216848
-gundef216847:
-  call void @lvp_gundef(ptr @g_ST, ptr @.s728)
-  br label %gdef216848
-gdef216848:
-  %r216849 = load i64, ptr @g_ST
-  %r216850 = getelementptr inbounds i8, ptr @g_ST, i64 8
-  %r216852 = load i64, ptr %r216850
-  store i64 %r216849, ptr %t216844
-  %r216851 = getelementptr inbounds i8, ptr %t216844, i64 8
-  store i64 %r216852, ptr %r216851
-  store i64 292141662463, ptr @lv_pos
-  store i64 189062447359, ptr @lv_pos
-  %r216854 = load i64, ptr @g_split_lines
-  %r216855 = icmp eq i64 %r216854, 17
-  br i1 %r216855, label %gundef216856, label %gdef216857
-gundef216856:
-  call void @lvp_gundef(ptr @g_split_lines, ptr @.s780)
-  br label %gdef216857
-gdef216857:
-  %r216858 = load i64, ptr @g_split_lines
-  %r216859 = getelementptr inbounds i8, ptr @g_split_lines, i64 8
-  %r216861 = load i64, ptr %r216859
-  store i64 %r216858, ptr %t216853
-  %r216860 = getelementptr inbounds i8, ptr %t216853, i64 8
-  store i64 %r216861, ptr %r216860
-  store i64 292141662463, ptr @lv_pos
-  %r216863 = getelementptr inbounds [1 x %LV], ptr %a216862, i64 0, i64 0
-  %r216864 = load i64, ptr %a216839
-  %r216865 = getelementptr inbounds i8, ptr %a216839, i64 8
-  %r216867 = load i64, ptr %r216865
-  store i64 %r216864, ptr %r216863
-  %r216866 = getelementptr inbounds i8, ptr %r216863, i64 8
-  store i64 %r216867, ptr %r216866
-  call void @lvp_call(ptr %t216868, ptr %t216853, i32 1, ptr %a216862)
-  store i64 223359271167, ptr @lv_pos
-  call void @lvp_index_set(ptr %t216844, ptr getelementptr inbounds (%LV, ptr @K, i64 394), ptr %t216868)
-  store i64 256, ptr @lv_pos
-  store i64 721575477504, ptr @lv_pos
-  store i64 601341559040, ptr @lv_pos
-  store i64 257744175360, ptr @lv_pos
-  %r216870 = load i64, ptr @g_unparse_program
-  %r216871 = icmp eq i64 %r216870, 17
-  br i1 %r216871, label %gundef216872, label %gdef216873
-gundef216872:
+  store i64 292141662460, ptr @lv_pos
+  %r216790 = getelementptr inbounds [1 x %LV], ptr %a216789, i64 0, i64 0
+  %r216791 = load i64, ptr %a216766
+  %r216792 = getelementptr inbounds i8, ptr %a216766, i64 8
+  %r216794 = load i64, ptr %r216792
+  store i64 %r216791, ptr %r216790
+  %r216793 = getelementptr inbounds i8, ptr %r216790, i64 8
+  store i64 %r216794, ptr %r216793
+  call void @lvp_call(ptr %t216795, ptr %t216780, i32 1, ptr %a216789)
+  store i64 223359271164, ptr @lv_pos
+  call void @lvp_index_set(ptr %t216771, ptr getelementptr inbounds (%LV, ptr @K, i64 394), ptr %t216795)
+  store i64 253, ptr @lv_pos
+  store i64 721575477501, ptr @lv_pos
+  store i64 601341559037, ptr @lv_pos
+  store i64 257744175357, ptr @lv_pos
+  %r216797 = load i64, ptr @g_unparse_program
+  %r216798 = icmp eq i64 %r216797, 17
+  br i1 %r216798, label %gundef216799, label %gdef216800
+gundef216799:
   call void @lvp_gundef(ptr @g_unparse_program, ptr @.s6236)
-  br label %gdef216873
-gdef216873:
-  %r216874 = load i64, ptr @g_unparse_program
-  %r216875 = getelementptr inbounds i8, ptr @g_unparse_program, i64 8
-  %r216877 = load i64, ptr %r216875
-  store i64 %r216874, ptr %t216869
-  %r216876 = getelementptr inbounds i8, ptr %t216869, i64 8
-  store i64 %r216877, ptr %r216876
-  store i64 309350891776, ptr @lv_pos
-  store i64 206271676672, ptr @lv_pos
-  %r216879 = load i64, ptr @g_parse_source
-  %r216880 = icmp eq i64 %r216879, 17
-  br i1 %r216880, label %gundef216881, label %gdef216882
-gundef216881:
+  br label %gdef216800
+gdef216800:
+  %r216801 = load i64, ptr @g_unparse_program
+  %r216802 = getelementptr inbounds i8, ptr @g_unparse_program, i64 8
+  %r216804 = load i64, ptr %r216802
+  store i64 %r216801, ptr %t216796
+  %r216803 = getelementptr inbounds i8, ptr %t216796, i64 8
+  store i64 %r216804, ptr %r216803
+  store i64 309350891773, ptr @lv_pos
+  store i64 206271676669, ptr @lv_pos
+  %r216806 = load i64, ptr @g_parse_source
+  %r216807 = icmp eq i64 %r216806, 17
+  br i1 %r216807, label %gundef216808, label %gdef216809
+gundef216808:
   call void @lvp_gundef(ptr @g_parse_source, ptr @.s2405)
-  br label %gdef216882
-gdef216882:
-  %r216883 = load i64, ptr @g_parse_source
-  %r216884 = getelementptr inbounds i8, ptr @g_parse_source, i64 8
-  %r216886 = load i64, ptr %r216884
-  store i64 %r216883, ptr %t216878
-  %r216885 = getelementptr inbounds i8, ptr %t216878, i64 8
-  store i64 %r216886, ptr %r216885
-  store i64 309350891776, ptr @lv_pos
-  %r216888 = getelementptr inbounds [1 x %LV], ptr %a216887, i64 0, i64 0
-  %r216889 = load i64, ptr %a216839
-  %r216890 = getelementptr inbounds i8, ptr %a216839, i64 8
-  %r216892 = load i64, ptr %r216890
-  store i64 %r216889, ptr %r216888
-  %r216891 = getelementptr inbounds i8, ptr %r216888, i64 8
-  store i64 %r216892, ptr %r216891
-  call void @lvp_call(ptr %t216893, ptr %t216878, i32 1, ptr %a216887)
-  store i64 601341559040, ptr @lv_pos
-  %r216895 = getelementptr inbounds [1 x %LV], ptr %a216894, i64 0, i64 0
-  %r216896 = load i64, ptr %t216893
-  %r216897 = getelementptr inbounds i8, ptr %t216893, i64 8
-  %r216899 = load i64, ptr %r216897
-  store i64 %r216896, ptr %r216895
-  %r216898 = getelementptr inbounds i8, ptr %r216895, i64 8
-  store i64 %r216899, ptr %r216898
-  call void @lvp_call(ptr %t216900, ptr %t216869, i32 1, ptr %a216894)
-  store i64 721575477504, ptr @lv_pos
-  %r216902 = getelementptr inbounds [1 x %LV], ptr %a216901, i64 0, i64 0
-  %r216903 = load i64, ptr %t216900
-  %r216904 = getelementptr inbounds i8, ptr %t216900, i64 8
-  %r216906 = load i64, ptr %r216904
-  store i64 %r216903, ptr %r216902
-  %r216905 = getelementptr inbounds i8, ptr %r216902, i64 8
-  store i64 %r216906, ptr %r216905
-  %r216907 = call %LV @lb_print(ptr @nf_print, i32 1, ptr %a216901)
-  store %LV %r216907, ptr %t216908
+  br label %gdef216809
+gdef216809:
+  %r216810 = load i64, ptr @g_parse_source
+  %r216811 = getelementptr inbounds i8, ptr @g_parse_source, i64 8
+  %r216813 = load i64, ptr %r216811
+  store i64 %r216810, ptr %t216805
+  %r216812 = getelementptr inbounds i8, ptr %t216805, i64 8
+  store i64 %r216813, ptr %r216812
+  store i64 309350891773, ptr @lv_pos
+  %r216815 = getelementptr inbounds [1 x %LV], ptr %a216814, i64 0, i64 0
+  %r216816 = load i64, ptr %a216766
+  %r216817 = getelementptr inbounds i8, ptr %a216766, i64 8
+  %r216819 = load i64, ptr %r216817
+  store i64 %r216816, ptr %r216815
+  %r216818 = getelementptr inbounds i8, ptr %r216815, i64 8
+  store i64 %r216819, ptr %r216818
+  call void @lvp_call(ptr %t216820, ptr %t216805, i32 1, ptr %a216814)
+  store i64 601341559037, ptr @lv_pos
+  %r216822 = getelementptr inbounds [1 x %LV], ptr %a216821, i64 0, i64 0
+  %r216823 = load i64, ptr %t216820
+  %r216824 = getelementptr inbounds i8, ptr %t216820, i64 8
+  %r216826 = load i64, ptr %r216824
+  store i64 %r216823, ptr %r216822
+  %r216825 = getelementptr inbounds i8, ptr %r216822, i64 8
+  store i64 %r216826, ptr %r216825
+  call void @lvp_call(ptr %t216827, ptr %t216796, i32 1, ptr %a216821)
+  store i64 721575477501, ptr @lv_pos
+  %r216829 = getelementptr inbounds [1 x %LV], ptr %a216828, i64 0, i64 0
+  %r216830 = load i64, ptr %t216827
+  %r216831 = getelementptr inbounds i8, ptr %t216827, i64 8
+  %r216833 = load i64, ptr %r216831
+  store i64 %r216830, ptr %r216829
+  %r216832 = getelementptr inbounds i8, ptr %r216829, i64 8
+  store i64 %r216833, ptr %r216832
+  %r216834 = call %LV @lb_print(ptr @nf_print, i32 1, ptr %a216828)
+  store %LV %r216834, ptr %t216835
   ret %LV zeroinitializer
 }
-define internal %LV @fn_216915(ptr %self, i32 %argc, ptr %argv) {
+define internal %LV @fn_216842(ptr %self, i32 %argc, ptr %argv) {
 entry:
-  %a216918 = alloca %LV, align 8
-  %t216924 = alloca %LV, align 8
-  %a216926 = alloca %LV, align 8
-  %a216932 = alloca %LV, align 8
-  %a216937 = alloca i64, align 8
-  %t216943 = alloca %LV, align 8
-  %a216945 = alloca [1 x %LV], align 8
-  %t216952 = alloca %LV, align 8
-  %t216953 = alloca %LV, align 8
-  %t217003 = alloca %LV, align 8
-  %t217005 = alloca %LV, align 8
-  %t217006 = alloca %LV, align 8
-  %t217045 = alloca %LV, align 8
-  %t217072 = alloca %LV, align 8
-  %a217074 = alloca [1 x %LV], align 8
-  %t217081 = alloca %LV, align 8
-  %t217082 = alloca %LV, align 8
+  %a216845 = alloca %LV, align 8
+  %t216851 = alloca %LV, align 8
+  %a216853 = alloca %LV, align 8
+  %a216859 = alloca %LV, align 8
+  %a216864 = alloca i64, align 8
+  %t216870 = alloca %LV, align 8
+  %a216872 = alloca [1 x %LV], align 8
+  %t216879 = alloca %LV, align 8
+  %t216880 = alloca %LV, align 8
+  %t216930 = alloca %LV, align 8
+  %t216932 = alloca %LV, align 8
+  %t216933 = alloca %LV, align 8
+  %t216972 = alloca %LV, align 8
+  %t216999 = alloca %LV, align 8
+  %a217001 = alloca [1 x %LV], align 8
+  %t217008 = alloca %LV, align 8
+  %t217009 = alloca %LV, align 8
+  %t217085 = alloca %LV, align 8
+  %t217087 = alloca %LV, align 8
+  %t217088 = alloca %LV, align 8
+  %a217093 = alloca i64, align 8
+  %t217110 = alloca %LV, align 8
+  %t217120 = alloca %LV, align 8
+  %t217122 = alloca %LV, align 8
+  %t217123 = alloca %LV, align 8
+  %t217133 = alloca %LV, align 8
+  %t217135 = alloca %LV, align 8
+  %a217136 = alloca [1 x %LV], align 8
+  %t217142 = alloca %LV, align 8
+  %a217144 = alloca %LV, align 8
+  %t217149 = alloca %LV, align 8
   %t217158 = alloca %LV, align 8
-  %t217160 = alloca %LV, align 8
-  %t217161 = alloca %LV, align 8
-  %a217166 = alloca i64, align 8
-  %t217183 = alloca %LV, align 8
-  %t217193 = alloca %LV, align 8
+  %a217167 = alloca [1 x %LV], align 8
+  %t217173 = alloca %LV, align 8
+  %t217175 = alloca %LV, align 8
+  %t217177 = alloca %LV, align 8
+  %t217179 = alloca %LV, align 8
+  %t217180 = alloca %LV, align 8
+  %a217189 = alloca [1 x %LV], align 8
   %t217195 = alloca %LV, align 8
-  %t217196 = alloca %LV, align 8
-  %t217206 = alloca %LV, align 8
+  %a217196 = alloca [2 x %LV], align 8
   %t217208 = alloca %LV, align 8
-  %a217209 = alloca [1 x %LV], align 8
-  %t217215 = alloca %LV, align 8
-  %a217217 = alloca %LV, align 8
-  %t217222 = alloca %LV, align 8
-  %t217231 = alloca %LV, align 8
-  %a217240 = alloca [1 x %LV], align 8
-  %t217246 = alloca %LV, align 8
-  %t217248 = alloca %LV, align 8
-  %t217250 = alloca %LV, align 8
-  %t217252 = alloca %LV, align 8
-  %t217253 = alloca %LV, align 8
-  %a217262 = alloca [1 x %LV], align 8
-  %t217268 = alloca %LV, align 8
-  %a217269 = alloca [2 x %LV], align 8
-  %t217281 = alloca %LV, align 8
-  %t217292 = alloca %LV, align 8
-  %t217331 = alloca %LV, align 8
-  %a217348 = alloca [1 x %LV], align 8
-  %t217355 = alloca %LV, align 8
-  %t217356 = alloca %LV, align 8
-  %t217422 = alloca %LV, align 8
-  %t217431 = alloca %LV, align 8
-  %t217432 = alloca %LV, align 8
-  %t217441 = alloca %LV, align 8
-  %a217450 = alloca [1 x %LV], align 8
-  %t217456 = alloca %LV, align 8
-  %a217457 = alloca [2 x %LV], align 8
-  %t217468 = alloca %LV, align 8
+  %t217219 = alloca %LV, align 8
+  %t217258 = alloca %LV, align 8
+  %a217275 = alloca [1 x %LV], align 8
+  %t217282 = alloca %LV, align 8
+  %t217283 = alloca %LV, align 8
+  %t217349 = alloca %LV, align 8
+  %t217358 = alloca %LV, align 8
+  %t217359 = alloca %LV, align 8
+  %t217368 = alloca %LV, align 8
+  %a217377 = alloca [1 x %LV], align 8
+  %t217383 = alloca %LV, align 8
+  %a217384 = alloca [2 x %LV], align 8
+  %t217395 = alloca %LV, align 8
   store ptr @mod_0, ptr @lv_pos_mod
   call void @lv_arity(ptr %self, i32 %argc, i32 1, i32 1)
-  %r216916 = getelementptr inbounds %LV, ptr %argv, i64 0
-  %r216919 = load i64, ptr %r216916
-  %r216920 = getelementptr inbounds i8, ptr %r216916, i64 8
-  %r216922 = load i64, ptr %r216920
-  store i64 %r216919, ptr %a216918
-  %r216921 = getelementptr inbounds i8, ptr %a216918, i64 8
-  store i64 %r216922, ptr %r216921
-  store i64 261, ptr @lv_pos
-  %r216923 = call %LV @lv_list_new(i64 0)
-  store %LV %r216923, ptr %t216924
-  %r216927 = load i64, ptr %t216924
-  %r216928 = getelementptr inbounds i8, ptr %t216924, i64 8
-  %r216930 = load i64, ptr %r216928
-  store i64 %r216927, ptr %a216926
-  %r216929 = getelementptr inbounds i8, ptr %a216926, i64 8
-  store i64 %r216930, ptr %r216929
-  store i64 262, ptr @lv_pos
-  %r216933 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 0)
-  %r216934 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 0), i64 8
-  %r216936 = load i64, ptr %r216934
-  store i64 %r216933, ptr %a216932
-  %r216935 = getelementptr inbounds i8, ptr %a216932, i64 8
-  store i64 %r216936, ptr %r216935
+  %r216843 = getelementptr inbounds %LV, ptr %argv, i64 0
+  %r216846 = load i64, ptr %r216843
+  %r216847 = getelementptr inbounds i8, ptr %r216843, i64 8
+  %r216849 = load i64, ptr %r216847
+  store i64 %r216846, ptr %a216845
+  %r216848 = getelementptr inbounds i8, ptr %a216845, i64 8
+  store i64 %r216849, ptr %r216848
+  store i64 258, ptr @lv_pos
+  %r216850 = call %LV @lv_list_new(i64 0)
+  store %LV %r216850, ptr %t216851
+  %r216854 = load i64, ptr %t216851
+  %r216855 = getelementptr inbounds i8, ptr %t216851, i64 8
+  %r216857 = load i64, ptr %r216855
+  store i64 %r216854, ptr %a216853
+  %r216856 = getelementptr inbounds i8, ptr %a216853, i64 8
+  store i64 %r216857, ptr %r216856
+  store i64 259, ptr @lv_pos
+  %r216860 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 0)
+  %r216861 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 0), i64 8
+  %r216863 = load i64, ptr %r216861
+  store i64 %r216860, ptr %a216859
+  %r216862 = getelementptr inbounds i8, ptr %a216859, i64 8
+  store i64 %r216863, ptr %r216862
+  store i64 260, ptr @lv_pos
+  store i64 1, ptr %a216864
+  br label %wcond216865
+wcond216865:
+  %r216869 = load i64, ptr %a216864
+  store i64 2, ptr %t216870
+  %r216871 = getelementptr inbounds i8, ptr %t216870, i64 8
+  store i64 %r216869, ptr %r216871
+  store i64 103146324229, ptr @lv_pos
+  %r216873 = getelementptr inbounds [1 x %LV], ptr %a216872, i64 0, i64 0
+  %r216874 = load i64, ptr %a216845
+  %r216875 = getelementptr inbounds i8, ptr %a216845, i64 8
+  %r216877 = load i64, ptr %r216875
+  store i64 %r216874, ptr %r216873
+  %r216876 = getelementptr inbounds i8, ptr %r216873, i64 8
+  store i64 %r216877, ptr %r216876
+  %r216878 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a216872)
+  store %LV %r216878, ptr %t216879
+  %r216881 = load i64, ptr %t216870
+  %r216882 = load i64, ptr %t216879
+  %r216883 = icmp eq i64 %r216881, 2
+  %r216884 = icmp eq i64 %r216882, 2
+  %r216885 = and i1 %r216883, %r216884
+  br i1 %r216885, label %ifast216886, label %fcheck216887
+ifast216886:
+  %r216890 = getelementptr inbounds i8, ptr %t216870, i64 8
+  %r216891 = getelementptr inbounds i8, ptr %t216879, i64 8
+  %r216892 = load i64, ptr %r216890
+  %r216893 = load i64, ptr %r216891
+  %r216895 = getelementptr inbounds i8, ptr %t216880, i64 8
+  %r216896 = icmp slt i64 %r216892, %r216893
+  %r216897 = zext i1 %r216896 to i64
+  store i64 1, ptr %t216880
+  store i64 %r216897, ptr %r216895
+  br label %idone216889
+fcheck216887:
+  %r216898 = icmp eq i64 %r216881, 3
+  %r216899 = icmp eq i64 %r216882, 3
+  %r216900 = and i1 %r216898, %r216899
+  br i1 %r216900, label %ffast216901, label %islow216888
+ffast216901:
+  %r216902 = getelementptr inbounds i8, ptr %t216870, i64 8
+  %r216903 = getelementptr inbounds i8, ptr %t216879, i64 8
+  %r216904 = load i64, ptr %r216902
+  %r216905 = load i64, ptr %r216903
+  %r216906 = bitcast i64 %r216904 to double
+  %r216907 = bitcast i64 %r216905 to double
+  %r216908 = getelementptr inbounds i8, ptr %t216880, i64 8
+  %r216909 = fcmp olt double %r216906, %r216907
+  %r216910 = zext i1 %r216909 to i64
+  store i64 1, ptr %t216880
+  store i64 %r216910, ptr %r216908
+  br label %idone216889
+islow216888:
+  store i64 140909337379077, ptr @lv_pos
+  %r216913 = getelementptr inbounds i8, ptr %t216870, i64 8
+  %r216914 = getelementptr inbounds i8, ptr %t216879, i64 8
+  %r216911 = load i64, ptr %r216913
+  %r216912 = load i64, ptr %r216914
+  %r216915 = call %LV @lvv_lt(i64 %r216881, i64 %r216911, i64 %r216882, i64 %r216912)
+  %r216916 = extractvalue %LV %r216915, 0
+  %r216917 = extractvalue %LV %r216915, 1
+  store i64 %r216916, ptr %t216880
+  %r216918 = getelementptr inbounds i8, ptr %t216880, i64 8
+  store i64 %r216917, ptr %r216918
+  br label %idone216889
+idone216889:
+  store i64 140909337379077, ptr @lv_pos
+  %r216919 = load i64, ptr %t216880
+  %r216920 = icmp eq i64 %r216919, 1
+  br i1 %r216920, label %tbool216922, label %tbad216921
+tbad216921:
+  %r216923 = getelementptr inbounds i8, ptr %t216880, i64 8
+  %r216924 = load i64, ptr %r216923
+  %r216925 = call i64 @lvv_truth(i64 %r216919, i64 %r216924)
+  br label %tbool216922
+tbool216922:
+  %r216926 = getelementptr inbounds i8, ptr %t216880, i64 8
+  %r216927 = load i32, ptr %r216926
+  %r216928 = icmp ne i32 %r216927, 0
+  br i1 %r216928, label %wbody216866, label %wend216867
+wbody216866:
+  %r216929 = load i64, ptr %a216864
+  store i64 2, ptr %t216930
+  %r216931 = getelementptr inbounds i8, ptr %t216930, i64 8
+  store i64 %r216929, ptr %r216931
+  store i64 68774002950, ptr @lv_pos
+  call void @lvp_index(ptr %t216932, ptr %a216845, ptr %t216930)
+  %r216934 = load i64, ptr %t216932
+  %r216935 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1653)
+  %r216936 = icmp eq i64 %r216934, 2
+  %r216937 = icmp eq i64 %r216935, 2
+  %r216938 = and i1 %r216936, %r216937
+  br i1 %r216938, label %ifast216939, label %fcheck216940
+ifast216939:
+  %r216943 = getelementptr inbounds i8, ptr %t216932, i64 8
+  %r216944 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1653), i64 8
+  %r216945 = load i64, ptr %r216943
+  %r216946 = load i64, ptr %r216944
+  %r216948 = getelementptr inbounds i8, ptr %t216933, i64 8
+  %r216949 = icmp eq i64 %r216945, %r216946
+  %r216950 = zext i1 %r216949 to i64
+  store i64 1, ptr %t216933
+  store i64 %r216950, ptr %r216948
+  br label %idone216942
+fcheck216940:
+  %r216951 = icmp eq i64 %r216934, 3
+  %r216952 = icmp eq i64 %r216935, 3
+  %r216953 = and i1 %r216951, %r216952
+  br i1 %r216953, label %ffast216954, label %islow216941
+ffast216954:
+  %r216955 = getelementptr inbounds i8, ptr %t216932, i64 8
+  %r216956 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1653), i64 8
+  %r216957 = load i64, ptr %r216955
+  %r216958 = load i64, ptr %r216956
+  %r216959 = bitcast i64 %r216957 to double
+  %r216960 = bitcast i64 %r216958 to double
+  %r216961 = getelementptr inbounds i8, ptr %t216933, i64 8
+  %r216962 = fcmp oeq double %r216959, %r216960
+  %r216963 = zext i1 %r216962 to i64
+  store i64 1, ptr %t216933
+  store i64 %r216963, ptr %r216961
+  br label %idone216942
+islow216941:
+  store i64 288582426085556486, ptr @lv_pos
+  %r216966 = getelementptr inbounds i8, ptr %t216932, i64 8
+  %r216967 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1653), i64 8
+  %r216964 = load i64, ptr %r216966
+  %r216965 = load i64, ptr %r216967
+  %r216968 = call %LV @lvv_eq(i64 %r216934, i64 %r216964, i64 %r216935, i64 %r216965)
+  %r216969 = extractvalue %LV %r216968, 0
+  %r216970 = extractvalue %LV %r216968, 1
+  store i64 %r216969, ptr %t216933
+  %r216971 = getelementptr inbounds i8, ptr %t216933, i64 8
+  store i64 %r216970, ptr %r216971
+  br label %idone216942
+idone216942:
+  store i64 288582426085556486, ptr @lv_pos
+  %r216973 = load i64, ptr %t216933
+  %r216974 = getelementptr inbounds i8, ptr %t216933, i64 8
+  %r216976 = load i64, ptr %r216974
+  store i64 %r216973, ptr %t216972
+  %r216975 = getelementptr inbounds i8, ptr %t216972, i64 8
+  store i64 %r216976, ptr %r216975
+  %r216979 = load i64, ptr %t216972
+  %r216980 = icmp eq i64 %r216979, 1
+  br i1 %r216980, label %tbool216982, label %tbad216981
+tbad216981:
+  %r216983 = getelementptr inbounds i8, ptr %t216972, i64 8
+  %r216984 = load i64, ptr %r216983
+  %r216985 = call i64 @lvv_truth(i64 %r216979, i64 %r216984)
+  br label %tbool216982
+tbool216982:
+  %r216986 = getelementptr inbounds i8, ptr %t216972, i64 8
+  %r216987 = load i32, ptr %r216986
+  %r216988 = icmp ne i32 %r216987, 0
+  br i1 %r216988, label %rhs216977, label %done216978
+rhs216977:
+  %r216989 = load i64, ptr %a216864
+  %r216994 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %r216989, i64 1)
+  %r216993 = extractvalue { i64, i1 } %r216994, 0
+  %r216995 = extractvalue { i64, i1 } %r216994, 1
+  br i1 %r216995, label %tslow216991, label %tfast216990
+tslow216991:
+  store i64 140823513530630, ptr @lv_pos
+  %r216996 = call %LV @lvv_add(i64 2, i64 %r216989, i64 2, i64 1)
+  %r216997 = extractvalue %LV %r216996, 1
+  br label %tdone216992
+tfast216990:
+  br label %tdone216992
+tdone216992:
+  %r216998 = phi i64 [ %r216993, %tfast216990 ], [ %r216997, %tslow216991 ]
+  store i64 2, ptr %t216999
+  %r217000 = getelementptr inbounds i8, ptr %t216999, i64 8
+  store i64 %r216998, ptr %r217000
+  store i64 103238598918, ptr @lv_pos
+  %r217002 = getelementptr inbounds [1 x %LV], ptr %a217001, i64 0, i64 0
+  %r217003 = load i64, ptr %a216845
+  %r217004 = getelementptr inbounds i8, ptr %a216845, i64 8
+  %r217006 = load i64, ptr %r217004
+  store i64 %r217003, ptr %r217002
+  %r217005 = getelementptr inbounds i8, ptr %r217002, i64 8
+  store i64 %r217006, ptr %r217005
+  %r217007 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217001)
+  store %LV %r217007, ptr %t217008
+  %r217010 = load i64, ptr %t216999
+  %r217011 = load i64, ptr %t217008
+  %r217012 = icmp eq i64 %r217010, 2
+  %r217013 = icmp eq i64 %r217011, 2
+  %r217014 = and i1 %r217012, %r217013
+  br i1 %r217014, label %ifast217015, label %fcheck217016
+ifast217015:
+  %r217019 = getelementptr inbounds i8, ptr %t216999, i64 8
+  %r217020 = getelementptr inbounds i8, ptr %t217008, i64 8
+  %r217021 = load i64, ptr %r217019
+  %r217022 = load i64, ptr %r217020
+  %r217024 = getelementptr inbounds i8, ptr %t217009, i64 8
+  %r217025 = icmp slt i64 %r217021, %r217022
+  %r217026 = zext i1 %r217025 to i64
+  store i64 1, ptr %t217009
+  store i64 %r217026, ptr %r217024
+  br label %idone217018
+fcheck217016:
+  %r217027 = icmp eq i64 %r217010, 3
+  %r217028 = icmp eq i64 %r217011, 3
+  %r217029 = and i1 %r217027, %r217028
+  br i1 %r217029, label %ffast217030, label %islow217017
+ffast217030:
+  %r217031 = getelementptr inbounds i8, ptr %t216999, i64 8
+  %r217032 = getelementptr inbounds i8, ptr %t217008, i64 8
+  %r217033 = load i64, ptr %r217031
+  %r217034 = load i64, ptr %r217032
+  %r217035 = bitcast i64 %r217033 to double
+  %r217036 = bitcast i64 %r217034 to double
+  %r217037 = getelementptr inbounds i8, ptr %t217009, i64 8
+  %r217038 = fcmp olt double %r217035, %r217036
+  %r217039 = zext i1 %r217038 to i64
+  store i64 1, ptr %t217009
+  store i64 %r217039, ptr %r217037
+  br label %idone217018
+islow217017:
+  store i64 422453109063942, ptr @lv_pos
+  %r217042 = getelementptr inbounds i8, ptr %t216999, i64 8
+  %r217043 = getelementptr inbounds i8, ptr %t217008, i64 8
+  %r217040 = load i64, ptr %r217042
+  %r217041 = load i64, ptr %r217043
+  %r217044 = call %LV @lvv_lt(i64 %r217010, i64 %r217040, i64 %r217011, i64 %r217041)
+  %r217045 = extractvalue %LV %r217044, 0
+  %r217046 = extractvalue %LV %r217044, 1
+  store i64 %r217045, ptr %t217009
+  %r217047 = getelementptr inbounds i8, ptr %t217009, i64 8
+  store i64 %r217046, ptr %r217047
+  br label %idone217018
+idone217018:
+  store i64 422453109063942, ptr @lv_pos
+  %r217048 = load i64, ptr %t217009
+  %r217049 = icmp eq i64 %r217048, 1
+  br i1 %r217049, label %tbool217051, label %tbad217050
+tbad217050:
+  %r217052 = getelementptr inbounds i8, ptr %t217009, i64 8
+  %r217053 = load i64, ptr %r217052
+  %r217054 = call i64 @lvv_truth(i64 %r217048, i64 %r217053)
+  br label %tbool217051
+tbool217051:
+  %r217055 = getelementptr inbounds i8, ptr %t217009, i64 8
+  %r217056 = load i32, ptr %r217055
+  %r217057 = icmp ne i32 %r217056, 0
+  %r217058 = load i64, ptr %t217009
+  %r217059 = getelementptr inbounds i8, ptr %t217009, i64 8
+  %r217061 = load i64, ptr %r217059
+  store i64 %r217058, ptr %t216972
+  %r217060 = getelementptr inbounds i8, ptr %t216972, i64 8
+  store i64 %r217061, ptr %r217060
+  br label %done216978
+done216978:
+  store i64 577376078608204038, ptr @lv_pos
+  %r217062 = load i64, ptr %t216972
+  %r217063 = icmp eq i64 %r217062, 1
+  br i1 %r217063, label %tbool217065, label %tbad217064
+tbad217064:
+  %r217066 = getelementptr inbounds i8, ptr %t216972, i64 8
+  %r217067 = load i64, ptr %r217066
+  %r217068 = call i64 @lvv_truth(i64 %r217062, i64 %r217067)
+  br label %tbool217065
+tbool217065:
+  %r217069 = getelementptr inbounds i8, ptr %t216972, i64 8
+  %r217070 = load i32, ptr %r217069
+  %r217071 = icmp ne i32 %r217070, 0
+  br i1 %r217071, label %then217072, label %else217073
+then217072:
   store i64 263, ptr @lv_pos
-  store i64 1, ptr %a216937
-  br label %wcond216938
-wcond216938:
-  %r216942 = load i64, ptr %a216937
-  store i64 2, ptr %t216943
-  %r216944 = getelementptr inbounds i8, ptr %t216943, i64 8
-  store i64 %r216942, ptr %r216944
-  store i64 103146324232, ptr @lv_pos
-  %r216946 = getelementptr inbounds [1 x %LV], ptr %a216945, i64 0, i64 0
-  %r216947 = load i64, ptr %a216918
-  %r216948 = getelementptr inbounds i8, ptr %a216918, i64 8
-  %r216950 = load i64, ptr %r216948
-  store i64 %r216947, ptr %r216946
-  %r216949 = getelementptr inbounds i8, ptr %r216946, i64 8
-  store i64 %r216950, ptr %r216949
-  %r216951 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a216945)
-  store %LV %r216951, ptr %t216952
-  %r216954 = load i64, ptr %t216943
-  %r216955 = load i64, ptr %t216952
-  %r216956 = icmp eq i64 %r216954, 2
-  %r216957 = icmp eq i64 %r216955, 2
-  %r216958 = and i1 %r216956, %r216957
-  br i1 %r216958, label %ifast216959, label %fcheck216960
-ifast216959:
-  %r216963 = getelementptr inbounds i8, ptr %t216943, i64 8
-  %r216964 = getelementptr inbounds i8, ptr %t216952, i64 8
-  %r216965 = load i64, ptr %r216963
-  %r216966 = load i64, ptr %r216964
-  %r216968 = getelementptr inbounds i8, ptr %t216953, i64 8
-  %r216969 = icmp slt i64 %r216965, %r216966
-  %r216970 = zext i1 %r216969 to i64
-  store i64 1, ptr %t216953
-  store i64 %r216970, ptr %r216968
-  br label %idone216962
-fcheck216960:
-  %r216971 = icmp eq i64 %r216954, 3
-  %r216972 = icmp eq i64 %r216955, 3
-  %r216973 = and i1 %r216971, %r216972
-  br i1 %r216973, label %ffast216974, label %islow216961
-ffast216974:
-  %r216975 = getelementptr inbounds i8, ptr %t216943, i64 8
-  %r216976 = getelementptr inbounds i8, ptr %t216952, i64 8
-  %r216977 = load i64, ptr %r216975
-  %r216978 = load i64, ptr %r216976
-  %r216979 = bitcast i64 %r216977 to double
-  %r216980 = bitcast i64 %r216978 to double
-  %r216981 = getelementptr inbounds i8, ptr %t216953, i64 8
-  %r216982 = fcmp olt double %r216979, %r216980
-  %r216983 = zext i1 %r216982 to i64
-  store i64 1, ptr %t216953
-  store i64 %r216983, ptr %r216981
-  br label %idone216962
-islow216961:
-  store i64 140909337379080, ptr @lv_pos
-  %r216986 = getelementptr inbounds i8, ptr %t216943, i64 8
-  %r216987 = getelementptr inbounds i8, ptr %t216952, i64 8
-  %r216984 = load i64, ptr %r216986
-  %r216985 = load i64, ptr %r216987
-  %r216988 = call %LV @lvv_lt(i64 %r216954, i64 %r216984, i64 %r216955, i64 %r216985)
-  %r216989 = extractvalue %LV %r216988, 0
-  %r216990 = extractvalue %LV %r216988, 1
-  store i64 %r216989, ptr %t216953
-  %r216991 = getelementptr inbounds i8, ptr %t216953, i64 8
-  store i64 %r216990, ptr %r216991
-  br label %idone216962
-idone216962:
-  store i64 140909337379080, ptr @lv_pos
-  %r216992 = load i64, ptr %t216953
-  %r216993 = icmp eq i64 %r216992, 1
-  br i1 %r216993, label %tbool216995, label %tbad216994
-tbad216994:
-  %r216996 = getelementptr inbounds i8, ptr %t216953, i64 8
-  %r216997 = load i64, ptr %r216996
-  %r216998 = call i64 @lvv_truth(i64 %r216992, i64 %r216997)
-  br label %tbool216995
-tbool216995:
-  %r216999 = getelementptr inbounds i8, ptr %t216953, i64 8
-  %r217000 = load i32, ptr %r216999
-  %r217001 = icmp ne i32 %r217000, 0
-  br i1 %r217001, label %wbody216939, label %wend216940
-wbody216939:
-  %r217002 = load i64, ptr %a216937
-  store i64 2, ptr %t217003
-  %r217004 = getelementptr inbounds i8, ptr %t217003, i64 8
-  store i64 %r217002, ptr %r217004
-  store i64 68774002953, ptr @lv_pos
-  call void @lvp_index(ptr %t217005, ptr %a216918, ptr %t217003)
-  %r217007 = load i64, ptr %t217005
-  %r217008 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1653)
-  %r217009 = icmp eq i64 %r217007, 2
-  %r217010 = icmp eq i64 %r217008, 2
-  %r217011 = and i1 %r217009, %r217010
-  br i1 %r217011, label %ifast217012, label %fcheck217013
-ifast217012:
-  %r217016 = getelementptr inbounds i8, ptr %t217005, i64 8
-  %r217017 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1653), i64 8
-  %r217018 = load i64, ptr %r217016
-  %r217019 = load i64, ptr %r217017
-  %r217021 = getelementptr inbounds i8, ptr %t217006, i64 8
-  %r217022 = icmp eq i64 %r217018, %r217019
-  %r217023 = zext i1 %r217022 to i64
-  store i64 1, ptr %t217006
-  store i64 %r217023, ptr %r217021
-  br label %idone217015
-fcheck217013:
-  %r217024 = icmp eq i64 %r217007, 3
-  %r217025 = icmp eq i64 %r217008, 3
-  %r217026 = and i1 %r217024, %r217025
-  br i1 %r217026, label %ffast217027, label %islow217014
-ffast217027:
-  %r217028 = getelementptr inbounds i8, ptr %t217005, i64 8
-  %r217029 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1653), i64 8
-  %r217030 = load i64, ptr %r217028
-  %r217031 = load i64, ptr %r217029
-  %r217032 = bitcast i64 %r217030 to double
-  %r217033 = bitcast i64 %r217031 to double
-  %r217034 = getelementptr inbounds i8, ptr %t217006, i64 8
-  %r217035 = fcmp oeq double %r217032, %r217033
-  %r217036 = zext i1 %r217035 to i64
-  store i64 1, ptr %t217006
-  store i64 %r217036, ptr %r217034
-  br label %idone217015
-islow217014:
-  store i64 288582426085556489, ptr @lv_pos
-  %r217039 = getelementptr inbounds i8, ptr %t217005, i64 8
-  %r217040 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1653), i64 8
-  %r217037 = load i64, ptr %r217039
-  %r217038 = load i64, ptr %r217040
-  %r217041 = call %LV @lvv_eq(i64 %r217007, i64 %r217037, i64 %r217008, i64 %r217038)
-  %r217042 = extractvalue %LV %r217041, 0
-  %r217043 = extractvalue %LV %r217041, 1
-  store i64 %r217042, ptr %t217006
-  %r217044 = getelementptr inbounds i8, ptr %t217006, i64 8
-  store i64 %r217043, ptr %r217044
-  br label %idone217015
-idone217015:
-  store i64 288582426085556489, ptr @lv_pos
-  %r217046 = load i64, ptr %t217006
-  %r217047 = getelementptr inbounds i8, ptr %t217006, i64 8
-  %r217049 = load i64, ptr %r217047
-  store i64 %r217046, ptr %t217045
-  %r217048 = getelementptr inbounds i8, ptr %t217045, i64 8
-  store i64 %r217049, ptr %r217048
-  %r217052 = load i64, ptr %t217045
-  %r217053 = icmp eq i64 %r217052, 1
-  br i1 %r217053, label %tbool217055, label %tbad217054
-tbad217054:
-  %r217056 = getelementptr inbounds i8, ptr %t217045, i64 8
-  %r217057 = load i64, ptr %r217056
-  %r217058 = call i64 @lvv_truth(i64 %r217052, i64 %r217057)
-  br label %tbool217055
-tbool217055:
-  %r217059 = getelementptr inbounds i8, ptr %t217045, i64 8
-  %r217060 = load i32, ptr %r217059
-  %r217061 = icmp ne i32 %r217060, 0
-  br i1 %r217061, label %rhs217050, label %done217051
-rhs217050:
-  %r217062 = load i64, ptr %a216937
-  %r217067 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %r217062, i64 1)
-  %r217066 = extractvalue { i64, i1 } %r217067, 0
-  %r217068 = extractvalue { i64, i1 } %r217067, 1
-  br i1 %r217068, label %tslow217064, label %tfast217063
-tslow217064:
-  store i64 140823513530633, ptr @lv_pos
-  %r217069 = call %LV @lvv_add(i64 2, i64 %r217062, i64 2, i64 1)
-  %r217070 = extractvalue %LV %r217069, 1
-  br label %tdone217065
-tfast217063:
-  br label %tdone217065
-tdone217065:
-  %r217071 = phi i64 [ %r217066, %tfast217063 ], [ %r217070, %tslow217064 ]
-  store i64 2, ptr %t217072
-  %r217073 = getelementptr inbounds i8, ptr %t217072, i64 8
-  store i64 %r217071, ptr %r217073
-  store i64 103238598921, ptr @lv_pos
-  %r217075 = getelementptr inbounds [1 x %LV], ptr %a217074, i64 0, i64 0
-  %r217076 = load i64, ptr %a216918
-  %r217077 = getelementptr inbounds i8, ptr %a216918, i64 8
-  %r217079 = load i64, ptr %r217077
-  store i64 %r217076, ptr %r217075
-  %r217078 = getelementptr inbounds i8, ptr %r217075, i64 8
-  store i64 %r217079, ptr %r217078
-  %r217080 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217074)
-  store %LV %r217080, ptr %t217081
-  %r217083 = load i64, ptr %t217072
-  %r217084 = load i64, ptr %t217081
-  %r217085 = icmp eq i64 %r217083, 2
-  %r217086 = icmp eq i64 %r217084, 2
-  %r217087 = and i1 %r217085, %r217086
-  br i1 %r217087, label %ifast217088, label %fcheck217089
-ifast217088:
-  %r217092 = getelementptr inbounds i8, ptr %t217072, i64 8
-  %r217093 = getelementptr inbounds i8, ptr %t217081, i64 8
-  %r217094 = load i64, ptr %r217092
-  %r217095 = load i64, ptr %r217093
-  %r217097 = getelementptr inbounds i8, ptr %t217082, i64 8
-  %r217098 = icmp slt i64 %r217094, %r217095
-  %r217099 = zext i1 %r217098 to i64
-  store i64 1, ptr %t217082
-  store i64 %r217099, ptr %r217097
-  br label %idone217091
-fcheck217089:
-  %r217100 = icmp eq i64 %r217083, 3
-  %r217101 = icmp eq i64 %r217084, 3
-  %r217102 = and i1 %r217100, %r217101
-  br i1 %r217102, label %ffast217103, label %islow217090
-ffast217103:
-  %r217104 = getelementptr inbounds i8, ptr %t217072, i64 8
-  %r217105 = getelementptr inbounds i8, ptr %t217081, i64 8
-  %r217106 = load i64, ptr %r217104
-  %r217107 = load i64, ptr %r217105
-  %r217108 = bitcast i64 %r217106 to double
-  %r217109 = bitcast i64 %r217107 to double
-  %r217110 = getelementptr inbounds i8, ptr %t217082, i64 8
-  %r217111 = fcmp olt double %r217108, %r217109
-  %r217112 = zext i1 %r217111 to i64
-  store i64 1, ptr %t217082
-  store i64 %r217112, ptr %r217110
-  br label %idone217091
-islow217090:
-  store i64 422453109063945, ptr @lv_pos
-  %r217115 = getelementptr inbounds i8, ptr %t217072, i64 8
-  %r217116 = getelementptr inbounds i8, ptr %t217081, i64 8
-  %r217113 = load i64, ptr %r217115
-  %r217114 = load i64, ptr %r217116
-  %r217117 = call %LV @lvv_lt(i64 %r217083, i64 %r217113, i64 %r217084, i64 %r217114)
-  %r217118 = extractvalue %LV %r217117, 0
-  %r217119 = extractvalue %LV %r217117, 1
-  store i64 %r217118, ptr %t217082
-  %r217120 = getelementptr inbounds i8, ptr %t217082, i64 8
-  store i64 %r217119, ptr %r217120
-  br label %idone217091
-idone217091:
-  store i64 422453109063945, ptr @lv_pos
-  %r217121 = load i64, ptr %t217082
-  %r217122 = icmp eq i64 %r217121, 1
-  br i1 %r217122, label %tbool217124, label %tbad217123
-tbad217123:
-  %r217125 = getelementptr inbounds i8, ptr %t217082, i64 8
-  %r217126 = load i64, ptr %r217125
-  %r217127 = call i64 @lvv_truth(i64 %r217121, i64 %r217126)
-  br label %tbool217124
-tbool217124:
-  %r217128 = getelementptr inbounds i8, ptr %t217082, i64 8
-  %r217129 = load i32, ptr %r217128
-  %r217130 = icmp ne i32 %r217129, 0
-  %r217131 = load i64, ptr %t217082
-  %r217132 = getelementptr inbounds i8, ptr %t217082, i64 8
-  %r217134 = load i64, ptr %r217132
-  store i64 %r217131, ptr %t217045
-  %r217133 = getelementptr inbounds i8, ptr %t217045, i64 8
-  store i64 %r217134, ptr %r217133
-  br label %done217051
-done217051:
-  store i64 577376078608204041, ptr @lv_pos
-  %r217135 = load i64, ptr %t217045
-  %r217136 = icmp eq i64 %r217135, 1
-  br i1 %r217136, label %tbool217138, label %tbad217137
-tbad217137:
-  %r217139 = getelementptr inbounds i8, ptr %t217045, i64 8
-  %r217140 = load i64, ptr %r217139
-  %r217141 = call i64 @lvv_truth(i64 %r217135, i64 %r217140)
-  br label %tbool217138
-tbool217138:
-  %r217142 = getelementptr inbounds i8, ptr %t217045, i64 8
-  %r217143 = load i32, ptr %r217142
-  %r217144 = icmp ne i32 %r217143, 0
-  br i1 %r217144, label %then217145, label %else217146
-then217145:
-  store i64 266, ptr @lv_pos
-  %r217148 = load i64, ptr %a216937
-  %r217153 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %r217148, i64 1)
-  %r217152 = extractvalue { i64, i1 } %r217153, 0
-  %r217154 = extractvalue { i64, i1 } %r217153, 1
-  br i1 %r217154, label %tslow217150, label %tfast217149
-tslow217150:
-  store i64 140823496753418, ptr @lv_pos
-  %r217155 = call %LV @lvv_add(i64 2, i64 %r217148, i64 2, i64 1)
-  %r217156 = extractvalue %LV %r217155, 1
-  br label %tdone217151
-tfast217149:
-  br label %tdone217151
-tdone217151:
-  %r217157 = phi i64 [ %r217152, %tfast217149 ], [ %r217156, %tslow217150 ]
-  store i64 2, ptr %t217158
-  %r217159 = getelementptr inbounds i8, ptr %t217158, i64 8
-  store i64 %r217157, ptr %r217159
-  store i64 137539617034, ptr @lv_pos
-  call void @lvp_index(ptr %t217160, ptr %a216918, ptr %t217158)
-  %r217162 = load i64, ptr %t217160
-  %r217163 = getelementptr inbounds i8, ptr %t217160, i64 8
-  %r217165 = load i64, ptr %r217163
-  store i64 %r217162, ptr %t217161
-  %r217164 = getelementptr inbounds i8, ptr %t217161, i64 8
-  store i64 %r217165, ptr %r217164
-  %r217167 = call i64 @lv_scope_new()
-  store i64 %r217167, ptr %a217166
-  call void @lvp_box_assign_copy(ptr %t217161, i64 %r217167)
-  %r217168 = load i64, ptr %t217161
-  %r217169 = getelementptr inbounds i8, ptr %t217161, i64 8
-  %r217171 = load i64, ptr %r217169
-  store i64 %r217168, ptr %a216932
-  %r217170 = getelementptr inbounds i8, ptr %a216932, i64 8
-  store i64 %r217171, ptr %r217170
+  %r217075 = load i64, ptr %a216864
+  %r217080 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %r217075, i64 1)
+  %r217079 = extractvalue { i64, i1 } %r217080, 0
+  %r217081 = extractvalue { i64, i1 } %r217080, 1
+  br i1 %r217081, label %tslow217077, label %tfast217076
+tslow217077:
+  store i64 140823496753415, ptr @lv_pos
+  %r217082 = call %LV @lvv_add(i64 2, i64 %r217075, i64 2, i64 1)
+  %r217083 = extractvalue %LV %r217082, 1
+  br label %tdone217078
+tfast217076:
+  br label %tdone217078
+tdone217078:
+  %r217084 = phi i64 [ %r217079, %tfast217076 ], [ %r217083, %tslow217077 ]
+  store i64 2, ptr %t217085
+  %r217086 = getelementptr inbounds i8, ptr %t217085, i64 8
+  store i64 %r217084, ptr %r217086
+  store i64 137539617031, ptr @lv_pos
+  call void @lvp_index(ptr %t217087, ptr %a216845, ptr %t217085)
+  %r217089 = load i64, ptr %t217087
+  %r217090 = getelementptr inbounds i8, ptr %t217087, i64 8
+  %r217092 = load i64, ptr %r217090
+  store i64 %r217089, ptr %t217088
+  %r217091 = getelementptr inbounds i8, ptr %t217088, i64 8
+  store i64 %r217092, ptr %r217091
+  %r217094 = call i64 @lv_scope_new()
+  store i64 %r217094, ptr %a217093
+  call void @lvp_box_assign_copy(ptr %t217088, i64 %r217094)
+  %r217095 = load i64, ptr %t217088
+  %r217096 = getelementptr inbounds i8, ptr %t217088, i64 8
+  %r217098 = load i64, ptr %r217096
+  store i64 %r217095, ptr %a216859
+  %r217097 = getelementptr inbounds i8, ptr %a216859, i64 8
+  store i64 %r217098, ptr %r217097
+  store i64 264, ptr @lv_pos
+  %r217099 = load i64, ptr %a216864
+  %r217104 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %r217099, i64 2)
+  %r217103 = extractvalue { i64, i1 } %r217104, 0
+  %r217105 = extractvalue { i64, i1 } %r217104, 1
+  br i1 %r217105, label %tslow217101, label %tfast217100
+tslow217101:
+  store i64 288371216773808392, ptr @lv_pos
+  %r217106 = call %LV @lvv_add(i64 2, i64 %r217099, i64 2, i64 2)
+  %r217107 = extractvalue %LV %r217106, 1
+  br label %tdone217102
+tfast217100:
+  br label %tdone217102
+tdone217102:
+  %r217108 = phi i64 [ %r217103, %tfast217100 ], [ %r217107, %tslow217101 ]
+  store i64 %r217108, ptr %a216864
+  %r217109 = load i64, ptr %a217093
+  call void @lv_box_release_scope(i64 %r217109)
+  br label %endif217074
+else217073:
+  store i64 34414264586, ptr @lv_pos
+  %r217111 = load i64, ptr @g_ST
+  %r217112 = icmp eq i64 %r217111, 17
+  br i1 %r217112, label %gundef217113, label %gdef217114
+gundef217113:
+  call void @lvp_gundef(ptr @g_ST, ptr @.s728)
+  br label %gdef217114
+gdef217114:
+  %r217115 = load i64, ptr @g_ST
+  %r217116 = getelementptr inbounds i8, ptr @g_ST, i64 8
+  %r217118 = load i64, ptr %r217116
+  store i64 %r217115, ptr %t217110
+  %r217117 = getelementptr inbounds i8, ptr %t217110, i64 8
+  store i64 %r217118, ptr %r217117
+  %r217119 = load i64, ptr %a216864
+  store i64 2, ptr %t217120
+  %r217121 = getelementptr inbounds i8, ptr %t217120, i64 8
+  store i64 %r217119, ptr %r217121
+  store i64 68832723210, ptr @lv_pos
+  call void @lvp_index(ptr %t217122, ptr %a216845, ptr %t217120)
+  store i64 206212956426, ptr @lv_pos
+  call void @lvp_index_set(ptr %t217110, ptr getelementptr inbounds (%LV, ptr @K, i64 393), ptr %t217122)
   store i64 267, ptr @lv_pos
-  %r217172 = load i64, ptr %a216937
-  %r217177 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %r217172, i64 2)
-  %r217176 = extractvalue { i64, i1 } %r217177, 0
-  %r217178 = extractvalue { i64, i1 } %r217177, 1
-  br i1 %r217178, label %tslow217174, label %tfast217173
-tslow217174:
-  store i64 288371216773808395, ptr @lv_pos
-  %r217179 = call %LV @lvv_add(i64 2, i64 %r217172, i64 2, i64 2)
-  %r217180 = extractvalue %LV %r217179, 1
-  br label %tdone217175
-tfast217173:
-  br label %tdone217175
-tdone217175:
-  %r217181 = phi i64 [ %r217176, %tfast217173 ], [ %r217180, %tslow217174 ]
-  store i64 %r217181, ptr %a216937
-  %r217182 = load i64, ptr %a217166
-  call void @lv_box_release_scope(i64 %r217182)
-  br label %endif217147
-else217146:
-  store i64 34414264589, ptr @lv_pos
-  %r217184 = load i64, ptr @g_ST
-  %r217185 = icmp eq i64 %r217184, 17
-  br i1 %r217185, label %gundef217186, label %gdef217187
-gundef217186:
-  call void @lvp_gundef(ptr @g_ST, ptr @.s728)
-  br label %gdef217187
-gdef217187:
-  %r217188 = load i64, ptr @g_ST
-  %r217189 = getelementptr inbounds i8, ptr @g_ST, i64 8
-  %r217191 = load i64, ptr %r217189
-  store i64 %r217188, ptr %t217183
-  %r217190 = getelementptr inbounds i8, ptr %t217183, i64 8
-  store i64 %r217191, ptr %r217190
-  %r217192 = load i64, ptr %a216937
-  store i64 2, ptr %t217193
-  %r217194 = getelementptr inbounds i8, ptr %t217193, i64 8
-  store i64 %r217192, ptr %r217194
-  store i64 68832723213, ptr @lv_pos
-  call void @lvp_index(ptr %t217195, ptr %a216918, ptr %t217193)
-  store i64 206212956429, ptr @lv_pos
-  call void @lvp_index_set(ptr %t217183, ptr getelementptr inbounds (%LV, ptr @K, i64 393), ptr %t217195)
-  store i64 270, ptr @lv_pos
-  store i64 257798701326, ptr @lv_pos
-  store i64 154719486222, ptr @lv_pos
-  %r217197 = load i64, ptr @g_read_file
-  %r217198 = icmp eq i64 %r217197, 17
-  br i1 %r217198, label %gundef217199, label %gdef217200
-gundef217199:
+  store i64 257798701323, ptr @lv_pos
+  store i64 154719486219, ptr @lv_pos
+  %r217124 = load i64, ptr @g_read_file
+  %r217125 = icmp eq i64 %r217124, 17
+  br i1 %r217125, label %gundef217126, label %gdef217127
+gundef217126:
   call void @lvp_gundef(ptr @g_read_file, ptr @.s779)
-  br label %gdef217200
-gdef217200:
-  %r217201 = load i64, ptr @g_read_file
-  %r217202 = getelementptr inbounds i8, ptr @g_read_file, i64 8
-  %r217204 = load i64, ptr %r217202
-  store i64 %r217201, ptr %t217196
-  %r217203 = getelementptr inbounds i8, ptr %t217196, i64 8
-  store i64 %r217204, ptr %r217203
-  %r217205 = load i64, ptr %a216937
-  store i64 2, ptr %t217206
-  %r217207 = getelementptr inbounds i8, ptr %t217206, i64 8
-  store i64 %r217205, ptr %r217207
-  store i64 68862083342, ptr @lv_pos
-  call void @lvp_index(ptr %t217208, ptr %a216918, ptr %t217206)
-  store i64 257798701326, ptr @lv_pos
-  %r217210 = getelementptr inbounds [1 x %LV], ptr %a217209, i64 0, i64 0
-  %r217211 = load i64, ptr %t217208
-  %r217212 = getelementptr inbounds i8, ptr %t217208, i64 8
-  %r217214 = load i64, ptr %r217212
-  store i64 %r217211, ptr %r217210
-  %r217213 = getelementptr inbounds i8, ptr %r217210, i64 8
-  store i64 %r217214, ptr %r217213
-  call void @lvp_call(ptr %t217215, ptr %t217196, i32 1, ptr %a217209)
-  %r217218 = load i64, ptr %t217215
-  %r217219 = getelementptr inbounds i8, ptr %t217215, i64 8
-  %r217221 = load i64, ptr %r217219
-  store i64 %r217218, ptr %a217217
-  %r217220 = getelementptr inbounds i8, ptr %a217217, i64 8
-  store i64 %r217221, ptr %r217220
-  store i64 34414264591, ptr @lv_pos
-  %r217223 = load i64, ptr @g_ST
-  %r217224 = icmp eq i64 %r217223, 17
-  br i1 %r217224, label %gundef217225, label %gdef217226
-gundef217225:
+  br label %gdef217127
+gdef217127:
+  %r217128 = load i64, ptr @g_read_file
+  %r217129 = getelementptr inbounds i8, ptr @g_read_file, i64 8
+  %r217131 = load i64, ptr %r217129
+  store i64 %r217128, ptr %t217123
+  %r217130 = getelementptr inbounds i8, ptr %t217123, i64 8
+  store i64 %r217131, ptr %r217130
+  %r217132 = load i64, ptr %a216864
+  store i64 2, ptr %t217133
+  %r217134 = getelementptr inbounds i8, ptr %t217133, i64 8
+  store i64 %r217132, ptr %r217134
+  store i64 68862083339, ptr @lv_pos
+  call void @lvp_index(ptr %t217135, ptr %a216845, ptr %t217133)
+  store i64 257798701323, ptr @lv_pos
+  %r217137 = getelementptr inbounds [1 x %LV], ptr %a217136, i64 0, i64 0
+  %r217138 = load i64, ptr %t217135
+  %r217139 = getelementptr inbounds i8, ptr %t217135, i64 8
+  %r217141 = load i64, ptr %r217139
+  store i64 %r217138, ptr %r217137
+  %r217140 = getelementptr inbounds i8, ptr %r217137, i64 8
+  store i64 %r217141, ptr %r217140
+  call void @lvp_call(ptr %t217142, ptr %t217123, i32 1, ptr %a217136)
+  %r217145 = load i64, ptr %t217142
+  %r217146 = getelementptr inbounds i8, ptr %t217142, i64 8
+  %r217148 = load i64, ptr %r217146
+  store i64 %r217145, ptr %a217144
+  %r217147 = getelementptr inbounds i8, ptr %a217144, i64 8
+  store i64 %r217148, ptr %r217147
+  store i64 34414264588, ptr @lv_pos
+  %r217150 = load i64, ptr @g_ST
+  %r217151 = icmp eq i64 %r217150, 17
+  br i1 %r217151, label %gundef217152, label %gdef217153
+gundef217152:
   call void @lvp_gundef(ptr @g_ST, ptr @.s728)
-  br label %gdef217226
-gdef217226:
-  %r217227 = load i64, ptr @g_ST
-  %r217228 = getelementptr inbounds i8, ptr @g_ST, i64 8
-  %r217230 = load i64, ptr %r217228
-  store i64 %r217227, ptr %t217222
-  %r217229 = getelementptr inbounds i8, ptr %t217222, i64 8
-  store i64 %r217230, ptr %r217229
-  store i64 292175216911, ptr @lv_pos
-  store i64 189096001807, ptr @lv_pos
-  %r217232 = load i64, ptr @g_split_lines
-  %r217233 = icmp eq i64 %r217232, 17
-  br i1 %r217233, label %gundef217234, label %gdef217235
-gundef217234:
+  br label %gdef217153
+gdef217153:
+  %r217154 = load i64, ptr @g_ST
+  %r217155 = getelementptr inbounds i8, ptr @g_ST, i64 8
+  %r217157 = load i64, ptr %r217155
+  store i64 %r217154, ptr %t217149
+  %r217156 = getelementptr inbounds i8, ptr %t217149, i64 8
+  store i64 %r217157, ptr %r217156
+  store i64 292175216908, ptr @lv_pos
+  store i64 189096001804, ptr @lv_pos
+  %r217159 = load i64, ptr @g_split_lines
+  %r217160 = icmp eq i64 %r217159, 17
+  br i1 %r217160, label %gundef217161, label %gdef217162
+gundef217161:
   call void @lvp_gundef(ptr @g_split_lines, ptr @.s780)
-  br label %gdef217235
-gdef217235:
-  %r217236 = load i64, ptr @g_split_lines
-  %r217237 = getelementptr inbounds i8, ptr @g_split_lines, i64 8
-  %r217239 = load i64, ptr %r217237
-  store i64 %r217236, ptr %t217231
-  %r217238 = getelementptr inbounds i8, ptr %t217231, i64 8
-  store i64 %r217239, ptr %r217238
-  store i64 292175216911, ptr @lv_pos
-  %r217241 = getelementptr inbounds [1 x %LV], ptr %a217240, i64 0, i64 0
-  %r217242 = load i64, ptr %a217217
-  %r217243 = getelementptr inbounds i8, ptr %a217217, i64 8
-  %r217245 = load i64, ptr %r217243
-  store i64 %r217242, ptr %r217241
-  %r217244 = getelementptr inbounds i8, ptr %r217241, i64 8
-  store i64 %r217245, ptr %r217244
-  call void @lvp_call(ptr %t217246, ptr %t217231, i32 1, ptr %a217240)
-  store i64 223392825615, ptr @lv_pos
-  call void @lvp_index_set(ptr %t217222, ptr getelementptr inbounds (%LV, ptr @K, i64 394), ptr %t217246)
-  store i64 272, ptr @lv_pos
-  store i64 996486938896, ptr @lv_pos
-  %r217247 = call %LV @lv_map_new()
-  store %LV %r217247, ptr %t217248
-  %r217249 = load i64, ptr %a216937
-  store i64 2, ptr %t217250
-  %r217251 = getelementptr inbounds i8, ptr %t217250, i64 8
-  store i64 %r217249, ptr %r217251
-  store i64 68870471952, ptr @lv_pos
-  call void @lvp_index(ptr %t217252, ptr %a216918, ptr %t217250)
-  call void @lvp_container_check(ptr %t217252)
-  call void @lvp_map_put(ptr %t217248, ptr getelementptr inbounds (%LV, ptr @K, i64 624), ptr %t217252)
-  store i64 309451555088, ptr @lv_pos
-  store i64 206372339984, ptr @lv_pos
-  %r217254 = load i64, ptr @g_parse_source
-  %r217255 = icmp eq i64 %r217254, 17
-  br i1 %r217255, label %gundef217256, label %gdef217257
-gundef217256:
+  br label %gdef217162
+gdef217162:
+  %r217163 = load i64, ptr @g_split_lines
+  %r217164 = getelementptr inbounds i8, ptr @g_split_lines, i64 8
+  %r217166 = load i64, ptr %r217164
+  store i64 %r217163, ptr %t217158
+  %r217165 = getelementptr inbounds i8, ptr %t217158, i64 8
+  store i64 %r217166, ptr %r217165
+  store i64 292175216908, ptr @lv_pos
+  %r217168 = getelementptr inbounds [1 x %LV], ptr %a217167, i64 0, i64 0
+  %r217169 = load i64, ptr %a217144
+  %r217170 = getelementptr inbounds i8, ptr %a217144, i64 8
+  %r217172 = load i64, ptr %r217170
+  store i64 %r217169, ptr %r217168
+  %r217171 = getelementptr inbounds i8, ptr %r217168, i64 8
+  store i64 %r217172, ptr %r217171
+  call void @lvp_call(ptr %t217173, ptr %t217158, i32 1, ptr %a217167)
+  store i64 223392825612, ptr @lv_pos
+  call void @lvp_index_set(ptr %t217149, ptr getelementptr inbounds (%LV, ptr @K, i64 394), ptr %t217173)
+  store i64 269, ptr @lv_pos
+  store i64 996486938893, ptr @lv_pos
+  %r217174 = call %LV @lv_map_new()
+  store %LV %r217174, ptr %t217175
+  %r217176 = load i64, ptr %a216864
+  store i64 2, ptr %t217177
+  %r217178 = getelementptr inbounds i8, ptr %t217177, i64 8
+  store i64 %r217176, ptr %r217178
+  store i64 68870471949, ptr @lv_pos
+  call void @lvp_index(ptr %t217179, ptr %a216845, ptr %t217177)
+  call void @lvp_container_check(ptr %t217179)
+  call void @lvp_map_put(ptr %t217175, ptr getelementptr inbounds (%LV, ptr @K, i64 624), ptr %t217179)
+  store i64 309451555085, ptr @lv_pos
+  store i64 206372339981, ptr @lv_pos
+  %r217181 = load i64, ptr @g_parse_source
+  %r217182 = icmp eq i64 %r217181, 17
+  br i1 %r217182, label %gundef217183, label %gdef217184
+gundef217183:
   call void @lvp_gundef(ptr @g_parse_source, ptr @.s2405)
-  br label %gdef217257
-gdef217257:
-  %r217258 = load i64, ptr @g_parse_source
-  %r217259 = getelementptr inbounds i8, ptr @g_parse_source, i64 8
-  %r217261 = load i64, ptr %r217259
-  store i64 %r217258, ptr %t217253
-  %r217260 = getelementptr inbounds i8, ptr %t217253, i64 8
-  store i64 %r217261, ptr %r217260
-  store i64 309451555088, ptr @lv_pos
-  %r217263 = getelementptr inbounds [1 x %LV], ptr %a217262, i64 0, i64 0
-  %r217264 = load i64, ptr %a217217
-  %r217265 = getelementptr inbounds i8, ptr %a217217, i64 8
-  %r217267 = load i64, ptr %r217265
-  store i64 %r217264, ptr %r217263
-  %r217266 = getelementptr inbounds i8, ptr %r217263, i64 8
-  store i64 %r217267, ptr %r217266
-  call void @lvp_call(ptr %t217268, ptr %t217253, i32 1, ptr %a217262)
-  call void @lvp_container_check(ptr %t217268)
-  call void @lvp_map_put(ptr %t217248, ptr getelementptr inbounds (%LV, ptr @K, i64 1575), ptr %t217268)
-  call void @lvp_container_check(ptr %t217248)
-  store i64 996486938896, ptr @lv_pos
-  %r217270 = getelementptr inbounds [2 x %LV], ptr %a217269, i64 0, i64 0
-  %r217271 = load i64, ptr %a216926
-  %r217272 = getelementptr inbounds i8, ptr %a216926, i64 8
-  %r217274 = load i64, ptr %r217272
-  store i64 %r217271, ptr %r217270
-  %r217273 = getelementptr inbounds i8, ptr %r217270, i64 8
-  store i64 %r217274, ptr %r217273
-  %r217275 = getelementptr inbounds [2 x %LV], ptr %a217269, i64 0, i64 1
-  %r217276 = load i64, ptr %t217248
-  %r217277 = getelementptr inbounds i8, ptr %t217248, i64 8
-  %r217279 = load i64, ptr %r217277
-  store i64 %r217276, ptr %r217275
-  %r217278 = getelementptr inbounds i8, ptr %r217275, i64 8
-  store i64 %r217279, ptr %r217278
-  %r217280 = call %LV @lb_append(ptr @nf_append, i32 2, ptr %a217269)
-  store %LV %r217280, ptr %t217281
-  store i64 273, ptr @lv_pos
-  %r217282 = load i64, ptr %a216937
-  %r217287 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %r217282, i64 1)
-  %r217286 = extractvalue { i64, i1 } %r217287, 0
-  %r217288 = extractvalue { i64, i1 } %r217287, 1
-  br i1 %r217288, label %tslow217284, label %tfast217283
-tslow217284:
-  store i64 288371216773808401, ptr @lv_pos
-  %r217289 = call %LV @lvv_add(i64 2, i64 %r217282, i64 2, i64 1)
-  %r217290 = extractvalue %LV %r217289, 1
-  br label %tdone217285
-tfast217283:
-  br label %tdone217285
-tdone217285:
-  %r217291 = phi i64 [ %r217286, %tfast217283 ], [ %r217290, %tslow217284 ]
-  store i64 %r217291, ptr %a216937
-  br label %endif217147
-endif217147:
-  br label %wcond216938
-wend216940:
-  %r217293 = load i64, ptr %a216932
-  %r217294 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 0)
-  %r217295 = icmp eq i64 %r217293, 2
-  %r217296 = icmp eq i64 %r217294, 2
-  %r217297 = and i1 %r217295, %r217296
-  br i1 %r217297, label %ifast217298, label %fcheck217299
-ifast217298:
-  %r217302 = getelementptr inbounds i8, ptr %a216932, i64 8
-  %r217303 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 0), i64 8
-  %r217304 = load i64, ptr %r217302
-  %r217305 = load i64, ptr %r217303
-  %r217307 = getelementptr inbounds i8, ptr %t217292, i64 8
-  %r217308 = icmp eq i64 %r217304, %r217305
-  %r217309 = zext i1 %r217308 to i64
-  store i64 1, ptr %t217292
-  store i64 %r217309, ptr %r217307
-  br label %idone217301
-fcheck217299:
-  %r217310 = icmp eq i64 %r217293, 3
-  %r217311 = icmp eq i64 %r217294, 3
-  %r217312 = and i1 %r217310, %r217311
-  br i1 %r217312, label %ffast217313, label %islow217300
-ffast217313:
-  %r217314 = getelementptr inbounds i8, ptr %a216932, i64 8
-  %r217315 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 0), i64 8
-  %r217316 = load i64, ptr %r217314
-  %r217317 = load i64, ptr %r217315
-  %r217318 = bitcast i64 %r217316 to double
-  %r217319 = bitcast i64 %r217317 to double
-  %r217320 = getelementptr inbounds i8, ptr %t217292, i64 8
-  %r217321 = fcmp oeq double %r217318, %r217319
-  %r217322 = zext i1 %r217321 to i64
-  store i64 1, ptr %t217292
-  store i64 %r217322, ptr %r217320
-  br label %idone217301
-islow217300:
-  store i64 288863935405228308, ptr @lv_pos
-  %r217325 = getelementptr inbounds i8, ptr %a216932, i64 8
-  %r217326 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 0), i64 8
-  %r217323 = load i64, ptr %r217325
-  %r217324 = load i64, ptr %r217326
-  %r217327 = call %LV @lvv_eq(i64 %r217293, i64 %r217323, i64 %r217294, i64 %r217324)
-  %r217328 = extractvalue %LV %r217327, 0
-  %r217329 = extractvalue %LV %r217327, 1
-  store i64 %r217328, ptr %t217292
-  %r217330 = getelementptr inbounds i8, ptr %t217292, i64 8
-  store i64 %r217329, ptr %r217330
-  br label %idone217301
-idone217301:
-  store i64 288863935405228308, ptr @lv_pos
-  %r217332 = load i64, ptr %t217292
-  %r217333 = getelementptr inbounds i8, ptr %t217292, i64 8
+  br label %gdef217184
+gdef217184:
+  %r217185 = load i64, ptr @g_parse_source
+  %r217186 = getelementptr inbounds i8, ptr @g_parse_source, i64 8
+  %r217188 = load i64, ptr %r217186
+  store i64 %r217185, ptr %t217180
+  %r217187 = getelementptr inbounds i8, ptr %t217180, i64 8
+  store i64 %r217188, ptr %r217187
+  store i64 309451555085, ptr @lv_pos
+  %r217190 = getelementptr inbounds [1 x %LV], ptr %a217189, i64 0, i64 0
+  %r217191 = load i64, ptr %a217144
+  %r217192 = getelementptr inbounds i8, ptr %a217144, i64 8
+  %r217194 = load i64, ptr %r217192
+  store i64 %r217191, ptr %r217190
+  %r217193 = getelementptr inbounds i8, ptr %r217190, i64 8
+  store i64 %r217194, ptr %r217193
+  call void @lvp_call(ptr %t217195, ptr %t217180, i32 1, ptr %a217189)
+  call void @lvp_container_check(ptr %t217195)
+  call void @lvp_map_put(ptr %t217175, ptr getelementptr inbounds (%LV, ptr @K, i64 1575), ptr %t217195)
+  call void @lvp_container_check(ptr %t217175)
+  store i64 996486938893, ptr @lv_pos
+  %r217197 = getelementptr inbounds [2 x %LV], ptr %a217196, i64 0, i64 0
+  %r217198 = load i64, ptr %a216853
+  %r217199 = getelementptr inbounds i8, ptr %a216853, i64 8
+  %r217201 = load i64, ptr %r217199
+  store i64 %r217198, ptr %r217197
+  %r217200 = getelementptr inbounds i8, ptr %r217197, i64 8
+  store i64 %r217201, ptr %r217200
+  %r217202 = getelementptr inbounds [2 x %LV], ptr %a217196, i64 0, i64 1
+  %r217203 = load i64, ptr %t217175
+  %r217204 = getelementptr inbounds i8, ptr %t217175, i64 8
+  %r217206 = load i64, ptr %r217204
+  store i64 %r217203, ptr %r217202
+  %r217205 = getelementptr inbounds i8, ptr %r217202, i64 8
+  store i64 %r217206, ptr %r217205
+  %r217207 = call %LV @lb_append(ptr @nf_append, i32 2, ptr %a217196)
+  store %LV %r217207, ptr %t217208
+  store i64 270, ptr @lv_pos
+  %r217209 = load i64, ptr %a216864
+  %r217214 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %r217209, i64 1)
+  %r217213 = extractvalue { i64, i1 } %r217214, 0
+  %r217215 = extractvalue { i64, i1 } %r217214, 1
+  br i1 %r217215, label %tslow217211, label %tfast217210
+tslow217211:
+  store i64 288371216773808398, ptr @lv_pos
+  %r217216 = call %LV @lvv_add(i64 2, i64 %r217209, i64 2, i64 1)
+  %r217217 = extractvalue %LV %r217216, 1
+  br label %tdone217212
+tfast217210:
+  br label %tdone217212
+tdone217212:
+  %r217218 = phi i64 [ %r217213, %tfast217210 ], [ %r217217, %tslow217211 ]
+  store i64 %r217218, ptr %a216864
+  br label %endif217074
+endif217074:
+  br label %wcond216865
+wend216867:
+  %r217220 = load i64, ptr %a216859
+  %r217221 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 0)
+  %r217222 = icmp eq i64 %r217220, 2
+  %r217223 = icmp eq i64 %r217221, 2
+  %r217224 = and i1 %r217222, %r217223
+  br i1 %r217224, label %ifast217225, label %fcheck217226
+ifast217225:
+  %r217229 = getelementptr inbounds i8, ptr %a216859, i64 8
+  %r217230 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 0), i64 8
+  %r217231 = load i64, ptr %r217229
+  %r217232 = load i64, ptr %r217230
+  %r217234 = getelementptr inbounds i8, ptr %t217219, i64 8
+  %r217235 = icmp eq i64 %r217231, %r217232
+  %r217236 = zext i1 %r217235 to i64
+  store i64 1, ptr %t217219
+  store i64 %r217236, ptr %r217234
+  br label %idone217228
+fcheck217226:
+  %r217237 = icmp eq i64 %r217220, 3
+  %r217238 = icmp eq i64 %r217221, 3
+  %r217239 = and i1 %r217237, %r217238
+  br i1 %r217239, label %ffast217240, label %islow217227
+ffast217240:
+  %r217241 = getelementptr inbounds i8, ptr %a216859, i64 8
+  %r217242 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 0), i64 8
+  %r217243 = load i64, ptr %r217241
+  %r217244 = load i64, ptr %r217242
+  %r217245 = bitcast i64 %r217243 to double
+  %r217246 = bitcast i64 %r217244 to double
+  %r217247 = getelementptr inbounds i8, ptr %t217219, i64 8
+  %r217248 = fcmp oeq double %r217245, %r217246
+  %r217249 = zext i1 %r217248 to i64
+  store i64 1, ptr %t217219
+  store i64 %r217249, ptr %r217247
+  br label %idone217228
+islow217227:
+  store i64 288863935405228305, ptr @lv_pos
+  %r217252 = getelementptr inbounds i8, ptr %a216859, i64 8
+  %r217253 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 0), i64 8
+  %r217250 = load i64, ptr %r217252
+  %r217251 = load i64, ptr %r217253
+  %r217254 = call %LV @lvv_eq(i64 %r217220, i64 %r217250, i64 %r217221, i64 %r217251)
+  %r217255 = extractvalue %LV %r217254, 0
+  %r217256 = extractvalue %LV %r217254, 1
+  store i64 %r217255, ptr %t217219
+  %r217257 = getelementptr inbounds i8, ptr %t217219, i64 8
+  store i64 %r217256, ptr %r217257
+  br label %idone217228
+idone217228:
+  store i64 288863935405228305, ptr @lv_pos
+  %r217259 = load i64, ptr %t217219
+  %r217260 = getelementptr inbounds i8, ptr %t217219, i64 8
+  %r217262 = load i64, ptr %r217260
+  store i64 %r217259, ptr %t217258
+  %r217261 = getelementptr inbounds i8, ptr %t217258, i64 8
+  store i64 %r217262, ptr %r217261
+  %r217265 = load i64, ptr %t217258
+  %r217266 = icmp eq i64 %r217265, 1
+  br i1 %r217266, label %tbool217268, label %tbad217267
+tbad217267:
+  %r217269 = getelementptr inbounds i8, ptr %t217258, i64 8
+  %r217270 = load i64, ptr %r217269
+  %r217271 = call i64 @lvv_truth(i64 %r217265, i64 %r217270)
+  br label %tbool217268
+tbool217268:
+  %r217272 = getelementptr inbounds i8, ptr %t217258, i64 8
+  %r217273 = load i32, ptr %r217272
+  %r217274 = icmp ne i32 %r217273, 0
+  br i1 %r217274, label %done217264, label %rhs217263
+rhs217263:
+  store i64 171911938321, ptr @lv_pos
+  %r217276 = getelementptr inbounds [1 x %LV], ptr %a217275, i64 0, i64 0
+  %r217277 = load i64, ptr %a216853
+  %r217278 = getelementptr inbounds i8, ptr %a216853, i64 8
+  %r217280 = load i64, ptr %r217278
+  store i64 %r217277, ptr %r217276
+  %r217279 = getelementptr inbounds i8, ptr %r217276, i64 8
+  store i64 %r217280, ptr %r217279
+  %r217281 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217275)
+  store %LV %r217281, ptr %t217282
+  %r217284 = load i64, ptr %t217282
+  %r217285 = load i64, ptr @.c1
+  %r217286 = icmp eq i64 %r217284, 2
+  %r217287 = icmp eq i64 %r217285, 2
+  %r217288 = and i1 %r217286, %r217287
+  br i1 %r217288, label %ifast217289, label %fcheck217290
+ifast217289:
+  %r217293 = getelementptr inbounds i8, ptr %t217282, i64 8
+  %r217294 = getelementptr inbounds i8, ptr @.c1, i64 8
+  %r217295 = load i64, ptr %r217293
+  %r217296 = load i64, ptr %r217294
+  %r217298 = getelementptr inbounds i8, ptr %t217283, i64 8
+  %r217299 = icmp eq i64 %r217295, %r217296
+  %r217300 = zext i1 %r217299 to i64
+  store i64 1, ptr %t217283
+  store i64 %r217300, ptr %r217298
+  br label %idone217292
+fcheck217290:
+  %r217301 = icmp eq i64 %r217284, 3
+  %r217302 = icmp eq i64 %r217285, 3
+  %r217303 = and i1 %r217301, %r217302
+  br i1 %r217303, label %ffast217304, label %islow217291
+ffast217304:
+  %r217305 = getelementptr inbounds i8, ptr %t217282, i64 8
+  %r217306 = getelementptr inbounds i8, ptr @.c1, i64 8
+  %r217307 = load i64, ptr %r217305
+  %r217308 = load i64, ptr %r217306
+  %r217309 = bitcast i64 %r217307 to double
+  %r217310 = bitcast i64 %r217308 to double
+  %r217311 = getelementptr inbounds i8, ptr %t217283, i64 8
+  %r217312 = fcmp oeq double %r217309, %r217310
+  %r217313 = zext i1 %r217312 to i64
+  store i64 1, ptr %t217283
+  store i64 %r217313, ptr %r217311
+  br label %idone217292
+islow217291:
+  store i64 289004690148950289, ptr @lv_pos
+  %r217316 = getelementptr inbounds i8, ptr %t217282, i64 8
+  %r217317 = getelementptr inbounds i8, ptr @.c1, i64 8
+  %r217314 = load i64, ptr %r217316
+  %r217315 = load i64, ptr %r217317
+  %r217318 = call %LV @lvv_eq(i64 %r217284, i64 %r217314, i64 %r217285, i64 %r217315)
+  %r217319 = extractvalue %LV %r217318, 0
+  %r217320 = extractvalue %LV %r217318, 1
+  store i64 %r217319, ptr %t217283
+  %r217321 = getelementptr inbounds i8, ptr %t217283, i64 8
+  store i64 %r217320, ptr %r217321
+  br label %idone217292
+idone217292:
+  store i64 289004690148950289, ptr @lv_pos
+  %r217322 = load i64, ptr %t217283
+  %r217323 = icmp eq i64 %r217322, 1
+  br i1 %r217323, label %tbool217325, label %tbad217324
+tbad217324:
+  %r217326 = getelementptr inbounds i8, ptr %t217283, i64 8
+  %r217327 = load i64, ptr %r217326
+  %r217328 = call i64 @lvv_truth(i64 %r217322, i64 %r217327)
+  br label %tbool217325
+tbool217325:
+  %r217329 = getelementptr inbounds i8, ptr %t217283, i64 8
+  %r217330 = load i32, ptr %r217329
+  %r217331 = icmp ne i32 %r217330, 0
+  %r217332 = load i64, ptr %t217283
+  %r217333 = getelementptr inbounds i8, ptr %t217283, i64 8
   %r217335 = load i64, ptr %r217333
-  store i64 %r217332, ptr %t217331
-  %r217334 = getelementptr inbounds i8, ptr %t217331, i64 8
+  store i64 %r217332, ptr %t217258
+  %r217334 = getelementptr inbounds i8, ptr %t217258, i64 8
   store i64 %r217335, ptr %r217334
-  %r217338 = load i64, ptr %t217331
-  %r217339 = icmp eq i64 %r217338, 1
-  br i1 %r217339, label %tbool217341, label %tbad217340
-tbad217340:
-  %r217342 = getelementptr inbounds i8, ptr %t217331, i64 8
-  %r217343 = load i64, ptr %r217342
-  %r217344 = call i64 @lvv_truth(i64 %r217338, i64 %r217343)
-  br label %tbool217341
-tbool217341:
-  %r217345 = getelementptr inbounds i8, ptr %t217331, i64 8
-  %r217346 = load i32, ptr %r217345
-  %r217347 = icmp ne i32 %r217346, 0
-  br i1 %r217347, label %done217337, label %rhs217336
-rhs217336:
-  store i64 171911938324, ptr @lv_pos
-  %r217349 = getelementptr inbounds [1 x %LV], ptr %a217348, i64 0, i64 0
-  %r217350 = load i64, ptr %a216926
-  %r217351 = getelementptr inbounds i8, ptr %a216926, i64 8
-  %r217353 = load i64, ptr %r217351
-  store i64 %r217350, ptr %r217349
-  %r217352 = getelementptr inbounds i8, ptr %r217349, i64 8
-  store i64 %r217353, ptr %r217352
-  %r217354 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217348)
-  store %LV %r217354, ptr %t217355
-  %r217357 = load i64, ptr %t217355
-  %r217358 = load i64, ptr @.c1
-  %r217359 = icmp eq i64 %r217357, 2
-  %r217360 = icmp eq i64 %r217358, 2
-  %r217361 = and i1 %r217359, %r217360
-  br i1 %r217361, label %ifast217362, label %fcheck217363
-ifast217362:
-  %r217366 = getelementptr inbounds i8, ptr %t217355, i64 8
-  %r217367 = getelementptr inbounds i8, ptr @.c1, i64 8
-  %r217368 = load i64, ptr %r217366
-  %r217369 = load i64, ptr %r217367
-  %r217371 = getelementptr inbounds i8, ptr %t217356, i64 8
-  %r217372 = icmp eq i64 %r217368, %r217369
-  %r217373 = zext i1 %r217372 to i64
-  store i64 1, ptr %t217356
-  store i64 %r217373, ptr %r217371
-  br label %idone217365
-fcheck217363:
-  %r217374 = icmp eq i64 %r217357, 3
-  %r217375 = icmp eq i64 %r217358, 3
-  %r217376 = and i1 %r217374, %r217375
-  br i1 %r217376, label %ffast217377, label %islow217364
-ffast217377:
-  %r217378 = getelementptr inbounds i8, ptr %t217355, i64 8
-  %r217379 = getelementptr inbounds i8, ptr @.c1, i64 8
-  %r217380 = load i64, ptr %r217378
-  %r217381 = load i64, ptr %r217379
-  %r217382 = bitcast i64 %r217380 to double
-  %r217383 = bitcast i64 %r217381 to double
-  %r217384 = getelementptr inbounds i8, ptr %t217356, i64 8
-  %r217385 = fcmp oeq double %r217382, %r217383
-  %r217386 = zext i1 %r217385 to i64
-  store i64 1, ptr %t217356
-  store i64 %r217386, ptr %r217384
-  br label %idone217365
-islow217364:
-  store i64 289004690148950292, ptr @lv_pos
-  %r217389 = getelementptr inbounds i8, ptr %t217355, i64 8
-  %r217390 = getelementptr inbounds i8, ptr @.c1, i64 8
-  %r217387 = load i64, ptr %r217389
-  %r217388 = load i64, ptr %r217390
-  %r217391 = call %LV @lvv_eq(i64 %r217357, i64 %r217387, i64 %r217358, i64 %r217388)
-  %r217392 = extractvalue %LV %r217391, 0
-  %r217393 = extractvalue %LV %r217391, 1
-  store i64 %r217392, ptr %t217356
-  %r217394 = getelementptr inbounds i8, ptr %t217356, i64 8
-  store i64 %r217393, ptr %r217394
-  br label %idone217365
-idone217365:
-  store i64 289004690148950292, ptr @lv_pos
-  %r217395 = load i64, ptr %t217356
-  %r217396 = icmp eq i64 %r217395, 1
-  br i1 %r217396, label %tbool217398, label %tbad217397
-tbad217397:
-  %r217399 = getelementptr inbounds i8, ptr %t217356, i64 8
-  %r217400 = load i64, ptr %r217399
-  %r217401 = call i64 @lvv_truth(i64 %r217395, i64 %r217400)
-  br label %tbool217398
-tbool217398:
-  %r217402 = getelementptr inbounds i8, ptr %t217356, i64 8
-  %r217403 = load i32, ptr %r217402
-  %r217404 = icmp ne i32 %r217403, 0
-  %r217405 = load i64, ptr %t217356
-  %r217406 = getelementptr inbounds i8, ptr %t217356, i64 8
-  %r217408 = load i64, ptr %r217406
-  store i64 %r217405, ptr %t217331
-  %r217407 = getelementptr inbounds i8, ptr %t217331, i64 8
-  store i64 %r217408, ptr %r217407
-  br label %done217337
-done217337:
-  store i64 289286474287808788, ptr @lv_pos
-  %r217409 = load i64, ptr %t217331
-  %r217410 = icmp eq i64 %r217409, 1
-  br i1 %r217410, label %tbool217412, label %tbad217411
-tbad217411:
-  %r217413 = getelementptr inbounds i8, ptr %t217331, i64 8
-  %r217414 = load i64, ptr %r217413
-  %r217415 = call i64 @lvv_truth(i64 %r217409, i64 %r217414)
-  br label %tbool217412
-tbool217412:
-  %r217416 = getelementptr inbounds i8, ptr %t217331, i64 8
-  %r217417 = load i32, ptr %r217416
-  %r217418 = icmp ne i32 %r217417, 0
-  br i1 %r217418, label %then217419, label %else217420
-then217419:
-  store i64 277, ptr @lv_pos
-  store i64 120296833301, ptr @lv_pos
-  store i64 85937094933, ptr @lv_pos
-  %r217423 = load i64, ptr @g_usage
-  %r217424 = icmp eq i64 %r217423, 17
-  br i1 %r217424, label %gundef217425, label %gdef217426
-gundef217425:
+  br label %done217264
+done217264:
+  store i64 289286474287808785, ptr @lv_pos
+  %r217336 = load i64, ptr %t217258
+  %r217337 = icmp eq i64 %r217336, 1
+  br i1 %r217337, label %tbool217339, label %tbad217338
+tbad217338:
+  %r217340 = getelementptr inbounds i8, ptr %t217258, i64 8
+  %r217341 = load i64, ptr %r217340
+  %r217342 = call i64 @lvv_truth(i64 %r217336, i64 %r217341)
+  br label %tbool217339
+tbool217339:
+  %r217343 = getelementptr inbounds i8, ptr %t217258, i64 8
+  %r217344 = load i32, ptr %r217343
+  %r217345 = icmp ne i32 %r217344, 0
+  br i1 %r217345, label %then217346, label %else217347
+then217346:
+  store i64 274, ptr @lv_pos
+  store i64 120296833298, ptr @lv_pos
+  store i64 85937094930, ptr @lv_pos
+  %r217350 = load i64, ptr @g_usage
+  %r217351 = icmp eq i64 %r217350, 17
+  br i1 %r217351, label %gundef217352, label %gdef217353
+gundef217352:
   call void @lvp_gundef(ptr @g_usage, ptr @.s6241)
-  br label %gdef217426
-gdef217426:
-  %r217427 = load i64, ptr @g_usage
-  %r217428 = getelementptr inbounds i8, ptr @g_usage, i64 8
-  %r217430 = load i64, ptr %r217428
-  store i64 %r217427, ptr %t217422
-  %r217429 = getelementptr inbounds i8, ptr %t217422, i64 8
-  store i64 %r217430, ptr %r217429
-  store i64 120296833301, ptr @lv_pos
-  call void @lvp_call(ptr %t217431, ptr %t217422, i32 0, ptr null)
-  br label %endif217421
-else217420:
-  br label %endif217421
-endif217421:
-  store i64 279, ptr @lv_pos
-  store i64 738755346711, ptr @lv_pos
-  store i64 171819663639, ptr @lv_pos
-  %r217433 = load i64, ptr @g_write_text
-  %r217434 = icmp eq i64 %r217433, 17
-  br i1 %r217434, label %gundef217435, label %gdef217436
-gundef217435:
+  br label %gdef217353
+gdef217353:
+  %r217354 = load i64, ptr @g_usage
+  %r217355 = getelementptr inbounds i8, ptr @g_usage, i64 8
+  %r217357 = load i64, ptr %r217355
+  store i64 %r217354, ptr %t217349
+  %r217356 = getelementptr inbounds i8, ptr %t217349, i64 8
+  store i64 %r217357, ptr %r217356
+  store i64 120296833298, ptr @lv_pos
+  call void @lvp_call(ptr %t217358, ptr %t217349, i32 0, ptr null)
+  br label %endif217348
+else217347:
+  br label %endif217348
+endif217348:
+  store i64 276, ptr @lv_pos
+  store i64 738755346708, ptr @lv_pos
+  store i64 171819663636, ptr @lv_pos
+  %r217360 = load i64, ptr @g_write_text
+  %r217361 = icmp eq i64 %r217360, 17
+  br i1 %r217361, label %gundef217362, label %gdef217363
+gundef217362:
   call void @lvp_gundef(ptr @g_write_text, ptr @.s6243)
-  br label %gdef217436
-gdef217436:
-  %r217437 = load i64, ptr @g_write_text
-  %r217438 = getelementptr inbounds i8, ptr @g_write_text, i64 8
-  %r217440 = load i64, ptr %r217438
-  store i64 %r217437, ptr %t217432
-  %r217439 = getelementptr inbounds i8, ptr %t217432, i64 8
-  store i64 %r217440, ptr %r217439
-  store i64 360886305047, ptr @lv_pos
-  store i64 240627220759, ptr @lv_pos
-  %r217442 = load i64, ptr @g_compile_native
-  %r217443 = icmp eq i64 %r217442, 17
-  br i1 %r217443, label %gundef217444, label %gdef217445
-gundef217444:
+  br label %gdef217363
+gdef217363:
+  %r217364 = load i64, ptr @g_write_text
+  %r217365 = getelementptr inbounds i8, ptr @g_write_text, i64 8
+  %r217367 = load i64, ptr %r217365
+  store i64 %r217364, ptr %t217359
+  %r217366 = getelementptr inbounds i8, ptr %t217359, i64 8
+  store i64 %r217367, ptr %r217366
+  store i64 360886305044, ptr @lv_pos
+  store i64 240627220756, ptr @lv_pos
+  %r217369 = load i64, ptr @g_compile_native
+  %r217370 = icmp eq i64 %r217369, 17
+  br i1 %r217370, label %gundef217371, label %gdef217372
+gundef217371:
   call void @lvp_gundef(ptr @g_compile_native, ptr @.s5965)
-  br label %gdef217445
-gdef217445:
-  %r217446 = load i64, ptr @g_compile_native
-  %r217447 = getelementptr inbounds i8, ptr @g_compile_native, i64 8
-  %r217449 = load i64, ptr %r217447
-  store i64 %r217446, ptr %t217441
-  %r217448 = getelementptr inbounds i8, ptr %t217441, i64 8
-  store i64 %r217449, ptr %r217448
-  store i64 360886305047, ptr @lv_pos
-  %r217451 = getelementptr inbounds [1 x %LV], ptr %a217450, i64 0, i64 0
-  %r217452 = load i64, ptr %a216926
-  %r217453 = getelementptr inbounds i8, ptr %a216926, i64 8
-  %r217455 = load i64, ptr %r217453
-  store i64 %r217452, ptr %r217451
-  %r217454 = getelementptr inbounds i8, ptr %r217451, i64 8
-  store i64 %r217455, ptr %r217454
-  call void @lvp_call(ptr %t217456, ptr %t217441, i32 1, ptr %a217450)
-  store i64 738755346711, ptr @lv_pos
-  %r217458 = getelementptr inbounds [2 x %LV], ptr %a217457, i64 0, i64 0
-  %r217459 = load i64, ptr %a216932
-  %r217460 = getelementptr inbounds i8, ptr %a216932, i64 8
-  %r217462 = load i64, ptr %r217460
-  store i64 %r217459, ptr %r217458
-  %r217461 = getelementptr inbounds i8, ptr %r217458, i64 8
-  store i64 %r217462, ptr %r217461
-  %r217463 = getelementptr inbounds [2 x %LV], ptr %a217457, i64 0, i64 1
-  %r217464 = load i64, ptr %t217456
-  %r217465 = getelementptr inbounds i8, ptr %t217456, i64 8
-  %r217467 = load i64, ptr %r217465
-  store i64 %r217464, ptr %r217463
-  %r217466 = getelementptr inbounds i8, ptr %r217463, i64 8
-  store i64 %r217467, ptr %r217466
-  call void @lvp_call(ptr %t217468, ptr %t217432, i32 2, ptr %a217457)
+  br label %gdef217372
+gdef217372:
+  %r217373 = load i64, ptr @g_compile_native
+  %r217374 = getelementptr inbounds i8, ptr @g_compile_native, i64 8
+  %r217376 = load i64, ptr %r217374
+  store i64 %r217373, ptr %t217368
+  %r217375 = getelementptr inbounds i8, ptr %t217368, i64 8
+  store i64 %r217376, ptr %r217375
+  store i64 360886305044, ptr @lv_pos
+  %r217378 = getelementptr inbounds [1 x %LV], ptr %a217377, i64 0, i64 0
+  %r217379 = load i64, ptr %a216853
+  %r217380 = getelementptr inbounds i8, ptr %a216853, i64 8
+  %r217382 = load i64, ptr %r217380
+  store i64 %r217379, ptr %r217378
+  %r217381 = getelementptr inbounds i8, ptr %r217378, i64 8
+  store i64 %r217382, ptr %r217381
+  call void @lvp_call(ptr %t217383, ptr %t217368, i32 1, ptr %a217377)
+  store i64 738755346708, ptr @lv_pos
+  %r217385 = getelementptr inbounds [2 x %LV], ptr %a217384, i64 0, i64 0
+  %r217386 = load i64, ptr %a216859
+  %r217387 = getelementptr inbounds i8, ptr %a216859, i64 8
+  %r217389 = load i64, ptr %r217387
+  store i64 %r217386, ptr %r217385
+  %r217388 = getelementptr inbounds i8, ptr %r217385, i64 8
+  store i64 %r217389, ptr %r217388
+  %r217390 = getelementptr inbounds [2 x %LV], ptr %a217384, i64 0, i64 1
+  %r217391 = load i64, ptr %t217383
+  %r217392 = getelementptr inbounds i8, ptr %t217383, i64 8
+  %r217394 = load i64, ptr %r217392
+  store i64 %r217391, ptr %r217390
+  %r217393 = getelementptr inbounds i8, ptr %r217390, i64 8
+  store i64 %r217394, ptr %r217393
+  call void @lvp_call(ptr %t217395, ptr %t217359, i32 2, ptr %a217384)
   ret %LV zeroinitializer
 }
-define internal %LV @fn_217475(ptr %self, i32 %argc, ptr %argv) {
+define internal %LV @fn_217402(ptr %self, i32 %argc, ptr %argv) {
 entry:
-  %a217478 = alloca %LV, align 8
-  %t217483 = alloca %LV, align 8
-  %t217492 = alloca %LV, align 8
-  %t217493 = alloca %LV, align 8
-  %t217502 = alloca %LV, align 8
-  %a217503 = alloca [1 x %LV], align 8
-  %t217509 = alloca %LV, align 8
-  %a217511 = alloca %LV, align 8
-  %t217516 = alloca %LV, align 8
-  %t217525 = alloca %LV, align 8
-  %a217534 = alloca [1 x %LV], align 8
-  %t217540 = alloca %LV, align 8
-  %a217541 = alloca [1 x %LV], align 8
-  %t217548 = alloca %LV, align 8
-  %t217549 = alloca %LV, align 8
-  %t217601 = alloca %LV, align 8
-  %t217610 = alloca %LV, align 8
-  %t217611 = alloca %LV, align 8
-  %t217620 = alloca %LV, align 8
-  %a217629 = alloca [1 x %LV], align 8
-  %t217635 = alloca %LV, align 8
-  %a217636 = alloca [1 x %LV], align 8
-  %t217642 = alloca %LV, align 8
-  %a217644 = alloca %LV, align 8
-  %a217649 = alloca [1 x %LV], align 8
-  %t217656 = alloca %LV, align 8
+  %a217405 = alloca %LV, align 8
+  %t217410 = alloca %LV, align 8
+  %t217419 = alloca %LV, align 8
+  %t217420 = alloca %LV, align 8
+  %t217429 = alloca %LV, align 8
+  %a217430 = alloca [1 x %LV], align 8
+  %t217436 = alloca %LV, align 8
+  %a217438 = alloca %LV, align 8
+  %t217443 = alloca %LV, align 8
+  %t217452 = alloca %LV, align 8
+  %a217461 = alloca [1 x %LV], align 8
+  %t217467 = alloca %LV, align 8
+  %a217468 = alloca [1 x %LV], align 8
+  %t217475 = alloca %LV, align 8
+  %t217476 = alloca %LV, align 8
+  %t217528 = alloca %LV, align 8
+  %t217537 = alloca %LV, align 8
+  %t217538 = alloca %LV, align 8
+  %t217547 = alloca %LV, align 8
+  %a217556 = alloca [1 x %LV], align 8
+  %t217562 = alloca %LV, align 8
+  %a217563 = alloca [1 x %LV], align 8
+  %t217569 = alloca %LV, align 8
+  %a217571 = alloca %LV, align 8
+  %a217576 = alloca [1 x %LV], align 8
+  %t217583 = alloca %LV, align 8
+  %t217584 = alloca %LV, align 8
+  %t217636 = alloca %LV, align 8
+  %t217645 = alloca %LV, align 8
+  %a217646 = alloca [2 x %LV], align 8
   %t217657 = alloca %LV, align 8
-  %t217709 = alloca %LV, align 8
-  %t217718 = alloca %LV, align 8
-  %a217719 = alloca [2 x %LV], align 8
-  %t217730 = alloca %LV, align 8
-  %a217731 = alloca [1 x %LV], align 8
-  %t217738 = alloca %LV, align 8
+  %a217658 = alloca [1 x %LV], align 8
+  %t217665 = alloca %LV, align 8
   store ptr @mod_0, ptr @lv_pos_mod
   call void @lv_arity(ptr %self, i32 %argc, i32 1, i32 1)
-  %r217476 = getelementptr inbounds %LV, ptr %argv, i64 0
-  %r217479 = load i64, ptr %r217476
-  %r217480 = getelementptr inbounds i8, ptr %r217476, i64 8
-  %r217482 = load i64, ptr %r217480
-  store i64 %r217479, ptr %a217478
-  %r217481 = getelementptr inbounds i8, ptr %a217478, i64 8
-  store i64 %r217482, ptr %r217481
-  store i64 34380710173, ptr @lv_pos
-  %r217484 = load i64, ptr @g_ST
-  %r217485 = icmp eq i64 %r217484, 17
-  br i1 %r217485, label %gundef217486, label %gdef217487
-gundef217486:
+  %r217403 = getelementptr inbounds %LV, ptr %argv, i64 0
+  %r217406 = load i64, ptr %r217403
+  %r217407 = getelementptr inbounds i8, ptr %r217403, i64 8
+  %r217409 = load i64, ptr %r217407
+  store i64 %r217406, ptr %a217405
+  %r217408 = getelementptr inbounds i8, ptr %a217405, i64 8
+  store i64 %r217409, ptr %r217408
+  store i64 34380710170, ptr @lv_pos
+  %r217411 = load i64, ptr @g_ST
+  %r217412 = icmp eq i64 %r217411, 17
+  br i1 %r217412, label %gundef217413, label %gdef217414
+gundef217413:
   call void @lvp_gundef(ptr @g_ST, ptr @.s728)
-  br label %gdef217487
-gdef217487:
-  %r217488 = load i64, ptr @g_ST
-  %r217489 = getelementptr inbounds i8, ptr @g_ST, i64 8
-  %r217491 = load i64, ptr %r217489
-  store i64 %r217488, ptr %t217483
-  %r217490 = getelementptr inbounds i8, ptr %t217483, i64 8
-  store i64 %r217491, ptr %r217490
-  store i64 68799168797, ptr @lv_pos
-  call void @lvp_index(ptr %t217492, ptr %a217478, ptr @.c1)
-  store i64 206179402013, ptr @lv_pos
-  call void @lvp_index_set(ptr %t217483, ptr getelementptr inbounds (%LV, ptr @K, i64 393), ptr %t217492)
-  store i64 286, ptr @lv_pos
-  store i64 257765146910, ptr @lv_pos
-  store i64 154685931806, ptr @lv_pos
-  %r217494 = load i64, ptr @g_read_file
-  %r217495 = icmp eq i64 %r217494, 17
-  br i1 %r217495, label %gundef217496, label %gdef217497
-gundef217496:
+  br label %gdef217414
+gdef217414:
+  %r217415 = load i64, ptr @g_ST
+  %r217416 = getelementptr inbounds i8, ptr @g_ST, i64 8
+  %r217418 = load i64, ptr %r217416
+  store i64 %r217415, ptr %t217410
+  %r217417 = getelementptr inbounds i8, ptr %t217410, i64 8
+  store i64 %r217418, ptr %r217417
+  store i64 68799168794, ptr @lv_pos
+  call void @lvp_index(ptr %t217419, ptr %a217405, ptr @.c1)
+  store i64 206179402010, ptr @lv_pos
+  call void @lvp_index_set(ptr %t217410, ptr getelementptr inbounds (%LV, ptr @K, i64 393), ptr %t217419)
+  store i64 283, ptr @lv_pos
+  store i64 257765146907, ptr @lv_pos
+  store i64 154685931803, ptr @lv_pos
+  %r217421 = load i64, ptr @g_read_file
+  %r217422 = icmp eq i64 %r217421, 17
+  br i1 %r217422, label %gundef217423, label %gdef217424
+gundef217423:
   call void @lvp_gundef(ptr @g_read_file, ptr @.s779)
-  br label %gdef217497
-gdef217497:
-  %r217498 = load i64, ptr @g_read_file
-  %r217499 = getelementptr inbounds i8, ptr @g_read_file, i64 8
-  %r217501 = load i64, ptr %r217499
-  store i64 %r217498, ptr %t217493
-  %r217500 = getelementptr inbounds i8, ptr %t217493, i64 8
-  store i64 %r217501, ptr %r217500
-  store i64 68828528926, ptr @lv_pos
-  call void @lvp_index(ptr %t217502, ptr %a217478, ptr @.c1)
-  store i64 257765146910, ptr @lv_pos
-  %r217504 = getelementptr inbounds [1 x %LV], ptr %a217503, i64 0, i64 0
-  %r217505 = load i64, ptr %t217502
-  %r217506 = getelementptr inbounds i8, ptr %t217502, i64 8
-  %r217508 = load i64, ptr %r217506
-  store i64 %r217505, ptr %r217504
-  %r217507 = getelementptr inbounds i8, ptr %r217504, i64 8
-  store i64 %r217508, ptr %r217507
-  call void @lvp_call(ptr %t217509, ptr %t217493, i32 1, ptr %a217503)
-  %r217512 = load i64, ptr %t217509
-  %r217513 = getelementptr inbounds i8, ptr %t217509, i64 8
-  %r217515 = load i64, ptr %r217513
-  store i64 %r217512, ptr %a217511
-  %r217514 = getelementptr inbounds i8, ptr %a217511, i64 8
-  store i64 %r217515, ptr %r217514
-  store i64 34380710175, ptr @lv_pos
-  %r217517 = load i64, ptr @g_ST
-  %r217518 = icmp eq i64 %r217517, 17
-  br i1 %r217518, label %gundef217519, label %gdef217520
-gundef217519:
+  br label %gdef217424
+gdef217424:
+  %r217425 = load i64, ptr @g_read_file
+  %r217426 = getelementptr inbounds i8, ptr @g_read_file, i64 8
+  %r217428 = load i64, ptr %r217426
+  store i64 %r217425, ptr %t217420
+  %r217427 = getelementptr inbounds i8, ptr %t217420, i64 8
+  store i64 %r217428, ptr %r217427
+  store i64 68828528923, ptr @lv_pos
+  call void @lvp_index(ptr %t217429, ptr %a217405, ptr @.c1)
+  store i64 257765146907, ptr @lv_pos
+  %r217431 = getelementptr inbounds [1 x %LV], ptr %a217430, i64 0, i64 0
+  %r217432 = load i64, ptr %t217429
+  %r217433 = getelementptr inbounds i8, ptr %t217429, i64 8
+  %r217435 = load i64, ptr %r217433
+  store i64 %r217432, ptr %r217431
+  %r217434 = getelementptr inbounds i8, ptr %r217431, i64 8
+  store i64 %r217435, ptr %r217434
+  call void @lvp_call(ptr %t217436, ptr %t217420, i32 1, ptr %a217430)
+  %r217439 = load i64, ptr %t217436
+  %r217440 = getelementptr inbounds i8, ptr %t217436, i64 8
+  %r217442 = load i64, ptr %r217440
+  store i64 %r217439, ptr %a217438
+  %r217441 = getelementptr inbounds i8, ptr %a217438, i64 8
+  store i64 %r217442, ptr %r217441
+  store i64 34380710172, ptr @lv_pos
+  %r217444 = load i64, ptr @g_ST
+  %r217445 = icmp eq i64 %r217444, 17
+  br i1 %r217445, label %gundef217446, label %gdef217447
+gundef217446:
   call void @lvp_gundef(ptr @g_ST, ptr @.s728)
-  br label %gdef217520
-gdef217520:
-  %r217521 = load i64, ptr @g_ST
-  %r217522 = getelementptr inbounds i8, ptr @g_ST, i64 8
-  %r217524 = load i64, ptr %r217522
-  store i64 %r217521, ptr %t217516
-  %r217523 = getelementptr inbounds i8, ptr %t217516, i64 8
-  store i64 %r217524, ptr %r217523
-  store i64 292141662495, ptr @lv_pos
-  store i64 189062447391, ptr @lv_pos
-  %r217526 = load i64, ptr @g_split_lines
-  %r217527 = icmp eq i64 %r217526, 17
-  br i1 %r217527, label %gundef217528, label %gdef217529
-gundef217528:
+  br label %gdef217447
+gdef217447:
+  %r217448 = load i64, ptr @g_ST
+  %r217449 = getelementptr inbounds i8, ptr @g_ST, i64 8
+  %r217451 = load i64, ptr %r217449
+  store i64 %r217448, ptr %t217443
+  %r217450 = getelementptr inbounds i8, ptr %t217443, i64 8
+  store i64 %r217451, ptr %r217450
+  store i64 292141662492, ptr @lv_pos
+  store i64 189062447388, ptr @lv_pos
+  %r217453 = load i64, ptr @g_split_lines
+  %r217454 = icmp eq i64 %r217453, 17
+  br i1 %r217454, label %gundef217455, label %gdef217456
+gundef217455:
   call void @lvp_gundef(ptr @g_split_lines, ptr @.s780)
-  br label %gdef217529
-gdef217529:
-  %r217530 = load i64, ptr @g_split_lines
-  %r217531 = getelementptr inbounds i8, ptr @g_split_lines, i64 8
-  %r217533 = load i64, ptr %r217531
-  store i64 %r217530, ptr %t217525
-  %r217532 = getelementptr inbounds i8, ptr %t217525, i64 8
-  store i64 %r217533, ptr %r217532
-  store i64 292141662495, ptr @lv_pos
-  %r217535 = getelementptr inbounds [1 x %LV], ptr %a217534, i64 0, i64 0
-  %r217536 = load i64, ptr %a217511
-  %r217537 = getelementptr inbounds i8, ptr %a217511, i64 8
-  %r217539 = load i64, ptr %r217537
-  store i64 %r217536, ptr %r217535
-  %r217538 = getelementptr inbounds i8, ptr %r217535, i64 8
-  store i64 %r217539, ptr %r217538
-  call void @lvp_call(ptr %t217540, ptr %t217525, i32 1, ptr %a217534)
-  store i64 223359271199, ptr @lv_pos
-  call void @lvp_index_set(ptr %t217516, ptr getelementptr inbounds (%LV, ptr @K, i64 394), ptr %t217540)
-  store i64 103116964128, ptr @lv_pos
-  %r217542 = getelementptr inbounds [1 x %LV], ptr %a217541, i64 0, i64 0
-  %r217543 = load i64, ptr %a217478
-  %r217544 = getelementptr inbounds i8, ptr %a217478, i64 8
-  %r217546 = load i64, ptr %r217544
-  store i64 %r217543, ptr %r217542
-  %r217545 = getelementptr inbounds i8, ptr %r217542, i64 8
-  store i64 %r217546, ptr %r217545
-  %r217547 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217541)
-  store %LV %r217547, ptr %t217548
-  %r217550 = load i64, ptr %t217548
-  %r217551 = load i64, ptr @.c11
-  %r217552 = icmp eq i64 %r217550, 2
-  %r217553 = icmp eq i64 %r217551, 2
-  %r217554 = and i1 %r217552, %r217553
-  br i1 %r217554, label %ifast217555, label %fcheck217556
-ifast217555:
-  %r217559 = getelementptr inbounds i8, ptr %t217548, i64 8
-  %r217560 = getelementptr inbounds i8, ptr @.c11, i64 8
-  %r217561 = load i64, ptr %r217559
-  %r217562 = load i64, ptr %r217560
-  %r217564 = getelementptr inbounds i8, ptr %t217549, i64 8
-  %r217565 = icmp sge i64 %r217561, %r217562
-  %r217566 = zext i1 %r217565 to i64
-  store i64 1, ptr %t217549
-  store i64 %r217566, ptr %r217564
-  br label %idone217558
-fcheck217556:
-  %r217567 = icmp eq i64 %r217550, 3
-  %r217568 = icmp eq i64 %r217551, 3
-  %r217569 = and i1 %r217567, %r217568
-  br i1 %r217569, label %ffast217570, label %islow217557
-ffast217570:
-  %r217571 = getelementptr inbounds i8, ptr %t217548, i64 8
-  %r217572 = getelementptr inbounds i8, ptr @.c11, i64 8
-  %r217573 = load i64, ptr %r217571
-  %r217574 = load i64, ptr %r217572
-  %r217575 = bitcast i64 %r217573 to double
-  %r217576 = bitcast i64 %r217574 to double
-  %r217577 = getelementptr inbounds i8, ptr %t217549, i64 8
-  %r217578 = fcmp oge double %r217575, %r217576
-  %r217579 = zext i1 %r217578 to i64
-  store i64 1, ptr %t217549
-  store i64 %r217579, ptr %r217577
-  br label %idone217558
-islow217557:
-  store i64 288723146377265440, ptr @lv_pos
-  %r217582 = getelementptr inbounds i8, ptr %t217548, i64 8
-  %r217583 = getelementptr inbounds i8, ptr @.c11, i64 8
-  %r217580 = load i64, ptr %r217582
-  %r217581 = load i64, ptr %r217583
-  %r217584 = call %LV @lvv_ge(i64 %r217550, i64 %r217580, i64 %r217551, i64 %r217581)
-  %r217585 = extractvalue %LV %r217584, 0
-  %r217586 = extractvalue %LV %r217584, 1
-  store i64 %r217585, ptr %t217549
-  %r217587 = getelementptr inbounds i8, ptr %t217549, i64 8
-  store i64 %r217586, ptr %r217587
-  br label %idone217558
-idone217558:
-  store i64 288723146377265440, ptr @lv_pos
-  %r217588 = load i64, ptr %t217549
-  %r217589 = icmp eq i64 %r217588, 1
-  br i1 %r217589, label %tbool217591, label %tbad217590
-tbad217590:
-  %r217592 = getelementptr inbounds i8, ptr %t217549, i64 8
-  %r217593 = load i64, ptr %r217592
-  %r217594 = call i64 @lvv_truth(i64 %r217588, i64 %r217593)
-  br label %tbool217591
-tbool217591:
-  %r217595 = getelementptr inbounds i8, ptr %t217549, i64 8
-  %r217596 = load i32, ptr %r217595
-  %r217597 = icmp ne i32 %r217596, 0
-  br i1 %r217597, label %then217598, label %else217599
-then217598:
-  store i64 34397487393, ptr @lv_pos
-  %r217602 = load i64, ptr @g_ST
-  %r217603 = icmp eq i64 %r217602, 17
-  br i1 %r217603, label %gundef217604, label %gdef217605
-gundef217604:
+  br label %gdef217456
+gdef217456:
+  %r217457 = load i64, ptr @g_split_lines
+  %r217458 = getelementptr inbounds i8, ptr @g_split_lines, i64 8
+  %r217460 = load i64, ptr %r217458
+  store i64 %r217457, ptr %t217452
+  %r217459 = getelementptr inbounds i8, ptr %t217452, i64 8
+  store i64 %r217460, ptr %r217459
+  store i64 292141662492, ptr @lv_pos
+  %r217462 = getelementptr inbounds [1 x %LV], ptr %a217461, i64 0, i64 0
+  %r217463 = load i64, ptr %a217438
+  %r217464 = getelementptr inbounds i8, ptr %a217438, i64 8
+  %r217466 = load i64, ptr %r217464
+  store i64 %r217463, ptr %r217462
+  %r217465 = getelementptr inbounds i8, ptr %r217462, i64 8
+  store i64 %r217466, ptr %r217465
+  call void @lvp_call(ptr %t217467, ptr %t217452, i32 1, ptr %a217461)
+  store i64 223359271196, ptr @lv_pos
+  call void @lvp_index_set(ptr %t217443, ptr getelementptr inbounds (%LV, ptr @K, i64 394), ptr %t217467)
+  store i64 103116964125, ptr @lv_pos
+  %r217469 = getelementptr inbounds [1 x %LV], ptr %a217468, i64 0, i64 0
+  %r217470 = load i64, ptr %a217405
+  %r217471 = getelementptr inbounds i8, ptr %a217405, i64 8
+  %r217473 = load i64, ptr %r217471
+  store i64 %r217470, ptr %r217469
+  %r217472 = getelementptr inbounds i8, ptr %r217469, i64 8
+  store i64 %r217473, ptr %r217472
+  %r217474 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217468)
+  store %LV %r217474, ptr %t217475
+  %r217477 = load i64, ptr %t217475
+  %r217478 = load i64, ptr @.c11
+  %r217479 = icmp eq i64 %r217477, 2
+  %r217480 = icmp eq i64 %r217478, 2
+  %r217481 = and i1 %r217479, %r217480
+  br i1 %r217481, label %ifast217482, label %fcheck217483
+ifast217482:
+  %r217486 = getelementptr inbounds i8, ptr %t217475, i64 8
+  %r217487 = getelementptr inbounds i8, ptr @.c11, i64 8
+  %r217488 = load i64, ptr %r217486
+  %r217489 = load i64, ptr %r217487
+  %r217491 = getelementptr inbounds i8, ptr %t217476, i64 8
+  %r217492 = icmp sge i64 %r217488, %r217489
+  %r217493 = zext i1 %r217492 to i64
+  store i64 1, ptr %t217476
+  store i64 %r217493, ptr %r217491
+  br label %idone217485
+fcheck217483:
+  %r217494 = icmp eq i64 %r217477, 3
+  %r217495 = icmp eq i64 %r217478, 3
+  %r217496 = and i1 %r217494, %r217495
+  br i1 %r217496, label %ffast217497, label %islow217484
+ffast217497:
+  %r217498 = getelementptr inbounds i8, ptr %t217475, i64 8
+  %r217499 = getelementptr inbounds i8, ptr @.c11, i64 8
+  %r217500 = load i64, ptr %r217498
+  %r217501 = load i64, ptr %r217499
+  %r217502 = bitcast i64 %r217500 to double
+  %r217503 = bitcast i64 %r217501 to double
+  %r217504 = getelementptr inbounds i8, ptr %t217476, i64 8
+  %r217505 = fcmp oge double %r217502, %r217503
+  %r217506 = zext i1 %r217505 to i64
+  store i64 1, ptr %t217476
+  store i64 %r217506, ptr %r217504
+  br label %idone217485
+islow217484:
+  store i64 288723146377265437, ptr @lv_pos
+  %r217509 = getelementptr inbounds i8, ptr %t217475, i64 8
+  %r217510 = getelementptr inbounds i8, ptr @.c11, i64 8
+  %r217507 = load i64, ptr %r217509
+  %r217508 = load i64, ptr %r217510
+  %r217511 = call %LV @lvv_ge(i64 %r217477, i64 %r217507, i64 %r217478, i64 %r217508)
+  %r217512 = extractvalue %LV %r217511, 0
+  %r217513 = extractvalue %LV %r217511, 1
+  store i64 %r217512, ptr %t217476
+  %r217514 = getelementptr inbounds i8, ptr %t217476, i64 8
+  store i64 %r217513, ptr %r217514
+  br label %idone217485
+idone217485:
+  store i64 288723146377265437, ptr @lv_pos
+  %r217515 = load i64, ptr %t217476
+  %r217516 = icmp eq i64 %r217515, 1
+  br i1 %r217516, label %tbool217518, label %tbad217517
+tbad217517:
+  %r217519 = getelementptr inbounds i8, ptr %t217476, i64 8
+  %r217520 = load i64, ptr %r217519
+  %r217521 = call i64 @lvv_truth(i64 %r217515, i64 %r217520)
+  br label %tbool217518
+tbool217518:
+  %r217522 = getelementptr inbounds i8, ptr %t217476, i64 8
+  %r217523 = load i32, ptr %r217522
+  %r217524 = icmp ne i32 %r217523, 0
+  br i1 %r217524, label %then217525, label %else217526
+then217525:
+  store i64 34397487390, ptr @lv_pos
+  %r217529 = load i64, ptr @g_ST
+  %r217530 = icmp eq i64 %r217529, 17
+  br i1 %r217530, label %gundef217531, label %gdef217532
+gundef217531:
   call void @lvp_gundef(ptr @g_ST, ptr @.s728)
-  br label %gdef217605
-gdef217605:
-  %r217606 = load i64, ptr @g_ST
-  %r217607 = getelementptr inbounds i8, ptr @g_ST, i64 8
-  %r217609 = load i64, ptr %r217607
-  store i64 %r217606, ptr %t217601
-  %r217608 = getelementptr inbounds i8, ptr %t217601, i64 8
-  store i64 %r217609, ptr %r217608
-  store i64 68794974497, ptr @lv_pos
-  call void @lvp_index(ptr %t217610, ptr %a217478, ptr @.c10)
-  store i64 120296833313, ptr @lv_pos
-  call void @lvp_index_set(ptr %t217601, ptr getelementptr inbounds (%LV, ptr @K, i64 1365), ptr %t217610)
-  br label %endif217600
-else217599:
-  br label %endif217600
-endif217600:
-  store i64 291, ptr @lv_pos
-  store i64 652902138147, ptr @lv_pos
-  store i64 309304754467, ptr @lv_pos
-  %r217612 = load i64, ptr @g_compile_program_ll
-  %r217613 = icmp eq i64 %r217612, 17
-  br i1 %r217613, label %gundef217614, label %gdef217615
-gundef217614:
+  br label %gdef217532
+gdef217532:
+  %r217533 = load i64, ptr @g_ST
+  %r217534 = getelementptr inbounds i8, ptr @g_ST, i64 8
+  %r217536 = load i64, ptr %r217534
+  store i64 %r217533, ptr %t217528
+  %r217535 = getelementptr inbounds i8, ptr %t217528, i64 8
+  store i64 %r217536, ptr %r217535
+  store i64 68794974494, ptr @lv_pos
+  call void @lvp_index(ptr %t217537, ptr %a217405, ptr @.c10)
+  store i64 120296833310, ptr @lv_pos
+  call void @lvp_index_set(ptr %t217528, ptr getelementptr inbounds (%LV, ptr @K, i64 1365), ptr %t217537)
+  br label %endif217527
+else217526:
+  br label %endif217527
+endif217527:
+  store i64 288, ptr @lv_pos
+  store i64 652902138144, ptr @lv_pos
+  store i64 309304754464, ptr @lv_pos
+  %r217539 = load i64, ptr @g_compile_program_ll
+  %r217540 = icmp eq i64 %r217539, 17
+  br i1 %r217540, label %gundef217541, label %gdef217542
+gundef217541:
   call void @lvp_gundef(ptr @g_compile_program_ll, ptr @.s5297)
-  br label %gdef217615
-gdef217615:
-  %r217616 = load i64, ptr @g_compile_program_ll
-  %r217617 = getelementptr inbounds i8, ptr @g_compile_program_ll, i64 8
-  %r217619 = load i64, ptr %r217617
-  store i64 %r217616, ptr %t217611
-  %r217618 = getelementptr inbounds i8, ptr %t217611, i64 8
-  store i64 %r217619, ptr %r217618
-  store i64 309384446243, ptr @lv_pos
-  store i64 206305231139, ptr @lv_pos
-  %r217621 = load i64, ptr @g_parse_source
-  %r217622 = icmp eq i64 %r217621, 17
-  br i1 %r217622, label %gundef217623, label %gdef217624
-gundef217623:
+  br label %gdef217542
+gdef217542:
+  %r217543 = load i64, ptr @g_compile_program_ll
+  %r217544 = getelementptr inbounds i8, ptr @g_compile_program_ll, i64 8
+  %r217546 = load i64, ptr %r217544
+  store i64 %r217543, ptr %t217538
+  %r217545 = getelementptr inbounds i8, ptr %t217538, i64 8
+  store i64 %r217546, ptr %r217545
+  store i64 309384446240, ptr @lv_pos
+  store i64 206305231136, ptr @lv_pos
+  %r217548 = load i64, ptr @g_parse_source
+  %r217549 = icmp eq i64 %r217548, 17
+  br i1 %r217549, label %gundef217550, label %gdef217551
+gundef217550:
   call void @lvp_gundef(ptr @g_parse_source, ptr @.s2405)
-  br label %gdef217624
-gdef217624:
-  %r217625 = load i64, ptr @g_parse_source
-  %r217626 = getelementptr inbounds i8, ptr @g_parse_source, i64 8
-  %r217628 = load i64, ptr %r217626
-  store i64 %r217625, ptr %t217620
-  %r217627 = getelementptr inbounds i8, ptr %t217620, i64 8
-  store i64 %r217628, ptr %r217627
-  store i64 309384446243, ptr @lv_pos
-  %r217630 = getelementptr inbounds [1 x %LV], ptr %a217629, i64 0, i64 0
-  %r217631 = load i64, ptr %a217511
-  %r217632 = getelementptr inbounds i8, ptr %a217511, i64 8
-  %r217634 = load i64, ptr %r217632
-  store i64 %r217631, ptr %r217630
-  %r217633 = getelementptr inbounds i8, ptr %r217630, i64 8
-  store i64 %r217634, ptr %r217633
-  call void @lvp_call(ptr %t217635, ptr %t217620, i32 1, ptr %a217629)
-  store i64 652902138147, ptr @lv_pos
-  %r217637 = getelementptr inbounds [1 x %LV], ptr %a217636, i64 0, i64 0
-  %r217638 = load i64, ptr %t217635
-  %r217639 = getelementptr inbounds i8, ptr %t217635, i64 8
-  %r217641 = load i64, ptr %r217639
-  store i64 %r217638, ptr %r217637
-  %r217640 = getelementptr inbounds i8, ptr %r217637, i64 8
-  store i64 %r217641, ptr %r217640
-  call void @lvp_call(ptr %t217642, ptr %t217611, i32 1, ptr %a217636)
-  %r217645 = load i64, ptr %t217642
-  %r217646 = getelementptr inbounds i8, ptr %t217642, i64 8
-  %r217648 = load i64, ptr %r217646
-  store i64 %r217645, ptr %a217644
-  %r217647 = getelementptr inbounds i8, ptr %a217644, i64 8
-  store i64 %r217648, ptr %r217647
-  store i64 103116964132, ptr @lv_pos
-  %r217650 = getelementptr inbounds [1 x %LV], ptr %a217649, i64 0, i64 0
-  %r217651 = load i64, ptr %a217478
-  %r217652 = getelementptr inbounds i8, ptr %a217478, i64 8
-  %r217654 = load i64, ptr %r217652
-  store i64 %r217651, ptr %r217650
-  %r217653 = getelementptr inbounds i8, ptr %r217650, i64 8
-  store i64 %r217654, ptr %r217653
-  %r217655 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217649)
-  store %LV %r217655, ptr %t217656
-  %r217658 = load i64, ptr %t217656
-  %r217659 = load i64, ptr @.c10
-  %r217660 = icmp eq i64 %r217658, 2
-  %r217661 = icmp eq i64 %r217659, 2
-  %r217662 = and i1 %r217660, %r217661
-  br i1 %r217662, label %ifast217663, label %fcheck217664
-ifast217663:
-  %r217667 = getelementptr inbounds i8, ptr %t217656, i64 8
-  %r217668 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r217669 = load i64, ptr %r217667
-  %r217670 = load i64, ptr %r217668
-  %r217672 = getelementptr inbounds i8, ptr %t217657, i64 8
-  %r217673 = icmp sge i64 %r217669, %r217670
-  %r217674 = zext i1 %r217673 to i64
-  store i64 1, ptr %t217657
-  store i64 %r217674, ptr %r217672
-  br label %idone217666
-fcheck217664:
-  %r217675 = icmp eq i64 %r217658, 3
-  %r217676 = icmp eq i64 %r217659, 3
-  %r217677 = and i1 %r217675, %r217676
-  br i1 %r217677, label %ffast217678, label %islow217665
-ffast217678:
-  %r217679 = getelementptr inbounds i8, ptr %t217656, i64 8
-  %r217680 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r217681 = load i64, ptr %r217679
-  %r217682 = load i64, ptr %r217680
-  %r217683 = bitcast i64 %r217681 to double
-  %r217684 = bitcast i64 %r217682 to double
-  %r217685 = getelementptr inbounds i8, ptr %t217657, i64 8
-  %r217686 = fcmp oge double %r217683, %r217684
-  %r217687 = zext i1 %r217686 to i64
-  store i64 1, ptr %t217657
-  store i64 %r217687, ptr %r217685
-  br label %idone217666
-islow217665:
-  store i64 288723146377265444, ptr @lv_pos
-  %r217690 = getelementptr inbounds i8, ptr %t217656, i64 8
-  %r217691 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r217688 = load i64, ptr %r217690
-  %r217689 = load i64, ptr %r217691
-  %r217692 = call %LV @lvv_ge(i64 %r217658, i64 %r217688, i64 %r217659, i64 %r217689)
-  %r217693 = extractvalue %LV %r217692, 0
-  %r217694 = extractvalue %LV %r217692, 1
-  store i64 %r217693, ptr %t217657
-  %r217695 = getelementptr inbounds i8, ptr %t217657, i64 8
-  store i64 %r217694, ptr %r217695
-  br label %idone217666
-idone217666:
-  store i64 288723146377265444, ptr @lv_pos
-  %r217696 = load i64, ptr %t217657
-  %r217697 = icmp eq i64 %r217696, 1
-  br i1 %r217697, label %tbool217699, label %tbad217698
-tbad217698:
-  %r217700 = getelementptr inbounds i8, ptr %t217657, i64 8
-  %r217701 = load i64, ptr %r217700
-  %r217702 = call i64 @lvv_truth(i64 %r217696, i64 %r217701)
-  br label %tbool217699
-tbool217699:
-  %r217703 = getelementptr inbounds i8, ptr %t217657, i64 8
-  %r217704 = load i32, ptr %r217703
-  %r217705 = icmp ne i32 %r217704, 0
-  br i1 %r217705, label %then217706, label %else217707
-then217706:
-  store i64 293, ptr @lv_pos
-  store i64 377994871077, ptr @lv_pos
-  store i64 171836440869, ptr @lv_pos
-  %r217710 = load i64, ptr @g_write_text
-  %r217711 = icmp eq i64 %r217710, 17
-  br i1 %r217711, label %gundef217712, label %gdef217713
-gundef217712:
+  br label %gdef217551
+gdef217551:
+  %r217552 = load i64, ptr @g_parse_source
+  %r217553 = getelementptr inbounds i8, ptr @g_parse_source, i64 8
+  %r217555 = load i64, ptr %r217553
+  store i64 %r217552, ptr %t217547
+  %r217554 = getelementptr inbounds i8, ptr %t217547, i64 8
+  store i64 %r217555, ptr %r217554
+  store i64 309384446240, ptr @lv_pos
+  %r217557 = getelementptr inbounds [1 x %LV], ptr %a217556, i64 0, i64 0
+  %r217558 = load i64, ptr %a217438
+  %r217559 = getelementptr inbounds i8, ptr %a217438, i64 8
+  %r217561 = load i64, ptr %r217559
+  store i64 %r217558, ptr %r217557
+  %r217560 = getelementptr inbounds i8, ptr %r217557, i64 8
+  store i64 %r217561, ptr %r217560
+  call void @lvp_call(ptr %t217562, ptr %t217547, i32 1, ptr %a217556)
+  store i64 652902138144, ptr @lv_pos
+  %r217564 = getelementptr inbounds [1 x %LV], ptr %a217563, i64 0, i64 0
+  %r217565 = load i64, ptr %t217562
+  %r217566 = getelementptr inbounds i8, ptr %t217562, i64 8
+  %r217568 = load i64, ptr %r217566
+  store i64 %r217565, ptr %r217564
+  %r217567 = getelementptr inbounds i8, ptr %r217564, i64 8
+  store i64 %r217568, ptr %r217567
+  call void @lvp_call(ptr %t217569, ptr %t217538, i32 1, ptr %a217563)
+  %r217572 = load i64, ptr %t217569
+  %r217573 = getelementptr inbounds i8, ptr %t217569, i64 8
+  %r217575 = load i64, ptr %r217573
+  store i64 %r217572, ptr %a217571
+  %r217574 = getelementptr inbounds i8, ptr %a217571, i64 8
+  store i64 %r217575, ptr %r217574
+  store i64 103116964129, ptr @lv_pos
+  %r217577 = getelementptr inbounds [1 x %LV], ptr %a217576, i64 0, i64 0
+  %r217578 = load i64, ptr %a217405
+  %r217579 = getelementptr inbounds i8, ptr %a217405, i64 8
+  %r217581 = load i64, ptr %r217579
+  store i64 %r217578, ptr %r217577
+  %r217580 = getelementptr inbounds i8, ptr %r217577, i64 8
+  store i64 %r217581, ptr %r217580
+  %r217582 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217576)
+  store %LV %r217582, ptr %t217583
+  %r217585 = load i64, ptr %t217583
+  %r217586 = load i64, ptr @.c10
+  %r217587 = icmp eq i64 %r217585, 2
+  %r217588 = icmp eq i64 %r217586, 2
+  %r217589 = and i1 %r217587, %r217588
+  br i1 %r217589, label %ifast217590, label %fcheck217591
+ifast217590:
+  %r217594 = getelementptr inbounds i8, ptr %t217583, i64 8
+  %r217595 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r217596 = load i64, ptr %r217594
+  %r217597 = load i64, ptr %r217595
+  %r217599 = getelementptr inbounds i8, ptr %t217584, i64 8
+  %r217600 = icmp sge i64 %r217596, %r217597
+  %r217601 = zext i1 %r217600 to i64
+  store i64 1, ptr %t217584
+  store i64 %r217601, ptr %r217599
+  br label %idone217593
+fcheck217591:
+  %r217602 = icmp eq i64 %r217585, 3
+  %r217603 = icmp eq i64 %r217586, 3
+  %r217604 = and i1 %r217602, %r217603
+  br i1 %r217604, label %ffast217605, label %islow217592
+ffast217605:
+  %r217606 = getelementptr inbounds i8, ptr %t217583, i64 8
+  %r217607 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r217608 = load i64, ptr %r217606
+  %r217609 = load i64, ptr %r217607
+  %r217610 = bitcast i64 %r217608 to double
+  %r217611 = bitcast i64 %r217609 to double
+  %r217612 = getelementptr inbounds i8, ptr %t217584, i64 8
+  %r217613 = fcmp oge double %r217610, %r217611
+  %r217614 = zext i1 %r217613 to i64
+  store i64 1, ptr %t217584
+  store i64 %r217614, ptr %r217612
+  br label %idone217593
+islow217592:
+  store i64 288723146377265441, ptr @lv_pos
+  %r217617 = getelementptr inbounds i8, ptr %t217583, i64 8
+  %r217618 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r217615 = load i64, ptr %r217617
+  %r217616 = load i64, ptr %r217618
+  %r217619 = call %LV @lvv_ge(i64 %r217585, i64 %r217615, i64 %r217586, i64 %r217616)
+  %r217620 = extractvalue %LV %r217619, 0
+  %r217621 = extractvalue %LV %r217619, 1
+  store i64 %r217620, ptr %t217584
+  %r217622 = getelementptr inbounds i8, ptr %t217584, i64 8
+  store i64 %r217621, ptr %r217622
+  br label %idone217593
+idone217593:
+  store i64 288723146377265441, ptr @lv_pos
+  %r217623 = load i64, ptr %t217584
+  %r217624 = icmp eq i64 %r217623, 1
+  br i1 %r217624, label %tbool217626, label %tbad217625
+tbad217625:
+  %r217627 = getelementptr inbounds i8, ptr %t217584, i64 8
+  %r217628 = load i64, ptr %r217627
+  %r217629 = call i64 @lvv_truth(i64 %r217623, i64 %r217628)
+  br label %tbool217626
+tbool217626:
+  %r217630 = getelementptr inbounds i8, ptr %t217584, i64 8
+  %r217631 = load i32, ptr %r217630
+  %r217632 = icmp ne i32 %r217631, 0
+  br i1 %r217632, label %then217633, label %else217634
+then217633:
+  store i64 290, ptr @lv_pos
+  store i64 377994871074, ptr @lv_pos
+  store i64 171836440866, ptr @lv_pos
+  %r217637 = load i64, ptr @g_write_text
+  %r217638 = icmp eq i64 %r217637, 17
+  br i1 %r217638, label %gundef217639, label %gdef217640
+gundef217639:
   call void @lvp_gundef(ptr @g_write_text, ptr @.s6243)
-  br label %gdef217713
-gdef217713:
-  %r217714 = load i64, ptr @g_write_text
-  %r217715 = getelementptr inbounds i8, ptr @g_write_text, i64 8
-  %r217717 = load i64, ptr %r217715
-  store i64 %r217714, ptr %t217709
-  %r217716 = getelementptr inbounds i8, ptr %t217709, i64 8
-  store i64 %r217717, ptr %r217716
-  store i64 68803363109, ptr @lv_pos
-  call void @lvp_index(ptr %t217718, ptr %a217478, ptr @.c2)
-  store i64 377994871077, ptr @lv_pos
-  %r217720 = getelementptr inbounds [2 x %LV], ptr %a217719, i64 0, i64 0
-  %r217721 = load i64, ptr %t217718
-  %r217722 = getelementptr inbounds i8, ptr %t217718, i64 8
-  %r217724 = load i64, ptr %r217722
-  store i64 %r217721, ptr %r217720
-  %r217723 = getelementptr inbounds i8, ptr %r217720, i64 8
-  store i64 %r217724, ptr %r217723
-  %r217725 = getelementptr inbounds [2 x %LV], ptr %a217719, i64 0, i64 1
-  %r217726 = load i64, ptr %a217644
-  %r217727 = getelementptr inbounds i8, ptr %a217644, i64 8
-  %r217729 = load i64, ptr %r217727
-  store i64 %r217726, ptr %r217725
-  %r217728 = getelementptr inbounds i8, ptr %r217725, i64 8
-  store i64 %r217729, ptr %r217728
-  call void @lvp_call(ptr %t217730, ptr %t217709, i32 2, ptr %a217719)
-  br label %endif217708
-else217707:
-  store i64 295, ptr @lv_pos
-  store i64 189016310055, ptr @lv_pos
-  %r217732 = getelementptr inbounds [1 x %LV], ptr %a217731, i64 0, i64 0
-  %r217733 = load i64, ptr %a217644
-  %r217734 = getelementptr inbounds i8, ptr %a217644, i64 8
-  %r217736 = load i64, ptr %r217734
-  store i64 %r217733, ptr %r217732
-  %r217735 = getelementptr inbounds i8, ptr %r217732, i64 8
-  store i64 %r217736, ptr %r217735
-  %r217737 = call %LV @lb_print(ptr @nf_print, i32 1, ptr %a217731)
-  store %LV %r217737, ptr %t217738
-  br label %endif217708
-endif217708:
+  br label %gdef217640
+gdef217640:
+  %r217641 = load i64, ptr @g_write_text
+  %r217642 = getelementptr inbounds i8, ptr @g_write_text, i64 8
+  %r217644 = load i64, ptr %r217642
+  store i64 %r217641, ptr %t217636
+  %r217643 = getelementptr inbounds i8, ptr %t217636, i64 8
+  store i64 %r217644, ptr %r217643
+  store i64 68803363106, ptr @lv_pos
+  call void @lvp_index(ptr %t217645, ptr %a217405, ptr @.c2)
+  store i64 377994871074, ptr @lv_pos
+  %r217647 = getelementptr inbounds [2 x %LV], ptr %a217646, i64 0, i64 0
+  %r217648 = load i64, ptr %t217645
+  %r217649 = getelementptr inbounds i8, ptr %t217645, i64 8
+  %r217651 = load i64, ptr %r217649
+  store i64 %r217648, ptr %r217647
+  %r217650 = getelementptr inbounds i8, ptr %r217647, i64 8
+  store i64 %r217651, ptr %r217650
+  %r217652 = getelementptr inbounds [2 x %LV], ptr %a217646, i64 0, i64 1
+  %r217653 = load i64, ptr %a217571
+  %r217654 = getelementptr inbounds i8, ptr %a217571, i64 8
+  %r217656 = load i64, ptr %r217654
+  store i64 %r217653, ptr %r217652
+  %r217655 = getelementptr inbounds i8, ptr %r217652, i64 8
+  store i64 %r217656, ptr %r217655
+  call void @lvp_call(ptr %t217657, ptr %t217636, i32 2, ptr %a217646)
+  br label %endif217635
+else217634:
+  store i64 292, ptr @lv_pos
+  store i64 189016310052, ptr @lv_pos
+  %r217659 = getelementptr inbounds [1 x %LV], ptr %a217658, i64 0, i64 0
+  %r217660 = load i64, ptr %a217571
+  %r217661 = getelementptr inbounds i8, ptr %a217571, i64 8
+  %r217663 = load i64, ptr %r217661
+  store i64 %r217660, ptr %r217659
+  %r217662 = getelementptr inbounds i8, ptr %r217659, i64 8
+  store i64 %r217663, ptr %r217662
+  %r217664 = call %LV @lb_print(ptr @nf_print, i32 1, ptr %a217658)
+  store %LV %r217664, ptr %t217665
+  br label %endif217635
+endif217635:
   ret %LV zeroinitializer
 }
-define internal %LV @fn_217745(ptr %self, i32 %argc, ptr %argv) {
+define internal %LV @fn_217672(ptr %self, i32 %argc, ptr %argv) {
 entry:
-  %t217747 = alloca %LV, align 8
-  %a217749 = alloca %LV, align 8
-  %a217754 = alloca [1 x %LV], align 8
-  %t217761 = alloca %LV, align 8
-  %t217762 = alloca %LV, align 8
-  %t217814 = alloca %LV, align 8
-  %t217823 = alloca %LV, align 8
-  %t217824 = alloca %LV, align 8
-  %t217825 = alloca %LV, align 8
-  %a217830 = alloca i64, align 8
-  %a217833 = alloca %LV, align 8
-  %t217838 = alloca %LV, align 8
-  %a217847 = alloca [1 x %LV], align 8
-  %t217854 = alloca %LV, align 8
-  %a217855 = alloca [3 x %LV], align 8
-  %t217871 = alloca %LV, align 8
-  %a217873 = alloca %LV, align 8
-  %a217878 = alloca [1 x %LV], align 8
-  %t217885 = alloca %LV, align 8
-  %t217886 = alloca %LV, align 8
-  %t217925 = alloca %LV, align 8
-  %t217942 = alloca %LV, align 8
-  %t217943 = alloca %LV, align 8
-  %t218009 = alloca %LV, align 8
-  %a218018 = alloca [1 x %LV], align 8
-  %t218024 = alloca %LV, align 8
-  %t218025 = alloca %LV, align 8
-  %a218034 = alloca [1 x %LV], align 8
-  %t218041 = alloca %LV, align 8
-  %a218042 = alloca [3 x %LV], align 8
-  %t218058 = alloca %LV, align 8
-  %a218063 = alloca [1 x %LV], align 8
-  %t218070 = alloca %LV, align 8
-  %t218071 = alloca %LV, align 8
-  %t218110 = alloca %LV, align 8
-  %t218127 = alloca %LV, align 8
-  %t218128 = alloca %LV, align 8
+  %t217674 = alloca %LV, align 8
+  %a217676 = alloca %LV, align 8
+  %a217681 = alloca [1 x %LV], align 8
+  %t217688 = alloca %LV, align 8
+  %t217689 = alloca %LV, align 8
+  %t217741 = alloca %LV, align 8
+  %t217750 = alloca %LV, align 8
+  %t217751 = alloca %LV, align 8
+  %t217752 = alloca %LV, align 8
+  %a217757 = alloca i64, align 8
+  %a217760 = alloca %LV, align 8
+  %t217765 = alloca %LV, align 8
+  %a217774 = alloca [1 x %LV], align 8
+  %t217781 = alloca %LV, align 8
+  %a217782 = alloca [3 x %LV], align 8
+  %t217798 = alloca %LV, align 8
+  %a217800 = alloca %LV, align 8
+  %a217805 = alloca [1 x %LV], align 8
+  %t217812 = alloca %LV, align 8
+  %t217813 = alloca %LV, align 8
+  %t217852 = alloca %LV, align 8
+  %t217869 = alloca %LV, align 8
+  %t217870 = alloca %LV, align 8
+  %t217936 = alloca %LV, align 8
+  %a217945 = alloca [1 x %LV], align 8
+  %t217951 = alloca %LV, align 8
+  %t217952 = alloca %LV, align 8
+  %a217961 = alloca [1 x %LV], align 8
+  %t217968 = alloca %LV, align 8
+  %a217969 = alloca [3 x %LV], align 8
+  %t217985 = alloca %LV, align 8
+  %a217990 = alloca [1 x %LV], align 8
+  %t217997 = alloca %LV, align 8
+  %t217998 = alloca %LV, align 8
+  %t218037 = alloca %LV, align 8
+  %t218054 = alloca %LV, align 8
+  %t218055 = alloca %LV, align 8
+  %t218108 = alloca %LV, align 8
+  %t218125 = alloca %LV, align 8
+  %t218164 = alloca %LV, align 8
   %t218181 = alloca %LV, align 8
-  %t218198 = alloca %LV, align 8
-  %t218237 = alloca %LV, align 8
-  %t218254 = alloca %LV, align 8
-  %t218307 = alloca %LV, align 8
-  %t218324 = alloca %LV, align 8
-  %t218404 = alloca %LV, align 8
-  %t218413 = alloca %LV, align 8
-  %t218414 = alloca %LV, align 8
-  %a218423 = alloca [1 x %LV], align 8
-  %t218430 = alloca %LV, align 8
-  %a218431 = alloca [3 x %LV], align 8
+  %t218234 = alloca %LV, align 8
+  %t218251 = alloca %LV, align 8
+  %t218331 = alloca %LV, align 8
+  %t218340 = alloca %LV, align 8
+  %t218341 = alloca %LV, align 8
+  %a218350 = alloca [1 x %LV], align 8
+  %t218357 = alloca %LV, align 8
+  %a218358 = alloca [3 x %LV], align 8
+  %t218374 = alloca %LV, align 8
+  %t218379 = alloca %LV, align 8
+  %t218431 = alloca %LV, align 8
+  %a218440 = alloca [1 x %LV], align 8
+  %t218446 = alloca %LV, align 8
   %t218447 = alloca %LV, align 8
-  %t218452 = alloca %LV, align 8
-  %t218504 = alloca %LV, align 8
-  %a218513 = alloca [1 x %LV], align 8
-  %t218519 = alloca %LV, align 8
-  %t218520 = alloca %LV, align 8
-  %t218559 = alloca %LV, align 8
-  %a218576 = alloca [1 x %LV], align 8
-  %t218583 = alloca %LV, align 8
-  %t218584 = alloca %LV, align 8
-  %t218650 = alloca %LV, align 8
-  %a218659 = alloca [1 x %LV], align 8
-  %t218665 = alloca %LV, align 8
-  %t218666 = alloca %LV, align 8
-  %t218705 = alloca %LV, align 8
-  %a218722 = alloca [1 x %LV], align 8
-  %t218729 = alloca %LV, align 8
-  %t218730 = alloca %LV, align 8
-  %t218796 = alloca %LV, align 8
-  %a218805 = alloca [1 x %LV], align 8
-  %t218811 = alloca %LV, align 8
-  %t218812 = alloca %LV, align 8
-  %t218851 = alloca %LV, align 8
-  %a218868 = alloca [1 x %LV], align 8
-  %t218875 = alloca %LV, align 8
-  %t218876 = alloca %LV, align 8
-  %t218942 = alloca %LV, align 8
-  %a218951 = alloca [1 x %LV], align 8
-  %t218957 = alloca %LV, align 8
-  %t218958 = alloca %LV, align 8
-  %t218997 = alloca %LV, align 8
-  %a219014 = alloca [1 x %LV], align 8
-  %t219021 = alloca %LV, align 8
-  %t219022 = alloca %LV, align 8
-  %t219088 = alloca %LV, align 8
-  %a219097 = alloca [1 x %LV], align 8
-  %t219103 = alloca %LV, align 8
-  %t219104 = alloca %LV, align 8
-  %t219143 = alloca %LV, align 8
-  %a219160 = alloca [1 x %LV], align 8
-  %t219167 = alloca %LV, align 8
-  %t219168 = alloca %LV, align 8
-  %t219234 = alloca %LV, align 8
-  %a219243 = alloca [1 x %LV], align 8
-  %t219249 = alloca %LV, align 8
-  %t219250 = alloca %LV, align 8
-  %t219289 = alloca %LV, align 8
-  %a219306 = alloca [1 x %LV], align 8
-  %t219313 = alloca %LV, align 8
-  %t219314 = alloca %LV, align 8
-  %t219353 = alloca %LV, align 8
-  %a219370 = alloca [1 x %LV], align 8
-  %t219377 = alloca %LV, align 8
-  %t219378 = alloca %LV, align 8
-  %t219417 = alloca %LV, align 8
-  %t219434 = alloca %LV, align 8
-  %t219435 = alloca %LV, align 8
-  %t219529 = alloca %LV, align 8
-  %a219538 = alloca [1 x %LV], align 8
-  %t219544 = alloca %LV, align 8
-  %t219545 = alloca %LV, align 8
-  %t219584 = alloca %LV, align 8
-  %a219601 = alloca [1 x %LV], align 8
-  %t219608 = alloca %LV, align 8
-  %t219609 = alloca %LV, align 8
-  %t219675 = alloca %LV, align 8
-  %a219684 = alloca [1 x %LV], align 8
-  %t219690 = alloca %LV, align 8
-  %a219691 = alloca [2 x %LV], align 8
-  %t219703 = alloca %LV, align 8
-  %t219704 = alloca %LV, align 8
-  %a219721 = alloca [2 x %LV], align 8
-  %t219733 = alloca %LV, align 8
-  %t219761 = alloca %LV, align 8
-  %a219770 = alloca [1 x %LV], align 8
-  %t219776 = alloca %LV, align 8
-  %t219777 = alloca %LV, align 8
-  %t219786 = alloca %LV, align 8
+  %t218486 = alloca %LV, align 8
+  %a218503 = alloca [1 x %LV], align 8
+  %t218510 = alloca %LV, align 8
+  %t218511 = alloca %LV, align 8
+  %t218577 = alloca %LV, align 8
+  %a218586 = alloca [1 x %LV], align 8
+  %t218592 = alloca %LV, align 8
+  %t218593 = alloca %LV, align 8
+  %t218632 = alloca %LV, align 8
+  %a218649 = alloca [1 x %LV], align 8
+  %t218656 = alloca %LV, align 8
+  %t218657 = alloca %LV, align 8
+  %t218723 = alloca %LV, align 8
+  %a218732 = alloca [1 x %LV], align 8
+  %t218738 = alloca %LV, align 8
+  %t218739 = alloca %LV, align 8
+  %t218778 = alloca %LV, align 8
+  %a218795 = alloca [1 x %LV], align 8
+  %t218802 = alloca %LV, align 8
+  %t218803 = alloca %LV, align 8
+  %t218869 = alloca %LV, align 8
+  %a218878 = alloca [1 x %LV], align 8
+  %t218884 = alloca %LV, align 8
+  %t218885 = alloca %LV, align 8
+  %t218924 = alloca %LV, align 8
+  %a218941 = alloca [1 x %LV], align 8
+  %t218948 = alloca %LV, align 8
+  %t218949 = alloca %LV, align 8
+  %t219015 = alloca %LV, align 8
+  %a219024 = alloca [1 x %LV], align 8
+  %t219030 = alloca %LV, align 8
+  %t219031 = alloca %LV, align 8
+  %t219070 = alloca %LV, align 8
+  %a219087 = alloca [1 x %LV], align 8
+  %t219094 = alloca %LV, align 8
+  %t219095 = alloca %LV, align 8
+  %t219161 = alloca %LV, align 8
+  %a219170 = alloca [1 x %LV], align 8
+  %t219176 = alloca %LV, align 8
+  %t219177 = alloca %LV, align 8
+  %t219216 = alloca %LV, align 8
+  %a219233 = alloca [1 x %LV], align 8
+  %t219240 = alloca %LV, align 8
+  %t219241 = alloca %LV, align 8
+  %t219280 = alloca %LV, align 8
+  %a219297 = alloca [1 x %LV], align 8
+  %t219304 = alloca %LV, align 8
+  %t219305 = alloca %LV, align 8
+  %t219344 = alloca %LV, align 8
+  %t219361 = alloca %LV, align 8
+  %t219362 = alloca %LV, align 8
+  %t219456 = alloca %LV, align 8
+  %a219465 = alloca [1 x %LV], align 8
+  %t219471 = alloca %LV, align 8
+  %t219472 = alloca %LV, align 8
+  %t219511 = alloca %LV, align 8
+  %a219528 = alloca [1 x %LV], align 8
+  %t219535 = alloca %LV, align 8
+  %t219536 = alloca %LV, align 8
+  %t219602 = alloca %LV, align 8
+  %a219611 = alloca [1 x %LV], align 8
+  %t219617 = alloca %LV, align 8
+  %a219618 = alloca [2 x %LV], align 8
+  %t219630 = alloca %LV, align 8
+  %t219644 = alloca %LV, align 8
+  %a219653 = alloca [1 x %LV], align 8
+  %t219659 = alloca %LV, align 8
+  %t219660 = alloca %LV, align 8
+  %t219669 = alloca %LV, align 8
   store ptr @mod_0, ptr @lv_pos_mod
   call void @lv_arity(ptr %self, i32 %argc, i32 0, i32 0)
-  store i64 300, ptr @lv_pos
-  store i64 103133741356, ptr @lv_pos
-  %r217746 = call %LV @lb_args(ptr @nf_args, i32 0, ptr null)
-  store %LV %r217746, ptr %t217747
-  %r217750 = load i64, ptr %t217747
-  %r217751 = getelementptr inbounds i8, ptr %t217747, i64 8
-  %r217753 = load i64, ptr %r217751
-  store i64 %r217750, ptr %a217749
-  %r217752 = getelementptr inbounds i8, ptr %a217749, i64 8
-  store i64 %r217753, ptr %r217752
-  store i64 103116964141, ptr @lv_pos
-  %r217755 = getelementptr inbounds [1 x %LV], ptr %a217754, i64 0, i64 0
-  %r217756 = load i64, ptr %a217749
-  %r217757 = getelementptr inbounds i8, ptr %a217749, i64 8
-  %r217759 = load i64, ptr %r217757
+  store i64 297, ptr @lv_pos
+  store i64 103133741353, ptr @lv_pos
+  %r217673 = call %LV @lb_args(ptr @nf_args, i32 0, ptr null)
+  store %LV %r217673, ptr %t217674
+  %r217677 = load i64, ptr %t217674
+  %r217678 = getelementptr inbounds i8, ptr %t217674, i64 8
+  %r217680 = load i64, ptr %r217678
+  store i64 %r217677, ptr %a217676
+  %r217679 = getelementptr inbounds i8, ptr %a217676, i64 8
+  store i64 %r217680, ptr %r217679
+  store i64 103116964138, ptr @lv_pos
+  %r217682 = getelementptr inbounds [1 x %LV], ptr %a217681, i64 0, i64 0
+  %r217683 = load i64, ptr %a217676
+  %r217684 = getelementptr inbounds i8, ptr %a217676, i64 8
+  %r217686 = load i64, ptr %r217684
+  store i64 %r217683, ptr %r217682
+  %r217685 = getelementptr inbounds i8, ptr %r217682, i64 8
+  store i64 %r217686, ptr %r217685
+  %r217687 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217681)
+  store %LV %r217687, ptr %t217688
+  %r217690 = load i64, ptr %t217688
+  %r217691 = load i64, ptr @.c2
+  %r217692 = icmp eq i64 %r217690, 2
+  %r217693 = icmp eq i64 %r217691, 2
+  %r217694 = and i1 %r217692, %r217693
+  br i1 %r217694, label %ifast217695, label %fcheck217696
+ifast217695:
+  %r217699 = getelementptr inbounds i8, ptr %t217688, i64 8
+  %r217700 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r217701 = load i64, ptr %r217699
+  %r217702 = load i64, ptr %r217700
+  %r217704 = getelementptr inbounds i8, ptr %t217689, i64 8
+  %r217705 = icmp slt i64 %r217701, %r217702
+  %r217706 = zext i1 %r217705 to i64
+  store i64 1, ptr %t217689
+  store i64 %r217706, ptr %r217704
+  br label %idone217698
+fcheck217696:
+  %r217707 = icmp eq i64 %r217690, 3
+  %r217708 = icmp eq i64 %r217691, 3
+  %r217709 = and i1 %r217707, %r217708
+  br i1 %r217709, label %ffast217710, label %islow217697
+ffast217710:
+  %r217711 = getelementptr inbounds i8, ptr %t217688, i64 8
+  %r217712 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r217713 = load i64, ptr %r217711
+  %r217714 = load i64, ptr %r217712
+  %r217715 = bitcast i64 %r217713 to double
+  %r217716 = bitcast i64 %r217714 to double
+  %r217717 = getelementptr inbounds i8, ptr %t217689, i64 8
+  %r217718 = fcmp olt double %r217715, %r217716
+  %r217719 = zext i1 %r217718 to i64
+  store i64 1, ptr %t217689
+  store i64 %r217719, ptr %r217717
+  br label %idone217698
+islow217697:
+  store i64 492753045684522, ptr @lv_pos
+  %r217722 = getelementptr inbounds i8, ptr %t217688, i64 8
+  %r217723 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r217720 = load i64, ptr %r217722
+  %r217721 = load i64, ptr %r217723
+  %r217724 = call %LV @lvv_lt(i64 %r217690, i64 %r217720, i64 %r217691, i64 %r217721)
+  %r217725 = extractvalue %LV %r217724, 0
+  %r217726 = extractvalue %LV %r217724, 1
+  store i64 %r217725, ptr %t217689
+  %r217727 = getelementptr inbounds i8, ptr %t217689, i64 8
+  store i64 %r217726, ptr %r217727
+  br label %idone217698
+idone217698:
+  store i64 492753045684522, ptr @lv_pos
+  %r217728 = load i64, ptr %t217689
+  %r217729 = icmp eq i64 %r217728, 1
+  br i1 %r217729, label %tbool217731, label %tbad217730
+tbad217730:
+  %r217732 = getelementptr inbounds i8, ptr %t217689, i64 8
+  %r217733 = load i64, ptr %r217732
+  %r217734 = call i64 @lvv_truth(i64 %r217728, i64 %r217733)
+  br label %tbool217731
+tbool217731:
+  %r217735 = getelementptr inbounds i8, ptr %t217689, i64 8
+  %r217736 = load i32, ptr %r217735
+  %r217737 = icmp ne i32 %r217736, 0
+  br i1 %r217737, label %then217738, label %else217739
+then217738:
+  store i64 299, ptr @lv_pos
+  store i64 120296833323, ptr @lv_pos
+  store i64 85937094955, ptr @lv_pos
+  %r217742 = load i64, ptr @g_usage
+  %r217743 = icmp eq i64 %r217742, 17
+  br i1 %r217743, label %gundef217744, label %gdef217745
+gundef217744:
+  call void @lvp_gundef(ptr @g_usage, ptr @.s6241)
+  br label %gdef217745
+gdef217745:
+  %r217746 = load i64, ptr @g_usage
+  %r217747 = getelementptr inbounds i8, ptr @g_usage, i64 8
+  %r217749 = load i64, ptr %r217747
+  store i64 %r217746, ptr %t217741
+  %r217748 = getelementptr inbounds i8, ptr %t217741, i64 8
+  store i64 %r217749, ptr %r217748
+  store i64 120296833323, ptr @lv_pos
+  call void @lvp_call(ptr %t217750, ptr %t217741, i32 0, ptr null)
+  br label %endif217740
+else217739:
+  br label %endif217740
+endif217740:
+  store i64 301, ptr @lv_pos
+  store i64 68782391597, ptr @lv_pos
+  call void @lvp_index(ptr %t217751, ptr %a217676, ptr @.c1)
+  %r217753 = load i64, ptr %t217751
+  %r217754 = getelementptr inbounds i8, ptr %t217751, i64 8
+  %r217756 = load i64, ptr %r217754
+  store i64 %r217753, ptr %t217752
+  %r217755 = getelementptr inbounds i8, ptr %t217752, i64 8
   store i64 %r217756, ptr %r217755
-  %r217758 = getelementptr inbounds i8, ptr %r217755, i64 8
-  store i64 %r217759, ptr %r217758
-  %r217760 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217754)
-  store %LV %r217760, ptr %t217761
-  %r217763 = load i64, ptr %t217761
-  %r217764 = load i64, ptr @.c2
-  %r217765 = icmp eq i64 %r217763, 2
-  %r217766 = icmp eq i64 %r217764, 2
-  %r217767 = and i1 %r217765, %r217766
-  br i1 %r217767, label %ifast217768, label %fcheck217769
-ifast217768:
-  %r217772 = getelementptr inbounds i8, ptr %t217761, i64 8
-  %r217773 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r217774 = load i64, ptr %r217772
-  %r217775 = load i64, ptr %r217773
-  %r217777 = getelementptr inbounds i8, ptr %t217762, i64 8
-  %r217778 = icmp slt i64 %r217774, %r217775
-  %r217779 = zext i1 %r217778 to i64
-  store i64 1, ptr %t217762
-  store i64 %r217779, ptr %r217777
-  br label %idone217771
-fcheck217769:
-  %r217780 = icmp eq i64 %r217763, 3
-  %r217781 = icmp eq i64 %r217764, 3
-  %r217782 = and i1 %r217780, %r217781
-  br i1 %r217782, label %ffast217783, label %islow217770
-ffast217783:
-  %r217784 = getelementptr inbounds i8, ptr %t217761, i64 8
-  %r217785 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r217786 = load i64, ptr %r217784
-  %r217787 = load i64, ptr %r217785
-  %r217788 = bitcast i64 %r217786 to double
-  %r217789 = bitcast i64 %r217787 to double
-  %r217790 = getelementptr inbounds i8, ptr %t217762, i64 8
-  %r217791 = fcmp olt double %r217788, %r217789
-  %r217792 = zext i1 %r217791 to i64
-  store i64 1, ptr %t217762
-  store i64 %r217792, ptr %r217790
-  br label %idone217771
-islow217770:
-  store i64 492753045684525, ptr @lv_pos
-  %r217795 = getelementptr inbounds i8, ptr %t217761, i64 8
-  %r217796 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r217793 = load i64, ptr %r217795
-  %r217794 = load i64, ptr %r217796
-  %r217797 = call %LV @lvv_lt(i64 %r217763, i64 %r217793, i64 %r217764, i64 %r217794)
-  %r217798 = extractvalue %LV %r217797, 0
-  %r217799 = extractvalue %LV %r217797, 1
-  store i64 %r217798, ptr %t217762
-  %r217800 = getelementptr inbounds i8, ptr %t217762, i64 8
-  store i64 %r217799, ptr %r217800
-  br label %idone217771
-idone217771:
-  store i64 492753045684525, ptr @lv_pos
-  %r217801 = load i64, ptr %t217762
-  %r217802 = icmp eq i64 %r217801, 1
-  br i1 %r217802, label %tbool217804, label %tbad217803
-tbad217803:
-  %r217805 = getelementptr inbounds i8, ptr %t217762, i64 8
-  %r217806 = load i64, ptr %r217805
-  %r217807 = call i64 @lvv_truth(i64 %r217801, i64 %r217806)
-  br label %tbool217804
-tbool217804:
-  %r217808 = getelementptr inbounds i8, ptr %t217762, i64 8
-  %r217809 = load i32, ptr %r217808
-  %r217810 = icmp ne i32 %r217809, 0
-  br i1 %r217810, label %then217811, label %else217812
-then217811:
+  %r217758 = call i64 @lv_scope_new()
+  store i64 %r217758, ptr %a217757
+  call void @lvp_box_assign_copy(ptr %t217752, i64 %r217758)
+  %r217761 = load i64, ptr %t217752
+  %r217762 = getelementptr inbounds i8, ptr %t217752, i64 8
+  %r217764 = load i64, ptr %r217762
+  store i64 %r217761, ptr %a217760
+  %r217763 = getelementptr inbounds i8, ptr %a217760, i64 8
+  store i64 %r217764, ptr %r217763
   store i64 302, ptr @lv_pos
-  store i64 120296833326, ptr @lv_pos
-  store i64 85937094958, ptr @lv_pos
-  %r217815 = load i64, ptr @g_usage
-  %r217816 = icmp eq i64 %r217815, 17
-  br i1 %r217816, label %gundef217817, label %gdef217818
-gundef217817:
-  call void @lvp_gundef(ptr @g_usage, ptr @.s6241)
-  br label %gdef217818
-gdef217818:
-  %r217819 = load i64, ptr @g_usage
-  %r217820 = getelementptr inbounds i8, ptr @g_usage, i64 8
-  %r217822 = load i64, ptr %r217820
-  store i64 %r217819, ptr %t217814
-  %r217821 = getelementptr inbounds i8, ptr %t217814, i64 8
-  store i64 %r217822, ptr %r217821
-  store i64 120296833326, ptr @lv_pos
-  call void @lvp_call(ptr %t217823, ptr %t217814, i32 0, ptr null)
-  br label %endif217813
-else217812:
-  br label %endif217813
-endif217813:
-  store i64 304, ptr @lv_pos
-  store i64 68782391600, ptr @lv_pos
-  call void @lvp_index(ptr %t217824, ptr %a217749, ptr @.c1)
-  %r217826 = load i64, ptr %t217824
-  %r217827 = getelementptr inbounds i8, ptr %t217824, i64 8
-  %r217829 = load i64, ptr %r217827
-  store i64 %r217826, ptr %t217825
-  %r217828 = getelementptr inbounds i8, ptr %t217825, i64 8
-  store i64 %r217829, ptr %r217828
-  %r217831 = call i64 @lv_scope_new()
-  store i64 %r217831, ptr %a217830
-  call void @lvp_box_assign_copy(ptr %t217825, i64 %r217831)
-  %r217834 = load i64, ptr %t217825
-  %r217835 = getelementptr inbounds i8, ptr %t217825, i64 8
+  store i64 292124885294, ptr @lv_pos
+  store i64 51606716718, ptr @lv_pos
+  %r217766 = load i64, ptr @g_cut
+  %r217767 = icmp eq i64 %r217766, 17
+  br i1 %r217767, label %gundef217768, label %gdef217769
+gundef217768:
+  call void @lvp_gundef(ptr @g_cut, ptr @.s721)
+  br label %gdef217769
+gdef217769:
+  %r217770 = load i64, ptr @g_cut
+  %r217771 = getelementptr inbounds i8, ptr @g_cut, i64 8
+  %r217773 = load i64, ptr %r217771
+  store i64 %r217770, ptr %t217765
+  %r217772 = getelementptr inbounds i8, ptr %t217765, i64 8
+  store i64 %r217773, ptr %r217772
+  store i64 103188267310, ptr @lv_pos
+  %r217775 = getelementptr inbounds [1 x %LV], ptr %a217774, i64 0, i64 0
+  %r217776 = load i64, ptr %a217676
+  %r217777 = getelementptr inbounds i8, ptr %a217676, i64 8
+  %r217779 = load i64, ptr %r217777
+  store i64 %r217776, ptr %r217775
+  %r217778 = getelementptr inbounds i8, ptr %r217775, i64 8
+  store i64 %r217779, ptr %r217778
+  %r217780 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217774)
+  store %LV %r217780, ptr %t217781
+  store i64 292124885294, ptr @lv_pos
+  %r217783 = getelementptr inbounds [3 x %LV], ptr %a217782, i64 0, i64 0
+  %r217784 = load i64, ptr %a217676
+  %r217785 = getelementptr inbounds i8, ptr %a217676, i64 8
+  %r217787 = load i64, ptr %r217785
+  store i64 %r217784, ptr %r217783
+  %r217786 = getelementptr inbounds i8, ptr %r217783, i64 8
+  store i64 %r217787, ptr %r217786
+  %r217788 = getelementptr inbounds [3 x %LV], ptr %a217782, i64 0, i64 1
+  %r217789 = load i64, ptr @.c2
+  %r217790 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r217792 = load i64, ptr %r217790
+  store i64 %r217789, ptr %r217788
+  %r217791 = getelementptr inbounds i8, ptr %r217788, i64 8
+  store i64 %r217792, ptr %r217791
+  %r217793 = getelementptr inbounds [3 x %LV], ptr %a217782, i64 0, i64 2
+  %r217794 = load i64, ptr %t217781
+  %r217795 = getelementptr inbounds i8, ptr %t217781, i64 8
+  %r217797 = load i64, ptr %r217795
+  store i64 %r217794, ptr %r217793
+  %r217796 = getelementptr inbounds i8, ptr %r217793, i64 8
+  store i64 %r217797, ptr %r217796
+  call void @lvp_call(ptr %t217798, ptr %t217765, i32 3, ptr %a217782)
+  %r217801 = load i64, ptr %t217798
+  %r217802 = getelementptr inbounds i8, ptr %t217798, i64 8
+  %r217804 = load i64, ptr %r217802
+  store i64 %r217801, ptr %a217800
+  %r217803 = getelementptr inbounds i8, ptr %a217800, i64 8
+  store i64 %r217804, ptr %r217803
+  store i64 154656571695, ptr @lv_pos
+  %r217806 = getelementptr inbounds [1 x %LV], ptr %a217805, i64 0, i64 0
+  %r217807 = load i64, ptr %a217800
+  %r217808 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r217810 = load i64, ptr %r217808
+  store i64 %r217807, ptr %r217806
+  %r217809 = getelementptr inbounds i8, ptr %r217806, i64 8
+  store i64 %r217810, ptr %r217809
+  %r217811 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217805)
+  store %LV %r217811, ptr %t217812
+  %r217814 = load i64, ptr %t217812
+  %r217815 = load i64, ptr @.c10
+  %r217816 = icmp eq i64 %r217814, 2
+  %r217817 = icmp eq i64 %r217815, 2
+  %r217818 = and i1 %r217816, %r217817
+  br i1 %r217818, label %ifast217819, label %fcheck217820
+ifast217819:
+  %r217823 = getelementptr inbounds i8, ptr %t217812, i64 8
+  %r217824 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r217825 = load i64, ptr %r217823
+  %r217826 = load i64, ptr %r217824
+  %r217828 = getelementptr inbounds i8, ptr %t217813, i64 8
+  %r217829 = icmp sge i64 %r217825, %r217826
+  %r217830 = zext i1 %r217829 to i64
+  store i64 1, ptr %t217813
+  store i64 %r217830, ptr %r217828
+  br label %idone217822
+fcheck217820:
+  %r217831 = icmp eq i64 %r217814, 3
+  %r217832 = icmp eq i64 %r217815, 3
+  %r217833 = and i1 %r217831, %r217832
+  br i1 %r217833, label %ffast217834, label %islow217821
+ffast217834:
+  %r217835 = getelementptr inbounds i8, ptr %t217812, i64 8
+  %r217836 = getelementptr inbounds i8, ptr @.c10, i64 8
   %r217837 = load i64, ptr %r217835
-  store i64 %r217834, ptr %a217833
-  %r217836 = getelementptr inbounds i8, ptr %a217833, i64 8
-  store i64 %r217837, ptr %r217836
-  store i64 305, ptr @lv_pos
-  store i64 292124885297, ptr @lv_pos
-  store i64 51606716721, ptr @lv_pos
-  %r217839 = load i64, ptr @g_cut
-  %r217840 = icmp eq i64 %r217839, 17
-  br i1 %r217840, label %gundef217841, label %gdef217842
-gundef217841:
-  call void @lvp_gundef(ptr @g_cut, ptr @.s721)
-  br label %gdef217842
-gdef217842:
-  %r217843 = load i64, ptr @g_cut
-  %r217844 = getelementptr inbounds i8, ptr @g_cut, i64 8
-  %r217846 = load i64, ptr %r217844
-  store i64 %r217843, ptr %t217838
-  %r217845 = getelementptr inbounds i8, ptr %t217838, i64 8
-  store i64 %r217846, ptr %r217845
-  store i64 103188267313, ptr @lv_pos
-  %r217848 = getelementptr inbounds [1 x %LV], ptr %a217847, i64 0, i64 0
-  %r217849 = load i64, ptr %a217749
-  %r217850 = getelementptr inbounds i8, ptr %a217749, i64 8
-  %r217852 = load i64, ptr %r217850
-  store i64 %r217849, ptr %r217848
-  %r217851 = getelementptr inbounds i8, ptr %r217848, i64 8
-  store i64 %r217852, ptr %r217851
-  %r217853 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217847)
-  store %LV %r217853, ptr %t217854
-  store i64 292124885297, ptr @lv_pos
-  %r217856 = getelementptr inbounds [3 x %LV], ptr %a217855, i64 0, i64 0
-  %r217857 = load i64, ptr %a217749
-  %r217858 = getelementptr inbounds i8, ptr %a217749, i64 8
-  %r217860 = load i64, ptr %r217858
-  store i64 %r217857, ptr %r217856
-  %r217859 = getelementptr inbounds i8, ptr %r217856, i64 8
-  store i64 %r217860, ptr %r217859
-  %r217861 = getelementptr inbounds [3 x %LV], ptr %a217855, i64 0, i64 1
-  %r217862 = load i64, ptr @.c2
-  %r217863 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r217865 = load i64, ptr %r217863
-  store i64 %r217862, ptr %r217861
-  %r217864 = getelementptr inbounds i8, ptr %r217861, i64 8
-  store i64 %r217865, ptr %r217864
-  %r217866 = getelementptr inbounds [3 x %LV], ptr %a217855, i64 0, i64 2
-  %r217867 = load i64, ptr %t217854
-  %r217868 = getelementptr inbounds i8, ptr %t217854, i64 8
-  %r217870 = load i64, ptr %r217868
-  store i64 %r217867, ptr %r217866
-  %r217869 = getelementptr inbounds i8, ptr %r217866, i64 8
-  store i64 %r217870, ptr %r217869
-  call void @lvp_call(ptr %t217871, ptr %t217838, i32 3, ptr %a217855)
-  %r217874 = load i64, ptr %t217871
-  %r217875 = getelementptr inbounds i8, ptr %t217871, i64 8
-  %r217877 = load i64, ptr %r217875
-  store i64 %r217874, ptr %a217873
-  %r217876 = getelementptr inbounds i8, ptr %a217873, i64 8
-  store i64 %r217877, ptr %r217876
-  store i64 154656571698, ptr @lv_pos
-  %r217879 = getelementptr inbounds [1 x %LV], ptr %a217878, i64 0, i64 0
-  %r217880 = load i64, ptr %a217873
-  %r217881 = getelementptr inbounds i8, ptr %a217873, i64 8
+  %r217838 = load i64, ptr %r217836
+  %r217839 = bitcast i64 %r217837 to double
+  %r217840 = bitcast i64 %r217838 to double
+  %r217841 = getelementptr inbounds i8, ptr %t217813, i64 8
+  %r217842 = fcmp oge double %r217839, %r217840
+  %r217843 = zext i1 %r217842 to i64
+  store i64 1, ptr %t217813
+  store i64 %r217843, ptr %r217841
+  br label %idone217822
+islow217821:
+  store i64 288934304149405999, ptr @lv_pos
+  %r217846 = getelementptr inbounds i8, ptr %t217812, i64 8
+  %r217847 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r217844 = load i64, ptr %r217846
+  %r217845 = load i64, ptr %r217847
+  %r217848 = call %LV @lvv_ge(i64 %r217814, i64 %r217844, i64 %r217815, i64 %r217845)
+  %r217849 = extractvalue %LV %r217848, 0
+  %r217850 = extractvalue %LV %r217848, 1
+  store i64 %r217849, ptr %t217813
+  %r217851 = getelementptr inbounds i8, ptr %t217813, i64 8
+  store i64 %r217850, ptr %r217851
+  br label %idone217822
+idone217822:
+  store i64 288934304149405999, ptr @lv_pos
+  %r217853 = load i64, ptr %t217813
+  %r217854 = getelementptr inbounds i8, ptr %t217813, i64 8
+  %r217856 = load i64, ptr %r217854
+  store i64 %r217853, ptr %t217852
+  %r217855 = getelementptr inbounds i8, ptr %t217852, i64 8
+  store i64 %r217856, ptr %r217855
+  %r217859 = load i64, ptr %t217852
+  %r217860 = icmp eq i64 %r217859, 1
+  br i1 %r217860, label %tbool217862, label %tbad217861
+tbad217861:
+  %r217863 = getelementptr inbounds i8, ptr %t217852, i64 8
+  %r217864 = load i64, ptr %r217863
+  %r217865 = call i64 @lvv_truth(i64 %r217859, i64 %r217864)
+  br label %tbool217862
+tbool217862:
+  %r217866 = getelementptr inbounds i8, ptr %t217852, i64 8
+  %r217867 = load i32, ptr %r217866
+  %r217868 = icmp ne i32 %r217867, 0
+  br i1 %r217868, label %rhs217857, label %done217858
+rhs217857:
+  store i64 120376525103, ptr @lv_pos
+  call void @lvp_index(ptr %t217869, ptr %a217800, ptr @.c1)
+  %r217871 = load i64, ptr %t217869
+  %r217872 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1668)
+  %r217873 = icmp eq i64 %r217871, 2
+  %r217874 = icmp eq i64 %r217872, 2
+  %r217875 = and i1 %r217873, %r217874
+  br i1 %r217875, label %ifast217876, label %fcheck217877
+ifast217876:
+  %r217880 = getelementptr inbounds i8, ptr %t217869, i64 8
+  %r217881 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1668), i64 8
+  %r217882 = load i64, ptr %r217880
   %r217883 = load i64, ptr %r217881
-  store i64 %r217880, ptr %r217879
-  %r217882 = getelementptr inbounds i8, ptr %r217879, i64 8
-  store i64 %r217883, ptr %r217882
-  %r217884 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217878)
-  store %LV %r217884, ptr %t217885
-  %r217887 = load i64, ptr %t217885
-  %r217888 = load i64, ptr @.c10
-  %r217889 = icmp eq i64 %r217887, 2
-  %r217890 = icmp eq i64 %r217888, 2
-  %r217891 = and i1 %r217889, %r217890
-  br i1 %r217891, label %ifast217892, label %fcheck217893
-ifast217892:
-  %r217896 = getelementptr inbounds i8, ptr %t217885, i64 8
-  %r217897 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r217898 = load i64, ptr %r217896
-  %r217899 = load i64, ptr %r217897
-  %r217901 = getelementptr inbounds i8, ptr %t217886, i64 8
-  %r217902 = icmp sge i64 %r217898, %r217899
-  %r217903 = zext i1 %r217902 to i64
-  store i64 1, ptr %t217886
-  store i64 %r217903, ptr %r217901
-  br label %idone217895
-fcheck217893:
-  %r217904 = icmp eq i64 %r217887, 3
-  %r217905 = icmp eq i64 %r217888, 3
-  %r217906 = and i1 %r217904, %r217905
-  br i1 %r217906, label %ffast217907, label %islow217894
-ffast217907:
-  %r217908 = getelementptr inbounds i8, ptr %t217885, i64 8
-  %r217909 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r217910 = load i64, ptr %r217908
-  %r217911 = load i64, ptr %r217909
-  %r217912 = bitcast i64 %r217910 to double
-  %r217913 = bitcast i64 %r217911 to double
-  %r217914 = getelementptr inbounds i8, ptr %t217886, i64 8
-  %r217915 = fcmp oge double %r217912, %r217913
-  %r217916 = zext i1 %r217915 to i64
-  store i64 1, ptr %t217886
-  store i64 %r217916, ptr %r217914
-  br label %idone217895
-islow217894:
-  store i64 288934304149406002, ptr @lv_pos
-  %r217919 = getelementptr inbounds i8, ptr %t217885, i64 8
-  %r217920 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r217917 = load i64, ptr %r217919
-  %r217918 = load i64, ptr %r217920
-  %r217921 = call %LV @lvv_ge(i64 %r217887, i64 %r217917, i64 %r217888, i64 %r217918)
-  %r217922 = extractvalue %LV %r217921, 0
-  %r217923 = extractvalue %LV %r217921, 1
-  store i64 %r217922, ptr %t217886
-  %r217924 = getelementptr inbounds i8, ptr %t217886, i64 8
-  store i64 %r217923, ptr %r217924
-  br label %idone217895
-idone217895:
-  store i64 288934304149406002, ptr @lv_pos
-  %r217926 = load i64, ptr %t217886
-  %r217927 = getelementptr inbounds i8, ptr %t217886, i64 8
-  %r217929 = load i64, ptr %r217927
-  store i64 %r217926, ptr %t217925
-  %r217928 = getelementptr inbounds i8, ptr %t217925, i64 8
-  store i64 %r217929, ptr %r217928
-  %r217932 = load i64, ptr %t217925
-  %r217933 = icmp eq i64 %r217932, 1
-  br i1 %r217933, label %tbool217935, label %tbad217934
-tbad217934:
-  %r217936 = getelementptr inbounds i8, ptr %t217925, i64 8
-  %r217937 = load i64, ptr %r217936
-  %r217938 = call i64 @lvv_truth(i64 %r217932, i64 %r217937)
-  br label %tbool217935
-tbool217935:
-  %r217939 = getelementptr inbounds i8, ptr %t217925, i64 8
-  %r217940 = load i32, ptr %r217939
-  %r217941 = icmp ne i32 %r217940, 0
-  br i1 %r217941, label %rhs217930, label %done217931
-rhs217930:
-  store i64 120376525106, ptr @lv_pos
-  call void @lvp_index(ptr %t217942, ptr %a217873, ptr @.c1)
-  %r217944 = load i64, ptr %t217942
-  %r217945 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1668)
-  %r217946 = icmp eq i64 %r217944, 2
-  %r217947 = icmp eq i64 %r217945, 2
-  %r217948 = and i1 %r217946, %r217947
-  br i1 %r217948, label %ifast217949, label %fcheck217950
-ifast217949:
-  %r217953 = getelementptr inbounds i8, ptr %t217942, i64 8
-  %r217954 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1668), i64 8
-  %r217955 = load i64, ptr %r217953
-  %r217956 = load i64, ptr %r217954
-  %r217958 = getelementptr inbounds i8, ptr %t217943, i64 8
-  %r217959 = icmp eq i64 %r217955, %r217956
-  %r217960 = zext i1 %r217959 to i64
-  store i64 1, ptr %t217943
-  store i64 %r217960, ptr %r217958
-  br label %idone217952
-fcheck217950:
-  %r217961 = icmp eq i64 %r217944, 3
-  %r217962 = icmp eq i64 %r217945, 3
-  %r217963 = and i1 %r217961, %r217962
-  br i1 %r217963, label %ffast217964, label %islow217951
-ffast217964:
-  %r217965 = getelementptr inbounds i8, ptr %t217942, i64 8
-  %r217966 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1668), i64 8
-  %r217967 = load i64, ptr %r217965
-  %r217968 = load i64, ptr %r217966
-  %r217969 = bitcast i64 %r217967 to double
-  %r217970 = bitcast i64 %r217968 to double
-  %r217971 = getelementptr inbounds i8, ptr %t217943, i64 8
-  %r217972 = fcmp oeq double %r217969, %r217970
-  %r217973 = zext i1 %r217972 to i64
-  store i64 1, ptr %t217943
-  store i64 %r217973, ptr %r217971
-  br label %idone217952
-islow217951:
-  store i64 288793875978387762, ptr @lv_pos
-  %r217976 = getelementptr inbounds i8, ptr %t217942, i64 8
-  %r217977 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1668), i64 8
-  %r217974 = load i64, ptr %r217976
-  %r217975 = load i64, ptr %r217977
-  %r217978 = call %LV @lvv_eq(i64 %r217944, i64 %r217974, i64 %r217945, i64 %r217975)
-  %r217979 = extractvalue %LV %r217978, 0
-  %r217980 = extractvalue %LV %r217978, 1
-  store i64 %r217979, ptr %t217943
-  %r217981 = getelementptr inbounds i8, ptr %t217943, i64 8
-  store i64 %r217980, ptr %r217981
-  br label %idone217952
-idone217952:
-  store i64 288793875978387762, ptr @lv_pos
-  %r217982 = load i64, ptr %t217943
-  %r217983 = icmp eq i64 %r217982, 1
-  br i1 %r217983, label %tbool217985, label %tbad217984
-tbad217984:
-  %r217986 = getelementptr inbounds i8, ptr %t217943, i64 8
-  %r217987 = load i64, ptr %r217986
-  %r217988 = call i64 @lvv_truth(i64 %r217982, i64 %r217987)
-  br label %tbool217985
-tbool217985:
-  %r217989 = getelementptr inbounds i8, ptr %t217943, i64 8
-  %r217990 = load i32, ptr %r217989
-  %r217991 = icmp ne i32 %r217990, 0
-  %r217992 = load i64, ptr %t217943
-  %r217993 = getelementptr inbounds i8, ptr %t217943, i64 8
-  %r217995 = load i64, ptr %r217993
-  store i64 %r217992, ptr %t217925
-  %r217994 = getelementptr inbounds i8, ptr %t217925, i64 8
-  store i64 %r217995, ptr %r217994
-  br label %done217931
-done217931:
-  store i64 577517159677165874, ptr @lv_pos
-  %r217996 = load i64, ptr %t217925
-  %r217997 = icmp eq i64 %r217996, 1
-  br i1 %r217997, label %tbool217999, label %tbad217998
-tbad217998:
-  %r218000 = getelementptr inbounds i8, ptr %t217925, i64 8
-  %r218001 = load i64, ptr %r218000
-  %r218002 = call i64 @lvv_truth(i64 %r217996, i64 %r218001)
-  br label %tbool217999
-tbool217999:
-  %r218003 = getelementptr inbounds i8, ptr %t217925, i64 8
-  %r218004 = load i32, ptr %r218003
-  %r218005 = icmp ne i32 %r218004, 0
-  br i1 %r218005, label %then218006, label %else218007
-then218006:
-  store i64 307, ptr @lv_pos
-  store i64 395174740275, ptr @lv_pos
-  store i64 257735786803, ptr @lv_pos
-  %r218010 = load i64, ptr @g_diag_set_format
-  %r218011 = icmp eq i64 %r218010, 17
-  br i1 %r218011, label %gundef218012, label %gdef218013
-gundef218012:
+  %r217885 = getelementptr inbounds i8, ptr %t217870, i64 8
+  %r217886 = icmp eq i64 %r217882, %r217883
+  %r217887 = zext i1 %r217886 to i64
+  store i64 1, ptr %t217870
+  store i64 %r217887, ptr %r217885
+  br label %idone217879
+fcheck217877:
+  %r217888 = icmp eq i64 %r217871, 3
+  %r217889 = icmp eq i64 %r217872, 3
+  %r217890 = and i1 %r217888, %r217889
+  br i1 %r217890, label %ffast217891, label %islow217878
+ffast217891:
+  %r217892 = getelementptr inbounds i8, ptr %t217869, i64 8
+  %r217893 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1668), i64 8
+  %r217894 = load i64, ptr %r217892
+  %r217895 = load i64, ptr %r217893
+  %r217896 = bitcast i64 %r217894 to double
+  %r217897 = bitcast i64 %r217895 to double
+  %r217898 = getelementptr inbounds i8, ptr %t217870, i64 8
+  %r217899 = fcmp oeq double %r217896, %r217897
+  %r217900 = zext i1 %r217899 to i64
+  store i64 1, ptr %t217870
+  store i64 %r217900, ptr %r217898
+  br label %idone217879
+islow217878:
+  store i64 288793875978387759, ptr @lv_pos
+  %r217903 = getelementptr inbounds i8, ptr %t217869, i64 8
+  %r217904 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1668), i64 8
+  %r217901 = load i64, ptr %r217903
+  %r217902 = load i64, ptr %r217904
+  %r217905 = call %LV @lvv_eq(i64 %r217871, i64 %r217901, i64 %r217872, i64 %r217902)
+  %r217906 = extractvalue %LV %r217905, 0
+  %r217907 = extractvalue %LV %r217905, 1
+  store i64 %r217906, ptr %t217870
+  %r217908 = getelementptr inbounds i8, ptr %t217870, i64 8
+  store i64 %r217907, ptr %r217908
+  br label %idone217879
+idone217879:
+  store i64 288793875978387759, ptr @lv_pos
+  %r217909 = load i64, ptr %t217870
+  %r217910 = icmp eq i64 %r217909, 1
+  br i1 %r217910, label %tbool217912, label %tbad217911
+tbad217911:
+  %r217913 = getelementptr inbounds i8, ptr %t217870, i64 8
+  %r217914 = load i64, ptr %r217913
+  %r217915 = call i64 @lvv_truth(i64 %r217909, i64 %r217914)
+  br label %tbool217912
+tbool217912:
+  %r217916 = getelementptr inbounds i8, ptr %t217870, i64 8
+  %r217917 = load i32, ptr %r217916
+  %r217918 = icmp ne i32 %r217917, 0
+  %r217919 = load i64, ptr %t217870
+  %r217920 = getelementptr inbounds i8, ptr %t217870, i64 8
+  %r217922 = load i64, ptr %r217920
+  store i64 %r217919, ptr %t217852
+  %r217921 = getelementptr inbounds i8, ptr %t217852, i64 8
+  store i64 %r217922, ptr %r217921
+  br label %done217858
+done217858:
+  store i64 577517159677165871, ptr @lv_pos
+  %r217923 = load i64, ptr %t217852
+  %r217924 = icmp eq i64 %r217923, 1
+  br i1 %r217924, label %tbool217926, label %tbad217925
+tbad217925:
+  %r217927 = getelementptr inbounds i8, ptr %t217852, i64 8
+  %r217928 = load i64, ptr %r217927
+  %r217929 = call i64 @lvv_truth(i64 %r217923, i64 %r217928)
+  br label %tbool217926
+tbool217926:
+  %r217930 = getelementptr inbounds i8, ptr %t217852, i64 8
+  %r217931 = load i32, ptr %r217930
+  %r217932 = icmp ne i32 %r217931, 0
+  br i1 %r217932, label %then217933, label %else217934
+then217933:
+  store i64 304, ptr @lv_pos
+  store i64 395174740272, ptr @lv_pos
+  store i64 257735786800, ptr @lv_pos
+  %r217937 = load i64, ptr @g_diag_set_format
+  %r217938 = icmp eq i64 %r217937, 17
+  br i1 %r217938, label %gundef217939, label %gdef217940
+gundef217939:
   call void @lvp_gundef(ptr @g_diag_set_format, ptr @.s723)
-  br label %gdef218013
-gdef218013:
-  %r218014 = load i64, ptr @g_diag_set_format
-  %r218015 = getelementptr inbounds i8, ptr @g_diag_set_format, i64 8
-  %r218017 = load i64, ptr %r218015
-  store i64 %r218014, ptr %t218009
-  %r218016 = getelementptr inbounds i8, ptr %t218009, i64 8
-  store i64 %r218017, ptr %r218016
-  store i64 395174740275, ptr @lv_pos
-  %r218019 = getelementptr inbounds [1 x %LV], ptr %a218018, i64 0, i64 0
-  %r218020 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 451)
-  %r218021 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 451), i64 8
+  br label %gdef217940
+gdef217940:
+  %r217941 = load i64, ptr @g_diag_set_format
+  %r217942 = getelementptr inbounds i8, ptr @g_diag_set_format, i64 8
+  %r217944 = load i64, ptr %r217942
+  store i64 %r217941, ptr %t217936
+  %r217943 = getelementptr inbounds i8, ptr %t217936, i64 8
+  store i64 %r217944, ptr %r217943
+  store i64 395174740272, ptr @lv_pos
+  %r217946 = getelementptr inbounds [1 x %LV], ptr %a217945, i64 0, i64 0
+  %r217947 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 451)
+  %r217948 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 451), i64 8
+  %r217950 = load i64, ptr %r217948
+  store i64 %r217947, ptr %r217946
+  %r217949 = getelementptr inbounds i8, ptr %r217946, i64 8
+  store i64 %r217950, ptr %r217949
+  call void @lvp_call(ptr %t217951, ptr %t217936, i32 1, ptr %a217945)
+  store i64 305, ptr @lv_pos
+  store i64 395204100401, ptr @lv_pos
+  store i64 51606716721, ptr @lv_pos
+  %r217953 = load i64, ptr @g_cut
+  %r217954 = icmp eq i64 %r217953, 17
+  br i1 %r217954, label %gundef217955, label %gdef217956
+gundef217955:
+  call void @lvp_gundef(ptr @g_cut, ptr @.s721)
+  br label %gdef217956
+gdef217956:
+  %r217957 = load i64, ptr @g_cut
+  %r217958 = getelementptr inbounds i8, ptr @g_cut, i64 8
+  %r217960 = load i64, ptr %r217958
+  store i64 %r217957, ptr %t217952
+  %r217959 = getelementptr inbounds i8, ptr %t217952, i64 8
+  store i64 %r217960, ptr %r217959
+  store i64 154740457777, ptr @lv_pos
+  %r217962 = getelementptr inbounds [1 x %LV], ptr %a217961, i64 0, i64 0
+  %r217963 = load i64, ptr %a217800
+  %r217964 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r217966 = load i64, ptr %r217964
+  store i64 %r217963, ptr %r217962
+  %r217965 = getelementptr inbounds i8, ptr %r217962, i64 8
+  store i64 %r217966, ptr %r217965
+  %r217967 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217961)
+  store %LV %r217967, ptr %t217968
+  store i64 395204100401, ptr @lv_pos
+  %r217970 = getelementptr inbounds [3 x %LV], ptr %a217969, i64 0, i64 0
+  %r217971 = load i64, ptr %a217800
+  %r217972 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r217974 = load i64, ptr %r217972
+  store i64 %r217971, ptr %r217970
+  %r217973 = getelementptr inbounds i8, ptr %r217970, i64 8
+  store i64 %r217974, ptr %r217973
+  %r217975 = getelementptr inbounds [3 x %LV], ptr %a217969, i64 0, i64 1
+  %r217976 = load i64, ptr @.c2
+  %r217977 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r217979 = load i64, ptr %r217977
+  store i64 %r217976, ptr %r217975
+  %r217978 = getelementptr inbounds i8, ptr %r217975, i64 8
+  store i64 %r217979, ptr %r217978
+  %r217980 = getelementptr inbounds [3 x %LV], ptr %a217969, i64 0, i64 2
+  %r217981 = load i64, ptr %t217968
+  %r217982 = getelementptr inbounds i8, ptr %t217968, i64 8
+  %r217984 = load i64, ptr %r217982
+  store i64 %r217981, ptr %r217980
+  %r217983 = getelementptr inbounds i8, ptr %r217980, i64 8
+  store i64 %r217984, ptr %r217983
+  call void @lvp_call(ptr %t217985, ptr %t217952, i32 3, ptr %a217969)
+  %r217986 = load i64, ptr %t217985
+  %r217987 = getelementptr inbounds i8, ptr %t217985, i64 8
+  %r217989 = load i64, ptr %r217987
+  store i64 %r217986, ptr %a217800
+  %r217988 = getelementptr inbounds i8, ptr %a217800, i64 8
+  store i64 %r217989, ptr %r217988
+  br label %endif217935
+else217934:
+  br label %endif217935
+endif217935:
+  store i64 154656571699, ptr @lv_pos
+  %r217991 = getelementptr inbounds [1 x %LV], ptr %a217990, i64 0, i64 0
+  %r217992 = load i64, ptr %a217800
+  %r217993 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r217995 = load i64, ptr %r217993
+  store i64 %r217992, ptr %r217991
+  %r217994 = getelementptr inbounds i8, ptr %r217991, i64 8
+  store i64 %r217995, ptr %r217994
+  %r217996 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a217990)
+  store %LV %r217996, ptr %t217997
+  %r217999 = load i64, ptr %t217997
+  %r218000 = load i64, ptr @.c10
+  %r218001 = icmp eq i64 %r217999, 2
+  %r218002 = icmp eq i64 %r218000, 2
+  %r218003 = and i1 %r218001, %r218002
+  br i1 %r218003, label %ifast218004, label %fcheck218005
+ifast218004:
+  %r218008 = getelementptr inbounds i8, ptr %t217997, i64 8
+  %r218009 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r218010 = load i64, ptr %r218008
+  %r218011 = load i64, ptr %r218009
+  %r218013 = getelementptr inbounds i8, ptr %t217998, i64 8
+  %r218014 = icmp sge i64 %r218010, %r218011
+  %r218015 = zext i1 %r218014 to i64
+  store i64 1, ptr %t217998
+  store i64 %r218015, ptr %r218013
+  br label %idone218007
+fcheck218005:
+  %r218016 = icmp eq i64 %r217999, 3
+  %r218017 = icmp eq i64 %r218000, 3
+  %r218018 = and i1 %r218016, %r218017
+  br i1 %r218018, label %ffast218019, label %islow218006
+ffast218019:
+  %r218020 = getelementptr inbounds i8, ptr %t217997, i64 8
+  %r218021 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r218022 = load i64, ptr %r218020
   %r218023 = load i64, ptr %r218021
-  store i64 %r218020, ptr %r218019
-  %r218022 = getelementptr inbounds i8, ptr %r218019, i64 8
-  store i64 %r218023, ptr %r218022
-  call void @lvp_call(ptr %t218024, ptr %t218009, i32 1, ptr %a218018)
-  store i64 308, ptr @lv_pos
-  store i64 395204100404, ptr @lv_pos
-  store i64 51606716724, ptr @lv_pos
-  %r218026 = load i64, ptr @g_cut
-  %r218027 = icmp eq i64 %r218026, 17
-  br i1 %r218027, label %gundef218028, label %gdef218029
-gundef218028:
-  call void @lvp_gundef(ptr @g_cut, ptr @.s721)
-  br label %gdef218029
-gdef218029:
-  %r218030 = load i64, ptr @g_cut
-  %r218031 = getelementptr inbounds i8, ptr @g_cut, i64 8
-  %r218033 = load i64, ptr %r218031
-  store i64 %r218030, ptr %t218025
-  %r218032 = getelementptr inbounds i8, ptr %t218025, i64 8
-  store i64 %r218033, ptr %r218032
-  store i64 154740457780, ptr @lv_pos
-  %r218035 = getelementptr inbounds [1 x %LV], ptr %a218034, i64 0, i64 0
-  %r218036 = load i64, ptr %a217873
-  %r218037 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218039 = load i64, ptr %r218037
-  store i64 %r218036, ptr %r218035
-  %r218038 = getelementptr inbounds i8, ptr %r218035, i64 8
-  store i64 %r218039, ptr %r218038
-  %r218040 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218034)
-  store %LV %r218040, ptr %t218041
-  store i64 395204100404, ptr @lv_pos
-  %r218043 = getelementptr inbounds [3 x %LV], ptr %a218042, i64 0, i64 0
-  %r218044 = load i64, ptr %a217873
-  %r218045 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218047 = load i64, ptr %r218045
-  store i64 %r218044, ptr %r218043
-  %r218046 = getelementptr inbounds i8, ptr %r218043, i64 8
-  store i64 %r218047, ptr %r218046
-  %r218048 = getelementptr inbounds [3 x %LV], ptr %a218042, i64 0, i64 1
-  %r218049 = load i64, ptr @.c2
-  %r218050 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218052 = load i64, ptr %r218050
-  store i64 %r218049, ptr %r218048
-  %r218051 = getelementptr inbounds i8, ptr %r218048, i64 8
-  store i64 %r218052, ptr %r218051
-  %r218053 = getelementptr inbounds [3 x %LV], ptr %a218042, i64 0, i64 2
-  %r218054 = load i64, ptr %t218041
-  %r218055 = getelementptr inbounds i8, ptr %t218041, i64 8
-  %r218057 = load i64, ptr %r218055
-  store i64 %r218054, ptr %r218053
-  %r218056 = getelementptr inbounds i8, ptr %r218053, i64 8
-  store i64 %r218057, ptr %r218056
-  call void @lvp_call(ptr %t218058, ptr %t218025, i32 3, ptr %a218042)
-  %r218059 = load i64, ptr %t218058
-  %r218060 = getelementptr inbounds i8, ptr %t218058, i64 8
-  %r218062 = load i64, ptr %r218060
-  store i64 %r218059, ptr %a217873
-  %r218061 = getelementptr inbounds i8, ptr %a217873, i64 8
-  store i64 %r218062, ptr %r218061
-  br label %endif218008
-else218007:
-  br label %endif218008
-endif218008:
-  store i64 154656571702, ptr @lv_pos
-  %r218064 = getelementptr inbounds [1 x %LV], ptr %a218063, i64 0, i64 0
-  %r218065 = load i64, ptr %a217873
-  %r218066 = getelementptr inbounds i8, ptr %a217873, i64 8
+  %r218024 = bitcast i64 %r218022 to double
+  %r218025 = bitcast i64 %r218023 to double
+  %r218026 = getelementptr inbounds i8, ptr %t217998, i64 8
+  %r218027 = fcmp oge double %r218024, %r218025
+  %r218028 = zext i1 %r218027 to i64
+  store i64 1, ptr %t217998
+  store i64 %r218028, ptr %r218026
+  br label %idone218007
+islow218006:
+  store i64 288934304149406003, ptr @lv_pos
+  %r218031 = getelementptr inbounds i8, ptr %t217997, i64 8
+  %r218032 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r218029 = load i64, ptr %r218031
+  %r218030 = load i64, ptr %r218032
+  %r218033 = call %LV @lvv_ge(i64 %r217999, i64 %r218029, i64 %r218000, i64 %r218030)
+  %r218034 = extractvalue %LV %r218033, 0
+  %r218035 = extractvalue %LV %r218033, 1
+  store i64 %r218034, ptr %t217998
+  %r218036 = getelementptr inbounds i8, ptr %t217998, i64 8
+  store i64 %r218035, ptr %r218036
+  br label %idone218007
+idone218007:
+  store i64 288934304149406003, ptr @lv_pos
+  %r218038 = load i64, ptr %t217998
+  %r218039 = getelementptr inbounds i8, ptr %t217998, i64 8
+  %r218041 = load i64, ptr %r218039
+  store i64 %r218038, ptr %t218037
+  %r218040 = getelementptr inbounds i8, ptr %t218037, i64 8
+  store i64 %r218041, ptr %r218040
+  %r218044 = load i64, ptr %t218037
+  %r218045 = icmp eq i64 %r218044, 1
+  br i1 %r218045, label %tbool218047, label %tbad218046
+tbad218046:
+  %r218048 = getelementptr inbounds i8, ptr %t218037, i64 8
+  %r218049 = load i64, ptr %r218048
+  %r218050 = call i64 @lvv_truth(i64 %r218044, i64 %r218049)
+  br label %tbool218047
+tbool218047:
+  %r218051 = getelementptr inbounds i8, ptr %t218037, i64 8
+  %r218052 = load i32, ptr %r218051
+  %r218053 = icmp ne i32 %r218052, 0
+  br i1 %r218053, label %rhs218042, label %done218043
+rhs218042:
+  store i64 120376525107, ptr @lv_pos
+  call void @lvp_index(ptr %t218054, ptr %a217800, ptr @.c1)
+  %r218056 = load i64, ptr %t218054
+  %r218057 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1655)
+  %r218058 = icmp eq i64 %r218056, 2
+  %r218059 = icmp eq i64 %r218057, 2
+  %r218060 = and i1 %r218058, %r218059
+  br i1 %r218060, label %ifast218061, label %fcheck218062
+ifast218061:
+  %r218065 = getelementptr inbounds i8, ptr %t218054, i64 8
+  %r218066 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1655), i64 8
+  %r218067 = load i64, ptr %r218065
   %r218068 = load i64, ptr %r218066
-  store i64 %r218065, ptr %r218064
-  %r218067 = getelementptr inbounds i8, ptr %r218064, i64 8
-  store i64 %r218068, ptr %r218067
-  %r218069 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218063)
-  store %LV %r218069, ptr %t218070
-  %r218072 = load i64, ptr %t218070
-  %r218073 = load i64, ptr @.c10
-  %r218074 = icmp eq i64 %r218072, 2
-  %r218075 = icmp eq i64 %r218073, 2
-  %r218076 = and i1 %r218074, %r218075
-  br i1 %r218076, label %ifast218077, label %fcheck218078
-ifast218077:
-  %r218081 = getelementptr inbounds i8, ptr %t218070, i64 8
-  %r218082 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r218083 = load i64, ptr %r218081
-  %r218084 = load i64, ptr %r218082
-  %r218086 = getelementptr inbounds i8, ptr %t218071, i64 8
-  %r218087 = icmp sge i64 %r218083, %r218084
-  %r218088 = zext i1 %r218087 to i64
-  store i64 1, ptr %t218071
-  store i64 %r218088, ptr %r218086
-  br label %idone218080
-fcheck218078:
-  %r218089 = icmp eq i64 %r218072, 3
-  %r218090 = icmp eq i64 %r218073, 3
-  %r218091 = and i1 %r218089, %r218090
-  br i1 %r218091, label %ffast218092, label %islow218079
-ffast218092:
-  %r218093 = getelementptr inbounds i8, ptr %t218070, i64 8
-  %r218094 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r218095 = load i64, ptr %r218093
-  %r218096 = load i64, ptr %r218094
-  %r218097 = bitcast i64 %r218095 to double
-  %r218098 = bitcast i64 %r218096 to double
-  %r218099 = getelementptr inbounds i8, ptr %t218071, i64 8
-  %r218100 = fcmp oge double %r218097, %r218098
-  %r218101 = zext i1 %r218100 to i64
-  store i64 1, ptr %t218071
-  store i64 %r218101, ptr %r218099
-  br label %idone218080
-islow218079:
-  store i64 288934304149406006, ptr @lv_pos
-  %r218104 = getelementptr inbounds i8, ptr %t218070, i64 8
-  %r218105 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r218102 = load i64, ptr %r218104
-  %r218103 = load i64, ptr %r218105
-  %r218106 = call %LV @lvv_ge(i64 %r218072, i64 %r218102, i64 %r218073, i64 %r218103)
-  %r218107 = extractvalue %LV %r218106, 0
-  %r218108 = extractvalue %LV %r218106, 1
-  store i64 %r218107, ptr %t218071
-  %r218109 = getelementptr inbounds i8, ptr %t218071, i64 8
-  store i64 %r218108, ptr %r218109
-  br label %idone218080
-idone218080:
-  store i64 288934304149406006, ptr @lv_pos
-  %r218111 = load i64, ptr %t218071
-  %r218112 = getelementptr inbounds i8, ptr %t218071, i64 8
-  %r218114 = load i64, ptr %r218112
-  store i64 %r218111, ptr %t218110
-  %r218113 = getelementptr inbounds i8, ptr %t218110, i64 8
-  store i64 %r218114, ptr %r218113
-  %r218117 = load i64, ptr %t218110
-  %r218118 = icmp eq i64 %r218117, 1
-  br i1 %r218118, label %tbool218120, label %tbad218119
-tbad218119:
-  %r218121 = getelementptr inbounds i8, ptr %t218110, i64 8
-  %r218122 = load i64, ptr %r218121
-  %r218123 = call i64 @lvv_truth(i64 %r218117, i64 %r218122)
-  br label %tbool218120
-tbool218120:
-  %r218124 = getelementptr inbounds i8, ptr %t218110, i64 8
-  %r218125 = load i32, ptr %r218124
-  %r218126 = icmp ne i32 %r218125, 0
-  br i1 %r218126, label %rhs218115, label %done218116
-rhs218115:
-  store i64 120376525110, ptr @lv_pos
-  call void @lvp_index(ptr %t218127, ptr %a217873, ptr @.c1)
-  %r218129 = load i64, ptr %t218127
-  %r218130 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1655)
-  %r218131 = icmp eq i64 %r218129, 2
-  %r218132 = icmp eq i64 %r218130, 2
-  %r218133 = and i1 %r218131, %r218132
-  br i1 %r218133, label %ifast218134, label %fcheck218135
-ifast218134:
-  %r218138 = getelementptr inbounds i8, ptr %t218127, i64 8
-  %r218139 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1655), i64 8
-  %r218140 = load i64, ptr %r218138
-  %r218141 = load i64, ptr %r218139
-  %r218143 = getelementptr inbounds i8, ptr %t218128, i64 8
-  %r218144 = icmp eq i64 %r218140, %r218141
-  %r218145 = zext i1 %r218144 to i64
-  store i64 1, ptr %t218128
-  store i64 %r218145, ptr %r218143
-  br label %idone218137
-fcheck218135:
-  %r218146 = icmp eq i64 %r218129, 3
-  %r218147 = icmp eq i64 %r218130, 3
-  %r218148 = and i1 %r218146, %r218147
-  br i1 %r218148, label %ffast218149, label %islow218136
-ffast218149:
-  %r218150 = getelementptr inbounds i8, ptr %t218127, i64 8
-  %r218151 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1655), i64 8
-  %r218152 = load i64, ptr %r218150
-  %r218153 = load i64, ptr %r218151
-  %r218154 = bitcast i64 %r218152 to double
-  %r218155 = bitcast i64 %r218153 to double
-  %r218156 = getelementptr inbounds i8, ptr %t218128, i64 8
-  %r218157 = fcmp oeq double %r218154, %r218155
-  %r218158 = zext i1 %r218157 to i64
-  store i64 1, ptr %t218128
-  store i64 %r218158, ptr %r218156
-  br label %idone218137
-islow218136:
-  store i64 288793583920611638, ptr @lv_pos
-  %r218161 = getelementptr inbounds i8, ptr %t218127, i64 8
-  %r218162 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1655), i64 8
-  %r218159 = load i64, ptr %r218161
-  %r218160 = load i64, ptr %r218162
-  %r218163 = call %LV @lvv_eq(i64 %r218129, i64 %r218159, i64 %r218130, i64 %r218160)
-  %r218164 = extractvalue %LV %r218163, 0
-  %r218165 = extractvalue %LV %r218163, 1
-  store i64 %r218164, ptr %t218128
-  %r218166 = getelementptr inbounds i8, ptr %t218128, i64 8
-  store i64 %r218165, ptr %r218166
-  br label %idone218137
-idone218137:
-  store i64 288793583920611638, ptr @lv_pos
-  %r218167 = load i64, ptr %t218128
-  %r218168 = icmp eq i64 %r218167, 1
-  br i1 %r218168, label %tbool218170, label %tbad218169
-tbad218169:
-  %r218171 = getelementptr inbounds i8, ptr %t218128, i64 8
-  %r218172 = load i64, ptr %r218171
-  %r218173 = call i64 @lvv_truth(i64 %r218167, i64 %r218172)
-  br label %tbool218170
-tbool218170:
-  %r218174 = getelementptr inbounds i8, ptr %t218128, i64 8
-  %r218175 = load i32, ptr %r218174
-  %r218176 = icmp ne i32 %r218175, 0
-  %r218177 = load i64, ptr %t218128
-  %r218178 = getelementptr inbounds i8, ptr %t218128, i64 8
-  %r218180 = load i64, ptr %r218178
-  store i64 %r218177, ptr %t218110
-  %r218179 = getelementptr inbounds i8, ptr %t218110, i64 8
-  store i64 %r218180, ptr %r218179
-  br label %done218116
-done218116:
-  store i64 577516867619389750, ptr @lv_pos
-  %r218182 = load i64, ptr %t218110
-  %r218183 = getelementptr inbounds i8, ptr %t218110, i64 8
-  %r218185 = load i64, ptr %r218183
-  store i64 %r218182, ptr %t218181
-  %r218184 = getelementptr inbounds i8, ptr %t218181, i64 8
-  store i64 %r218185, ptr %r218184
-  %r218188 = load i64, ptr %t218181
-  %r218189 = icmp eq i64 %r218188, 1
-  br i1 %r218189, label %tbool218191, label %tbad218190
-tbad218190:
-  %r218192 = getelementptr inbounds i8, ptr %t218181, i64 8
-  %r218193 = load i64, ptr %r218192
-  %r218194 = call i64 @lvv_truth(i64 %r218188, i64 %r218193)
-  br label %tbool218191
-tbool218191:
-  %r218195 = getelementptr inbounds i8, ptr %t218181, i64 8
-  %r218196 = load i32, ptr %r218195
-  %r218197 = icmp ne i32 %r218196, 0
-  br i1 %r218197, label %rhs218186, label %done218187
-rhs218186:
-  %r218199 = load i64, ptr %a217833
-  %r218200 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1669)
-  %r218201 = icmp eq i64 %r218199, 2
-  %r218202 = icmp eq i64 %r218200, 2
-  %r218203 = and i1 %r218201, %r218202
-  br i1 %r218203, label %ifast218204, label %fcheck218205
-ifast218204:
-  %r218208 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218209 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
-  %r218210 = load i64, ptr %r218208
-  %r218211 = load i64, ptr %r218209
-  %r218213 = getelementptr inbounds i8, ptr %t218198, i64 8
-  %r218214 = icmp eq i64 %r218210, %r218211
-  %r218215 = zext i1 %r218214 to i64
-  store i64 1, ptr %t218198
-  store i64 %r218215, ptr %r218213
-  br label %idone218207
-fcheck218205:
-  %r218216 = icmp eq i64 %r218199, 3
-  %r218217 = icmp eq i64 %r218200, 3
-  %r218218 = and i1 %r218216, %r218217
-  br i1 %r218218, label %ffast218219, label %islow218206
-ffast218219:
-  %r218220 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218221 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
-  %r218222 = load i64, ptr %r218220
-  %r218223 = load i64, ptr %r218221
-  %r218224 = bitcast i64 %r218222 to double
-  %r218225 = bitcast i64 %r218223 to double
-  %r218226 = getelementptr inbounds i8, ptr %t218198, i64 8
-  %r218227 = fcmp oeq double %r218224, %r218225
-  %r218228 = zext i1 %r218227 to i64
-  store i64 1, ptr %t218198
-  store i64 %r218228, ptr %r218226
-  br label %idone218207
-islow218206:
-  store i64 288512057492373814, ptr @lv_pos
-  %r218231 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218232 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
-  %r218229 = load i64, ptr %r218231
-  %r218230 = load i64, ptr %r218232
-  %r218233 = call %LV @lvv_eq(i64 %r218199, i64 %r218229, i64 %r218200, i64 %r218230)
-  %r218234 = extractvalue %LV %r218233, 0
-  %r218235 = extractvalue %LV %r218233, 1
-  store i64 %r218234, ptr %t218198
-  %r218236 = getelementptr inbounds i8, ptr %t218198, i64 8
-  store i64 %r218235, ptr %r218236
-  br label %idone218207
-idone218207:
-  store i64 288512057492373814, ptr @lv_pos
-  %r218238 = load i64, ptr %t218198
-  %r218239 = getelementptr inbounds i8, ptr %t218198, i64 8
-  %r218241 = load i64, ptr %r218239
-  store i64 %r218238, ptr %t218237
-  %r218240 = getelementptr inbounds i8, ptr %t218237, i64 8
-  store i64 %r218241, ptr %r218240
-  %r218244 = load i64, ptr %t218237
-  %r218245 = icmp eq i64 %r218244, 1
-  br i1 %r218245, label %tbool218247, label %tbad218246
-tbad218246:
-  %r218248 = getelementptr inbounds i8, ptr %t218237, i64 8
-  %r218249 = load i64, ptr %r218248
-  %r218250 = call i64 @lvv_truth(i64 %r218244, i64 %r218249)
-  br label %tbool218247
-tbool218247:
-  %r218251 = getelementptr inbounds i8, ptr %t218237, i64 8
-  %r218252 = load i32, ptr %r218251
-  %r218253 = icmp ne i32 %r218252, 0
-  br i1 %r218253, label %done218243, label %rhs218242
-rhs218242:
-  %r218255 = load i64, ptr %a217833
-  %r218256 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1670)
-  %r218257 = icmp eq i64 %r218255, 2
-  %r218258 = icmp eq i64 %r218256, 2
-  %r218259 = and i1 %r218257, %r218258
-  br i1 %r218259, label %ifast218260, label %fcheck218261
-ifast218260:
-  %r218264 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218265 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
-  %r218266 = load i64, ptr %r218264
-  %r218267 = load i64, ptr %r218265
-  %r218269 = getelementptr inbounds i8, ptr %t218254, i64 8
-  %r218270 = icmp eq i64 %r218266, %r218267
-  %r218271 = zext i1 %r218270 to i64
-  store i64 1, ptr %t218254
-  store i64 %r218271, ptr %r218269
-  br label %idone218263
-fcheck218261:
-  %r218272 = icmp eq i64 %r218255, 3
-  %r218273 = icmp eq i64 %r218256, 3
-  %r218274 = and i1 %r218272, %r218273
-  br i1 %r218274, label %ffast218275, label %islow218262
-ffast218275:
-  %r218276 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218277 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
-  %r218278 = load i64, ptr %r218276
-  %r218279 = load i64, ptr %r218277
-  %r218280 = bitcast i64 %r218278 to double
-  %r218281 = bitcast i64 %r218279 to double
-  %r218282 = getelementptr inbounds i8, ptr %t218254, i64 8
-  %r218283 = fcmp oeq double %r218280, %r218281
-  %r218284 = zext i1 %r218283 to i64
-  store i64 1, ptr %t218254
-  store i64 %r218284, ptr %r218282
-  br label %idone218263
-islow218262:
-  store i64 288512091919221046, ptr @lv_pos
-  %r218287 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218288 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
-  %r218285 = load i64, ptr %r218287
-  %r218286 = load i64, ptr %r218288
-  %r218289 = call %LV @lvv_eq(i64 %r218255, i64 %r218285, i64 %r218256, i64 %r218286)
-  %r218290 = extractvalue %LV %r218289, 0
-  %r218291 = extractvalue %LV %r218289, 1
-  store i64 %r218290, ptr %t218254
-  %r218292 = getelementptr inbounds i8, ptr %t218254, i64 8
-  store i64 %r218291, ptr %r218292
-  br label %idone218263
-idone218263:
-  store i64 288512091919221046, ptr @lv_pos
-  %r218293 = load i64, ptr %t218254
-  %r218294 = icmp eq i64 %r218293, 1
-  br i1 %r218294, label %tbool218296, label %tbad218295
-tbad218295:
-  %r218297 = getelementptr inbounds i8, ptr %t218254, i64 8
-  %r218298 = load i64, ptr %r218297
-  %r218299 = call i64 @lvv_truth(i64 %r218293, i64 %r218298)
-  br label %tbool218296
-tbool218296:
-  %r218300 = getelementptr inbounds i8, ptr %t218254, i64 8
-  %r218301 = load i32, ptr %r218300
-  %r218302 = icmp ne i32 %r218301, 0
-  %r218303 = load i64, ptr %t218254
-  %r218304 = getelementptr inbounds i8, ptr %t218254, i64 8
-  %r218306 = load i64, ptr %r218304
-  store i64 %r218303, ptr %t218237
-  %r218305 = getelementptr inbounds i8, ptr %t218237, i64 8
-  store i64 %r218306, ptr %r218305
-  br label %done218243
-done218243:
-  store i64 289145685427618102, ptr @lv_pos
-  %r218308 = load i64, ptr %t218237
-  %r218309 = getelementptr inbounds i8, ptr %t218237, i64 8
-  %r218311 = load i64, ptr %r218309
-  store i64 %r218308, ptr %t218307
-  %r218310 = getelementptr inbounds i8, ptr %t218307, i64 8
-  store i64 %r218311, ptr %r218310
-  %r218314 = load i64, ptr %t218307
-  %r218315 = icmp eq i64 %r218314, 1
-  br i1 %r218315, label %tbool218317, label %tbad218316
-tbad218316:
-  %r218318 = getelementptr inbounds i8, ptr %t218307, i64 8
-  %r218319 = load i64, ptr %r218318
-  %r218320 = call i64 @lvv_truth(i64 %r218314, i64 %r218319)
-  br label %tbool218317
-tbool218317:
-  %r218321 = getelementptr inbounds i8, ptr %t218307, i64 8
-  %r218322 = load i32, ptr %r218321
-  %r218323 = icmp ne i32 %r218322, 0
-  br i1 %r218323, label %done218313, label %rhs218312
-rhs218312:
-  %r218325 = load i64, ptr %a217833
-  %r218326 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1671)
-  %r218327 = icmp eq i64 %r218325, 2
-  %r218328 = icmp eq i64 %r218326, 2
-  %r218329 = and i1 %r218327, %r218328
-  br i1 %r218329, label %ifast218330, label %fcheck218331
-ifast218330:
-  %r218334 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218335 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
-  %r218336 = load i64, ptr %r218334
-  %r218337 = load i64, ptr %r218335
-  %r218339 = getelementptr inbounds i8, ptr %t218324, i64 8
-  %r218340 = icmp eq i64 %r218336, %r218337
-  %r218341 = zext i1 %r218340 to i64
-  store i64 1, ptr %t218324
-  store i64 %r218341, ptr %r218339
-  br label %idone218333
-fcheck218331:
-  %r218342 = icmp eq i64 %r218325, 3
-  %r218343 = icmp eq i64 %r218326, 3
-  %r218344 = and i1 %r218342, %r218343
-  br i1 %r218344, label %ffast218345, label %islow218332
-ffast218345:
-  %r218346 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218347 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
-  %r218348 = load i64, ptr %r218346
-  %r218349 = load i64, ptr %r218347
-  %r218350 = bitcast i64 %r218348 to double
-  %r218351 = bitcast i64 %r218349 to double
-  %r218352 = getelementptr inbounds i8, ptr %t218324, i64 8
-  %r218353 = fcmp oeq double %r218350, %r218351
-  %r218354 = zext i1 %r218353 to i64
-  store i64 1, ptr %t218324
-  store i64 %r218354, ptr %r218352
-  br label %idone218333
-islow218332:
-  store i64 288512074814849334, ptr @lv_pos
-  %r218357 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218358 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
-  %r218355 = load i64, ptr %r218357
-  %r218356 = load i64, ptr %r218358
-  %r218359 = call %LV @lvv_eq(i64 %r218325, i64 %r218355, i64 %r218326, i64 %r218356)
-  %r218360 = extractvalue %LV %r218359, 0
-  %r218361 = extractvalue %LV %r218359, 1
-  store i64 %r218360, ptr %t218324
-  %r218362 = getelementptr inbounds i8, ptr %t218324, i64 8
-  store i64 %r218361, ptr %r218362
-  br label %idone218333
-idone218333:
-  store i64 288512074814849334, ptr @lv_pos
-  %r218363 = load i64, ptr %t218324
-  %r218364 = icmp eq i64 %r218363, 1
-  br i1 %r218364, label %tbool218366, label %tbad218365
-tbad218365:
-  %r218367 = getelementptr inbounds i8, ptr %t218324, i64 8
-  %r218368 = load i64, ptr %r218367
-  %r218369 = call i64 @lvv_truth(i64 %r218363, i64 %r218368)
-  br label %tbool218366
-tbool218366:
-  %r218370 = getelementptr inbounds i8, ptr %t218324, i64 8
-  %r218371 = load i32, ptr %r218370
-  %r218372 = icmp ne i32 %r218371, 0
-  %r218373 = load i64, ptr %t218324
-  %r218374 = getelementptr inbounds i8, ptr %t218324, i64 8
-  %r218376 = load i64, ptr %r218374
-  store i64 %r218373, ptr %t218307
-  %r218375 = getelementptr inbounds i8, ptr %t218307, i64 8
-  store i64 %r218376, ptr %r218375
-  br label %done218313
-done218313:
-  store i64 290412614880592182, ptr @lv_pos
-  %r218377 = load i64, ptr %t218307
-  %r218378 = icmp eq i64 %r218377, 1
-  br i1 %r218378, label %tbool218380, label %tbad218379
-tbad218379:
-  %r218381 = getelementptr inbounds i8, ptr %t218307, i64 8
-  %r218382 = load i64, ptr %r218381
-  %r218383 = call i64 @lvv_truth(i64 %r218377, i64 %r218382)
-  br label %tbool218380
-tbool218380:
-  %r218384 = getelementptr inbounds i8, ptr %t218307, i64 8
-  %r218385 = load i32, ptr %r218384
-  %r218386 = icmp ne i32 %r218385, 0
-  %r218387 = load i64, ptr %t218307
-  %r218388 = getelementptr inbounds i8, ptr %t218307, i64 8
-  %r218390 = load i64, ptr %r218388
-  store i64 %r218387, ptr %t218181
-  %r218389 = getelementptr inbounds i8, ptr %t218181, i64 8
-  store i64 %r218390, ptr %r218389
-  br label %done218187
-done218187:
-  store i64 578925170215878966, ptr @lv_pos
-  %r218391 = load i64, ptr %t218181
-  %r218392 = icmp eq i64 %r218391, 1
-  br i1 %r218392, label %tbool218394, label %tbad218393
-tbad218393:
-  %r218395 = getelementptr inbounds i8, ptr %t218181, i64 8
-  %r218396 = load i64, ptr %r218395
-  %r218397 = call i64 @lvv_truth(i64 %r218391, i64 %r218396)
-  br label %tbool218394
-tbool218394:
-  %r218398 = getelementptr inbounds i8, ptr %t218181, i64 8
-  %r218399 = load i32, ptr %r218398
-  %r218400 = icmp ne i32 %r218399, 0
-  br i1 %r218400, label %then218401, label %else218402
-then218401:
-  store i64 311, ptr @lv_pos
-  store i64 206196179255, ptr @lv_pos
-  store i64 171836440887, ptr @lv_pos
-  %r218405 = load i64, ptr @g_dbg_enable
-  %r218406 = icmp eq i64 %r218405, 17
-  br i1 %r218406, label %gundef218407, label %gdef218408
-gundef218407:
+  %r218070 = getelementptr inbounds i8, ptr %t218055, i64 8
+  %r218071 = icmp eq i64 %r218067, %r218068
+  %r218072 = zext i1 %r218071 to i64
+  store i64 1, ptr %t218055
+  store i64 %r218072, ptr %r218070
+  br label %idone218064
+fcheck218062:
+  %r218073 = icmp eq i64 %r218056, 3
+  %r218074 = icmp eq i64 %r218057, 3
+  %r218075 = and i1 %r218073, %r218074
+  br i1 %r218075, label %ffast218076, label %islow218063
+ffast218076:
+  %r218077 = getelementptr inbounds i8, ptr %t218054, i64 8
+  %r218078 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1655), i64 8
+  %r218079 = load i64, ptr %r218077
+  %r218080 = load i64, ptr %r218078
+  %r218081 = bitcast i64 %r218079 to double
+  %r218082 = bitcast i64 %r218080 to double
+  %r218083 = getelementptr inbounds i8, ptr %t218055, i64 8
+  %r218084 = fcmp oeq double %r218081, %r218082
+  %r218085 = zext i1 %r218084 to i64
+  store i64 1, ptr %t218055
+  store i64 %r218085, ptr %r218083
+  br label %idone218064
+islow218063:
+  store i64 288793583920611635, ptr @lv_pos
+  %r218088 = getelementptr inbounds i8, ptr %t218054, i64 8
+  %r218089 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1655), i64 8
+  %r218086 = load i64, ptr %r218088
+  %r218087 = load i64, ptr %r218089
+  %r218090 = call %LV @lvv_eq(i64 %r218056, i64 %r218086, i64 %r218057, i64 %r218087)
+  %r218091 = extractvalue %LV %r218090, 0
+  %r218092 = extractvalue %LV %r218090, 1
+  store i64 %r218091, ptr %t218055
+  %r218093 = getelementptr inbounds i8, ptr %t218055, i64 8
+  store i64 %r218092, ptr %r218093
+  br label %idone218064
+idone218064:
+  store i64 288793583920611635, ptr @lv_pos
+  %r218094 = load i64, ptr %t218055
+  %r218095 = icmp eq i64 %r218094, 1
+  br i1 %r218095, label %tbool218097, label %tbad218096
+tbad218096:
+  %r218098 = getelementptr inbounds i8, ptr %t218055, i64 8
+  %r218099 = load i64, ptr %r218098
+  %r218100 = call i64 @lvv_truth(i64 %r218094, i64 %r218099)
+  br label %tbool218097
+tbool218097:
+  %r218101 = getelementptr inbounds i8, ptr %t218055, i64 8
+  %r218102 = load i32, ptr %r218101
+  %r218103 = icmp ne i32 %r218102, 0
+  %r218104 = load i64, ptr %t218055
+  %r218105 = getelementptr inbounds i8, ptr %t218055, i64 8
+  %r218107 = load i64, ptr %r218105
+  store i64 %r218104, ptr %t218037
+  %r218106 = getelementptr inbounds i8, ptr %t218037, i64 8
+  store i64 %r218107, ptr %r218106
+  br label %done218043
+done218043:
+  store i64 577516867619389747, ptr @lv_pos
+  %r218109 = load i64, ptr %t218037
+  %r218110 = getelementptr inbounds i8, ptr %t218037, i64 8
+  %r218112 = load i64, ptr %r218110
+  store i64 %r218109, ptr %t218108
+  %r218111 = getelementptr inbounds i8, ptr %t218108, i64 8
+  store i64 %r218112, ptr %r218111
+  %r218115 = load i64, ptr %t218108
+  %r218116 = icmp eq i64 %r218115, 1
+  br i1 %r218116, label %tbool218118, label %tbad218117
+tbad218117:
+  %r218119 = getelementptr inbounds i8, ptr %t218108, i64 8
+  %r218120 = load i64, ptr %r218119
+  %r218121 = call i64 @lvv_truth(i64 %r218115, i64 %r218120)
+  br label %tbool218118
+tbool218118:
+  %r218122 = getelementptr inbounds i8, ptr %t218108, i64 8
+  %r218123 = load i32, ptr %r218122
+  %r218124 = icmp ne i32 %r218123, 0
+  br i1 %r218124, label %rhs218113, label %done218114
+rhs218113:
+  %r218126 = load i64, ptr %a217760
+  %r218127 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1669)
+  %r218128 = icmp eq i64 %r218126, 2
+  %r218129 = icmp eq i64 %r218127, 2
+  %r218130 = and i1 %r218128, %r218129
+  br i1 %r218130, label %ifast218131, label %fcheck218132
+ifast218131:
+  %r218135 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218136 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
+  %r218137 = load i64, ptr %r218135
+  %r218138 = load i64, ptr %r218136
+  %r218140 = getelementptr inbounds i8, ptr %t218125, i64 8
+  %r218141 = icmp eq i64 %r218137, %r218138
+  %r218142 = zext i1 %r218141 to i64
+  store i64 1, ptr %t218125
+  store i64 %r218142, ptr %r218140
+  br label %idone218134
+fcheck218132:
+  %r218143 = icmp eq i64 %r218126, 3
+  %r218144 = icmp eq i64 %r218127, 3
+  %r218145 = and i1 %r218143, %r218144
+  br i1 %r218145, label %ffast218146, label %islow218133
+ffast218146:
+  %r218147 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218148 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
+  %r218149 = load i64, ptr %r218147
+  %r218150 = load i64, ptr %r218148
+  %r218151 = bitcast i64 %r218149 to double
+  %r218152 = bitcast i64 %r218150 to double
+  %r218153 = getelementptr inbounds i8, ptr %t218125, i64 8
+  %r218154 = fcmp oeq double %r218151, %r218152
+  %r218155 = zext i1 %r218154 to i64
+  store i64 1, ptr %t218125
+  store i64 %r218155, ptr %r218153
+  br label %idone218134
+islow218133:
+  store i64 288512057492373811, ptr @lv_pos
+  %r218158 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218159 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
+  %r218156 = load i64, ptr %r218158
+  %r218157 = load i64, ptr %r218159
+  %r218160 = call %LV @lvv_eq(i64 %r218126, i64 %r218156, i64 %r218127, i64 %r218157)
+  %r218161 = extractvalue %LV %r218160, 0
+  %r218162 = extractvalue %LV %r218160, 1
+  store i64 %r218161, ptr %t218125
+  %r218163 = getelementptr inbounds i8, ptr %t218125, i64 8
+  store i64 %r218162, ptr %r218163
+  br label %idone218134
+idone218134:
+  store i64 288512057492373811, ptr @lv_pos
+  %r218165 = load i64, ptr %t218125
+  %r218166 = getelementptr inbounds i8, ptr %t218125, i64 8
+  %r218168 = load i64, ptr %r218166
+  store i64 %r218165, ptr %t218164
+  %r218167 = getelementptr inbounds i8, ptr %t218164, i64 8
+  store i64 %r218168, ptr %r218167
+  %r218171 = load i64, ptr %t218164
+  %r218172 = icmp eq i64 %r218171, 1
+  br i1 %r218172, label %tbool218174, label %tbad218173
+tbad218173:
+  %r218175 = getelementptr inbounds i8, ptr %t218164, i64 8
+  %r218176 = load i64, ptr %r218175
+  %r218177 = call i64 @lvv_truth(i64 %r218171, i64 %r218176)
+  br label %tbool218174
+tbool218174:
+  %r218178 = getelementptr inbounds i8, ptr %t218164, i64 8
+  %r218179 = load i32, ptr %r218178
+  %r218180 = icmp ne i32 %r218179, 0
+  br i1 %r218180, label %done218170, label %rhs218169
+rhs218169:
+  %r218182 = load i64, ptr %a217760
+  %r218183 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1670)
+  %r218184 = icmp eq i64 %r218182, 2
+  %r218185 = icmp eq i64 %r218183, 2
+  %r218186 = and i1 %r218184, %r218185
+  br i1 %r218186, label %ifast218187, label %fcheck218188
+ifast218187:
+  %r218191 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218192 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
+  %r218193 = load i64, ptr %r218191
+  %r218194 = load i64, ptr %r218192
+  %r218196 = getelementptr inbounds i8, ptr %t218181, i64 8
+  %r218197 = icmp eq i64 %r218193, %r218194
+  %r218198 = zext i1 %r218197 to i64
+  store i64 1, ptr %t218181
+  store i64 %r218198, ptr %r218196
+  br label %idone218190
+fcheck218188:
+  %r218199 = icmp eq i64 %r218182, 3
+  %r218200 = icmp eq i64 %r218183, 3
+  %r218201 = and i1 %r218199, %r218200
+  br i1 %r218201, label %ffast218202, label %islow218189
+ffast218202:
+  %r218203 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218204 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
+  %r218205 = load i64, ptr %r218203
+  %r218206 = load i64, ptr %r218204
+  %r218207 = bitcast i64 %r218205 to double
+  %r218208 = bitcast i64 %r218206 to double
+  %r218209 = getelementptr inbounds i8, ptr %t218181, i64 8
+  %r218210 = fcmp oeq double %r218207, %r218208
+  %r218211 = zext i1 %r218210 to i64
+  store i64 1, ptr %t218181
+  store i64 %r218211, ptr %r218209
+  br label %idone218190
+islow218189:
+  store i64 288512091919221043, ptr @lv_pos
+  %r218214 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218215 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
+  %r218212 = load i64, ptr %r218214
+  %r218213 = load i64, ptr %r218215
+  %r218216 = call %LV @lvv_eq(i64 %r218182, i64 %r218212, i64 %r218183, i64 %r218213)
+  %r218217 = extractvalue %LV %r218216, 0
+  %r218218 = extractvalue %LV %r218216, 1
+  store i64 %r218217, ptr %t218181
+  %r218219 = getelementptr inbounds i8, ptr %t218181, i64 8
+  store i64 %r218218, ptr %r218219
+  br label %idone218190
+idone218190:
+  store i64 288512091919221043, ptr @lv_pos
+  %r218220 = load i64, ptr %t218181
+  %r218221 = icmp eq i64 %r218220, 1
+  br i1 %r218221, label %tbool218223, label %tbad218222
+tbad218222:
+  %r218224 = getelementptr inbounds i8, ptr %t218181, i64 8
+  %r218225 = load i64, ptr %r218224
+  %r218226 = call i64 @lvv_truth(i64 %r218220, i64 %r218225)
+  br label %tbool218223
+tbool218223:
+  %r218227 = getelementptr inbounds i8, ptr %t218181, i64 8
+  %r218228 = load i32, ptr %r218227
+  %r218229 = icmp ne i32 %r218228, 0
+  %r218230 = load i64, ptr %t218181
+  %r218231 = getelementptr inbounds i8, ptr %t218181, i64 8
+  %r218233 = load i64, ptr %r218231
+  store i64 %r218230, ptr %t218164
+  %r218232 = getelementptr inbounds i8, ptr %t218164, i64 8
+  store i64 %r218233, ptr %r218232
+  br label %done218170
+done218170:
+  store i64 289145685427618099, ptr @lv_pos
+  %r218235 = load i64, ptr %t218164
+  %r218236 = getelementptr inbounds i8, ptr %t218164, i64 8
+  %r218238 = load i64, ptr %r218236
+  store i64 %r218235, ptr %t218234
+  %r218237 = getelementptr inbounds i8, ptr %t218234, i64 8
+  store i64 %r218238, ptr %r218237
+  %r218241 = load i64, ptr %t218234
+  %r218242 = icmp eq i64 %r218241, 1
+  br i1 %r218242, label %tbool218244, label %tbad218243
+tbad218243:
+  %r218245 = getelementptr inbounds i8, ptr %t218234, i64 8
+  %r218246 = load i64, ptr %r218245
+  %r218247 = call i64 @lvv_truth(i64 %r218241, i64 %r218246)
+  br label %tbool218244
+tbool218244:
+  %r218248 = getelementptr inbounds i8, ptr %t218234, i64 8
+  %r218249 = load i32, ptr %r218248
+  %r218250 = icmp ne i32 %r218249, 0
+  br i1 %r218250, label %done218240, label %rhs218239
+rhs218239:
+  %r218252 = load i64, ptr %a217760
+  %r218253 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1671)
+  %r218254 = icmp eq i64 %r218252, 2
+  %r218255 = icmp eq i64 %r218253, 2
+  %r218256 = and i1 %r218254, %r218255
+  br i1 %r218256, label %ifast218257, label %fcheck218258
+ifast218257:
+  %r218261 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218262 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
+  %r218263 = load i64, ptr %r218261
+  %r218264 = load i64, ptr %r218262
+  %r218266 = getelementptr inbounds i8, ptr %t218251, i64 8
+  %r218267 = icmp eq i64 %r218263, %r218264
+  %r218268 = zext i1 %r218267 to i64
+  store i64 1, ptr %t218251
+  store i64 %r218268, ptr %r218266
+  br label %idone218260
+fcheck218258:
+  %r218269 = icmp eq i64 %r218252, 3
+  %r218270 = icmp eq i64 %r218253, 3
+  %r218271 = and i1 %r218269, %r218270
+  br i1 %r218271, label %ffast218272, label %islow218259
+ffast218272:
+  %r218273 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218274 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
+  %r218275 = load i64, ptr %r218273
+  %r218276 = load i64, ptr %r218274
+  %r218277 = bitcast i64 %r218275 to double
+  %r218278 = bitcast i64 %r218276 to double
+  %r218279 = getelementptr inbounds i8, ptr %t218251, i64 8
+  %r218280 = fcmp oeq double %r218277, %r218278
+  %r218281 = zext i1 %r218280 to i64
+  store i64 1, ptr %t218251
+  store i64 %r218281, ptr %r218279
+  br label %idone218260
+islow218259:
+  store i64 288512074814849331, ptr @lv_pos
+  %r218284 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218285 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
+  %r218282 = load i64, ptr %r218284
+  %r218283 = load i64, ptr %r218285
+  %r218286 = call %LV @lvv_eq(i64 %r218252, i64 %r218282, i64 %r218253, i64 %r218283)
+  %r218287 = extractvalue %LV %r218286, 0
+  %r218288 = extractvalue %LV %r218286, 1
+  store i64 %r218287, ptr %t218251
+  %r218289 = getelementptr inbounds i8, ptr %t218251, i64 8
+  store i64 %r218288, ptr %r218289
+  br label %idone218260
+idone218260:
+  store i64 288512074814849331, ptr @lv_pos
+  %r218290 = load i64, ptr %t218251
+  %r218291 = icmp eq i64 %r218290, 1
+  br i1 %r218291, label %tbool218293, label %tbad218292
+tbad218292:
+  %r218294 = getelementptr inbounds i8, ptr %t218251, i64 8
+  %r218295 = load i64, ptr %r218294
+  %r218296 = call i64 @lvv_truth(i64 %r218290, i64 %r218295)
+  br label %tbool218293
+tbool218293:
+  %r218297 = getelementptr inbounds i8, ptr %t218251, i64 8
+  %r218298 = load i32, ptr %r218297
+  %r218299 = icmp ne i32 %r218298, 0
+  %r218300 = load i64, ptr %t218251
+  %r218301 = getelementptr inbounds i8, ptr %t218251, i64 8
+  %r218303 = load i64, ptr %r218301
+  store i64 %r218300, ptr %t218234
+  %r218302 = getelementptr inbounds i8, ptr %t218234, i64 8
+  store i64 %r218303, ptr %r218302
+  br label %done218240
+done218240:
+  store i64 290412614880592179, ptr @lv_pos
+  %r218304 = load i64, ptr %t218234
+  %r218305 = icmp eq i64 %r218304, 1
+  br i1 %r218305, label %tbool218307, label %tbad218306
+tbad218306:
+  %r218308 = getelementptr inbounds i8, ptr %t218234, i64 8
+  %r218309 = load i64, ptr %r218308
+  %r218310 = call i64 @lvv_truth(i64 %r218304, i64 %r218309)
+  br label %tbool218307
+tbool218307:
+  %r218311 = getelementptr inbounds i8, ptr %t218234, i64 8
+  %r218312 = load i32, ptr %r218311
+  %r218313 = icmp ne i32 %r218312, 0
+  %r218314 = load i64, ptr %t218234
+  %r218315 = getelementptr inbounds i8, ptr %t218234, i64 8
+  %r218317 = load i64, ptr %r218315
+  store i64 %r218314, ptr %t218108
+  %r218316 = getelementptr inbounds i8, ptr %t218108, i64 8
+  store i64 %r218317, ptr %r218316
+  br label %done218114
+done218114:
+  store i64 578925170215878963, ptr @lv_pos
+  %r218318 = load i64, ptr %t218108
+  %r218319 = icmp eq i64 %r218318, 1
+  br i1 %r218319, label %tbool218321, label %tbad218320
+tbad218320:
+  %r218322 = getelementptr inbounds i8, ptr %t218108, i64 8
+  %r218323 = load i64, ptr %r218322
+  %r218324 = call i64 @lvv_truth(i64 %r218318, i64 %r218323)
+  br label %tbool218321
+tbool218321:
+  %r218325 = getelementptr inbounds i8, ptr %t218108, i64 8
+  %r218326 = load i32, ptr %r218325
+  %r218327 = icmp ne i32 %r218326, 0
+  br i1 %r218327, label %then218328, label %else218329
+then218328:
+  store i64 308, ptr @lv_pos
+  store i64 206196179252, ptr @lv_pos
+  store i64 171836440884, ptr @lv_pos
+  %r218332 = load i64, ptr @g_dbg_enable
+  %r218333 = icmp eq i64 %r218332, 17
+  br i1 %r218333, label %gundef218334, label %gdef218335
+gundef218334:
   call void @lvp_gundef(ptr @g_dbg_enable, ptr @.s3819)
-  br label %gdef218408
-gdef218408:
-  %r218409 = load i64, ptr @g_dbg_enable
-  %r218410 = getelementptr inbounds i8, ptr @g_dbg_enable, i64 8
-  %r218412 = load i64, ptr %r218410
-  store i64 %r218409, ptr %t218404
-  %r218411 = getelementptr inbounds i8, ptr %t218404, i64 8
-  store i64 %r218412, ptr %r218411
-  store i64 206196179255, ptr @lv_pos
-  call void @lvp_call(ptr %t218413, ptr %t218404, i32 0, ptr null)
-  store i64 312, ptr @lv_pos
-  store i64 395204100408, ptr @lv_pos
-  store i64 51606716728, ptr @lv_pos
-  %r218415 = load i64, ptr @g_cut
-  %r218416 = icmp eq i64 %r218415, 17
-  br i1 %r218416, label %gundef218417, label %gdef218418
-gundef218417:
+  br label %gdef218335
+gdef218335:
+  %r218336 = load i64, ptr @g_dbg_enable
+  %r218337 = getelementptr inbounds i8, ptr @g_dbg_enable, i64 8
+  %r218339 = load i64, ptr %r218337
+  store i64 %r218336, ptr %t218331
+  %r218338 = getelementptr inbounds i8, ptr %t218331, i64 8
+  store i64 %r218339, ptr %r218338
+  store i64 206196179252, ptr @lv_pos
+  call void @lvp_call(ptr %t218340, ptr %t218331, i32 0, ptr null)
+  store i64 309, ptr @lv_pos
+  store i64 395204100405, ptr @lv_pos
+  store i64 51606716725, ptr @lv_pos
+  %r218342 = load i64, ptr @g_cut
+  %r218343 = icmp eq i64 %r218342, 17
+  br i1 %r218343, label %gundef218344, label %gdef218345
+gundef218344:
   call void @lvp_gundef(ptr @g_cut, ptr @.s721)
-  br label %gdef218418
-gdef218418:
-  %r218419 = load i64, ptr @g_cut
-  %r218420 = getelementptr inbounds i8, ptr @g_cut, i64 8
-  %r218422 = load i64, ptr %r218420
-  store i64 %r218419, ptr %t218414
-  %r218421 = getelementptr inbounds i8, ptr %t218414, i64 8
-  store i64 %r218422, ptr %r218421
-  store i64 154740457784, ptr @lv_pos
-  %r218424 = getelementptr inbounds [1 x %LV], ptr %a218423, i64 0, i64 0
-  %r218425 = load i64, ptr %a217873
-  %r218426 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218428 = load i64, ptr %r218426
-  store i64 %r218425, ptr %r218424
-  %r218427 = getelementptr inbounds i8, ptr %r218424, i64 8
-  store i64 %r218428, ptr %r218427
-  %r218429 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218423)
-  store %LV %r218429, ptr %t218430
-  store i64 395204100408, ptr @lv_pos
-  %r218432 = getelementptr inbounds [3 x %LV], ptr %a218431, i64 0, i64 0
-  %r218433 = load i64, ptr %a217873
-  %r218434 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218436 = load i64, ptr %r218434
-  store i64 %r218433, ptr %r218432
-  %r218435 = getelementptr inbounds i8, ptr %r218432, i64 8
-  store i64 %r218436, ptr %r218435
-  %r218437 = getelementptr inbounds [3 x %LV], ptr %a218431, i64 0, i64 1
-  %r218438 = load i64, ptr @.c2
-  %r218439 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218441 = load i64, ptr %r218439
-  store i64 %r218438, ptr %r218437
-  %r218440 = getelementptr inbounds i8, ptr %r218437, i64 8
-  store i64 %r218441, ptr %r218440
-  %r218442 = getelementptr inbounds [3 x %LV], ptr %a218431, i64 0, i64 2
-  %r218443 = load i64, ptr %t218430
-  %r218444 = getelementptr inbounds i8, ptr %t218430, i64 8
-  %r218446 = load i64, ptr %r218444
-  store i64 %r218443, ptr %r218442
-  %r218445 = getelementptr inbounds i8, ptr %r218442, i64 8
-  store i64 %r218446, ptr %r218445
-  call void @lvp_call(ptr %t218447, ptr %t218414, i32 3, ptr %a218431)
-  %r218448 = load i64, ptr %t218447
-  %r218449 = getelementptr inbounds i8, ptr %t218447, i64 8
-  %r218451 = load i64, ptr %r218449
-  store i64 %r218448, ptr %a217873
-  %r218450 = getelementptr inbounds i8, ptr %a217873, i64 8
-  store i64 %r218451, ptr %r218450
-  br label %endif218403
-else218402:
-  br label %endif218403
-endif218403:
-  %r218453 = load i64, ptr %a217833
-  %r218454 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1672)
-  %r218455 = icmp eq i64 %r218453, 2
-  %r218456 = icmp eq i64 %r218454, 2
-  %r218457 = and i1 %r218455, %r218456
-  br i1 %r218457, label %ifast218458, label %fcheck218459
-ifast218458:
-  %r218462 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218463 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1672), i64 8
-  %r218464 = load i64, ptr %r218462
-  %r218465 = load i64, ptr %r218463
-  %r218467 = getelementptr inbounds i8, ptr %t218452, i64 8
-  %r218468 = icmp eq i64 %r218464, %r218465
-  %r218469 = zext i1 %r218468 to i64
-  store i64 1, ptr %t218452
-  store i64 %r218469, ptr %r218467
-  br label %idone218461
-fcheck218459:
-  %r218470 = icmp eq i64 %r218453, 3
-  %r218471 = icmp eq i64 %r218454, 3
-  %r218472 = and i1 %r218470, %r218471
-  br i1 %r218472, label %ffast218473, label %islow218460
-ffast218473:
-  %r218474 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218475 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1672), i64 8
-  %r218476 = load i64, ptr %r218474
-  %r218477 = load i64, ptr %r218475
-  %r218478 = bitcast i64 %r218476 to double
-  %r218479 = bitcast i64 %r218477 to double
-  %r218480 = getelementptr inbounds i8, ptr %t218452, i64 8
-  %r218481 = fcmp oeq double %r218478, %r218479
-  %r218482 = zext i1 %r218481 to i64
-  store i64 1, ptr %t218452
-  store i64 %r218482, ptr %r218480
-  br label %idone218461
-islow218460:
-  store i64 288512143223947578, ptr @lv_pos
-  %r218485 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218486 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1672), i64 8
-  %r218483 = load i64, ptr %r218485
-  %r218484 = load i64, ptr %r218486
-  %r218487 = call %LV @lvv_eq(i64 %r218453, i64 %r218483, i64 %r218454, i64 %r218484)
-  %r218488 = extractvalue %LV %r218487, 0
-  %r218489 = extractvalue %LV %r218487, 1
-  store i64 %r218488, ptr %t218452
-  %r218490 = getelementptr inbounds i8, ptr %t218452, i64 8
-  store i64 %r218489, ptr %r218490
-  br label %idone218461
-idone218461:
-  store i64 288512143223947578, ptr @lv_pos
-  %r218491 = load i64, ptr %t218452
-  %r218492 = icmp eq i64 %r218491, 1
-  br i1 %r218492, label %tbool218494, label %tbad218493
-tbad218493:
-  %r218495 = getelementptr inbounds i8, ptr %t218452, i64 8
-  %r218496 = load i64, ptr %r218495
-  %r218497 = call i64 @lvv_truth(i64 %r218491, i64 %r218496)
-  br label %tbool218494
-tbool218494:
-  %r218498 = getelementptr inbounds i8, ptr %t218452, i64 8
-  %r218499 = load i32, ptr %r218498
-  %r218500 = icmp ne i32 %r218499, 0
-  br i1 %r218500, label %then218501, label %else218502
-then218501:
-  store i64 315, ptr @lv_pos
-  store i64 240555917627, ptr @lv_pos
-  store i64 189016310075, ptr @lv_pos
-  %r218505 = load i64, ptr @g_native_main
-  %r218506 = icmp eq i64 %r218505, 17
-  br i1 %r218506, label %gundef218507, label %gdef218508
-gundef218507:
+  br label %gdef218345
+gdef218345:
+  %r218346 = load i64, ptr @g_cut
+  %r218347 = getelementptr inbounds i8, ptr @g_cut, i64 8
+  %r218349 = load i64, ptr %r218347
+  store i64 %r218346, ptr %t218341
+  %r218348 = getelementptr inbounds i8, ptr %t218341, i64 8
+  store i64 %r218349, ptr %r218348
+  store i64 154740457781, ptr @lv_pos
+  %r218351 = getelementptr inbounds [1 x %LV], ptr %a218350, i64 0, i64 0
+  %r218352 = load i64, ptr %a217800
+  %r218353 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r218355 = load i64, ptr %r218353
+  store i64 %r218352, ptr %r218351
+  %r218354 = getelementptr inbounds i8, ptr %r218351, i64 8
+  store i64 %r218355, ptr %r218354
+  %r218356 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218350)
+  store %LV %r218356, ptr %t218357
+  store i64 395204100405, ptr @lv_pos
+  %r218359 = getelementptr inbounds [3 x %LV], ptr %a218358, i64 0, i64 0
+  %r218360 = load i64, ptr %a217800
+  %r218361 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r218363 = load i64, ptr %r218361
+  store i64 %r218360, ptr %r218359
+  %r218362 = getelementptr inbounds i8, ptr %r218359, i64 8
+  store i64 %r218363, ptr %r218362
+  %r218364 = getelementptr inbounds [3 x %LV], ptr %a218358, i64 0, i64 1
+  %r218365 = load i64, ptr @.c2
+  %r218366 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218368 = load i64, ptr %r218366
+  store i64 %r218365, ptr %r218364
+  %r218367 = getelementptr inbounds i8, ptr %r218364, i64 8
+  store i64 %r218368, ptr %r218367
+  %r218369 = getelementptr inbounds [3 x %LV], ptr %a218358, i64 0, i64 2
+  %r218370 = load i64, ptr %t218357
+  %r218371 = getelementptr inbounds i8, ptr %t218357, i64 8
+  %r218373 = load i64, ptr %r218371
+  store i64 %r218370, ptr %r218369
+  %r218372 = getelementptr inbounds i8, ptr %r218369, i64 8
+  store i64 %r218373, ptr %r218372
+  call void @lvp_call(ptr %t218374, ptr %t218341, i32 3, ptr %a218358)
+  %r218375 = load i64, ptr %t218374
+  %r218376 = getelementptr inbounds i8, ptr %t218374, i64 8
+  %r218378 = load i64, ptr %r218376
+  store i64 %r218375, ptr %a217800
+  %r218377 = getelementptr inbounds i8, ptr %a217800, i64 8
+  store i64 %r218378, ptr %r218377
+  br label %endif218330
+else218329:
+  br label %endif218330
+endif218330:
+  %r218380 = load i64, ptr %a217760
+  %r218381 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1672)
+  %r218382 = icmp eq i64 %r218380, 2
+  %r218383 = icmp eq i64 %r218381, 2
+  %r218384 = and i1 %r218382, %r218383
+  br i1 %r218384, label %ifast218385, label %fcheck218386
+ifast218385:
+  %r218389 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218390 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1672), i64 8
+  %r218391 = load i64, ptr %r218389
+  %r218392 = load i64, ptr %r218390
+  %r218394 = getelementptr inbounds i8, ptr %t218379, i64 8
+  %r218395 = icmp eq i64 %r218391, %r218392
+  %r218396 = zext i1 %r218395 to i64
+  store i64 1, ptr %t218379
+  store i64 %r218396, ptr %r218394
+  br label %idone218388
+fcheck218386:
+  %r218397 = icmp eq i64 %r218380, 3
+  %r218398 = icmp eq i64 %r218381, 3
+  %r218399 = and i1 %r218397, %r218398
+  br i1 %r218399, label %ffast218400, label %islow218387
+ffast218400:
+  %r218401 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218402 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1672), i64 8
+  %r218403 = load i64, ptr %r218401
+  %r218404 = load i64, ptr %r218402
+  %r218405 = bitcast i64 %r218403 to double
+  %r218406 = bitcast i64 %r218404 to double
+  %r218407 = getelementptr inbounds i8, ptr %t218379, i64 8
+  %r218408 = fcmp oeq double %r218405, %r218406
+  %r218409 = zext i1 %r218408 to i64
+  store i64 1, ptr %t218379
+  store i64 %r218409, ptr %r218407
+  br label %idone218388
+islow218387:
+  store i64 288512143223947575, ptr @lv_pos
+  %r218412 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218413 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1672), i64 8
+  %r218410 = load i64, ptr %r218412
+  %r218411 = load i64, ptr %r218413
+  %r218414 = call %LV @lvv_eq(i64 %r218380, i64 %r218410, i64 %r218381, i64 %r218411)
+  %r218415 = extractvalue %LV %r218414, 0
+  %r218416 = extractvalue %LV %r218414, 1
+  store i64 %r218415, ptr %t218379
+  %r218417 = getelementptr inbounds i8, ptr %t218379, i64 8
+  store i64 %r218416, ptr %r218417
+  br label %idone218388
+idone218388:
+  store i64 288512143223947575, ptr @lv_pos
+  %r218418 = load i64, ptr %t218379
+  %r218419 = icmp eq i64 %r218418, 1
+  br i1 %r218419, label %tbool218421, label %tbad218420
+tbad218420:
+  %r218422 = getelementptr inbounds i8, ptr %t218379, i64 8
+  %r218423 = load i64, ptr %r218422
+  %r218424 = call i64 @lvv_truth(i64 %r218418, i64 %r218423)
+  br label %tbool218421
+tbool218421:
+  %r218425 = getelementptr inbounds i8, ptr %t218379, i64 8
+  %r218426 = load i32, ptr %r218425
+  %r218427 = icmp ne i32 %r218426, 0
+  br i1 %r218427, label %then218428, label %else218429
+then218428:
+  store i64 312, ptr @lv_pos
+  store i64 240555917624, ptr @lv_pos
+  store i64 189016310072, ptr @lv_pos
+  %r218432 = load i64, ptr @g_native_main
+  %r218433 = icmp eq i64 %r218432, 17
+  br i1 %r218433, label %gundef218434, label %gdef218435
+gundef218434:
   call void @lvp_gundef(ptr @g_native_main, ptr @.s6252)
-  br label %gdef218508
-gdef218508:
-  %r218509 = load i64, ptr @g_native_main
-  %r218510 = getelementptr inbounds i8, ptr @g_native_main, i64 8
-  %r218512 = load i64, ptr %r218510
-  store i64 %r218509, ptr %t218504
-  %r218511 = getelementptr inbounds i8, ptr %t218504, i64 8
-  store i64 %r218512, ptr %r218511
-  store i64 240555917627, ptr @lv_pos
-  %r218514 = getelementptr inbounds [1 x %LV], ptr %a218513, i64 0, i64 0
-  %r218515 = load i64, ptr %a217749
-  %r218516 = getelementptr inbounds i8, ptr %a217749, i64 8
-  %r218518 = load i64, ptr %r218516
-  store i64 %r218515, ptr %r218514
-  %r218517 = getelementptr inbounds i8, ptr %r218514, i64 8
-  store i64 %r218518, ptr %r218517
-  call void @lvp_call(ptr %t218519, ptr %t218504, i32 1, ptr %a218513)
-  br label %endif218503
-else218502:
-  %r218521 = load i64, ptr %a217833
-  %r218522 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1670)
-  %r218523 = icmp eq i64 %r218521, 2
-  %r218524 = icmp eq i64 %r218522, 2
-  %r218525 = and i1 %r218523, %r218524
-  br i1 %r218525, label %ifast218526, label %fcheck218527
-ifast218526:
-  %r218530 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218531 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
-  %r218532 = load i64, ptr %r218530
-  %r218533 = load i64, ptr %r218531
-  %r218535 = getelementptr inbounds i8, ptr %t218520, i64 8
-  %r218536 = icmp eq i64 %r218532, %r218533
-  %r218537 = zext i1 %r218536 to i64
-  store i64 1, ptr %t218520
-  store i64 %r218537, ptr %r218535
-  br label %idone218529
-fcheck218527:
-  %r218538 = icmp eq i64 %r218521, 3
-  %r218539 = icmp eq i64 %r218522, 3
-  %r218540 = and i1 %r218538, %r218539
-  br i1 %r218540, label %ffast218541, label %islow218528
-ffast218541:
-  %r218542 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218543 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
-  %r218544 = load i64, ptr %r218542
-  %r218545 = load i64, ptr %r218543
-  %r218546 = bitcast i64 %r218544 to double
-  %r218547 = bitcast i64 %r218545 to double
-  %r218548 = getelementptr inbounds i8, ptr %t218520, i64 8
-  %r218549 = fcmp oeq double %r218546, %r218547
-  %r218550 = zext i1 %r218549 to i64
-  store i64 1, ptr %t218520
-  store i64 %r218550, ptr %r218548
-  br label %idone218529
-islow218528:
-  store i64 288512091713700156, ptr @lv_pos
-  %r218553 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218554 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
-  %r218551 = load i64, ptr %r218553
-  %r218552 = load i64, ptr %r218554
-  %r218555 = call %LV @lvv_eq(i64 %r218521, i64 %r218551, i64 %r218522, i64 %r218552)
-  %r218556 = extractvalue %LV %r218555, 0
-  %r218557 = extractvalue %LV %r218555, 1
-  store i64 %r218556, ptr %t218520
-  %r218558 = getelementptr inbounds i8, ptr %t218520, i64 8
-  store i64 %r218557, ptr %r218558
-  br label %idone218529
-idone218529:
-  store i64 288512091713700156, ptr @lv_pos
-  %r218560 = load i64, ptr %t218520
-  %r218561 = getelementptr inbounds i8, ptr %t218520, i64 8
+  br label %gdef218435
+gdef218435:
+  %r218436 = load i64, ptr @g_native_main
+  %r218437 = getelementptr inbounds i8, ptr @g_native_main, i64 8
+  %r218439 = load i64, ptr %r218437
+  store i64 %r218436, ptr %t218431
+  %r218438 = getelementptr inbounds i8, ptr %t218431, i64 8
+  store i64 %r218439, ptr %r218438
+  store i64 240555917624, ptr @lv_pos
+  %r218441 = getelementptr inbounds [1 x %LV], ptr %a218440, i64 0, i64 0
+  %r218442 = load i64, ptr %a217676
+  %r218443 = getelementptr inbounds i8, ptr %a217676, i64 8
+  %r218445 = load i64, ptr %r218443
+  store i64 %r218442, ptr %r218441
+  %r218444 = getelementptr inbounds i8, ptr %r218441, i64 8
+  store i64 %r218445, ptr %r218444
+  call void @lvp_call(ptr %t218446, ptr %t218431, i32 1, ptr %a218440)
+  br label %endif218430
+else218429:
+  %r218448 = load i64, ptr %a217760
+  %r218449 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1670)
+  %r218450 = icmp eq i64 %r218448, 2
+  %r218451 = icmp eq i64 %r218449, 2
+  %r218452 = and i1 %r218450, %r218451
+  br i1 %r218452, label %ifast218453, label %fcheck218454
+ifast218453:
+  %r218457 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218458 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
+  %r218459 = load i64, ptr %r218457
+  %r218460 = load i64, ptr %r218458
+  %r218462 = getelementptr inbounds i8, ptr %t218447, i64 8
+  %r218463 = icmp eq i64 %r218459, %r218460
+  %r218464 = zext i1 %r218463 to i64
+  store i64 1, ptr %t218447
+  store i64 %r218464, ptr %r218462
+  br label %idone218456
+fcheck218454:
+  %r218465 = icmp eq i64 %r218448, 3
+  %r218466 = icmp eq i64 %r218449, 3
+  %r218467 = and i1 %r218465, %r218466
+  br i1 %r218467, label %ffast218468, label %islow218455
+ffast218468:
+  %r218469 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218470 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
+  %r218471 = load i64, ptr %r218469
+  %r218472 = load i64, ptr %r218470
+  %r218473 = bitcast i64 %r218471 to double
+  %r218474 = bitcast i64 %r218472 to double
+  %r218475 = getelementptr inbounds i8, ptr %t218447, i64 8
+  %r218476 = fcmp oeq double %r218473, %r218474
+  %r218477 = zext i1 %r218476 to i64
+  store i64 1, ptr %t218447
+  store i64 %r218477, ptr %r218475
+  br label %idone218456
+islow218455:
+  store i64 288512091713700153, ptr @lv_pos
+  %r218480 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218481 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1670), i64 8
+  %r218478 = load i64, ptr %r218480
+  %r218479 = load i64, ptr %r218481
+  %r218482 = call %LV @lvv_eq(i64 %r218448, i64 %r218478, i64 %r218449, i64 %r218479)
+  %r218483 = extractvalue %LV %r218482, 0
+  %r218484 = extractvalue %LV %r218482, 1
+  store i64 %r218483, ptr %t218447
+  %r218485 = getelementptr inbounds i8, ptr %t218447, i64 8
+  store i64 %r218484, ptr %r218485
+  br label %idone218456
+idone218456:
+  store i64 288512091713700153, ptr @lv_pos
+  %r218487 = load i64, ptr %t218447
+  %r218488 = getelementptr inbounds i8, ptr %t218447, i64 8
+  %r218490 = load i64, ptr %r218488
+  store i64 %r218487, ptr %t218486
+  %r218489 = getelementptr inbounds i8, ptr %t218486, i64 8
+  store i64 %r218490, ptr %r218489
+  %r218493 = load i64, ptr %t218486
+  %r218494 = icmp eq i64 %r218493, 1
+  br i1 %r218494, label %tbool218496, label %tbad218495
+tbad218495:
+  %r218497 = getelementptr inbounds i8, ptr %t218486, i64 8
+  %r218498 = load i64, ptr %r218497
+  %r218499 = call i64 @lvv_truth(i64 %r218493, i64 %r218498)
+  br label %tbool218496
+tbool218496:
+  %r218500 = getelementptr inbounds i8, ptr %t218486, i64 8
+  %r218501 = load i32, ptr %r218500
+  %r218502 = icmp ne i32 %r218501, 0
+  br i1 %r218502, label %rhs218491, label %done218492
+rhs218491:
+  store i64 154765623609, ptr @lv_pos
+  %r218504 = getelementptr inbounds [1 x %LV], ptr %a218503, i64 0, i64 0
+  %r218505 = load i64, ptr %a217800
+  %r218506 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r218508 = load i64, ptr %r218506
+  store i64 %r218505, ptr %r218504
+  %r218507 = getelementptr inbounds i8, ptr %r218504, i64 8
+  store i64 %r218508, ptr %r218507
+  %r218509 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218503)
+  store %LV %r218509, ptr %t218510
+  %r218512 = load i64, ptr %t218510
+  %r218513 = load i64, ptr @.c2
+  %r218514 = icmp eq i64 %r218512, 2
+  %r218515 = icmp eq i64 %r218513, 2
+  %r218516 = and i1 %r218514, %r218515
+  br i1 %r218516, label %ifast218517, label %fcheck218518
+ifast218517:
+  %r218521 = getelementptr inbounds i8, ptr %t218510, i64 8
+  %r218522 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218523 = load i64, ptr %r218521
+  %r218524 = load i64, ptr %r218522
+  %r218526 = getelementptr inbounds i8, ptr %t218511, i64 8
+  %r218527 = icmp sge i64 %r218523, %r218524
+  %r218528 = zext i1 %r218527 to i64
+  store i64 1, ptr %t218511
+  store i64 %r218528, ptr %r218526
+  br label %idone218520
+fcheck218518:
+  %r218529 = icmp eq i64 %r218512, 3
+  %r218530 = icmp eq i64 %r218513, 3
+  %r218531 = and i1 %r218529, %r218530
+  br i1 %r218531, label %ffast218532, label %islow218519
+ffast218532:
+  %r218533 = getelementptr inbounds i8, ptr %t218510, i64 8
+  %r218534 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218535 = load i64, ptr %r218533
+  %r218536 = load i64, ptr %r218534
+  %r218537 = bitcast i64 %r218535 to double
+  %r218538 = bitcast i64 %r218536 to double
+  %r218539 = getelementptr inbounds i8, ptr %t218511, i64 8
+  %r218540 = fcmp oge double %r218537, %r218538
+  %r218541 = zext i1 %r218540 to i64
+  store i64 1, ptr %t218511
+  store i64 %r218541, ptr %r218539
+  br label %idone218520
+islow218519:
+  store i64 288934304258457913, ptr @lv_pos
+  %r218544 = getelementptr inbounds i8, ptr %t218510, i64 8
+  %r218545 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218542 = load i64, ptr %r218544
+  %r218543 = load i64, ptr %r218545
+  %r218546 = call %LV @lvv_ge(i64 %r218512, i64 %r218542, i64 %r218513, i64 %r218543)
+  %r218547 = extractvalue %LV %r218546, 0
+  %r218548 = extractvalue %LV %r218546, 1
+  store i64 %r218547, ptr %t218511
+  %r218549 = getelementptr inbounds i8, ptr %t218511, i64 8
+  store i64 %r218548, ptr %r218549
+  br label %idone218520
+idone218520:
+  store i64 288934304258457913, ptr @lv_pos
+  %r218550 = load i64, ptr %t218511
+  %r218551 = icmp eq i64 %r218550, 1
+  br i1 %r218551, label %tbool218553, label %tbad218552
+tbad218552:
+  %r218554 = getelementptr inbounds i8, ptr %t218511, i64 8
+  %r218555 = load i64, ptr %r218554
+  %r218556 = call i64 @lvv_truth(i64 %r218550, i64 %r218555)
+  br label %tbool218553
+tbool218553:
+  %r218557 = getelementptr inbounds i8, ptr %t218511, i64 8
+  %r218558 = load i32, ptr %r218557
+  %r218559 = icmp ne i32 %r218558, 0
+  %r218560 = load i64, ptr %t218511
+  %r218561 = getelementptr inbounds i8, ptr %t218511, i64 8
   %r218563 = load i64, ptr %r218561
-  store i64 %r218560, ptr %t218559
-  %r218562 = getelementptr inbounds i8, ptr %t218559, i64 8
+  store i64 %r218560, ptr %t218486
+  %r218562 = getelementptr inbounds i8, ptr %t218486, i64 8
   store i64 %r218563, ptr %r218562
-  %r218566 = load i64, ptr %t218559
-  %r218567 = icmp eq i64 %r218566, 1
-  br i1 %r218567, label %tbool218569, label %tbad218568
-tbad218568:
-  %r218570 = getelementptr inbounds i8, ptr %t218559, i64 8
-  %r218571 = load i64, ptr %r218570
-  %r218572 = call i64 @lvv_truth(i64 %r218566, i64 %r218571)
-  br label %tbool218569
-tbool218569:
-  %r218573 = getelementptr inbounds i8, ptr %t218559, i64 8
-  %r218574 = load i32, ptr %r218573
-  %r218575 = icmp ne i32 %r218574, 0
-  br i1 %r218575, label %rhs218564, label %done218565
-rhs218564:
-  store i64 154765623612, ptr @lv_pos
-  %r218577 = getelementptr inbounds [1 x %LV], ptr %a218576, i64 0, i64 0
-  %r218578 = load i64, ptr %a217873
-  %r218579 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218581 = load i64, ptr %r218579
-  store i64 %r218578, ptr %r218577
-  %r218580 = getelementptr inbounds i8, ptr %r218577, i64 8
-  store i64 %r218581, ptr %r218580
-  %r218582 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218576)
-  store %LV %r218582, ptr %t218583
-  %r218585 = load i64, ptr %t218583
-  %r218586 = load i64, ptr @.c2
-  %r218587 = icmp eq i64 %r218585, 2
-  %r218588 = icmp eq i64 %r218586, 2
-  %r218589 = and i1 %r218587, %r218588
-  br i1 %r218589, label %ifast218590, label %fcheck218591
-ifast218590:
-  %r218594 = getelementptr inbounds i8, ptr %t218583, i64 8
-  %r218595 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218596 = load i64, ptr %r218594
-  %r218597 = load i64, ptr %r218595
-  %r218599 = getelementptr inbounds i8, ptr %t218584, i64 8
-  %r218600 = icmp sge i64 %r218596, %r218597
-  %r218601 = zext i1 %r218600 to i64
-  store i64 1, ptr %t218584
-  store i64 %r218601, ptr %r218599
-  br label %idone218593
-fcheck218591:
-  %r218602 = icmp eq i64 %r218585, 3
-  %r218603 = icmp eq i64 %r218586, 3
-  %r218604 = and i1 %r218602, %r218603
-  br i1 %r218604, label %ffast218605, label %islow218592
-ffast218605:
-  %r218606 = getelementptr inbounds i8, ptr %t218583, i64 8
-  %r218607 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218608 = load i64, ptr %r218606
-  %r218609 = load i64, ptr %r218607
-  %r218610 = bitcast i64 %r218608 to double
-  %r218611 = bitcast i64 %r218609 to double
-  %r218612 = getelementptr inbounds i8, ptr %t218584, i64 8
-  %r218613 = fcmp oge double %r218610, %r218611
-  %r218614 = zext i1 %r218613 to i64
-  store i64 1, ptr %t218584
-  store i64 %r218614, ptr %r218612
-  br label %idone218593
-islow218592:
-  store i64 288934304258457916, ptr @lv_pos
-  %r218617 = getelementptr inbounds i8, ptr %t218583, i64 8
-  %r218618 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218615 = load i64, ptr %r218617
-  %r218616 = load i64, ptr %r218618
-  %r218619 = call %LV @lvv_ge(i64 %r218585, i64 %r218615, i64 %r218586, i64 %r218616)
-  %r218620 = extractvalue %LV %r218619, 0
-  %r218621 = extractvalue %LV %r218619, 1
-  store i64 %r218620, ptr %t218584
-  %r218622 = getelementptr inbounds i8, ptr %t218584, i64 8
-  store i64 %r218621, ptr %r218622
-  br label %idone218593
-idone218593:
-  store i64 288934304258457916, ptr @lv_pos
-  %r218623 = load i64, ptr %t218584
-  %r218624 = icmp eq i64 %r218623, 1
-  br i1 %r218624, label %tbool218626, label %tbad218625
-tbad218625:
-  %r218627 = getelementptr inbounds i8, ptr %t218584, i64 8
-  %r218628 = load i64, ptr %r218627
-  %r218629 = call i64 @lvv_truth(i64 %r218623, i64 %r218628)
-  br label %tbool218626
-tbool218626:
-  %r218630 = getelementptr inbounds i8, ptr %t218584, i64 8
-  %r218631 = load i32, ptr %r218630
-  %r218632 = icmp ne i32 %r218631, 0
-  %r218633 = load i64, ptr %t218584
-  %r218634 = getelementptr inbounds i8, ptr %t218584, i64 8
-  %r218636 = load i64, ptr %r218634
-  store i64 %r218633, ptr %t218559
-  %r218635 = getelementptr inbounds i8, ptr %t218559, i64 8
-  store i64 %r218636, ptr %r218635
-  br label %done218565
-done218565:
-  store i64 577516850468880700, ptr @lv_pos
-  %r218637 = load i64, ptr %t218559
-  %r218638 = icmp eq i64 %r218637, 1
-  br i1 %r218638, label %tbool218640, label %tbad218639
-tbad218639:
-  %r218641 = getelementptr inbounds i8, ptr %t218559, i64 8
-  %r218642 = load i64, ptr %r218641
-  %r218643 = call i64 @lvv_truth(i64 %r218637, i64 %r218642)
-  br label %tbool218640
-tbool218640:
-  %r218644 = getelementptr inbounds i8, ptr %t218559, i64 8
-  %r218645 = load i32, ptr %r218644
-  %r218646 = icmp ne i32 %r218645, 0
-  br i1 %r218646, label %then218647, label %else218648
-then218647:
-  store i64 317, ptr @lv_pos
-  store i64 274915655997, ptr @lv_pos
-  store i64 171836440893, ptr @lv_pos
-  %r218651 = load i64, ptr @g_build_main
-  %r218652 = icmp eq i64 %r218651, 17
-  br i1 %r218652, label %gundef218653, label %gdef218654
-gundef218653:
+  br label %done218492
+done218492:
+  store i64 577516850468880697, ptr @lv_pos
+  %r218564 = load i64, ptr %t218486
+  %r218565 = icmp eq i64 %r218564, 1
+  br i1 %r218565, label %tbool218567, label %tbad218566
+tbad218566:
+  %r218568 = getelementptr inbounds i8, ptr %t218486, i64 8
+  %r218569 = load i64, ptr %r218568
+  %r218570 = call i64 @lvv_truth(i64 %r218564, i64 %r218569)
+  br label %tbool218567
+tbool218567:
+  %r218571 = getelementptr inbounds i8, ptr %t218486, i64 8
+  %r218572 = load i32, ptr %r218571
+  %r218573 = icmp ne i32 %r218572, 0
+  br i1 %r218573, label %then218574, label %else218575
+then218574:
+  store i64 314, ptr @lv_pos
+  store i64 274915655994, ptr @lv_pos
+  store i64 171836440890, ptr @lv_pos
+  %r218578 = load i64, ptr @g_build_main
+  %r218579 = icmp eq i64 %r218578, 17
+  br i1 %r218579, label %gundef218580, label %gdef218581
+gundef218580:
   call void @lvp_gundef(ptr @g_build_main, ptr @.s6245)
-  br label %gdef218654
-gdef218654:
-  %r218655 = load i64, ptr @g_build_main
-  %r218656 = getelementptr inbounds i8, ptr @g_build_main, i64 8
-  %r218658 = load i64, ptr %r218656
-  store i64 %r218655, ptr %t218650
-  %r218657 = getelementptr inbounds i8, ptr %t218650, i64 8
-  store i64 %r218658, ptr %r218657
-  store i64 274915655997, ptr @lv_pos
-  %r218660 = getelementptr inbounds [1 x %LV], ptr %a218659, i64 0, i64 0
-  %r218661 = load i64, ptr %a217873
-  %r218662 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218664 = load i64, ptr %r218662
-  store i64 %r218661, ptr %r218660
-  %r218663 = getelementptr inbounds i8, ptr %r218660, i64 8
-  store i64 %r218664, ptr %r218663
-  call void @lvp_call(ptr %t218665, ptr %t218650, i32 1, ptr %a218659)
-  br label %endif218649
-else218648:
-  %r218667 = load i64, ptr %a217833
-  %r218668 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1669)
-  %r218669 = icmp eq i64 %r218667, 2
-  %r218670 = icmp eq i64 %r218668, 2
-  %r218671 = and i1 %r218669, %r218670
-  br i1 %r218671, label %ifast218672, label %fcheck218673
-ifast218672:
-  %r218676 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218677 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
-  %r218678 = load i64, ptr %r218676
-  %r218679 = load i64, ptr %r218677
-  %r218681 = getelementptr inbounds i8, ptr %t218666, i64 8
-  %r218682 = icmp eq i64 %r218678, %r218679
-  %r218683 = zext i1 %r218682 to i64
-  store i64 1, ptr %t218666
-  store i64 %r218683, ptr %r218681
-  br label %idone218675
-fcheck218673:
-  %r218684 = icmp eq i64 %r218667, 3
-  %r218685 = icmp eq i64 %r218668, 3
-  %r218686 = and i1 %r218684, %r218685
-  br i1 %r218686, label %ffast218687, label %islow218674
-ffast218687:
-  %r218688 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218689 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
-  %r218690 = load i64, ptr %r218688
-  %r218691 = load i64, ptr %r218689
-  %r218692 = bitcast i64 %r218690 to double
-  %r218693 = bitcast i64 %r218691 to double
-  %r218694 = getelementptr inbounds i8, ptr %t218666, i64 8
-  %r218695 = fcmp oeq double %r218692, %r218693
-  %r218696 = zext i1 %r218695 to i64
-  store i64 1, ptr %t218666
-  store i64 %r218696, ptr %r218694
-  br label %idone218675
-islow218674:
-  store i64 288512057353961790, ptr @lv_pos
-  %r218699 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218700 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
-  %r218697 = load i64, ptr %r218699
-  %r218698 = load i64, ptr %r218700
-  %r218701 = call %LV @lvv_eq(i64 %r218667, i64 %r218697, i64 %r218668, i64 %r218698)
-  %r218702 = extractvalue %LV %r218701, 0
-  %r218703 = extractvalue %LV %r218701, 1
-  store i64 %r218702, ptr %t218666
-  %r218704 = getelementptr inbounds i8, ptr %t218666, i64 8
-  store i64 %r218703, ptr %r218704
-  br label %idone218675
-idone218675:
-  store i64 288512057353961790, ptr @lv_pos
-  %r218706 = load i64, ptr %t218666
-  %r218707 = getelementptr inbounds i8, ptr %t218666, i64 8
+  br label %gdef218581
+gdef218581:
+  %r218582 = load i64, ptr @g_build_main
+  %r218583 = getelementptr inbounds i8, ptr @g_build_main, i64 8
+  %r218585 = load i64, ptr %r218583
+  store i64 %r218582, ptr %t218577
+  %r218584 = getelementptr inbounds i8, ptr %t218577, i64 8
+  store i64 %r218585, ptr %r218584
+  store i64 274915655994, ptr @lv_pos
+  %r218587 = getelementptr inbounds [1 x %LV], ptr %a218586, i64 0, i64 0
+  %r218588 = load i64, ptr %a217800
+  %r218589 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r218591 = load i64, ptr %r218589
+  store i64 %r218588, ptr %r218587
+  %r218590 = getelementptr inbounds i8, ptr %r218587, i64 8
+  store i64 %r218591, ptr %r218590
+  call void @lvp_call(ptr %t218592, ptr %t218577, i32 1, ptr %a218586)
+  br label %endif218576
+else218575:
+  %r218594 = load i64, ptr %a217760
+  %r218595 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1669)
+  %r218596 = icmp eq i64 %r218594, 2
+  %r218597 = icmp eq i64 %r218595, 2
+  %r218598 = and i1 %r218596, %r218597
+  br i1 %r218598, label %ifast218599, label %fcheck218600
+ifast218599:
+  %r218603 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218604 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
+  %r218605 = load i64, ptr %r218603
+  %r218606 = load i64, ptr %r218604
+  %r218608 = getelementptr inbounds i8, ptr %t218593, i64 8
+  %r218609 = icmp eq i64 %r218605, %r218606
+  %r218610 = zext i1 %r218609 to i64
+  store i64 1, ptr %t218593
+  store i64 %r218610, ptr %r218608
+  br label %idone218602
+fcheck218600:
+  %r218611 = icmp eq i64 %r218594, 3
+  %r218612 = icmp eq i64 %r218595, 3
+  %r218613 = and i1 %r218611, %r218612
+  br i1 %r218613, label %ffast218614, label %islow218601
+ffast218614:
+  %r218615 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218616 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
+  %r218617 = load i64, ptr %r218615
+  %r218618 = load i64, ptr %r218616
+  %r218619 = bitcast i64 %r218617 to double
+  %r218620 = bitcast i64 %r218618 to double
+  %r218621 = getelementptr inbounds i8, ptr %t218593, i64 8
+  %r218622 = fcmp oeq double %r218619, %r218620
+  %r218623 = zext i1 %r218622 to i64
+  store i64 1, ptr %t218593
+  store i64 %r218623, ptr %r218621
+  br label %idone218602
+islow218601:
+  store i64 288512057353961787, ptr @lv_pos
+  %r218626 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218627 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1669), i64 8
+  %r218624 = load i64, ptr %r218626
+  %r218625 = load i64, ptr %r218627
+  %r218628 = call %LV @lvv_eq(i64 %r218594, i64 %r218624, i64 %r218595, i64 %r218625)
+  %r218629 = extractvalue %LV %r218628, 0
+  %r218630 = extractvalue %LV %r218628, 1
+  store i64 %r218629, ptr %t218593
+  %r218631 = getelementptr inbounds i8, ptr %t218593, i64 8
+  store i64 %r218630, ptr %r218631
+  br label %idone218602
+idone218602:
+  store i64 288512057353961787, ptr @lv_pos
+  %r218633 = load i64, ptr %t218593
+  %r218634 = getelementptr inbounds i8, ptr %t218593, i64 8
+  %r218636 = load i64, ptr %r218634
+  store i64 %r218633, ptr %t218632
+  %r218635 = getelementptr inbounds i8, ptr %t218632, i64 8
+  store i64 %r218636, ptr %r218635
+  %r218639 = load i64, ptr %t218632
+  %r218640 = icmp eq i64 %r218639, 1
+  br i1 %r218640, label %tbool218642, label %tbad218641
+tbad218641:
+  %r218643 = getelementptr inbounds i8, ptr %t218632, i64 8
+  %r218644 = load i64, ptr %r218643
+  %r218645 = call i64 @lvv_truth(i64 %r218639, i64 %r218644)
+  br label %tbool218642
+tbool218642:
+  %r218646 = getelementptr inbounds i8, ptr %t218632, i64 8
+  %r218647 = load i32, ptr %r218646
+  %r218648 = icmp ne i32 %r218647, 0
+  br i1 %r218648, label %rhs218637, label %done218638
+rhs218637:
+  store i64 154757235003, ptr @lv_pos
+  %r218650 = getelementptr inbounds [1 x %LV], ptr %a218649, i64 0, i64 0
+  %r218651 = load i64, ptr %a217800
+  %r218652 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r218654 = load i64, ptr %r218652
+  store i64 %r218651, ptr %r218650
+  %r218653 = getelementptr inbounds i8, ptr %r218650, i64 8
+  store i64 %r218654, ptr %r218653
+  %r218655 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218649)
+  store %LV %r218655, ptr %t218656
+  %r218658 = load i64, ptr %t218656
+  %r218659 = load i64, ptr @.c2
+  %r218660 = icmp eq i64 %r218658, 2
+  %r218661 = icmp eq i64 %r218659, 2
+  %r218662 = and i1 %r218660, %r218661
+  br i1 %r218662, label %ifast218663, label %fcheck218664
+ifast218663:
+  %r218667 = getelementptr inbounds i8, ptr %t218656, i64 8
+  %r218668 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218669 = load i64, ptr %r218667
+  %r218670 = load i64, ptr %r218668
+  %r218672 = getelementptr inbounds i8, ptr %t218657, i64 8
+  %r218673 = icmp sge i64 %r218669, %r218670
+  %r218674 = zext i1 %r218673 to i64
+  store i64 1, ptr %t218657
+  store i64 %r218674, ptr %r218672
+  br label %idone218666
+fcheck218664:
+  %r218675 = icmp eq i64 %r218658, 3
+  %r218676 = icmp eq i64 %r218659, 3
+  %r218677 = and i1 %r218675, %r218676
+  br i1 %r218677, label %ffast218678, label %islow218665
+ffast218678:
+  %r218679 = getelementptr inbounds i8, ptr %t218656, i64 8
+  %r218680 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218681 = load i64, ptr %r218679
+  %r218682 = load i64, ptr %r218680
+  %r218683 = bitcast i64 %r218681 to double
+  %r218684 = bitcast i64 %r218682 to double
+  %r218685 = getelementptr inbounds i8, ptr %t218657, i64 8
+  %r218686 = fcmp oge double %r218683, %r218684
+  %r218687 = zext i1 %r218686 to i64
+  store i64 1, ptr %t218657
+  store i64 %r218687, ptr %r218685
+  br label %idone218666
+islow218665:
+  store i64 288934304250069307, ptr @lv_pos
+  %r218690 = getelementptr inbounds i8, ptr %t218656, i64 8
+  %r218691 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218688 = load i64, ptr %r218690
+  %r218689 = load i64, ptr %r218691
+  %r218692 = call %LV @lvv_ge(i64 %r218658, i64 %r218688, i64 %r218659, i64 %r218689)
+  %r218693 = extractvalue %LV %r218692, 0
+  %r218694 = extractvalue %LV %r218692, 1
+  store i64 %r218693, ptr %t218657
+  %r218695 = getelementptr inbounds i8, ptr %t218657, i64 8
+  store i64 %r218694, ptr %r218695
+  br label %idone218666
+idone218666:
+  store i64 288934304250069307, ptr @lv_pos
+  %r218696 = load i64, ptr %t218657
+  %r218697 = icmp eq i64 %r218696, 1
+  br i1 %r218697, label %tbool218699, label %tbad218698
+tbad218698:
+  %r218700 = getelementptr inbounds i8, ptr %t218657, i64 8
+  %r218701 = load i64, ptr %r218700
+  %r218702 = call i64 @lvv_truth(i64 %r218696, i64 %r218701)
+  br label %tbool218699
+tbool218699:
+  %r218703 = getelementptr inbounds i8, ptr %t218657, i64 8
+  %r218704 = load i32, ptr %r218703
+  %r218705 = icmp ne i32 %r218704, 0
+  %r218706 = load i64, ptr %t218657
+  %r218707 = getelementptr inbounds i8, ptr %t218657, i64 8
   %r218709 = load i64, ptr %r218707
-  store i64 %r218706, ptr %t218705
-  %r218708 = getelementptr inbounds i8, ptr %t218705, i64 8
+  store i64 %r218706, ptr %t218632
+  %r218708 = getelementptr inbounds i8, ptr %t218632, i64 8
   store i64 %r218709, ptr %r218708
-  %r218712 = load i64, ptr %t218705
-  %r218713 = icmp eq i64 %r218712, 1
-  br i1 %r218713, label %tbool218715, label %tbad218714
-tbad218714:
-  %r218716 = getelementptr inbounds i8, ptr %t218705, i64 8
-  %r218717 = load i64, ptr %r218716
-  %r218718 = call i64 @lvv_truth(i64 %r218712, i64 %r218717)
-  br label %tbool218715
-tbool218715:
-  %r218719 = getelementptr inbounds i8, ptr %t218705, i64 8
-  %r218720 = load i32, ptr %r218719
-  %r218721 = icmp ne i32 %r218720, 0
-  br i1 %r218721, label %rhs218710, label %done218711
-rhs218710:
-  store i64 154757235006, ptr @lv_pos
-  %r218723 = getelementptr inbounds [1 x %LV], ptr %a218722, i64 0, i64 0
-  %r218724 = load i64, ptr %a217873
-  %r218725 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218727 = load i64, ptr %r218725
-  store i64 %r218724, ptr %r218723
-  %r218726 = getelementptr inbounds i8, ptr %r218723, i64 8
-  store i64 %r218727, ptr %r218726
-  %r218728 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218722)
-  store %LV %r218728, ptr %t218729
-  %r218731 = load i64, ptr %t218729
-  %r218732 = load i64, ptr @.c2
-  %r218733 = icmp eq i64 %r218731, 2
-  %r218734 = icmp eq i64 %r218732, 2
-  %r218735 = and i1 %r218733, %r218734
-  br i1 %r218735, label %ifast218736, label %fcheck218737
-ifast218736:
-  %r218740 = getelementptr inbounds i8, ptr %t218729, i64 8
-  %r218741 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218742 = load i64, ptr %r218740
-  %r218743 = load i64, ptr %r218741
-  %r218745 = getelementptr inbounds i8, ptr %t218730, i64 8
-  %r218746 = icmp sge i64 %r218742, %r218743
-  %r218747 = zext i1 %r218746 to i64
-  store i64 1, ptr %t218730
-  store i64 %r218747, ptr %r218745
-  br label %idone218739
-fcheck218737:
-  %r218748 = icmp eq i64 %r218731, 3
-  %r218749 = icmp eq i64 %r218732, 3
-  %r218750 = and i1 %r218748, %r218749
-  br i1 %r218750, label %ffast218751, label %islow218738
-ffast218751:
-  %r218752 = getelementptr inbounds i8, ptr %t218729, i64 8
-  %r218753 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218754 = load i64, ptr %r218752
-  %r218755 = load i64, ptr %r218753
-  %r218756 = bitcast i64 %r218754 to double
-  %r218757 = bitcast i64 %r218755 to double
-  %r218758 = getelementptr inbounds i8, ptr %t218730, i64 8
-  %r218759 = fcmp oge double %r218756, %r218757
-  %r218760 = zext i1 %r218759 to i64
-  store i64 1, ptr %t218730
-  store i64 %r218760, ptr %r218758
-  br label %idone218739
-islow218738:
-  store i64 288934304250069310, ptr @lv_pos
-  %r218763 = getelementptr inbounds i8, ptr %t218729, i64 8
-  %r218764 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218761 = load i64, ptr %r218763
-  %r218762 = load i64, ptr %r218764
-  %r218765 = call %LV @lvv_ge(i64 %r218731, i64 %r218761, i64 %r218732, i64 %r218762)
-  %r218766 = extractvalue %LV %r218765, 0
-  %r218767 = extractvalue %LV %r218765, 1
-  store i64 %r218766, ptr %t218730
-  %r218768 = getelementptr inbounds i8, ptr %t218730, i64 8
-  store i64 %r218767, ptr %r218768
-  br label %idone218739
-idone218739:
-  store i64 288934304250069310, ptr @lv_pos
-  %r218769 = load i64, ptr %t218730
-  %r218770 = icmp eq i64 %r218769, 1
-  br i1 %r218770, label %tbool218772, label %tbad218771
-tbad218771:
-  %r218773 = getelementptr inbounds i8, ptr %t218730, i64 8
-  %r218774 = load i64, ptr %r218773
-  %r218775 = call i64 @lvv_truth(i64 %r218769, i64 %r218774)
-  br label %tbool218772
-tbool218772:
-  %r218776 = getelementptr inbounds i8, ptr %t218730, i64 8
-  %r218777 = load i32, ptr %r218776
-  %r218778 = icmp ne i32 %r218777, 0
-  %r218779 = load i64, ptr %t218730
-  %r218780 = getelementptr inbounds i8, ptr %t218730, i64 8
-  %r218782 = load i64, ptr %r218780
-  store i64 %r218779, ptr %t218705
-  %r218781 = getelementptr inbounds i8, ptr %t218705, i64 8
-  store i64 %r218782, ptr %r218781
-  br label %done218711
-done218711:
-  store i64 577376078620787006, ptr @lv_pos
-  %r218783 = load i64, ptr %t218705
-  %r218784 = icmp eq i64 %r218783, 1
-  br i1 %r218784, label %tbool218786, label %tbad218785
-tbad218785:
-  %r218787 = getelementptr inbounds i8, ptr %t218705, i64 8
-  %r218788 = load i64, ptr %r218787
-  %r218789 = call i64 @lvv_truth(i64 %r218783, i64 %r218788)
-  br label %tbool218786
-tbool218786:
-  %r218790 = getelementptr inbounds i8, ptr %t218705, i64 8
-  %r218791 = load i32, ptr %r218790
-  %r218792 = icmp ne i32 %r218791, 0
-  br i1 %r218792, label %then218793, label %else218794
-then218793:
-  store i64 319, ptr @lv_pos
-  store i64 240555917631, ptr @lv_pos
-  store i64 137476702527, ptr @lv_pos
-  %r218797 = load i64, ptr @g_run_main
-  %r218798 = icmp eq i64 %r218797, 17
-  br i1 %r218798, label %gundef218799, label %gdef218800
-gundef218799:
+  br label %done218638
+done218638:
+  store i64 577376078620787003, ptr @lv_pos
+  %r218710 = load i64, ptr %t218632
+  %r218711 = icmp eq i64 %r218710, 1
+  br i1 %r218711, label %tbool218713, label %tbad218712
+tbad218712:
+  %r218714 = getelementptr inbounds i8, ptr %t218632, i64 8
+  %r218715 = load i64, ptr %r218714
+  %r218716 = call i64 @lvv_truth(i64 %r218710, i64 %r218715)
+  br label %tbool218713
+tbool218713:
+  %r218717 = getelementptr inbounds i8, ptr %t218632, i64 8
+  %r218718 = load i32, ptr %r218717
+  %r218719 = icmp ne i32 %r218718, 0
+  br i1 %r218719, label %then218720, label %else218721
+then218720:
+  store i64 316, ptr @lv_pos
+  store i64 240555917628, ptr @lv_pos
+  store i64 137476702524, ptr @lv_pos
+  %r218724 = load i64, ptr @g_run_main
+  %r218725 = icmp eq i64 %r218724, 17
+  br i1 %r218725, label %gundef218726, label %gdef218727
+gundef218726:
   call void @lvp_gundef(ptr @g_run_main, ptr @.s6246)
-  br label %gdef218800
-gdef218800:
-  %r218801 = load i64, ptr @g_run_main
-  %r218802 = getelementptr inbounds i8, ptr @g_run_main, i64 8
-  %r218804 = load i64, ptr %r218802
-  store i64 %r218801, ptr %t218796
-  %r218803 = getelementptr inbounds i8, ptr %t218796, i64 8
-  store i64 %r218804, ptr %r218803
-  store i64 240555917631, ptr @lv_pos
-  %r218806 = getelementptr inbounds [1 x %LV], ptr %a218805, i64 0, i64 0
-  %r218807 = load i64, ptr %a217873
-  %r218808 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218810 = load i64, ptr %r218808
-  store i64 %r218807, ptr %r218806
-  %r218809 = getelementptr inbounds i8, ptr %r218806, i64 8
-  store i64 %r218810, ptr %r218809
-  call void @lvp_call(ptr %t218811, ptr %t218796, i32 1, ptr %a218805)
-  br label %endif218795
-else218794:
-  %r218813 = load i64, ptr %a217833
-  %r218814 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1671)
-  %r218815 = icmp eq i64 %r218813, 2
-  %r218816 = icmp eq i64 %r218814, 2
-  %r218817 = and i1 %r218815, %r218816
-  br i1 %r218817, label %ifast218818, label %fcheck218819
-ifast218818:
-  %r218822 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218823 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
-  %r218824 = load i64, ptr %r218822
-  %r218825 = load i64, ptr %r218823
-  %r218827 = getelementptr inbounds i8, ptr %t218812, i64 8
-  %r218828 = icmp eq i64 %r218824, %r218825
-  %r218829 = zext i1 %r218828 to i64
-  store i64 1, ptr %t218812
-  store i64 %r218829, ptr %r218827
-  br label %idone218821
-fcheck218819:
-  %r218830 = icmp eq i64 %r218813, 3
-  %r218831 = icmp eq i64 %r218814, 3
-  %r218832 = and i1 %r218830, %r218831
-  br i1 %r218832, label %ffast218833, label %islow218820
-ffast218833:
-  %r218834 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218835 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
-  %r218836 = load i64, ptr %r218834
-  %r218837 = load i64, ptr %r218835
-  %r218838 = bitcast i64 %r218836 to double
-  %r218839 = bitcast i64 %r218837 to double
-  %r218840 = getelementptr inbounds i8, ptr %t218812, i64 8
-  %r218841 = fcmp oeq double %r218838, %r218839
-  %r218842 = zext i1 %r218841 to i64
-  store i64 1, ptr %t218812
-  store i64 %r218842, ptr %r218840
-  br label %idone218821
-islow218820:
-  store i64 288512074533830976, ptr @lv_pos
-  %r218845 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218846 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
-  %r218843 = load i64, ptr %r218845
-  %r218844 = load i64, ptr %r218846
-  %r218847 = call %LV @lvv_eq(i64 %r218813, i64 %r218843, i64 %r218814, i64 %r218844)
-  %r218848 = extractvalue %LV %r218847, 0
-  %r218849 = extractvalue %LV %r218847, 1
-  store i64 %r218848, ptr %t218812
-  %r218850 = getelementptr inbounds i8, ptr %t218812, i64 8
-  store i64 %r218849, ptr %r218850
-  br label %idone218821
-idone218821:
-  store i64 288512074533830976, ptr @lv_pos
-  %r218852 = load i64, ptr %t218812
-  %r218853 = getelementptr inbounds i8, ptr %t218812, i64 8
+  br label %gdef218727
+gdef218727:
+  %r218728 = load i64, ptr @g_run_main
+  %r218729 = getelementptr inbounds i8, ptr @g_run_main, i64 8
+  %r218731 = load i64, ptr %r218729
+  store i64 %r218728, ptr %t218723
+  %r218730 = getelementptr inbounds i8, ptr %t218723, i64 8
+  store i64 %r218731, ptr %r218730
+  store i64 240555917628, ptr @lv_pos
+  %r218733 = getelementptr inbounds [1 x %LV], ptr %a218732, i64 0, i64 0
+  %r218734 = load i64, ptr %a217800
+  %r218735 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r218737 = load i64, ptr %r218735
+  store i64 %r218734, ptr %r218733
+  %r218736 = getelementptr inbounds i8, ptr %r218733, i64 8
+  store i64 %r218737, ptr %r218736
+  call void @lvp_call(ptr %t218738, ptr %t218723, i32 1, ptr %a218732)
+  br label %endif218722
+else218721:
+  %r218740 = load i64, ptr %a217760
+  %r218741 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1671)
+  %r218742 = icmp eq i64 %r218740, 2
+  %r218743 = icmp eq i64 %r218741, 2
+  %r218744 = and i1 %r218742, %r218743
+  br i1 %r218744, label %ifast218745, label %fcheck218746
+ifast218745:
+  %r218749 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218750 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
+  %r218751 = load i64, ptr %r218749
+  %r218752 = load i64, ptr %r218750
+  %r218754 = getelementptr inbounds i8, ptr %t218739, i64 8
+  %r218755 = icmp eq i64 %r218751, %r218752
+  %r218756 = zext i1 %r218755 to i64
+  store i64 1, ptr %t218739
+  store i64 %r218756, ptr %r218754
+  br label %idone218748
+fcheck218746:
+  %r218757 = icmp eq i64 %r218740, 3
+  %r218758 = icmp eq i64 %r218741, 3
+  %r218759 = and i1 %r218757, %r218758
+  br i1 %r218759, label %ffast218760, label %islow218747
+ffast218760:
+  %r218761 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218762 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
+  %r218763 = load i64, ptr %r218761
+  %r218764 = load i64, ptr %r218762
+  %r218765 = bitcast i64 %r218763 to double
+  %r218766 = bitcast i64 %r218764 to double
+  %r218767 = getelementptr inbounds i8, ptr %t218739, i64 8
+  %r218768 = fcmp oeq double %r218765, %r218766
+  %r218769 = zext i1 %r218768 to i64
+  store i64 1, ptr %t218739
+  store i64 %r218769, ptr %r218767
+  br label %idone218748
+islow218747:
+  store i64 288512074533830973, ptr @lv_pos
+  %r218772 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218773 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1671), i64 8
+  %r218770 = load i64, ptr %r218772
+  %r218771 = load i64, ptr %r218773
+  %r218774 = call %LV @lvv_eq(i64 %r218740, i64 %r218770, i64 %r218741, i64 %r218771)
+  %r218775 = extractvalue %LV %r218774, 0
+  %r218776 = extractvalue %LV %r218774, 1
+  store i64 %r218775, ptr %t218739
+  %r218777 = getelementptr inbounds i8, ptr %t218739, i64 8
+  store i64 %r218776, ptr %r218777
+  br label %idone218748
+idone218748:
+  store i64 288512074533830973, ptr @lv_pos
+  %r218779 = load i64, ptr %t218739
+  %r218780 = getelementptr inbounds i8, ptr %t218739, i64 8
+  %r218782 = load i64, ptr %r218780
+  store i64 %r218779, ptr %t218778
+  %r218781 = getelementptr inbounds i8, ptr %t218778, i64 8
+  store i64 %r218782, ptr %r218781
+  %r218785 = load i64, ptr %t218778
+  %r218786 = icmp eq i64 %r218785, 1
+  br i1 %r218786, label %tbool218788, label %tbad218787
+tbad218787:
+  %r218789 = getelementptr inbounds i8, ptr %t218778, i64 8
+  %r218790 = load i64, ptr %r218789
+  %r218791 = call i64 @lvv_truth(i64 %r218785, i64 %r218790)
+  br label %tbool218788
+tbool218788:
+  %r218792 = getelementptr inbounds i8, ptr %t218778, i64 8
+  %r218793 = load i32, ptr %r218792
+  %r218794 = icmp ne i32 %r218793, 0
+  br i1 %r218794, label %rhs218783, label %done218784
+rhs218783:
+  store i64 154761429309, ptr @lv_pos
+  %r218796 = getelementptr inbounds [1 x %LV], ptr %a218795, i64 0, i64 0
+  %r218797 = load i64, ptr %a217800
+  %r218798 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r218800 = load i64, ptr %r218798
+  store i64 %r218797, ptr %r218796
+  %r218799 = getelementptr inbounds i8, ptr %r218796, i64 8
+  store i64 %r218800, ptr %r218799
+  %r218801 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218795)
+  store %LV %r218801, ptr %t218802
+  %r218804 = load i64, ptr %t218802
+  %r218805 = load i64, ptr @.c2
+  %r218806 = icmp eq i64 %r218804, 2
+  %r218807 = icmp eq i64 %r218805, 2
+  %r218808 = and i1 %r218806, %r218807
+  br i1 %r218808, label %ifast218809, label %fcheck218810
+ifast218809:
+  %r218813 = getelementptr inbounds i8, ptr %t218802, i64 8
+  %r218814 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218815 = load i64, ptr %r218813
+  %r218816 = load i64, ptr %r218814
+  %r218818 = getelementptr inbounds i8, ptr %t218803, i64 8
+  %r218819 = icmp sge i64 %r218815, %r218816
+  %r218820 = zext i1 %r218819 to i64
+  store i64 1, ptr %t218803
+  store i64 %r218820, ptr %r218818
+  br label %idone218812
+fcheck218810:
+  %r218821 = icmp eq i64 %r218804, 3
+  %r218822 = icmp eq i64 %r218805, 3
+  %r218823 = and i1 %r218821, %r218822
+  br i1 %r218823, label %ffast218824, label %islow218811
+ffast218824:
+  %r218825 = getelementptr inbounds i8, ptr %t218802, i64 8
+  %r218826 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218827 = load i64, ptr %r218825
+  %r218828 = load i64, ptr %r218826
+  %r218829 = bitcast i64 %r218827 to double
+  %r218830 = bitcast i64 %r218828 to double
+  %r218831 = getelementptr inbounds i8, ptr %t218803, i64 8
+  %r218832 = fcmp oge double %r218829, %r218830
+  %r218833 = zext i1 %r218832 to i64
+  store i64 1, ptr %t218803
+  store i64 %r218833, ptr %r218831
+  br label %idone218812
+islow218811:
+  store i64 288934304254263613, ptr @lv_pos
+  %r218836 = getelementptr inbounds i8, ptr %t218802, i64 8
+  %r218837 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218834 = load i64, ptr %r218836
+  %r218835 = load i64, ptr %r218837
+  %r218838 = call %LV @lvv_ge(i64 %r218804, i64 %r218834, i64 %r218805, i64 %r218835)
+  %r218839 = extractvalue %LV %r218838, 0
+  %r218840 = extractvalue %LV %r218838, 1
+  store i64 %r218839, ptr %t218803
+  %r218841 = getelementptr inbounds i8, ptr %t218803, i64 8
+  store i64 %r218840, ptr %r218841
+  br label %idone218812
+idone218812:
+  store i64 288934304254263613, ptr @lv_pos
+  %r218842 = load i64, ptr %t218803
+  %r218843 = icmp eq i64 %r218842, 1
+  br i1 %r218843, label %tbool218845, label %tbad218844
+tbad218844:
+  %r218846 = getelementptr inbounds i8, ptr %t218803, i64 8
+  %r218847 = load i64, ptr %r218846
+  %r218848 = call i64 @lvv_truth(i64 %r218842, i64 %r218847)
+  br label %tbool218845
+tbool218845:
+  %r218849 = getelementptr inbounds i8, ptr %t218803, i64 8
+  %r218850 = load i32, ptr %r218849
+  %r218851 = icmp ne i32 %r218850, 0
+  %r218852 = load i64, ptr %t218803
+  %r218853 = getelementptr inbounds i8, ptr %t218803, i64 8
   %r218855 = load i64, ptr %r218853
-  store i64 %r218852, ptr %t218851
-  %r218854 = getelementptr inbounds i8, ptr %t218851, i64 8
+  store i64 %r218852, ptr %t218778
+  %r218854 = getelementptr inbounds i8, ptr %t218778, i64 8
   store i64 %r218855, ptr %r218854
-  %r218858 = load i64, ptr %t218851
-  %r218859 = icmp eq i64 %r218858, 1
-  br i1 %r218859, label %tbool218861, label %tbad218860
-tbad218860:
-  %r218862 = getelementptr inbounds i8, ptr %t218851, i64 8
-  %r218863 = load i64, ptr %r218862
-  %r218864 = call i64 @lvv_truth(i64 %r218858, i64 %r218863)
-  br label %tbool218861
-tbool218861:
-  %r218865 = getelementptr inbounds i8, ptr %t218851, i64 8
-  %r218866 = load i32, ptr %r218865
-  %r218867 = icmp ne i32 %r218866, 0
-  br i1 %r218867, label %rhs218856, label %done218857
-rhs218856:
-  store i64 154761429312, ptr @lv_pos
-  %r218869 = getelementptr inbounds [1 x %LV], ptr %a218868, i64 0, i64 0
-  %r218870 = load i64, ptr %a217873
-  %r218871 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218873 = load i64, ptr %r218871
-  store i64 %r218870, ptr %r218869
-  %r218872 = getelementptr inbounds i8, ptr %r218869, i64 8
-  store i64 %r218873, ptr %r218872
-  %r218874 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218868)
-  store %LV %r218874, ptr %t218875
-  %r218877 = load i64, ptr %t218875
-  %r218878 = load i64, ptr @.c2
-  %r218879 = icmp eq i64 %r218877, 2
-  %r218880 = icmp eq i64 %r218878, 2
-  %r218881 = and i1 %r218879, %r218880
-  br i1 %r218881, label %ifast218882, label %fcheck218883
-ifast218882:
-  %r218886 = getelementptr inbounds i8, ptr %t218875, i64 8
-  %r218887 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218888 = load i64, ptr %r218886
-  %r218889 = load i64, ptr %r218887
-  %r218891 = getelementptr inbounds i8, ptr %t218876, i64 8
-  %r218892 = icmp sge i64 %r218888, %r218889
-  %r218893 = zext i1 %r218892 to i64
-  store i64 1, ptr %t218876
-  store i64 %r218893, ptr %r218891
-  br label %idone218885
-fcheck218883:
-  %r218894 = icmp eq i64 %r218877, 3
-  %r218895 = icmp eq i64 %r218878, 3
-  %r218896 = and i1 %r218894, %r218895
-  br i1 %r218896, label %ffast218897, label %islow218884
-ffast218897:
-  %r218898 = getelementptr inbounds i8, ptr %t218875, i64 8
-  %r218899 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218900 = load i64, ptr %r218898
-  %r218901 = load i64, ptr %r218899
-  %r218902 = bitcast i64 %r218900 to double
-  %r218903 = bitcast i64 %r218901 to double
-  %r218904 = getelementptr inbounds i8, ptr %t218876, i64 8
-  %r218905 = fcmp oge double %r218902, %r218903
-  %r218906 = zext i1 %r218905 to i64
-  store i64 1, ptr %t218876
-  store i64 %r218906, ptr %r218904
-  br label %idone218885
-islow218884:
-  store i64 288934304254263616, ptr @lv_pos
-  %r218909 = getelementptr inbounds i8, ptr %t218875, i64 8
-  %r218910 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r218907 = load i64, ptr %r218909
-  %r218908 = load i64, ptr %r218910
-  %r218911 = call %LV @lvv_ge(i64 %r218877, i64 %r218907, i64 %r218878, i64 %r218908)
-  %r218912 = extractvalue %LV %r218911, 0
-  %r218913 = extractvalue %LV %r218911, 1
-  store i64 %r218912, ptr %t218876
-  %r218914 = getelementptr inbounds i8, ptr %t218876, i64 8
-  store i64 %r218913, ptr %r218914
-  br label %idone218885
-idone218885:
-  store i64 288934304254263616, ptr @lv_pos
-  %r218915 = load i64, ptr %t218876
-  %r218916 = icmp eq i64 %r218915, 1
-  br i1 %r218916, label %tbool218918, label %tbad218917
-tbad218917:
-  %r218919 = getelementptr inbounds i8, ptr %t218876, i64 8
-  %r218920 = load i64, ptr %r218919
-  %r218921 = call i64 @lvv_truth(i64 %r218915, i64 %r218920)
-  br label %tbool218918
-tbool218918:
-  %r218922 = getelementptr inbounds i8, ptr %t218876, i64 8
-  %r218923 = load i32, ptr %r218922
-  %r218924 = icmp ne i32 %r218923, 0
-  %r218925 = load i64, ptr %t218876
-  %r218926 = getelementptr inbounds i8, ptr %t218876, i64 8
-  %r218928 = load i64, ptr %r218926
-  store i64 %r218925, ptr %t218851
-  %r218927 = getelementptr inbounds i8, ptr %t218851, i64 8
-  store i64 %r218928, ptr %r218927
-  br label %done218857
-done218857:
-  store i64 577446464544833856, ptr @lv_pos
-  %r218929 = load i64, ptr %t218851
-  %r218930 = icmp eq i64 %r218929, 1
-  br i1 %r218930, label %tbool218932, label %tbad218931
-tbad218931:
-  %r218933 = getelementptr inbounds i8, ptr %t218851, i64 8
-  %r218934 = load i64, ptr %r218933
-  %r218935 = call i64 @lvv_truth(i64 %r218929, i64 %r218934)
-  br label %tbool218932
-tbool218932:
-  %r218936 = getelementptr inbounds i8, ptr %t218851, i64 8
-  %r218937 = load i32, ptr %r218936
-  %r218938 = icmp ne i32 %r218937, 0
-  br i1 %r218938, label %then218939, label %else218940
-then218939:
-  store i64 321, ptr @lv_pos
-  store i64 257735786817, ptr @lv_pos
-  store i64 154656571713, ptr @lv_pos
-  %r218943 = load i64, ptr @g_emit_main
-  %r218944 = icmp eq i64 %r218943, 17
-  br i1 %r218944, label %gundef218945, label %gdef218946
-gundef218945:
+  br label %done218784
+done218784:
+  store i64 577446464544833853, ptr @lv_pos
+  %r218856 = load i64, ptr %t218778
+  %r218857 = icmp eq i64 %r218856, 1
+  br i1 %r218857, label %tbool218859, label %tbad218858
+tbad218858:
+  %r218860 = getelementptr inbounds i8, ptr %t218778, i64 8
+  %r218861 = load i64, ptr %r218860
+  %r218862 = call i64 @lvv_truth(i64 %r218856, i64 %r218861)
+  br label %tbool218859
+tbool218859:
+  %r218863 = getelementptr inbounds i8, ptr %t218778, i64 8
+  %r218864 = load i32, ptr %r218863
+  %r218865 = icmp ne i32 %r218864, 0
+  br i1 %r218865, label %then218866, label %else218867
+then218866:
+  store i64 318, ptr @lv_pos
+  store i64 257735786814, ptr @lv_pos
+  store i64 154656571710, ptr @lv_pos
+  %r218870 = load i64, ptr @g_emit_main
+  %r218871 = icmp eq i64 %r218870, 17
+  br i1 %r218871, label %gundef218872, label %gdef218873
+gundef218872:
   call void @lvp_gundef(ptr @g_emit_main, ptr @.s6247)
-  br label %gdef218946
-gdef218946:
-  %r218947 = load i64, ptr @g_emit_main
-  %r218948 = getelementptr inbounds i8, ptr @g_emit_main, i64 8
-  %r218950 = load i64, ptr %r218948
-  store i64 %r218947, ptr %t218942
-  %r218949 = getelementptr inbounds i8, ptr %t218942, i64 8
-  store i64 %r218950, ptr %r218949
-  store i64 257735786817, ptr @lv_pos
-  %r218952 = getelementptr inbounds [1 x %LV], ptr %a218951, i64 0, i64 0
-  %r218953 = load i64, ptr %a217873
-  %r218954 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r218956 = load i64, ptr %r218954
-  store i64 %r218953, ptr %r218952
-  %r218955 = getelementptr inbounds i8, ptr %r218952, i64 8
-  store i64 %r218956, ptr %r218955
-  call void @lvp_call(ptr %t218957, ptr %t218942, i32 1, ptr %a218951)
-  br label %endif218941
-else218940:
-  %r218959 = load i64, ptr %a217833
-  %r218960 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1673)
-  %r218961 = icmp eq i64 %r218959, 2
-  %r218962 = icmp eq i64 %r218960, 2
-  %r218963 = and i1 %r218961, %r218962
-  br i1 %r218963, label %ifast218964, label %fcheck218965
-ifast218964:
-  %r218968 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218969 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1673), i64 8
-  %r218970 = load i64, ptr %r218968
-  %r218971 = load i64, ptr %r218969
-  %r218973 = getelementptr inbounds i8, ptr %t218958, i64 8
-  %r218974 = icmp eq i64 %r218970, %r218971
-  %r218975 = zext i1 %r218974 to i64
-  store i64 1, ptr %t218958
-  store i64 %r218975, ptr %r218973
-  br label %idone218967
-fcheck218965:
-  %r218976 = icmp eq i64 %r218959, 3
-  %r218977 = icmp eq i64 %r218960, 3
-  %r218978 = and i1 %r218976, %r218977
-  br i1 %r218978, label %ffast218979, label %islow218966
-ffast218979:
-  %r218980 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218981 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1673), i64 8
-  %r218982 = load i64, ptr %r218980
-  %r218983 = load i64, ptr %r218981
-  %r218984 = bitcast i64 %r218982 to double
-  %r218985 = bitcast i64 %r218983 to double
-  %r218986 = getelementptr inbounds i8, ptr %t218958, i64 8
-  %r218987 = fcmp oeq double %r218984, %r218985
-  %r218988 = zext i1 %r218987 to i64
-  store i64 1, ptr %t218958
-  store i64 %r218988, ptr %r218986
-  br label %idone218967
-islow218966:
-  store i64 288512126073438530, ptr @lv_pos
-  %r218991 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r218992 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1673), i64 8
-  %r218989 = load i64, ptr %r218991
-  %r218990 = load i64, ptr %r218992
-  %r218993 = call %LV @lvv_eq(i64 %r218959, i64 %r218989, i64 %r218960, i64 %r218990)
-  %r218994 = extractvalue %LV %r218993, 0
-  %r218995 = extractvalue %LV %r218993, 1
-  store i64 %r218994, ptr %t218958
-  %r218996 = getelementptr inbounds i8, ptr %t218958, i64 8
-  store i64 %r218995, ptr %r218996
-  br label %idone218967
-idone218967:
-  store i64 288512126073438530, ptr @lv_pos
-  %r218998 = load i64, ptr %t218958
-  %r218999 = getelementptr inbounds i8, ptr %t218958, i64 8
+  br label %gdef218873
+gdef218873:
+  %r218874 = load i64, ptr @g_emit_main
+  %r218875 = getelementptr inbounds i8, ptr @g_emit_main, i64 8
+  %r218877 = load i64, ptr %r218875
+  store i64 %r218874, ptr %t218869
+  %r218876 = getelementptr inbounds i8, ptr %t218869, i64 8
+  store i64 %r218877, ptr %r218876
+  store i64 257735786814, ptr @lv_pos
+  %r218879 = getelementptr inbounds [1 x %LV], ptr %a218878, i64 0, i64 0
+  %r218880 = load i64, ptr %a217800
+  %r218881 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r218883 = load i64, ptr %r218881
+  store i64 %r218880, ptr %r218879
+  %r218882 = getelementptr inbounds i8, ptr %r218879, i64 8
+  store i64 %r218883, ptr %r218882
+  call void @lvp_call(ptr %t218884, ptr %t218869, i32 1, ptr %a218878)
+  br label %endif218868
+else218867:
+  %r218886 = load i64, ptr %a217760
+  %r218887 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1673)
+  %r218888 = icmp eq i64 %r218886, 2
+  %r218889 = icmp eq i64 %r218887, 2
+  %r218890 = and i1 %r218888, %r218889
+  br i1 %r218890, label %ifast218891, label %fcheck218892
+ifast218891:
+  %r218895 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218896 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1673), i64 8
+  %r218897 = load i64, ptr %r218895
+  %r218898 = load i64, ptr %r218896
+  %r218900 = getelementptr inbounds i8, ptr %t218885, i64 8
+  %r218901 = icmp eq i64 %r218897, %r218898
+  %r218902 = zext i1 %r218901 to i64
+  store i64 1, ptr %t218885
+  store i64 %r218902, ptr %r218900
+  br label %idone218894
+fcheck218892:
+  %r218903 = icmp eq i64 %r218886, 3
+  %r218904 = icmp eq i64 %r218887, 3
+  %r218905 = and i1 %r218903, %r218904
+  br i1 %r218905, label %ffast218906, label %islow218893
+ffast218906:
+  %r218907 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218908 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1673), i64 8
+  %r218909 = load i64, ptr %r218907
+  %r218910 = load i64, ptr %r218908
+  %r218911 = bitcast i64 %r218909 to double
+  %r218912 = bitcast i64 %r218910 to double
+  %r218913 = getelementptr inbounds i8, ptr %t218885, i64 8
+  %r218914 = fcmp oeq double %r218911, %r218912
+  %r218915 = zext i1 %r218914 to i64
+  store i64 1, ptr %t218885
+  store i64 %r218915, ptr %r218913
+  br label %idone218894
+islow218893:
+  store i64 288512126073438527, ptr @lv_pos
+  %r218918 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r218919 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1673), i64 8
+  %r218916 = load i64, ptr %r218918
+  %r218917 = load i64, ptr %r218919
+  %r218920 = call %LV @lvv_eq(i64 %r218886, i64 %r218916, i64 %r218887, i64 %r218917)
+  %r218921 = extractvalue %LV %r218920, 0
+  %r218922 = extractvalue %LV %r218920, 1
+  store i64 %r218921, ptr %t218885
+  %r218923 = getelementptr inbounds i8, ptr %t218885, i64 8
+  store i64 %r218922, ptr %r218923
+  br label %idone218894
+idone218894:
+  store i64 288512126073438527, ptr @lv_pos
+  %r218925 = load i64, ptr %t218885
+  %r218926 = getelementptr inbounds i8, ptr %t218885, i64 8
+  %r218928 = load i64, ptr %r218926
+  store i64 %r218925, ptr %t218924
+  %r218927 = getelementptr inbounds i8, ptr %t218924, i64 8
+  store i64 %r218928, ptr %r218927
+  %r218931 = load i64, ptr %t218924
+  %r218932 = icmp eq i64 %r218931, 1
+  br i1 %r218932, label %tbool218934, label %tbad218933
+tbad218933:
+  %r218935 = getelementptr inbounds i8, ptr %t218924, i64 8
+  %r218936 = load i64, ptr %r218935
+  %r218937 = call i64 @lvv_truth(i64 %r218931, i64 %r218936)
+  br label %tbool218934
+tbool218934:
+  %r218938 = getelementptr inbounds i8, ptr %t218924, i64 8
+  %r218939 = load i32, ptr %r218938
+  %r218940 = icmp ne i32 %r218939, 0
+  br i1 %r218940, label %rhs218929, label %done218930
+rhs218929:
+  store i64 154774012223, ptr @lv_pos
+  %r218942 = getelementptr inbounds [1 x %LV], ptr %a218941, i64 0, i64 0
+  %r218943 = load i64, ptr %a217800
+  %r218944 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r218946 = load i64, ptr %r218944
+  store i64 %r218943, ptr %r218942
+  %r218945 = getelementptr inbounds i8, ptr %r218942, i64 8
+  store i64 %r218946, ptr %r218945
+  %r218947 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a218941)
+  store %LV %r218947, ptr %t218948
+  %r218950 = load i64, ptr %t218948
+  %r218951 = load i64, ptr @.c2
+  %r218952 = icmp eq i64 %r218950, 2
+  %r218953 = icmp eq i64 %r218951, 2
+  %r218954 = and i1 %r218952, %r218953
+  br i1 %r218954, label %ifast218955, label %fcheck218956
+ifast218955:
+  %r218959 = getelementptr inbounds i8, ptr %t218948, i64 8
+  %r218960 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218961 = load i64, ptr %r218959
+  %r218962 = load i64, ptr %r218960
+  %r218964 = getelementptr inbounds i8, ptr %t218949, i64 8
+  %r218965 = icmp sle i64 %r218961, %r218962
+  %r218966 = zext i1 %r218965 to i64
+  store i64 1, ptr %t218949
+  store i64 %r218966, ptr %r218964
+  br label %idone218958
+fcheck218956:
+  %r218967 = icmp eq i64 %r218950, 3
+  %r218968 = icmp eq i64 %r218951, 3
+  %r218969 = and i1 %r218967, %r218968
+  br i1 %r218969, label %ffast218970, label %islow218957
+ffast218970:
+  %r218971 = getelementptr inbounds i8, ptr %t218948, i64 8
+  %r218972 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218973 = load i64, ptr %r218971
+  %r218974 = load i64, ptr %r218972
+  %r218975 = bitcast i64 %r218973 to double
+  %r218976 = bitcast i64 %r218974 to double
+  %r218977 = getelementptr inbounds i8, ptr %t218949, i64 8
+  %r218978 = fcmp ole double %r218975, %r218976
+  %r218979 = zext i1 %r218978 to i64
+  store i64 1, ptr %t218949
+  store i64 %r218979, ptr %r218977
+  br label %idone218958
+islow218957:
+  store i64 288934304266846527, ptr @lv_pos
+  %r218982 = getelementptr inbounds i8, ptr %t218948, i64 8
+  %r218983 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r218980 = load i64, ptr %r218982
+  %r218981 = load i64, ptr %r218983
+  %r218984 = call %LV @lvv_le(i64 %r218950, i64 %r218980, i64 %r218951, i64 %r218981)
+  %r218985 = extractvalue %LV %r218984, 0
+  %r218986 = extractvalue %LV %r218984, 1
+  store i64 %r218985, ptr %t218949
+  %r218987 = getelementptr inbounds i8, ptr %t218949, i64 8
+  store i64 %r218986, ptr %r218987
+  br label %idone218958
+idone218958:
+  store i64 288934304266846527, ptr @lv_pos
+  %r218988 = load i64, ptr %t218949
+  %r218989 = icmp eq i64 %r218988, 1
+  br i1 %r218989, label %tbool218991, label %tbad218990
+tbad218990:
+  %r218992 = getelementptr inbounds i8, ptr %t218949, i64 8
+  %r218993 = load i64, ptr %r218992
+  %r218994 = call i64 @lvv_truth(i64 %r218988, i64 %r218993)
+  br label %tbool218991
+tbool218991:
+  %r218995 = getelementptr inbounds i8, ptr %t218949, i64 8
+  %r218996 = load i32, ptr %r218995
+  %r218997 = icmp ne i32 %r218996, 0
+  %r218998 = load i64, ptr %t218949
+  %r218999 = getelementptr inbounds i8, ptr %t218949, i64 8
   %r219001 = load i64, ptr %r218999
-  store i64 %r218998, ptr %t218997
-  %r219000 = getelementptr inbounds i8, ptr %t218997, i64 8
+  store i64 %r218998, ptr %t218924
+  %r219000 = getelementptr inbounds i8, ptr %t218924, i64 8
   store i64 %r219001, ptr %r219000
-  %r219004 = load i64, ptr %t218997
-  %r219005 = icmp eq i64 %r219004, 1
-  br i1 %r219005, label %tbool219007, label %tbad219006
-tbad219006:
-  %r219008 = getelementptr inbounds i8, ptr %t218997, i64 8
-  %r219009 = load i64, ptr %r219008
-  %r219010 = call i64 @lvv_truth(i64 %r219004, i64 %r219009)
-  br label %tbool219007
-tbool219007:
-  %r219011 = getelementptr inbounds i8, ptr %t218997, i64 8
-  %r219012 = load i32, ptr %r219011
-  %r219013 = icmp ne i32 %r219012, 0
-  br i1 %r219013, label %rhs219002, label %done219003
-rhs219002:
-  store i64 154774012226, ptr @lv_pos
-  %r219015 = getelementptr inbounds [1 x %LV], ptr %a219014, i64 0, i64 0
-  %r219016 = load i64, ptr %a217873
-  %r219017 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r219019 = load i64, ptr %r219017
-  store i64 %r219016, ptr %r219015
-  %r219018 = getelementptr inbounds i8, ptr %r219015, i64 8
-  store i64 %r219019, ptr %r219018
-  %r219020 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a219014)
-  store %LV %r219020, ptr %t219021
-  %r219023 = load i64, ptr %t219021
-  %r219024 = load i64, ptr @.c2
-  %r219025 = icmp eq i64 %r219023, 2
-  %r219026 = icmp eq i64 %r219024, 2
-  %r219027 = and i1 %r219025, %r219026
-  br i1 %r219027, label %ifast219028, label %fcheck219029
-ifast219028:
-  %r219032 = getelementptr inbounds i8, ptr %t219021, i64 8
-  %r219033 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219034 = load i64, ptr %r219032
-  %r219035 = load i64, ptr %r219033
-  %r219037 = getelementptr inbounds i8, ptr %t219022, i64 8
-  %r219038 = icmp sle i64 %r219034, %r219035
-  %r219039 = zext i1 %r219038 to i64
-  store i64 1, ptr %t219022
-  store i64 %r219039, ptr %r219037
-  br label %idone219031
-fcheck219029:
-  %r219040 = icmp eq i64 %r219023, 3
-  %r219041 = icmp eq i64 %r219024, 3
-  %r219042 = and i1 %r219040, %r219041
-  br i1 %r219042, label %ffast219043, label %islow219030
-ffast219043:
-  %r219044 = getelementptr inbounds i8, ptr %t219021, i64 8
-  %r219045 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219046 = load i64, ptr %r219044
-  %r219047 = load i64, ptr %r219045
-  %r219048 = bitcast i64 %r219046 to double
-  %r219049 = bitcast i64 %r219047 to double
-  %r219050 = getelementptr inbounds i8, ptr %t219022, i64 8
-  %r219051 = fcmp ole double %r219048, %r219049
-  %r219052 = zext i1 %r219051 to i64
-  store i64 1, ptr %t219022
-  store i64 %r219052, ptr %r219050
-  br label %idone219031
-islow219030:
-  store i64 288934304266846530, ptr @lv_pos
-  %r219055 = getelementptr inbounds i8, ptr %t219021, i64 8
-  %r219056 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219053 = load i64, ptr %r219055
-  %r219054 = load i64, ptr %r219056
-  %r219057 = call %LV @lvv_le(i64 %r219023, i64 %r219053, i64 %r219024, i64 %r219054)
-  %r219058 = extractvalue %LV %r219057, 0
-  %r219059 = extractvalue %LV %r219057, 1
-  store i64 %r219058, ptr %t219022
-  %r219060 = getelementptr inbounds i8, ptr %t219022, i64 8
-  store i64 %r219059, ptr %r219060
-  br label %idone219031
-idone219031:
-  store i64 288934304266846530, ptr @lv_pos
-  %r219061 = load i64, ptr %t219022
-  %r219062 = icmp eq i64 %r219061, 1
-  br i1 %r219062, label %tbool219064, label %tbad219063
-tbad219063:
-  %r219065 = getelementptr inbounds i8, ptr %t219022, i64 8
-  %r219066 = load i64, ptr %r219065
-  %r219067 = call i64 @lvv_truth(i64 %r219061, i64 %r219066)
-  br label %tbool219064
-tbool219064:
-  %r219068 = getelementptr inbounds i8, ptr %t219022, i64 8
-  %r219069 = load i32, ptr %r219068
-  %r219070 = icmp ne i32 %r219069, 0
-  %r219071 = load i64, ptr %t219022
-  %r219072 = getelementptr inbounds i8, ptr %t219022, i64 8
-  %r219074 = load i64, ptr %r219072
-  store i64 %r219071, ptr %t218997
-  %r219073 = getelementptr inbounds i8, ptr %t218997, i64 8
-  store i64 %r219074, ptr %r219073
-  br label %done219003
-done219003:
-  store i64 577657622316974402, ptr @lv_pos
-  %r219075 = load i64, ptr %t218997
-  %r219076 = icmp eq i64 %r219075, 1
-  br i1 %r219076, label %tbool219078, label %tbad219077
-tbad219077:
-  %r219079 = getelementptr inbounds i8, ptr %t218997, i64 8
-  %r219080 = load i64, ptr %r219079
-  %r219081 = call i64 @lvv_truth(i64 %r219075, i64 %r219080)
-  br label %tbool219078
-tbool219078:
-  %r219082 = getelementptr inbounds i8, ptr %t218997, i64 8
-  %r219083 = load i32, ptr %r219082
-  %r219084 = icmp ne i32 %r219083, 0
-  br i1 %r219084, label %then219085, label %else219086
-then219085:
-  store i64 323, ptr @lv_pos
-  store i64 309275394371, ptr @lv_pos
-  store i64 206196179267, ptr @lv_pos
-  %r219089 = load i64, ptr @g_explain_main
-  %r219090 = icmp eq i64 %r219089, 17
-  br i1 %r219090, label %gundef219091, label %gdef219092
-gundef219091:
+  br label %done218930
+done218930:
+  store i64 577657622316974399, ptr @lv_pos
+  %r219002 = load i64, ptr %t218924
+  %r219003 = icmp eq i64 %r219002, 1
+  br i1 %r219003, label %tbool219005, label %tbad219004
+tbad219004:
+  %r219006 = getelementptr inbounds i8, ptr %t218924, i64 8
+  %r219007 = load i64, ptr %r219006
+  %r219008 = call i64 @lvv_truth(i64 %r219002, i64 %r219007)
+  br label %tbool219005
+tbool219005:
+  %r219009 = getelementptr inbounds i8, ptr %t218924, i64 8
+  %r219010 = load i32, ptr %r219009
+  %r219011 = icmp ne i32 %r219010, 0
+  br i1 %r219011, label %then219012, label %else219013
+then219012:
+  store i64 320, ptr @lv_pos
+  store i64 309275394368, ptr @lv_pos
+  store i64 206196179264, ptr @lv_pos
+  %r219016 = load i64, ptr @g_explain_main
+  %r219017 = icmp eq i64 %r219016, 17
+  br i1 %r219017, label %gundef219018, label %gdef219019
+gundef219018:
   call void @lvp_gundef(ptr @g_explain_main, ptr @.s6248)
-  br label %gdef219092
-gdef219092:
-  %r219093 = load i64, ptr @g_explain_main
-  %r219094 = getelementptr inbounds i8, ptr @g_explain_main, i64 8
-  %r219096 = load i64, ptr %r219094
-  store i64 %r219093, ptr %t219088
-  %r219095 = getelementptr inbounds i8, ptr %t219088, i64 8
-  store i64 %r219096, ptr %r219095
-  store i64 309275394371, ptr @lv_pos
-  %r219098 = getelementptr inbounds [1 x %LV], ptr %a219097, i64 0, i64 0
-  %r219099 = load i64, ptr %a217873
-  %r219100 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r219102 = load i64, ptr %r219100
-  store i64 %r219099, ptr %r219098
-  %r219101 = getelementptr inbounds i8, ptr %r219098, i64 8
-  store i64 %r219102, ptr %r219101
-  call void @lvp_call(ptr %t219103, ptr %t219088, i32 1, ptr %a219097)
-  br label %endif219087
-else219086:
-  %r219105 = load i64, ptr %a217833
-  %r219106 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1674)
-  %r219107 = icmp eq i64 %r219105, 2
-  %r219108 = icmp eq i64 %r219106, 2
-  %r219109 = and i1 %r219107, %r219108
-  br i1 %r219109, label %ifast219110, label %fcheck219111
-ifast219110:
-  %r219114 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219115 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1674), i64 8
-  %r219116 = load i64, ptr %r219114
-  %r219117 = load i64, ptr %r219115
-  %r219119 = getelementptr inbounds i8, ptr %t219104, i64 8
-  %r219120 = icmp eq i64 %r219116, %r219117
-  %r219121 = zext i1 %r219120 to i64
-  store i64 1, ptr %t219104
-  store i64 %r219121, ptr %r219119
-  br label %idone219113
-fcheck219111:
-  %r219122 = icmp eq i64 %r219105, 3
-  %r219123 = icmp eq i64 %r219106, 3
-  %r219124 = and i1 %r219122, %r219123
-  br i1 %r219124, label %ffast219125, label %islow219112
-ffast219125:
-  %r219126 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219127 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1674), i64 8
-  %r219128 = load i64, ptr %r219126
-  %r219129 = load i64, ptr %r219127
-  %r219130 = bitcast i64 %r219128 to double
-  %r219131 = bitcast i64 %r219129 to double
-  %r219132 = getelementptr inbounds i8, ptr %t219104, i64 8
-  %r219133 = fcmp oeq double %r219130, %r219131
-  %r219134 = zext i1 %r219133 to i64
-  store i64 1, ptr %t219104
-  store i64 %r219134, ptr %r219132
-  br label %idone219113
-islow219112:
-  store i64 288512091713700164, ptr @lv_pos
-  %r219137 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219138 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1674), i64 8
-  %r219135 = load i64, ptr %r219137
-  %r219136 = load i64, ptr %r219138
-  %r219139 = call %LV @lvv_eq(i64 %r219105, i64 %r219135, i64 %r219106, i64 %r219136)
-  %r219140 = extractvalue %LV %r219139, 0
-  %r219141 = extractvalue %LV %r219139, 1
-  store i64 %r219140, ptr %t219104
-  %r219142 = getelementptr inbounds i8, ptr %t219104, i64 8
-  store i64 %r219141, ptr %r219142
-  br label %idone219113
-idone219113:
-  store i64 288512091713700164, ptr @lv_pos
-  %r219144 = load i64, ptr %t219104
-  %r219145 = getelementptr inbounds i8, ptr %t219104, i64 8
+  br label %gdef219019
+gdef219019:
+  %r219020 = load i64, ptr @g_explain_main
+  %r219021 = getelementptr inbounds i8, ptr @g_explain_main, i64 8
+  %r219023 = load i64, ptr %r219021
+  store i64 %r219020, ptr %t219015
+  %r219022 = getelementptr inbounds i8, ptr %t219015, i64 8
+  store i64 %r219023, ptr %r219022
+  store i64 309275394368, ptr @lv_pos
+  %r219025 = getelementptr inbounds [1 x %LV], ptr %a219024, i64 0, i64 0
+  %r219026 = load i64, ptr %a217800
+  %r219027 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r219029 = load i64, ptr %r219027
+  store i64 %r219026, ptr %r219025
+  %r219028 = getelementptr inbounds i8, ptr %r219025, i64 8
+  store i64 %r219029, ptr %r219028
+  call void @lvp_call(ptr %t219030, ptr %t219015, i32 1, ptr %a219024)
+  br label %endif219014
+else219013:
+  %r219032 = load i64, ptr %a217760
+  %r219033 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1674)
+  %r219034 = icmp eq i64 %r219032, 2
+  %r219035 = icmp eq i64 %r219033, 2
+  %r219036 = and i1 %r219034, %r219035
+  br i1 %r219036, label %ifast219037, label %fcheck219038
+ifast219037:
+  %r219041 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219042 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1674), i64 8
+  %r219043 = load i64, ptr %r219041
+  %r219044 = load i64, ptr %r219042
+  %r219046 = getelementptr inbounds i8, ptr %t219031, i64 8
+  %r219047 = icmp eq i64 %r219043, %r219044
+  %r219048 = zext i1 %r219047 to i64
+  store i64 1, ptr %t219031
+  store i64 %r219048, ptr %r219046
+  br label %idone219040
+fcheck219038:
+  %r219049 = icmp eq i64 %r219032, 3
+  %r219050 = icmp eq i64 %r219033, 3
+  %r219051 = and i1 %r219049, %r219050
+  br i1 %r219051, label %ffast219052, label %islow219039
+ffast219052:
+  %r219053 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219054 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1674), i64 8
+  %r219055 = load i64, ptr %r219053
+  %r219056 = load i64, ptr %r219054
+  %r219057 = bitcast i64 %r219055 to double
+  %r219058 = bitcast i64 %r219056 to double
+  %r219059 = getelementptr inbounds i8, ptr %t219031, i64 8
+  %r219060 = fcmp oeq double %r219057, %r219058
+  %r219061 = zext i1 %r219060 to i64
+  store i64 1, ptr %t219031
+  store i64 %r219061, ptr %r219059
+  br label %idone219040
+islow219039:
+  store i64 288512091713700161, ptr @lv_pos
+  %r219064 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219065 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1674), i64 8
+  %r219062 = load i64, ptr %r219064
+  %r219063 = load i64, ptr %r219065
+  %r219066 = call %LV @lvv_eq(i64 %r219032, i64 %r219062, i64 %r219033, i64 %r219063)
+  %r219067 = extractvalue %LV %r219066, 0
+  %r219068 = extractvalue %LV %r219066, 1
+  store i64 %r219067, ptr %t219031
+  %r219069 = getelementptr inbounds i8, ptr %t219031, i64 8
+  store i64 %r219068, ptr %r219069
+  br label %idone219040
+idone219040:
+  store i64 288512091713700161, ptr @lv_pos
+  %r219071 = load i64, ptr %t219031
+  %r219072 = getelementptr inbounds i8, ptr %t219031, i64 8
+  %r219074 = load i64, ptr %r219072
+  store i64 %r219071, ptr %t219070
+  %r219073 = getelementptr inbounds i8, ptr %t219070, i64 8
+  store i64 %r219074, ptr %r219073
+  %r219077 = load i64, ptr %t219070
+  %r219078 = icmp eq i64 %r219077, 1
+  br i1 %r219078, label %tbool219080, label %tbad219079
+tbad219079:
+  %r219081 = getelementptr inbounds i8, ptr %t219070, i64 8
+  %r219082 = load i64, ptr %r219081
+  %r219083 = call i64 @lvv_truth(i64 %r219077, i64 %r219082)
+  br label %tbool219080
+tbool219080:
+  %r219084 = getelementptr inbounds i8, ptr %t219070, i64 8
+  %r219085 = load i32, ptr %r219084
+  %r219086 = icmp ne i32 %r219085, 0
+  br i1 %r219086, label %rhs219075, label %done219076
+rhs219075:
+  store i64 154765623617, ptr @lv_pos
+  %r219088 = getelementptr inbounds [1 x %LV], ptr %a219087, i64 0, i64 0
+  %r219089 = load i64, ptr %a217800
+  %r219090 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r219092 = load i64, ptr %r219090
+  store i64 %r219089, ptr %r219088
+  %r219091 = getelementptr inbounds i8, ptr %r219088, i64 8
+  store i64 %r219092, ptr %r219091
+  %r219093 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a219087)
+  store %LV %r219093, ptr %t219094
+  %r219096 = load i64, ptr %t219094
+  %r219097 = load i64, ptr @.c2
+  %r219098 = icmp eq i64 %r219096, 2
+  %r219099 = icmp eq i64 %r219097, 2
+  %r219100 = and i1 %r219098, %r219099
+  br i1 %r219100, label %ifast219101, label %fcheck219102
+ifast219101:
+  %r219105 = getelementptr inbounds i8, ptr %t219094, i64 8
+  %r219106 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r219107 = load i64, ptr %r219105
+  %r219108 = load i64, ptr %r219106
+  %r219110 = getelementptr inbounds i8, ptr %t219095, i64 8
+  %r219111 = icmp eq i64 %r219107, %r219108
+  %r219112 = zext i1 %r219111 to i64
+  store i64 1, ptr %t219095
+  store i64 %r219112, ptr %r219110
+  br label %idone219104
+fcheck219102:
+  %r219113 = icmp eq i64 %r219096, 3
+  %r219114 = icmp eq i64 %r219097, 3
+  %r219115 = and i1 %r219113, %r219114
+  br i1 %r219115, label %ffast219116, label %islow219103
+ffast219116:
+  %r219117 = getelementptr inbounds i8, ptr %t219094, i64 8
+  %r219118 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r219119 = load i64, ptr %r219117
+  %r219120 = load i64, ptr %r219118
+  %r219121 = bitcast i64 %r219119 to double
+  %r219122 = bitcast i64 %r219120 to double
+  %r219123 = getelementptr inbounds i8, ptr %t219095, i64 8
+  %r219124 = fcmp oeq double %r219121, %r219122
+  %r219125 = zext i1 %r219124 to i64
+  store i64 1, ptr %t219095
+  store i64 %r219125, ptr %r219123
+  br label %idone219104
+islow219103:
+  store i64 288934304258457921, ptr @lv_pos
+  %r219128 = getelementptr inbounds i8, ptr %t219094, i64 8
+  %r219129 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r219126 = load i64, ptr %r219128
+  %r219127 = load i64, ptr %r219129
+  %r219130 = call %LV @lvv_eq(i64 %r219096, i64 %r219126, i64 %r219097, i64 %r219127)
+  %r219131 = extractvalue %LV %r219130, 0
+  %r219132 = extractvalue %LV %r219130, 1
+  store i64 %r219131, ptr %t219095
+  %r219133 = getelementptr inbounds i8, ptr %t219095, i64 8
+  store i64 %r219132, ptr %r219133
+  br label %idone219104
+idone219104:
+  store i64 288934304258457921, ptr @lv_pos
+  %r219134 = load i64, ptr %t219095
+  %r219135 = icmp eq i64 %r219134, 1
+  br i1 %r219135, label %tbool219137, label %tbad219136
+tbad219136:
+  %r219138 = getelementptr inbounds i8, ptr %t219095, i64 8
+  %r219139 = load i64, ptr %r219138
+  %r219140 = call i64 @lvv_truth(i64 %r219134, i64 %r219139)
+  br label %tbool219137
+tbool219137:
+  %r219141 = getelementptr inbounds i8, ptr %t219095, i64 8
+  %r219142 = load i32, ptr %r219141
+  %r219143 = icmp ne i32 %r219142, 0
+  %r219144 = load i64, ptr %t219095
+  %r219145 = getelementptr inbounds i8, ptr %t219095, i64 8
   %r219147 = load i64, ptr %r219145
-  store i64 %r219144, ptr %t219143
-  %r219146 = getelementptr inbounds i8, ptr %t219143, i64 8
+  store i64 %r219144, ptr %t219070
+  %r219146 = getelementptr inbounds i8, ptr %t219070, i64 8
   store i64 %r219147, ptr %r219146
-  %r219150 = load i64, ptr %t219143
-  %r219151 = icmp eq i64 %r219150, 1
-  br i1 %r219151, label %tbool219153, label %tbad219152
-tbad219152:
-  %r219154 = getelementptr inbounds i8, ptr %t219143, i64 8
-  %r219155 = load i64, ptr %r219154
-  %r219156 = call i64 @lvv_truth(i64 %r219150, i64 %r219155)
-  br label %tbool219153
-tbool219153:
-  %r219157 = getelementptr inbounds i8, ptr %t219143, i64 8
-  %r219158 = load i32, ptr %r219157
-  %r219159 = icmp ne i32 %r219158, 0
-  br i1 %r219159, label %rhs219148, label %done219149
-rhs219148:
-  store i64 154765623620, ptr @lv_pos
-  %r219161 = getelementptr inbounds [1 x %LV], ptr %a219160, i64 0, i64 0
-  %r219162 = load i64, ptr %a217873
-  %r219163 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r219165 = load i64, ptr %r219163
-  store i64 %r219162, ptr %r219161
-  %r219164 = getelementptr inbounds i8, ptr %r219161, i64 8
-  store i64 %r219165, ptr %r219164
-  %r219166 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a219160)
-  store %LV %r219166, ptr %t219167
-  %r219169 = load i64, ptr %t219167
-  %r219170 = load i64, ptr @.c2
-  %r219171 = icmp eq i64 %r219169, 2
-  %r219172 = icmp eq i64 %r219170, 2
-  %r219173 = and i1 %r219171, %r219172
-  br i1 %r219173, label %ifast219174, label %fcheck219175
-ifast219174:
-  %r219178 = getelementptr inbounds i8, ptr %t219167, i64 8
-  %r219179 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219180 = load i64, ptr %r219178
-  %r219181 = load i64, ptr %r219179
-  %r219183 = getelementptr inbounds i8, ptr %t219168, i64 8
-  %r219184 = icmp eq i64 %r219180, %r219181
-  %r219185 = zext i1 %r219184 to i64
-  store i64 1, ptr %t219168
-  store i64 %r219185, ptr %r219183
-  br label %idone219177
-fcheck219175:
-  %r219186 = icmp eq i64 %r219169, 3
-  %r219187 = icmp eq i64 %r219170, 3
-  %r219188 = and i1 %r219186, %r219187
-  br i1 %r219188, label %ffast219189, label %islow219176
-ffast219189:
-  %r219190 = getelementptr inbounds i8, ptr %t219167, i64 8
-  %r219191 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219192 = load i64, ptr %r219190
-  %r219193 = load i64, ptr %r219191
-  %r219194 = bitcast i64 %r219192 to double
-  %r219195 = bitcast i64 %r219193 to double
-  %r219196 = getelementptr inbounds i8, ptr %t219168, i64 8
-  %r219197 = fcmp oeq double %r219194, %r219195
-  %r219198 = zext i1 %r219197 to i64
-  store i64 1, ptr %t219168
-  store i64 %r219198, ptr %r219196
-  br label %idone219177
-islow219176:
-  store i64 288934304258457924, ptr @lv_pos
-  %r219201 = getelementptr inbounds i8, ptr %t219167, i64 8
-  %r219202 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219199 = load i64, ptr %r219201
-  %r219200 = load i64, ptr %r219202
-  %r219203 = call %LV @lvv_eq(i64 %r219169, i64 %r219199, i64 %r219170, i64 %r219200)
-  %r219204 = extractvalue %LV %r219203, 0
-  %r219205 = extractvalue %LV %r219203, 1
-  store i64 %r219204, ptr %t219168
-  %r219206 = getelementptr inbounds i8, ptr %t219168, i64 8
-  store i64 %r219205, ptr %r219206
-  br label %idone219177
-idone219177:
-  store i64 288934304258457924, ptr @lv_pos
-  %r219207 = load i64, ptr %t219168
-  %r219208 = icmp eq i64 %r219207, 1
-  br i1 %r219208, label %tbool219210, label %tbad219209
-tbad219209:
-  %r219211 = getelementptr inbounds i8, ptr %t219168, i64 8
-  %r219212 = load i64, ptr %r219211
-  %r219213 = call i64 @lvv_truth(i64 %r219207, i64 %r219212)
-  br label %tbool219210
-tbool219210:
-  %r219214 = getelementptr inbounds i8, ptr %t219168, i64 8
-  %r219215 = load i32, ptr %r219214
-  %r219216 = icmp ne i32 %r219215, 0
-  %r219217 = load i64, ptr %t219168
-  %r219218 = getelementptr inbounds i8, ptr %t219168, i64 8
-  %r219220 = load i64, ptr %r219218
-  store i64 %r219217, ptr %t219143
-  %r219219 = getelementptr inbounds i8, ptr %t219143, i64 8
-  store i64 %r219220, ptr %r219219
-  br label %done219149
-done219149:
-  store i64 577516850468880708, ptr @lv_pos
-  %r219221 = load i64, ptr %t219143
-  %r219222 = icmp eq i64 %r219221, 1
-  br i1 %r219222, label %tbool219224, label %tbad219223
-tbad219223:
-  %r219225 = getelementptr inbounds i8, ptr %t219143, i64 8
-  %r219226 = load i64, ptr %r219225
-  %r219227 = call i64 @lvv_truth(i64 %r219221, i64 %r219226)
-  br label %tbool219224
-tbool219224:
-  %r219228 = getelementptr inbounds i8, ptr %t219143, i64 8
-  %r219229 = load i32, ptr %r219228
-  %r219230 = icmp ne i32 %r219229, 0
-  br i1 %r219230, label %then219231, label %else219232
-then219231:
-  store i64 325, ptr @lv_pos
-  store i64 274915656005, ptr @lv_pos
-  store i64 171836440901, ptr @lv_pos
-  %r219235 = load i64, ptr @g_check_main
-  %r219236 = icmp eq i64 %r219235, 17
-  br i1 %r219236, label %gundef219237, label %gdef219238
-gundef219237:
+  br label %done219076
+done219076:
+  store i64 577516850468880705, ptr @lv_pos
+  %r219148 = load i64, ptr %t219070
+  %r219149 = icmp eq i64 %r219148, 1
+  br i1 %r219149, label %tbool219151, label %tbad219150
+tbad219150:
+  %r219152 = getelementptr inbounds i8, ptr %t219070, i64 8
+  %r219153 = load i64, ptr %r219152
+  %r219154 = call i64 @lvv_truth(i64 %r219148, i64 %r219153)
+  br label %tbool219151
+tbool219151:
+  %r219155 = getelementptr inbounds i8, ptr %t219070, i64 8
+  %r219156 = load i32, ptr %r219155
+  %r219157 = icmp ne i32 %r219156, 0
+  br i1 %r219157, label %then219158, label %else219159
+then219158:
+  store i64 322, ptr @lv_pos
+  store i64 274915656002, ptr @lv_pos
+  store i64 171836440898, ptr @lv_pos
+  %r219162 = load i64, ptr @g_check_main
+  %r219163 = icmp eq i64 %r219162, 17
+  br i1 %r219163, label %gundef219164, label %gdef219165
+gundef219164:
   call void @lvp_gundef(ptr @g_check_main, ptr @.s6250)
-  br label %gdef219238
-gdef219238:
-  %r219239 = load i64, ptr @g_check_main
-  %r219240 = getelementptr inbounds i8, ptr @g_check_main, i64 8
-  %r219242 = load i64, ptr %r219240
-  store i64 %r219239, ptr %t219234
-  %r219241 = getelementptr inbounds i8, ptr %t219234, i64 8
-  store i64 %r219242, ptr %r219241
-  store i64 274915656005, ptr @lv_pos
-  %r219244 = getelementptr inbounds [1 x %LV], ptr %a219243, i64 0, i64 0
-  %r219245 = load i64, ptr %a217873
-  %r219246 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r219248 = load i64, ptr %r219246
-  store i64 %r219245, ptr %r219244
-  %r219247 = getelementptr inbounds i8, ptr %r219244, i64 8
-  store i64 %r219248, ptr %r219247
-  call void @lvp_call(ptr %t219249, ptr %t219234, i32 1, ptr %a219243)
-  br label %endif219233
-else219232:
-  %r219251 = load i64, ptr %a217833
-  %r219252 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1675)
-  %r219253 = icmp eq i64 %r219251, 2
-  %r219254 = icmp eq i64 %r219252, 2
-  %r219255 = and i1 %r219253, %r219254
-  br i1 %r219255, label %ifast219256, label %fcheck219257
-ifast219256:
-  %r219260 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219261 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1675), i64 8
-  %r219262 = load i64, ptr %r219260
-  %r219263 = load i64, ptr %r219261
-  %r219265 = getelementptr inbounds i8, ptr %t219250, i64 8
-  %r219266 = icmp eq i64 %r219262, %r219263
-  %r219267 = zext i1 %r219266 to i64
-  store i64 1, ptr %t219250
-  store i64 %r219267, ptr %r219265
-  br label %idone219259
-fcheck219257:
-  %r219268 = icmp eq i64 %r219251, 3
-  %r219269 = icmp eq i64 %r219252, 3
-  %r219270 = and i1 %r219268, %r219269
-  br i1 %r219270, label %ffast219271, label %islow219258
-ffast219271:
-  %r219272 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219273 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1675), i64 8
-  %r219274 = load i64, ptr %r219272
-  %r219275 = load i64, ptr %r219273
-  %r219276 = bitcast i64 %r219274 to double
-  %r219277 = bitcast i64 %r219275 to double
-  %r219278 = getelementptr inbounds i8, ptr %t219250, i64 8
-  %r219279 = fcmp oeq double %r219276, %r219277
-  %r219280 = zext i1 %r219279 to i64
-  store i64 1, ptr %t219250
-  store i64 %r219280, ptr %r219278
-  br label %idone219259
-islow219258:
-  store i64 288512057353961798, ptr @lv_pos
-  %r219283 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219284 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1675), i64 8
-  %r219281 = load i64, ptr %r219283
-  %r219282 = load i64, ptr %r219284
-  %r219285 = call %LV @lvv_eq(i64 %r219251, i64 %r219281, i64 %r219252, i64 %r219282)
-  %r219286 = extractvalue %LV %r219285, 0
-  %r219287 = extractvalue %LV %r219285, 1
-  store i64 %r219286, ptr %t219250
-  %r219288 = getelementptr inbounds i8, ptr %t219250, i64 8
-  store i64 %r219287, ptr %r219288
-  br label %idone219259
-idone219259:
-  store i64 288512057353961798, ptr @lv_pos
-  %r219290 = load i64, ptr %t219250
-  %r219291 = getelementptr inbounds i8, ptr %t219250, i64 8
-  %r219293 = load i64, ptr %r219291
-  store i64 %r219290, ptr %t219289
-  %r219292 = getelementptr inbounds i8, ptr %t219289, i64 8
-  store i64 %r219293, ptr %r219292
-  %r219296 = load i64, ptr %t219289
-  %r219297 = icmp eq i64 %r219296, 1
-  br i1 %r219297, label %tbool219299, label %tbad219298
-tbad219298:
-  %r219300 = getelementptr inbounds i8, ptr %t219289, i64 8
-  %r219301 = load i64, ptr %r219300
-  %r219302 = call i64 @lvv_truth(i64 %r219296, i64 %r219301)
-  br label %tbool219299
-tbool219299:
-  %r219303 = getelementptr inbounds i8, ptr %t219289, i64 8
-  %r219304 = load i32, ptr %r219303
-  %r219305 = icmp ne i32 %r219304, 0
-  br i1 %r219305, label %rhs219294, label %done219295
-rhs219294:
-  store i64 154761429318, ptr @lv_pos
-  %r219307 = getelementptr inbounds [1 x %LV], ptr %a219306, i64 0, i64 0
-  %r219308 = load i64, ptr %a217873
-  %r219309 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r219311 = load i64, ptr %r219309
-  store i64 %r219308, ptr %r219307
-  %r219310 = getelementptr inbounds i8, ptr %r219307, i64 8
-  store i64 %r219311, ptr %r219310
-  %r219312 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a219306)
-  store %LV %r219312, ptr %t219313
-  %r219315 = load i64, ptr %t219313
-  %r219316 = load i64, ptr @.c2
-  %r219317 = icmp eq i64 %r219315, 2
-  %r219318 = icmp eq i64 %r219316, 2
-  %r219319 = and i1 %r219317, %r219318
-  br i1 %r219319, label %ifast219320, label %fcheck219321
-ifast219320:
-  %r219324 = getelementptr inbounds i8, ptr %t219313, i64 8
-  %r219325 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219326 = load i64, ptr %r219324
-  %r219327 = load i64, ptr %r219325
-  %r219329 = getelementptr inbounds i8, ptr %t219314, i64 8
-  %r219330 = icmp eq i64 %r219326, %r219327
-  %r219331 = zext i1 %r219330 to i64
-  store i64 1, ptr %t219314
-  store i64 %r219331, ptr %r219329
-  br label %idone219323
-fcheck219321:
-  %r219332 = icmp eq i64 %r219315, 3
-  %r219333 = icmp eq i64 %r219316, 3
-  %r219334 = and i1 %r219332, %r219333
-  br i1 %r219334, label %ffast219335, label %islow219322
-ffast219335:
-  %r219336 = getelementptr inbounds i8, ptr %t219313, i64 8
-  %r219337 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219338 = load i64, ptr %r219336
-  %r219339 = load i64, ptr %r219337
-  %r219340 = bitcast i64 %r219338 to double
-  %r219341 = bitcast i64 %r219339 to double
-  %r219342 = getelementptr inbounds i8, ptr %t219314, i64 8
-  %r219343 = fcmp oeq double %r219340, %r219341
-  %r219344 = zext i1 %r219343 to i64
-  store i64 1, ptr %t219314
-  store i64 %r219344, ptr %r219342
-  br label %idone219323
-islow219322:
-  store i64 288934304254263622, ptr @lv_pos
-  %r219347 = getelementptr inbounds i8, ptr %t219313, i64 8
-  %r219348 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219345 = load i64, ptr %r219347
-  %r219346 = load i64, ptr %r219348
-  %r219349 = call %LV @lvv_eq(i64 %r219315, i64 %r219345, i64 %r219316, i64 %r219346)
-  %r219350 = extractvalue %LV %r219349, 0
-  %r219351 = extractvalue %LV %r219349, 1
-  store i64 %r219350, ptr %t219314
-  %r219352 = getelementptr inbounds i8, ptr %t219314, i64 8
-  store i64 %r219351, ptr %r219352
-  br label %idone219323
-idone219323:
-  store i64 288934304254263622, ptr @lv_pos
-  %r219354 = load i64, ptr %t219314
-  %r219355 = getelementptr inbounds i8, ptr %t219314, i64 8
-  %r219357 = load i64, ptr %r219355
-  store i64 %r219354, ptr %t219353
-  %r219356 = getelementptr inbounds i8, ptr %t219353, i64 8
-  store i64 %r219357, ptr %r219356
-  %r219360 = load i64, ptr %t219353
-  %r219361 = icmp eq i64 %r219360, 1
-  br i1 %r219361, label %tbool219363, label %tbad219362
-tbad219362:
-  %r219364 = getelementptr inbounds i8, ptr %t219353, i64 8
-  %r219365 = load i64, ptr %r219364
-  %r219366 = call i64 @lvv_truth(i64 %r219360, i64 %r219365)
-  br label %tbool219363
-tbool219363:
-  %r219367 = getelementptr inbounds i8, ptr %t219353, i64 8
-  %r219368 = load i32, ptr %r219367
-  %r219369 = icmp ne i32 %r219368, 0
-  br i1 %r219369, label %done219359, label %rhs219358
-rhs219358:
-  store i64 154841121094, ptr @lv_pos
-  %r219371 = getelementptr inbounds [1 x %LV], ptr %a219370, i64 0, i64 0
-  %r219372 = load i64, ptr %a217873
-  %r219373 = getelementptr inbounds i8, ptr %a217873, i64 8
+  br label %gdef219165
+gdef219165:
+  %r219166 = load i64, ptr @g_check_main
+  %r219167 = getelementptr inbounds i8, ptr @g_check_main, i64 8
+  %r219169 = load i64, ptr %r219167
+  store i64 %r219166, ptr %t219161
+  %r219168 = getelementptr inbounds i8, ptr %t219161, i64 8
+  store i64 %r219169, ptr %r219168
+  store i64 274915656002, ptr @lv_pos
+  %r219171 = getelementptr inbounds [1 x %LV], ptr %a219170, i64 0, i64 0
+  %r219172 = load i64, ptr %a217800
+  %r219173 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r219175 = load i64, ptr %r219173
+  store i64 %r219172, ptr %r219171
+  %r219174 = getelementptr inbounds i8, ptr %r219171, i64 8
+  store i64 %r219175, ptr %r219174
+  call void @lvp_call(ptr %t219176, ptr %t219161, i32 1, ptr %a219170)
+  br label %endif219160
+else219159:
+  %r219178 = load i64, ptr %a217760
+  %r219179 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1675)
+  %r219180 = icmp eq i64 %r219178, 2
+  %r219181 = icmp eq i64 %r219179, 2
+  %r219182 = and i1 %r219180, %r219181
+  br i1 %r219182, label %ifast219183, label %fcheck219184
+ifast219183:
+  %r219187 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219188 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1675), i64 8
+  %r219189 = load i64, ptr %r219187
+  %r219190 = load i64, ptr %r219188
+  %r219192 = getelementptr inbounds i8, ptr %t219177, i64 8
+  %r219193 = icmp eq i64 %r219189, %r219190
+  %r219194 = zext i1 %r219193 to i64
+  store i64 1, ptr %t219177
+  store i64 %r219194, ptr %r219192
+  br label %idone219186
+fcheck219184:
+  %r219195 = icmp eq i64 %r219178, 3
+  %r219196 = icmp eq i64 %r219179, 3
+  %r219197 = and i1 %r219195, %r219196
+  br i1 %r219197, label %ffast219198, label %islow219185
+ffast219198:
+  %r219199 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219200 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1675), i64 8
+  %r219201 = load i64, ptr %r219199
+  %r219202 = load i64, ptr %r219200
+  %r219203 = bitcast i64 %r219201 to double
+  %r219204 = bitcast i64 %r219202 to double
+  %r219205 = getelementptr inbounds i8, ptr %t219177, i64 8
+  %r219206 = fcmp oeq double %r219203, %r219204
+  %r219207 = zext i1 %r219206 to i64
+  store i64 1, ptr %t219177
+  store i64 %r219207, ptr %r219205
+  br label %idone219186
+islow219185:
+  store i64 288512057353961795, ptr @lv_pos
+  %r219210 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219211 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1675), i64 8
+  %r219208 = load i64, ptr %r219210
+  %r219209 = load i64, ptr %r219211
+  %r219212 = call %LV @lvv_eq(i64 %r219178, i64 %r219208, i64 %r219179, i64 %r219209)
+  %r219213 = extractvalue %LV %r219212, 0
+  %r219214 = extractvalue %LV %r219212, 1
+  store i64 %r219213, ptr %t219177
+  %r219215 = getelementptr inbounds i8, ptr %t219177, i64 8
+  store i64 %r219214, ptr %r219215
+  br label %idone219186
+idone219186:
+  store i64 288512057353961795, ptr @lv_pos
+  %r219217 = load i64, ptr %t219177
+  %r219218 = getelementptr inbounds i8, ptr %t219177, i64 8
+  %r219220 = load i64, ptr %r219218
+  store i64 %r219217, ptr %t219216
+  %r219219 = getelementptr inbounds i8, ptr %t219216, i64 8
+  store i64 %r219220, ptr %r219219
+  %r219223 = load i64, ptr %t219216
+  %r219224 = icmp eq i64 %r219223, 1
+  br i1 %r219224, label %tbool219226, label %tbad219225
+tbad219225:
+  %r219227 = getelementptr inbounds i8, ptr %t219216, i64 8
+  %r219228 = load i64, ptr %r219227
+  %r219229 = call i64 @lvv_truth(i64 %r219223, i64 %r219228)
+  br label %tbool219226
+tbool219226:
+  %r219230 = getelementptr inbounds i8, ptr %t219216, i64 8
+  %r219231 = load i32, ptr %r219230
+  %r219232 = icmp ne i32 %r219231, 0
+  br i1 %r219232, label %rhs219221, label %done219222
+rhs219221:
+  store i64 154761429315, ptr @lv_pos
+  %r219234 = getelementptr inbounds [1 x %LV], ptr %a219233, i64 0, i64 0
+  %r219235 = load i64, ptr %a217800
+  %r219236 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r219238 = load i64, ptr %r219236
+  store i64 %r219235, ptr %r219234
+  %r219237 = getelementptr inbounds i8, ptr %r219234, i64 8
+  store i64 %r219238, ptr %r219237
+  %r219239 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a219233)
+  store %LV %r219239, ptr %t219240
+  %r219242 = load i64, ptr %t219240
+  %r219243 = load i64, ptr @.c2
+  %r219244 = icmp eq i64 %r219242, 2
+  %r219245 = icmp eq i64 %r219243, 2
+  %r219246 = and i1 %r219244, %r219245
+  br i1 %r219246, label %ifast219247, label %fcheck219248
+ifast219247:
+  %r219251 = getelementptr inbounds i8, ptr %t219240, i64 8
+  %r219252 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r219253 = load i64, ptr %r219251
+  %r219254 = load i64, ptr %r219252
+  %r219256 = getelementptr inbounds i8, ptr %t219241, i64 8
+  %r219257 = icmp eq i64 %r219253, %r219254
+  %r219258 = zext i1 %r219257 to i64
+  store i64 1, ptr %t219241
+  store i64 %r219258, ptr %r219256
+  br label %idone219250
+fcheck219248:
+  %r219259 = icmp eq i64 %r219242, 3
+  %r219260 = icmp eq i64 %r219243, 3
+  %r219261 = and i1 %r219259, %r219260
+  br i1 %r219261, label %ffast219262, label %islow219249
+ffast219262:
+  %r219263 = getelementptr inbounds i8, ptr %t219240, i64 8
+  %r219264 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r219265 = load i64, ptr %r219263
+  %r219266 = load i64, ptr %r219264
+  %r219267 = bitcast i64 %r219265 to double
+  %r219268 = bitcast i64 %r219266 to double
+  %r219269 = getelementptr inbounds i8, ptr %t219241, i64 8
+  %r219270 = fcmp oeq double %r219267, %r219268
+  %r219271 = zext i1 %r219270 to i64
+  store i64 1, ptr %t219241
+  store i64 %r219271, ptr %r219269
+  br label %idone219250
+islow219249:
+  store i64 288934304254263619, ptr @lv_pos
+  %r219274 = getelementptr inbounds i8, ptr %t219240, i64 8
+  %r219275 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r219272 = load i64, ptr %r219274
+  %r219273 = load i64, ptr %r219275
+  %r219276 = call %LV @lvv_eq(i64 %r219242, i64 %r219272, i64 %r219243, i64 %r219273)
+  %r219277 = extractvalue %LV %r219276, 0
+  %r219278 = extractvalue %LV %r219276, 1
+  store i64 %r219277, ptr %t219241
+  %r219279 = getelementptr inbounds i8, ptr %t219241, i64 8
+  store i64 %r219278, ptr %r219279
+  br label %idone219250
+idone219250:
+  store i64 288934304254263619, ptr @lv_pos
+  %r219281 = load i64, ptr %t219241
+  %r219282 = getelementptr inbounds i8, ptr %t219241, i64 8
+  %r219284 = load i64, ptr %r219282
+  store i64 %r219281, ptr %t219280
+  %r219283 = getelementptr inbounds i8, ptr %t219280, i64 8
+  store i64 %r219284, ptr %r219283
+  %r219287 = load i64, ptr %t219280
+  %r219288 = icmp eq i64 %r219287, 1
+  br i1 %r219288, label %tbool219290, label %tbad219289
+tbad219289:
+  %r219291 = getelementptr inbounds i8, ptr %t219280, i64 8
+  %r219292 = load i64, ptr %r219291
+  %r219293 = call i64 @lvv_truth(i64 %r219287, i64 %r219292)
+  br label %tbool219290
+tbool219290:
+  %r219294 = getelementptr inbounds i8, ptr %t219280, i64 8
+  %r219295 = load i32, ptr %r219294
+  %r219296 = icmp ne i32 %r219295, 0
+  br i1 %r219296, label %done219286, label %rhs219285
+rhs219285:
+  store i64 154841121091, ptr @lv_pos
+  %r219298 = getelementptr inbounds [1 x %LV], ptr %a219297, i64 0, i64 0
+  %r219299 = load i64, ptr %a217800
+  %r219300 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r219302 = load i64, ptr %r219300
+  store i64 %r219299, ptr %r219298
+  %r219301 = getelementptr inbounds i8, ptr %r219298, i64 8
+  store i64 %r219302, ptr %r219301
+  %r219303 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a219297)
+  store %LV %r219303, ptr %t219304
+  %r219306 = load i64, ptr %t219304
+  %r219307 = load i64, ptr @.c10
+  %r219308 = icmp eq i64 %r219306, 2
+  %r219309 = icmp eq i64 %r219307, 2
+  %r219310 = and i1 %r219308, %r219309
+  br i1 %r219310, label %ifast219311, label %fcheck219312
+ifast219311:
+  %r219315 = getelementptr inbounds i8, ptr %t219304, i64 8
+  %r219316 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r219317 = load i64, ptr %r219315
+  %r219318 = load i64, ptr %r219316
+  %r219320 = getelementptr inbounds i8, ptr %t219305, i64 8
+  %r219321 = icmp eq i64 %r219317, %r219318
+  %r219322 = zext i1 %r219321 to i64
+  store i64 1, ptr %t219305
+  store i64 %r219322, ptr %r219320
+  br label %idone219314
+fcheck219312:
+  %r219323 = icmp eq i64 %r219306, 3
+  %r219324 = icmp eq i64 %r219307, 3
+  %r219325 = and i1 %r219323, %r219324
+  br i1 %r219325, label %ffast219326, label %islow219313
+ffast219326:
+  %r219327 = getelementptr inbounds i8, ptr %t219304, i64 8
+  %r219328 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r219329 = load i64, ptr %r219327
+  %r219330 = load i64, ptr %r219328
+  %r219331 = bitcast i64 %r219329 to double
+  %r219332 = bitcast i64 %r219330 to double
+  %r219333 = getelementptr inbounds i8, ptr %t219305, i64 8
+  %r219334 = fcmp oeq double %r219331, %r219332
+  %r219335 = zext i1 %r219334 to i64
+  store i64 1, ptr %t219305
+  store i64 %r219335, ptr %r219333
+  br label %idone219314
+islow219313:
+  store i64 288934304333955395, ptr @lv_pos
+  %r219338 = getelementptr inbounds i8, ptr %t219304, i64 8
+  %r219339 = getelementptr inbounds i8, ptr @.c10, i64 8
+  %r219336 = load i64, ptr %r219338
+  %r219337 = load i64, ptr %r219339
+  %r219340 = call %LV @lvv_eq(i64 %r219306, i64 %r219336, i64 %r219307, i64 %r219337)
+  %r219341 = extractvalue %LV %r219340, 0
+  %r219342 = extractvalue %LV %r219340, 1
+  store i64 %r219341, ptr %t219305
+  %r219343 = getelementptr inbounds i8, ptr %t219305, i64 8
+  store i64 %r219342, ptr %r219343
+  br label %idone219314
+idone219314:
+  store i64 288934304333955395, ptr @lv_pos
+  %r219345 = load i64, ptr %t219305
+  %r219346 = getelementptr inbounds i8, ptr %t219305, i64 8
+  %r219348 = load i64, ptr %r219346
+  store i64 %r219345, ptr %t219344
+  %r219347 = getelementptr inbounds i8, ptr %t219344, i64 8
+  store i64 %r219348, ptr %r219347
+  %r219351 = load i64, ptr %t219344
+  %r219352 = icmp eq i64 %r219351, 1
+  br i1 %r219352, label %tbool219354, label %tbad219353
+tbad219353:
+  %r219355 = getelementptr inbounds i8, ptr %t219344, i64 8
+  %r219356 = load i64, ptr %r219355
+  %r219357 = call i64 @lvv_truth(i64 %r219351, i64 %r219356)
+  br label %tbool219354
+tbool219354:
+  %r219358 = getelementptr inbounds i8, ptr %t219344, i64 8
+  %r219359 = load i32, ptr %r219358
+  %r219360 = icmp ne i32 %r219359, 0
+  br i1 %r219360, label %rhs219349, label %done219350
+rhs219349:
+  store i64 120561074499, ptr @lv_pos
+  call void @lvp_index(ptr %t219361, ptr %a217800, ptr @.c1)
+  %r219363 = load i64, ptr %t219361
+  %r219364 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1667)
+  %r219365 = icmp eq i64 %r219363, 2
+  %r219366 = icmp eq i64 %r219364, 2
+  %r219367 = and i1 %r219365, %r219366
+  br i1 %r219367, label %ifast219368, label %fcheck219369
+ifast219368:
+  %r219372 = getelementptr inbounds i8, ptr %t219361, i64 8
+  %r219373 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1667), i64 8
+  %r219374 = load i64, ptr %r219372
   %r219375 = load i64, ptr %r219373
-  store i64 %r219372, ptr %r219371
-  %r219374 = getelementptr inbounds i8, ptr %r219371, i64 8
-  store i64 %r219375, ptr %r219374
-  %r219376 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a219370)
-  store %LV %r219376, ptr %t219377
-  %r219379 = load i64, ptr %t219377
-  %r219380 = load i64, ptr @.c10
-  %r219381 = icmp eq i64 %r219379, 2
-  %r219382 = icmp eq i64 %r219380, 2
-  %r219383 = and i1 %r219381, %r219382
-  br i1 %r219383, label %ifast219384, label %fcheck219385
-ifast219384:
-  %r219388 = getelementptr inbounds i8, ptr %t219377, i64 8
-  %r219389 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r219390 = load i64, ptr %r219388
-  %r219391 = load i64, ptr %r219389
-  %r219393 = getelementptr inbounds i8, ptr %t219378, i64 8
-  %r219394 = icmp eq i64 %r219390, %r219391
-  %r219395 = zext i1 %r219394 to i64
-  store i64 1, ptr %t219378
-  store i64 %r219395, ptr %r219393
-  br label %idone219387
-fcheck219385:
-  %r219396 = icmp eq i64 %r219379, 3
-  %r219397 = icmp eq i64 %r219380, 3
-  %r219398 = and i1 %r219396, %r219397
-  br i1 %r219398, label %ffast219399, label %islow219386
-ffast219399:
-  %r219400 = getelementptr inbounds i8, ptr %t219377, i64 8
-  %r219401 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r219402 = load i64, ptr %r219400
-  %r219403 = load i64, ptr %r219401
-  %r219404 = bitcast i64 %r219402 to double
-  %r219405 = bitcast i64 %r219403 to double
-  %r219406 = getelementptr inbounds i8, ptr %t219378, i64 8
-  %r219407 = fcmp oeq double %r219404, %r219405
-  %r219408 = zext i1 %r219407 to i64
-  store i64 1, ptr %t219378
-  store i64 %r219408, ptr %r219406
-  br label %idone219387
-islow219386:
-  store i64 288934304333955398, ptr @lv_pos
-  %r219411 = getelementptr inbounds i8, ptr %t219377, i64 8
-  %r219412 = getelementptr inbounds i8, ptr @.c10, i64 8
-  %r219409 = load i64, ptr %r219411
-  %r219410 = load i64, ptr %r219412
-  %r219413 = call %LV @lvv_eq(i64 %r219379, i64 %r219409, i64 %r219380, i64 %r219410)
-  %r219414 = extractvalue %LV %r219413, 0
-  %r219415 = extractvalue %LV %r219413, 1
-  store i64 %r219414, ptr %t219378
-  %r219416 = getelementptr inbounds i8, ptr %t219378, i64 8
-  store i64 %r219415, ptr %r219416
-  br label %idone219387
-idone219387:
-  store i64 288934304333955398, ptr @lv_pos
-  %r219418 = load i64, ptr %t219378
-  %r219419 = getelementptr inbounds i8, ptr %t219378, i64 8
-  %r219421 = load i64, ptr %r219419
-  store i64 %r219418, ptr %t219417
-  %r219420 = getelementptr inbounds i8, ptr %t219417, i64 8
-  store i64 %r219421, ptr %r219420
-  %r219424 = load i64, ptr %t219417
-  %r219425 = icmp eq i64 %r219424, 1
-  br i1 %r219425, label %tbool219427, label %tbad219426
-tbad219426:
-  %r219428 = getelementptr inbounds i8, ptr %t219417, i64 8
-  %r219429 = load i64, ptr %r219428
-  %r219430 = call i64 @lvv_truth(i64 %r219424, i64 %r219429)
-  br label %tbool219427
-tbool219427:
-  %r219431 = getelementptr inbounds i8, ptr %t219417, i64 8
-  %r219432 = load i32, ptr %r219431
-  %r219433 = icmp ne i32 %r219432, 0
-  br i1 %r219433, label %rhs219422, label %done219423
-rhs219422:
-  store i64 120561074502, ptr @lv_pos
-  call void @lvp_index(ptr %t219434, ptr %a217873, ptr @.c1)
-  %r219436 = load i64, ptr %t219434
-  %r219437 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1667)
-  %r219438 = icmp eq i64 %r219436, 2
-  %r219439 = icmp eq i64 %r219437, 2
-  %r219440 = and i1 %r219438, %r219439
-  br i1 %r219440, label %ifast219441, label %fcheck219442
-ifast219441:
-  %r219445 = getelementptr inbounds i8, ptr %t219434, i64 8
-  %r219446 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1667), i64 8
-  %r219447 = load i64, ptr %r219445
-  %r219448 = load i64, ptr %r219446
-  %r219450 = getelementptr inbounds i8, ptr %t219435, i64 8
-  %r219451 = icmp eq i64 %r219447, %r219448
-  %r219452 = zext i1 %r219451 to i64
-  store i64 1, ptr %t219435
-  store i64 %r219452, ptr %r219450
-  br label %idone219444
-fcheck219442:
-  %r219453 = icmp eq i64 %r219436, 3
-  %r219454 = icmp eq i64 %r219437, 3
-  %r219455 = and i1 %r219453, %r219454
-  br i1 %r219455, label %ffast219456, label %islow219443
-ffast219456:
-  %r219457 = getelementptr inbounds i8, ptr %t219434, i64 8
-  %r219458 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1667), i64 8
-  %r219459 = load i64, ptr %r219457
-  %r219460 = load i64, ptr %r219458
-  %r219461 = bitcast i64 %r219459 to double
-  %r219462 = bitcast i64 %r219460 to double
-  %r219463 = getelementptr inbounds i8, ptr %t219435, i64 8
-  %r219464 = fcmp oeq double %r219461, %r219462
-  %r219465 = zext i1 %r219464 to i64
-  store i64 1, ptr %t219435
-  store i64 %r219465, ptr %r219463
-  br label %idone219444
-islow219443:
-  store i64 288793670004506950, ptr @lv_pos
-  %r219468 = getelementptr inbounds i8, ptr %t219434, i64 8
-  %r219469 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1667), i64 8
-  %r219466 = load i64, ptr %r219468
-  %r219467 = load i64, ptr %r219469
-  %r219470 = call %LV @lvv_eq(i64 %r219436, i64 %r219466, i64 %r219437, i64 %r219467)
-  %r219471 = extractvalue %LV %r219470, 0
-  %r219472 = extractvalue %LV %r219470, 1
-  store i64 %r219471, ptr %t219435
-  %r219473 = getelementptr inbounds i8, ptr %t219435, i64 8
-  store i64 %r219472, ptr %r219473
-  br label %idone219444
-idone219444:
-  store i64 288793670004506950, ptr @lv_pos
-  %r219474 = load i64, ptr %t219435
-  %r219475 = icmp eq i64 %r219474, 1
-  br i1 %r219475, label %tbool219477, label %tbad219476
-tbad219476:
-  %r219478 = getelementptr inbounds i8, ptr %t219435, i64 8
-  %r219479 = load i64, ptr %r219478
-  %r219480 = call i64 @lvv_truth(i64 %r219474, i64 %r219479)
-  br label %tbool219477
-tbool219477:
-  %r219481 = getelementptr inbounds i8, ptr %t219435, i64 8
-  %r219482 = load i32, ptr %r219481
-  %r219483 = icmp ne i32 %r219482, 0
-  %r219484 = load i64, ptr %t219435
-  %r219485 = getelementptr inbounds i8, ptr %t219435, i64 8
-  %r219487 = load i64, ptr %r219485
-  store i64 %r219484, ptr %t219417
-  %r219486 = getelementptr inbounds i8, ptr %t219417, i64 8
-  store i64 %r219487, ptr %r219486
-  br label %done219423
-done219423:
-  store i64 577516953703285062, ptr @lv_pos
-  %r219488 = load i64, ptr %t219417
-  %r219489 = icmp eq i64 %r219488, 1
-  br i1 %r219489, label %tbool219491, label %tbad219490
-tbad219490:
-  %r219492 = getelementptr inbounds i8, ptr %t219417, i64 8
-  %r219493 = load i64, ptr %r219492
-  %r219494 = call i64 @lvv_truth(i64 %r219488, i64 %r219493)
-  br label %tbool219491
-tbool219491:
-  %r219495 = getelementptr inbounds i8, ptr %t219417, i64 8
-  %r219496 = load i32, ptr %r219495
-  %r219497 = icmp ne i32 %r219496, 0
-  %r219498 = load i64, ptr %t219417
-  %r219499 = getelementptr inbounds i8, ptr %t219417, i64 8
-  %r219501 = load i64, ptr %r219499
-  store i64 %r219498, ptr %t219353
-  %r219500 = getelementptr inbounds i8, ptr %t219353, i64 8
-  store i64 %r219501, ptr %r219500
-  br label %done219359
-done219359:
-  store i64 289286921069265222, ptr @lv_pos
-  %r219502 = load i64, ptr %t219353
-  %r219503 = icmp eq i64 %r219502, 1
-  br i1 %r219503, label %tbool219505, label %tbad219504
-tbad219504:
-  %r219506 = getelementptr inbounds i8, ptr %t219353, i64 8
-  %r219507 = load i64, ptr %r219506
-  %r219508 = call i64 @lvv_truth(i64 %r219502, i64 %r219507)
-  br label %tbool219505
-tbool219505:
-  %r219509 = getelementptr inbounds i8, ptr %t219353, i64 8
-  %r219510 = load i32, ptr %r219509
-  %r219511 = icmp ne i32 %r219510, 0
-  %r219512 = load i64, ptr %t219353
-  %r219513 = getelementptr inbounds i8, ptr %t219353, i64 8
-  %r219515 = load i64, ptr %r219513
-  store i64 %r219512, ptr %t219289
-  %r219514 = getelementptr inbounds i8, ptr %t219289, i64 8
-  store i64 %r219515, ptr %r219514
-  br label %done219295
-done219295:
-  store i64 577376886074638662, ptr @lv_pos
-  %r219516 = load i64, ptr %t219289
-  %r219517 = icmp eq i64 %r219516, 1
-  br i1 %r219517, label %tbool219519, label %tbad219518
-tbad219518:
-  %r219520 = getelementptr inbounds i8, ptr %t219289, i64 8
-  %r219521 = load i64, ptr %r219520
-  %r219522 = call i64 @lvv_truth(i64 %r219516, i64 %r219521)
-  br label %tbool219519
-tbool219519:
-  %r219523 = getelementptr inbounds i8, ptr %t219289, i64 8
-  %r219524 = load i32, ptr %r219523
-  %r219525 = icmp ne i32 %r219524, 0
-  br i1 %r219525, label %then219526, label %else219527
-then219526:
-  store i64 327, ptr @lv_pos
-  store i64 240555917639, ptr @lv_pos
-  store i64 137476702535, ptr @lv_pos
-  %r219530 = load i64, ptr @g_ast_main
-  %r219531 = icmp eq i64 %r219530, 17
-  br i1 %r219531, label %gundef219532, label %gdef219533
-gundef219532:
+  %r219377 = getelementptr inbounds i8, ptr %t219362, i64 8
+  %r219378 = icmp eq i64 %r219374, %r219375
+  %r219379 = zext i1 %r219378 to i64
+  store i64 1, ptr %t219362
+  store i64 %r219379, ptr %r219377
+  br label %idone219371
+fcheck219369:
+  %r219380 = icmp eq i64 %r219363, 3
+  %r219381 = icmp eq i64 %r219364, 3
+  %r219382 = and i1 %r219380, %r219381
+  br i1 %r219382, label %ffast219383, label %islow219370
+ffast219383:
+  %r219384 = getelementptr inbounds i8, ptr %t219361, i64 8
+  %r219385 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1667), i64 8
+  %r219386 = load i64, ptr %r219384
+  %r219387 = load i64, ptr %r219385
+  %r219388 = bitcast i64 %r219386 to double
+  %r219389 = bitcast i64 %r219387 to double
+  %r219390 = getelementptr inbounds i8, ptr %t219362, i64 8
+  %r219391 = fcmp oeq double %r219388, %r219389
+  %r219392 = zext i1 %r219391 to i64
+  store i64 1, ptr %t219362
+  store i64 %r219392, ptr %r219390
+  br label %idone219371
+islow219370:
+  store i64 288793670004506947, ptr @lv_pos
+  %r219395 = getelementptr inbounds i8, ptr %t219361, i64 8
+  %r219396 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1667), i64 8
+  %r219393 = load i64, ptr %r219395
+  %r219394 = load i64, ptr %r219396
+  %r219397 = call %LV @lvv_eq(i64 %r219363, i64 %r219393, i64 %r219364, i64 %r219394)
+  %r219398 = extractvalue %LV %r219397, 0
+  %r219399 = extractvalue %LV %r219397, 1
+  store i64 %r219398, ptr %t219362
+  %r219400 = getelementptr inbounds i8, ptr %t219362, i64 8
+  store i64 %r219399, ptr %r219400
+  br label %idone219371
+idone219371:
+  store i64 288793670004506947, ptr @lv_pos
+  %r219401 = load i64, ptr %t219362
+  %r219402 = icmp eq i64 %r219401, 1
+  br i1 %r219402, label %tbool219404, label %tbad219403
+tbad219403:
+  %r219405 = getelementptr inbounds i8, ptr %t219362, i64 8
+  %r219406 = load i64, ptr %r219405
+  %r219407 = call i64 @lvv_truth(i64 %r219401, i64 %r219406)
+  br label %tbool219404
+tbool219404:
+  %r219408 = getelementptr inbounds i8, ptr %t219362, i64 8
+  %r219409 = load i32, ptr %r219408
+  %r219410 = icmp ne i32 %r219409, 0
+  %r219411 = load i64, ptr %t219362
+  %r219412 = getelementptr inbounds i8, ptr %t219362, i64 8
+  %r219414 = load i64, ptr %r219412
+  store i64 %r219411, ptr %t219344
+  %r219413 = getelementptr inbounds i8, ptr %t219344, i64 8
+  store i64 %r219414, ptr %r219413
+  br label %done219350
+done219350:
+  store i64 577516953703285059, ptr @lv_pos
+  %r219415 = load i64, ptr %t219344
+  %r219416 = icmp eq i64 %r219415, 1
+  br i1 %r219416, label %tbool219418, label %tbad219417
+tbad219417:
+  %r219419 = getelementptr inbounds i8, ptr %t219344, i64 8
+  %r219420 = load i64, ptr %r219419
+  %r219421 = call i64 @lvv_truth(i64 %r219415, i64 %r219420)
+  br label %tbool219418
+tbool219418:
+  %r219422 = getelementptr inbounds i8, ptr %t219344, i64 8
+  %r219423 = load i32, ptr %r219422
+  %r219424 = icmp ne i32 %r219423, 0
+  %r219425 = load i64, ptr %t219344
+  %r219426 = getelementptr inbounds i8, ptr %t219344, i64 8
+  %r219428 = load i64, ptr %r219426
+  store i64 %r219425, ptr %t219280
+  %r219427 = getelementptr inbounds i8, ptr %t219280, i64 8
+  store i64 %r219428, ptr %r219427
+  br label %done219286
+done219286:
+  store i64 289286921069265219, ptr @lv_pos
+  %r219429 = load i64, ptr %t219280
+  %r219430 = icmp eq i64 %r219429, 1
+  br i1 %r219430, label %tbool219432, label %tbad219431
+tbad219431:
+  %r219433 = getelementptr inbounds i8, ptr %t219280, i64 8
+  %r219434 = load i64, ptr %r219433
+  %r219435 = call i64 @lvv_truth(i64 %r219429, i64 %r219434)
+  br label %tbool219432
+tbool219432:
+  %r219436 = getelementptr inbounds i8, ptr %t219280, i64 8
+  %r219437 = load i32, ptr %r219436
+  %r219438 = icmp ne i32 %r219437, 0
+  %r219439 = load i64, ptr %t219280
+  %r219440 = getelementptr inbounds i8, ptr %t219280, i64 8
+  %r219442 = load i64, ptr %r219440
+  store i64 %r219439, ptr %t219216
+  %r219441 = getelementptr inbounds i8, ptr %t219216, i64 8
+  store i64 %r219442, ptr %r219441
+  br label %done219222
+done219222:
+  store i64 577376886074638659, ptr @lv_pos
+  %r219443 = load i64, ptr %t219216
+  %r219444 = icmp eq i64 %r219443, 1
+  br i1 %r219444, label %tbool219446, label %tbad219445
+tbad219445:
+  %r219447 = getelementptr inbounds i8, ptr %t219216, i64 8
+  %r219448 = load i64, ptr %r219447
+  %r219449 = call i64 @lvv_truth(i64 %r219443, i64 %r219448)
+  br label %tbool219446
+tbool219446:
+  %r219450 = getelementptr inbounds i8, ptr %t219216, i64 8
+  %r219451 = load i32, ptr %r219450
+  %r219452 = icmp ne i32 %r219451, 0
+  br i1 %r219452, label %then219453, label %else219454
+then219453:
+  store i64 324, ptr @lv_pos
+  store i64 240555917636, ptr @lv_pos
+  store i64 137476702532, ptr @lv_pos
+  %r219457 = load i64, ptr @g_ast_main
+  %r219458 = icmp eq i64 %r219457, 17
+  br i1 %r219458, label %gundef219459, label %gdef219460
+gundef219459:
   call void @lvp_gundef(ptr @g_ast_main, ptr @.s6249)
-  br label %gdef219533
-gdef219533:
-  %r219534 = load i64, ptr @g_ast_main
-  %r219535 = getelementptr inbounds i8, ptr @g_ast_main, i64 8
-  %r219537 = load i64, ptr %r219535
-  store i64 %r219534, ptr %t219529
-  %r219536 = getelementptr inbounds i8, ptr %t219529, i64 8
-  store i64 %r219537, ptr %r219536
-  store i64 240555917639, ptr @lv_pos
-  %r219539 = getelementptr inbounds [1 x %LV], ptr %a219538, i64 0, i64 0
-  %r219540 = load i64, ptr %a217873
-  %r219541 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r219543 = load i64, ptr %r219541
-  store i64 %r219540, ptr %r219539
-  %r219542 = getelementptr inbounds i8, ptr %r219539, i64 8
-  store i64 %r219543, ptr %r219542
-  call void @lvp_call(ptr %t219544, ptr %t219529, i32 1, ptr %a219538)
-  br label %endif219528
-else219527:
-  %r219546 = load i64, ptr %a217833
-  %r219547 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1676)
-  %r219548 = icmp eq i64 %r219546, 2
-  %r219549 = icmp eq i64 %r219547, 2
-  %r219550 = and i1 %r219548, %r219549
-  br i1 %r219550, label %ifast219551, label %fcheck219552
-ifast219551:
-  %r219555 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219556 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1676), i64 8
-  %r219557 = load i64, ptr %r219555
-  %r219558 = load i64, ptr %r219556
-  %r219560 = getelementptr inbounds i8, ptr %t219545, i64 8
-  %r219561 = icmp eq i64 %r219557, %r219558
-  %r219562 = zext i1 %r219561 to i64
-  store i64 1, ptr %t219545
-  store i64 %r219562, ptr %r219560
-  br label %idone219554
-fcheck219552:
-  %r219563 = icmp eq i64 %r219546, 3
-  %r219564 = icmp eq i64 %r219547, 3
-  %r219565 = and i1 %r219563, %r219564
-  br i1 %r219565, label %ffast219566, label %islow219553
-ffast219566:
-  %r219567 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219568 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1676), i64 8
-  %r219569 = load i64, ptr %r219567
-  %r219570 = load i64, ptr %r219568
-  %r219571 = bitcast i64 %r219569 to double
-  %r219572 = bitcast i64 %r219570 to double
-  %r219573 = getelementptr inbounds i8, ptr %t219545, i64 8
-  %r219574 = fcmp oeq double %r219571, %r219572
-  %r219575 = zext i1 %r219574 to i64
-  store i64 1, ptr %t219545
-  store i64 %r219575, ptr %r219573
-  br label %idone219554
-islow219553:
-  store i64 288512126073438536, ptr @lv_pos
-  %r219578 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219579 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1676), i64 8
-  %r219576 = load i64, ptr %r219578
-  %r219577 = load i64, ptr %r219579
-  %r219580 = call %LV @lvv_eq(i64 %r219546, i64 %r219576, i64 %r219547, i64 %r219577)
-  %r219581 = extractvalue %LV %r219580, 0
-  %r219582 = extractvalue %LV %r219580, 1
-  store i64 %r219581, ptr %t219545
-  %r219583 = getelementptr inbounds i8, ptr %t219545, i64 8
-  store i64 %r219582, ptr %r219583
-  br label %idone219554
-idone219554:
-  store i64 288512126073438536, ptr @lv_pos
-  %r219585 = load i64, ptr %t219545
-  %r219586 = getelementptr inbounds i8, ptr %t219545, i64 8
+  br label %gdef219460
+gdef219460:
+  %r219461 = load i64, ptr @g_ast_main
+  %r219462 = getelementptr inbounds i8, ptr @g_ast_main, i64 8
+  %r219464 = load i64, ptr %r219462
+  store i64 %r219461, ptr %t219456
+  %r219463 = getelementptr inbounds i8, ptr %t219456, i64 8
+  store i64 %r219464, ptr %r219463
+  store i64 240555917636, ptr @lv_pos
+  %r219466 = getelementptr inbounds [1 x %LV], ptr %a219465, i64 0, i64 0
+  %r219467 = load i64, ptr %a217800
+  %r219468 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r219470 = load i64, ptr %r219468
+  store i64 %r219467, ptr %r219466
+  %r219469 = getelementptr inbounds i8, ptr %r219466, i64 8
+  store i64 %r219470, ptr %r219469
+  call void @lvp_call(ptr %t219471, ptr %t219456, i32 1, ptr %a219465)
+  br label %endif219455
+else219454:
+  %r219473 = load i64, ptr %a217760
+  %r219474 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1676)
+  %r219475 = icmp eq i64 %r219473, 2
+  %r219476 = icmp eq i64 %r219474, 2
+  %r219477 = and i1 %r219475, %r219476
+  br i1 %r219477, label %ifast219478, label %fcheck219479
+ifast219478:
+  %r219482 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219483 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1676), i64 8
+  %r219484 = load i64, ptr %r219482
+  %r219485 = load i64, ptr %r219483
+  %r219487 = getelementptr inbounds i8, ptr %t219472, i64 8
+  %r219488 = icmp eq i64 %r219484, %r219485
+  %r219489 = zext i1 %r219488 to i64
+  store i64 1, ptr %t219472
+  store i64 %r219489, ptr %r219487
+  br label %idone219481
+fcheck219479:
+  %r219490 = icmp eq i64 %r219473, 3
+  %r219491 = icmp eq i64 %r219474, 3
+  %r219492 = and i1 %r219490, %r219491
+  br i1 %r219492, label %ffast219493, label %islow219480
+ffast219493:
+  %r219494 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219495 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1676), i64 8
+  %r219496 = load i64, ptr %r219494
+  %r219497 = load i64, ptr %r219495
+  %r219498 = bitcast i64 %r219496 to double
+  %r219499 = bitcast i64 %r219497 to double
+  %r219500 = getelementptr inbounds i8, ptr %t219472, i64 8
+  %r219501 = fcmp oeq double %r219498, %r219499
+  %r219502 = zext i1 %r219501 to i64
+  store i64 1, ptr %t219472
+  store i64 %r219502, ptr %r219500
+  br label %idone219481
+islow219480:
+  store i64 288512126073438533, ptr @lv_pos
+  %r219505 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219506 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1676), i64 8
+  %r219503 = load i64, ptr %r219505
+  %r219504 = load i64, ptr %r219506
+  %r219507 = call %LV @lvv_eq(i64 %r219473, i64 %r219503, i64 %r219474, i64 %r219504)
+  %r219508 = extractvalue %LV %r219507, 0
+  %r219509 = extractvalue %LV %r219507, 1
+  store i64 %r219508, ptr %t219472
+  %r219510 = getelementptr inbounds i8, ptr %t219472, i64 8
+  store i64 %r219509, ptr %r219510
+  br label %idone219481
+idone219481:
+  store i64 288512126073438533, ptr @lv_pos
+  %r219512 = load i64, ptr %t219472
+  %r219513 = getelementptr inbounds i8, ptr %t219472, i64 8
+  %r219515 = load i64, ptr %r219513
+  store i64 %r219512, ptr %t219511
+  %r219514 = getelementptr inbounds i8, ptr %t219511, i64 8
+  store i64 %r219515, ptr %r219514
+  %r219518 = load i64, ptr %t219511
+  %r219519 = icmp eq i64 %r219518, 1
+  br i1 %r219519, label %tbool219521, label %tbad219520
+tbad219520:
+  %r219522 = getelementptr inbounds i8, ptr %t219511, i64 8
+  %r219523 = load i64, ptr %r219522
+  %r219524 = call i64 @lvv_truth(i64 %r219518, i64 %r219523)
+  br label %tbool219521
+tbool219521:
+  %r219525 = getelementptr inbounds i8, ptr %t219511, i64 8
+  %r219526 = load i32, ptr %r219525
+  %r219527 = icmp ne i32 %r219526, 0
+  br i1 %r219527, label %rhs219516, label %done219517
+rhs219516:
+  store i64 154774012229, ptr @lv_pos
+  %r219529 = getelementptr inbounds [1 x %LV], ptr %a219528, i64 0, i64 0
+  %r219530 = load i64, ptr %a217800
+  %r219531 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r219533 = load i64, ptr %r219531
+  store i64 %r219530, ptr %r219529
+  %r219532 = getelementptr inbounds i8, ptr %r219529, i64 8
+  store i64 %r219533, ptr %r219532
+  %r219534 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a219528)
+  store %LV %r219534, ptr %t219535
+  %r219537 = load i64, ptr %t219535
+  %r219538 = load i64, ptr @.c2
+  %r219539 = icmp eq i64 %r219537, 2
+  %r219540 = icmp eq i64 %r219538, 2
+  %r219541 = and i1 %r219539, %r219540
+  br i1 %r219541, label %ifast219542, label %fcheck219543
+ifast219542:
+  %r219546 = getelementptr inbounds i8, ptr %t219535, i64 8
+  %r219547 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r219548 = load i64, ptr %r219546
+  %r219549 = load i64, ptr %r219547
+  %r219551 = getelementptr inbounds i8, ptr %t219536, i64 8
+  %r219552 = icmp eq i64 %r219548, %r219549
+  %r219553 = zext i1 %r219552 to i64
+  store i64 1, ptr %t219536
+  store i64 %r219553, ptr %r219551
+  br label %idone219545
+fcheck219543:
+  %r219554 = icmp eq i64 %r219537, 3
+  %r219555 = icmp eq i64 %r219538, 3
+  %r219556 = and i1 %r219554, %r219555
+  br i1 %r219556, label %ffast219557, label %islow219544
+ffast219557:
+  %r219558 = getelementptr inbounds i8, ptr %t219535, i64 8
+  %r219559 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r219560 = load i64, ptr %r219558
+  %r219561 = load i64, ptr %r219559
+  %r219562 = bitcast i64 %r219560 to double
+  %r219563 = bitcast i64 %r219561 to double
+  %r219564 = getelementptr inbounds i8, ptr %t219536, i64 8
+  %r219565 = fcmp oeq double %r219562, %r219563
+  %r219566 = zext i1 %r219565 to i64
+  store i64 1, ptr %t219536
+  store i64 %r219566, ptr %r219564
+  br label %idone219545
+islow219544:
+  store i64 288934304266846533, ptr @lv_pos
+  %r219569 = getelementptr inbounds i8, ptr %t219535, i64 8
+  %r219570 = getelementptr inbounds i8, ptr @.c2, i64 8
+  %r219567 = load i64, ptr %r219569
+  %r219568 = load i64, ptr %r219570
+  %r219571 = call %LV @lvv_eq(i64 %r219537, i64 %r219567, i64 %r219538, i64 %r219568)
+  %r219572 = extractvalue %LV %r219571, 0
+  %r219573 = extractvalue %LV %r219571, 1
+  store i64 %r219572, ptr %t219536
+  %r219574 = getelementptr inbounds i8, ptr %t219536, i64 8
+  store i64 %r219573, ptr %r219574
+  br label %idone219545
+idone219545:
+  store i64 288934304266846533, ptr @lv_pos
+  %r219575 = load i64, ptr %t219536
+  %r219576 = icmp eq i64 %r219575, 1
+  br i1 %r219576, label %tbool219578, label %tbad219577
+tbad219577:
+  %r219579 = getelementptr inbounds i8, ptr %t219536, i64 8
+  %r219580 = load i64, ptr %r219579
+  %r219581 = call i64 @lvv_truth(i64 %r219575, i64 %r219580)
+  br label %tbool219578
+tbool219578:
+  %r219582 = getelementptr inbounds i8, ptr %t219536, i64 8
+  %r219583 = load i32, ptr %r219582
+  %r219584 = icmp ne i32 %r219583, 0
+  %r219585 = load i64, ptr %t219536
+  %r219586 = getelementptr inbounds i8, ptr %t219536, i64 8
   %r219588 = load i64, ptr %r219586
-  store i64 %r219585, ptr %t219584
-  %r219587 = getelementptr inbounds i8, ptr %t219584, i64 8
+  store i64 %r219585, ptr %t219511
+  %r219587 = getelementptr inbounds i8, ptr %t219511, i64 8
   store i64 %r219588, ptr %r219587
-  %r219591 = load i64, ptr %t219584
-  %r219592 = icmp eq i64 %r219591, 1
-  br i1 %r219592, label %tbool219594, label %tbad219593
-tbad219593:
-  %r219595 = getelementptr inbounds i8, ptr %t219584, i64 8
-  %r219596 = load i64, ptr %r219595
-  %r219597 = call i64 @lvv_truth(i64 %r219591, i64 %r219596)
-  br label %tbool219594
-tbool219594:
-  %r219598 = getelementptr inbounds i8, ptr %t219584, i64 8
-  %r219599 = load i32, ptr %r219598
-  %r219600 = icmp ne i32 %r219599, 0
-  br i1 %r219600, label %rhs219589, label %done219590
-rhs219589:
-  store i64 154774012232, ptr @lv_pos
-  %r219602 = getelementptr inbounds [1 x %LV], ptr %a219601, i64 0, i64 0
-  %r219603 = load i64, ptr %a217873
-  %r219604 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r219606 = load i64, ptr %r219604
-  store i64 %r219603, ptr %r219602
-  %r219605 = getelementptr inbounds i8, ptr %r219602, i64 8
-  store i64 %r219606, ptr %r219605
-  %r219607 = call %LV @lb_len(ptr @nf_len, i32 1, ptr %a219601)
-  store %LV %r219607, ptr %t219608
-  %r219610 = load i64, ptr %t219608
-  %r219611 = load i64, ptr @.c2
-  %r219612 = icmp eq i64 %r219610, 2
-  %r219613 = icmp eq i64 %r219611, 2
-  %r219614 = and i1 %r219612, %r219613
-  br i1 %r219614, label %ifast219615, label %fcheck219616
-ifast219615:
-  %r219619 = getelementptr inbounds i8, ptr %t219608, i64 8
-  %r219620 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219621 = load i64, ptr %r219619
-  %r219622 = load i64, ptr %r219620
-  %r219624 = getelementptr inbounds i8, ptr %t219609, i64 8
-  %r219625 = icmp eq i64 %r219621, %r219622
-  %r219626 = zext i1 %r219625 to i64
-  store i64 1, ptr %t219609
-  store i64 %r219626, ptr %r219624
-  br label %idone219618
-fcheck219616:
-  %r219627 = icmp eq i64 %r219610, 3
-  %r219628 = icmp eq i64 %r219611, 3
-  %r219629 = and i1 %r219627, %r219628
-  br i1 %r219629, label %ffast219630, label %islow219617
-ffast219630:
-  %r219631 = getelementptr inbounds i8, ptr %t219608, i64 8
-  %r219632 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219633 = load i64, ptr %r219631
-  %r219634 = load i64, ptr %r219632
-  %r219635 = bitcast i64 %r219633 to double
-  %r219636 = bitcast i64 %r219634 to double
-  %r219637 = getelementptr inbounds i8, ptr %t219609, i64 8
-  %r219638 = fcmp oeq double %r219635, %r219636
-  %r219639 = zext i1 %r219638 to i64
-  store i64 1, ptr %t219609
-  store i64 %r219639, ptr %r219637
-  br label %idone219618
-islow219617:
-  store i64 288934304266846536, ptr @lv_pos
-  %r219642 = getelementptr inbounds i8, ptr %t219608, i64 8
-  %r219643 = getelementptr inbounds i8, ptr @.c2, i64 8
-  %r219640 = load i64, ptr %r219642
-  %r219641 = load i64, ptr %r219643
-  %r219644 = call %LV @lvv_eq(i64 %r219610, i64 %r219640, i64 %r219611, i64 %r219641)
-  %r219645 = extractvalue %LV %r219644, 0
-  %r219646 = extractvalue %LV %r219644, 1
-  store i64 %r219645, ptr %t219609
-  %r219647 = getelementptr inbounds i8, ptr %t219609, i64 8
-  store i64 %r219646, ptr %r219647
-  br label %idone219618
-idone219618:
-  store i64 288934304266846536, ptr @lv_pos
-  %r219648 = load i64, ptr %t219609
-  %r219649 = icmp eq i64 %r219648, 1
-  br i1 %r219649, label %tbool219651, label %tbad219650
-tbad219650:
-  %r219652 = getelementptr inbounds i8, ptr %t219609, i64 8
-  %r219653 = load i64, ptr %r219652
-  %r219654 = call i64 @lvv_truth(i64 %r219648, i64 %r219653)
-  br label %tbool219651
-tbool219651:
-  %r219655 = getelementptr inbounds i8, ptr %t219609, i64 8
-  %r219656 = load i32, ptr %r219655
-  %r219657 = icmp ne i32 %r219656, 0
-  %r219658 = load i64, ptr %t219609
-  %r219659 = getelementptr inbounds i8, ptr %t219609, i64 8
-  %r219661 = load i64, ptr %r219659
-  store i64 %r219658, ptr %t219584
-  %r219660 = getelementptr inbounds i8, ptr %t219584, i64 8
-  store i64 %r219661, ptr %r219660
-  br label %done219590
-done219590:
-  store i64 577657622316974408, ptr @lv_pos
-  %r219662 = load i64, ptr %t219584
-  %r219663 = icmp eq i64 %r219662, 1
-  br i1 %r219663, label %tbool219665, label %tbad219664
-tbad219664:
-  %r219666 = getelementptr inbounds i8, ptr %t219584, i64 8
-  %r219667 = load i64, ptr %r219666
-  %r219668 = call i64 @lvv_truth(i64 %r219662, i64 %r219667)
-  br label %tbool219665
-tbool219665:
-  %r219669 = getelementptr inbounds i8, ptr %t219584, i64 8
-  %r219670 = load i32, ptr %r219669
-  %r219671 = icmp ne i32 %r219670, 0
-  br i1 %r219671, label %then219672, label %else219673
-then219672:
-  store i64 329, ptr @lv_pos
-  store i64 309275394377, ptr @lv_pos
-  store i64 206196179273, ptr @lv_pos
-  %r219676 = load i64, ptr @g_unparse_main
-  %r219677 = icmp eq i64 %r219676, 17
-  br i1 %r219677, label %gundef219678, label %gdef219679
-gundef219678:
+  br label %done219517
+done219517:
+  store i64 577657622316974405, ptr @lv_pos
+  %r219589 = load i64, ptr %t219511
+  %r219590 = icmp eq i64 %r219589, 1
+  br i1 %r219590, label %tbool219592, label %tbad219591
+tbad219591:
+  %r219593 = getelementptr inbounds i8, ptr %t219511, i64 8
+  %r219594 = load i64, ptr %r219593
+  %r219595 = call i64 @lvv_truth(i64 %r219589, i64 %r219594)
+  br label %tbool219592
+tbool219592:
+  %r219596 = getelementptr inbounds i8, ptr %t219511, i64 8
+  %r219597 = load i32, ptr %r219596
+  %r219598 = icmp ne i32 %r219597, 0
+  br i1 %r219598, label %then219599, label %else219600
+then219599:
+  store i64 326, ptr @lv_pos
+  store i64 309275394374, ptr @lv_pos
+  store i64 206196179270, ptr @lv_pos
+  %r219603 = load i64, ptr @g_unparse_main
+  %r219604 = icmp eq i64 %r219603, 17
+  br i1 %r219604, label %gundef219605, label %gdef219606
+gundef219605:
   call void @lvp_gundef(ptr @g_unparse_main, ptr @.s6251)
-  br label %gdef219679
-gdef219679:
-  %r219680 = load i64, ptr @g_unparse_main
-  %r219681 = getelementptr inbounds i8, ptr @g_unparse_main, i64 8
-  %r219683 = load i64, ptr %r219681
-  store i64 %r219680, ptr %t219675
-  %r219682 = getelementptr inbounds i8, ptr %t219675, i64 8
-  store i64 %r219683, ptr %r219682
-  store i64 309275394377, ptr @lv_pos
-  %r219685 = getelementptr inbounds [1 x %LV], ptr %a219684, i64 0, i64 0
-  %r219686 = load i64, ptr %a217873
-  %r219687 = getelementptr inbounds i8, ptr %a217873, i64 8
-  %r219689 = load i64, ptr %r219687
-  store i64 %r219686, ptr %r219685
-  %r219688 = getelementptr inbounds i8, ptr %r219685, i64 8
-  store i64 %r219689, ptr %r219688
-  call void @lvp_call(ptr %t219690, ptr %t219675, i32 1, ptr %a219684)
-  br label %endif219674
-else219673:
-  store i64 360844362058, ptr @lv_pos
-  %r219692 = getelementptr inbounds [2 x %LV], ptr %a219691, i64 0, i64 0
-  %r219693 = load i64, ptr %a217833
-  %r219694 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219696 = load i64, ptr %r219694
-  store i64 %r219693, ptr %r219692
-  %r219695 = getelementptr inbounds i8, ptr %r219692, i64 8
-  store i64 %r219696, ptr %r219695
-  %r219697 = getelementptr inbounds [2 x %LV], ptr %a219691, i64 0, i64 1
-  %r219698 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1617)
-  %r219699 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1617), i64 8
-  %r219701 = load i64, ptr %r219699
-  store i64 %r219698, ptr %r219697
-  %r219700 = getelementptr inbounds i8, ptr %r219697, i64 8
-  store i64 %r219701, ptr %r219700
-  %r219702 = call %LV @lb_ends_with(ptr @nf_ends_with, i32 2, ptr %a219691)
-  store %LV %r219702, ptr %t219703
-  %r219705 = load i64, ptr %t219703
-  %r219706 = getelementptr inbounds i8, ptr %t219703, i64 8
-  %r219708 = load i64, ptr %r219706
-  store i64 %r219705, ptr %t219704
-  %r219707 = getelementptr inbounds i8, ptr %t219704, i64 8
-  store i64 %r219708, ptr %r219707
-  %r219711 = load i64, ptr %t219704
-  %r219712 = icmp eq i64 %r219711, 1
-  br i1 %r219712, label %tbool219714, label %tbad219713
-tbad219713:
-  %r219715 = getelementptr inbounds i8, ptr %t219704, i64 8
-  %r219716 = load i64, ptr %r219715
-  %r219717 = call i64 @lvv_truth(i64 %r219711, i64 %r219716)
-  br label %tbool219714
-tbool219714:
-  %r219718 = getelementptr inbounds i8, ptr %t219704, i64 8
-  %r219719 = load i32, ptr %r219718
-  %r219720 = icmp ne i32 %r219719, 0
-  br i1 %r219720, label %done219710, label %rhs219709
-rhs219709:
-  store i64 360949219658, ptr @lv_pos
-  %r219722 = getelementptr inbounds [2 x %LV], ptr %a219721, i64 0, i64 0
-  %r219723 = load i64, ptr %a217833
-  %r219724 = getelementptr inbounds i8, ptr %a217833, i64 8
-  %r219726 = load i64, ptr %r219724
-  store i64 %r219723, ptr %r219722
-  %r219725 = getelementptr inbounds i8, ptr %r219722, i64 8
-  store i64 %r219726, ptr %r219725
-  %r219727 = getelementptr inbounds [2 x %LV], ptr %a219721, i64 0, i64 1
-  %r219728 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1617)
-  %r219729 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1617), i64 8
-  %r219731 = load i64, ptr %r219729
-  store i64 %r219728, ptr %r219727
-  %r219730 = getelementptr inbounds i8, ptr %r219727, i64 8
-  store i64 %r219731, ptr %r219730
-  %r219732 = call %LV @lb_ends_with(ptr @nf_ends_with, i32 2, ptr %a219721)
-  store %LV %r219732, ptr %t219733
-  %r219734 = load i64, ptr %t219733
-  %r219735 = icmp eq i64 %r219734, 1
-  br i1 %r219735, label %tbool219737, label %tbad219736
-tbad219736:
-  %r219738 = getelementptr inbounds i8, ptr %t219733, i64 8
-  %r219739 = load i64, ptr %r219738
-  %r219740 = call i64 @lvv_truth(i64 %r219734, i64 %r219739)
-  br label %tbool219737
-tbool219737:
-  %r219741 = getelementptr inbounds i8, ptr %t219733, i64 8
-  %r219742 = load i32, ptr %r219741
-  %r219743 = icmp ne i32 %r219742, 0
-  %r219744 = load i64, ptr %t219733
-  %r219745 = getelementptr inbounds i8, ptr %t219733, i64 8
-  %r219747 = load i64, ptr %r219745
-  store i64 %r219744, ptr %t219704
-  %r219746 = getelementptr inbounds i8, ptr %t219704, i64 8
-  store i64 %r219747, ptr %r219746
-  br label %done219710
-done219710:
-  store i64 289779278864712010, ptr @lv_pos
-  %r219748 = load i64, ptr %t219704
-  %r219749 = icmp eq i64 %r219748, 1
-  br i1 %r219749, label %tbool219751, label %tbad219750
-tbad219750:
-  %r219752 = getelementptr inbounds i8, ptr %t219704, i64 8
-  %r219753 = load i64, ptr %r219752
-  %r219754 = call i64 @lvv_truth(i64 %r219748, i64 %r219753)
-  br label %tbool219751
-tbool219751:
-  %r219755 = getelementptr inbounds i8, ptr %t219704, i64 8
-  %r219756 = load i32, ptr %r219755
-  %r219757 = icmp ne i32 %r219756, 0
-  br i1 %r219757, label %then219758, label %else219759
-then219758:
-  store i64 331, ptr @lv_pos
-  store i64 309275394379, ptr @lv_pos
-  store i64 257735786827, ptr @lv_pos
-  %r219762 = load i64, ptr @g_positional_main
-  %r219763 = icmp eq i64 %r219762, 17
-  br i1 %r219763, label %gundef219764, label %gdef219765
-gundef219764:
+  br label %gdef219606
+gdef219606:
+  %r219607 = load i64, ptr @g_unparse_main
+  %r219608 = getelementptr inbounds i8, ptr @g_unparse_main, i64 8
+  %r219610 = load i64, ptr %r219608
+  store i64 %r219607, ptr %t219602
+  %r219609 = getelementptr inbounds i8, ptr %t219602, i64 8
+  store i64 %r219610, ptr %r219609
+  store i64 309275394374, ptr @lv_pos
+  %r219612 = getelementptr inbounds [1 x %LV], ptr %a219611, i64 0, i64 0
+  %r219613 = load i64, ptr %a217800
+  %r219614 = getelementptr inbounds i8, ptr %a217800, i64 8
+  %r219616 = load i64, ptr %r219614
+  store i64 %r219613, ptr %r219612
+  %r219615 = getelementptr inbounds i8, ptr %r219612, i64 8
+  store i64 %r219616, ptr %r219615
+  call void @lvp_call(ptr %t219617, ptr %t219602, i32 1, ptr %a219611)
+  br label %endif219601
+else219600:
+  store i64 360844362055, ptr @lv_pos
+  %r219619 = getelementptr inbounds [2 x %LV], ptr %a219618, i64 0, i64 0
+  %r219620 = load i64, ptr %a217760
+  %r219621 = getelementptr inbounds i8, ptr %a217760, i64 8
+  %r219623 = load i64, ptr %r219621
+  store i64 %r219620, ptr %r219619
+  %r219622 = getelementptr inbounds i8, ptr %r219619, i64 8
+  store i64 %r219623, ptr %r219622
+  %r219624 = getelementptr inbounds [2 x %LV], ptr %a219618, i64 0, i64 1
+  %r219625 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 1617)
+  %r219626 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 1617), i64 8
+  %r219628 = load i64, ptr %r219626
+  store i64 %r219625, ptr %r219624
+  %r219627 = getelementptr inbounds i8, ptr %r219624, i64 8
+  store i64 %r219628, ptr %r219627
+  %r219629 = call %LV @lb_ends_with(ptr @nf_ends_with, i32 2, ptr %a219618)
+  store %LV %r219629, ptr %t219630
+  %r219631 = load i64, ptr %t219630
+  %r219632 = icmp eq i64 %r219631, 1
+  br i1 %r219632, label %tbool219634, label %tbad219633
+tbad219633:
+  %r219635 = getelementptr inbounds i8, ptr %t219630, i64 8
+  %r219636 = load i64, ptr %r219635
+  %r219637 = call i64 @lvv_truth(i64 %r219631, i64 %r219636)
+  br label %tbool219634
+tbool219634:
+  %r219638 = getelementptr inbounds i8, ptr %t219630, i64 8
+  %r219639 = load i32, ptr %r219638
+  %r219640 = icmp ne i32 %r219639, 0
+  br i1 %r219640, label %then219641, label %else219642
+then219641:
+  store i64 328, ptr @lv_pos
+  store i64 309275394376, ptr @lv_pos
+  store i64 257735786824, ptr @lv_pos
+  %r219645 = load i64, ptr @g_positional_main
+  %r219646 = icmp eq i64 %r219645, 17
+  br i1 %r219646, label %gundef219647, label %gdef219648
+gundef219647:
   call void @lvp_gundef(ptr @g_positional_main, ptr @.s6253)
-  br label %gdef219765
-gdef219765:
-  %r219766 = load i64, ptr @g_positional_main
-  %r219767 = getelementptr inbounds i8, ptr @g_positional_main, i64 8
-  %r219769 = load i64, ptr %r219767
-  store i64 %r219766, ptr %t219761
-  %r219768 = getelementptr inbounds i8, ptr %t219761, i64 8
-  store i64 %r219769, ptr %r219768
-  store i64 309275394379, ptr @lv_pos
-  %r219771 = getelementptr inbounds [1 x %LV], ptr %a219770, i64 0, i64 0
-  %r219772 = load i64, ptr %a217749
-  %r219773 = getelementptr inbounds i8, ptr %a217749, i64 8
-  %r219775 = load i64, ptr %r219773
-  store i64 %r219772, ptr %r219771
-  %r219774 = getelementptr inbounds i8, ptr %r219771, i64 8
-  store i64 %r219775, ptr %r219774
-  call void @lvp_call(ptr %t219776, ptr %t219761, i32 1, ptr %a219770)
-  br label %endif219760
-else219759:
-  store i64 333, ptr @lv_pos
-  store i64 120296833357, ptr @lv_pos
-  store i64 85937094989, ptr @lv_pos
-  %r219778 = load i64, ptr @g_usage
-  %r219779 = icmp eq i64 %r219778, 17
-  br i1 %r219779, label %gundef219780, label %gdef219781
-gundef219780:
+  br label %gdef219648
+gdef219648:
+  %r219649 = load i64, ptr @g_positional_main
+  %r219650 = getelementptr inbounds i8, ptr @g_positional_main, i64 8
+  %r219652 = load i64, ptr %r219650
+  store i64 %r219649, ptr %t219644
+  %r219651 = getelementptr inbounds i8, ptr %t219644, i64 8
+  store i64 %r219652, ptr %r219651
+  store i64 309275394376, ptr @lv_pos
+  %r219654 = getelementptr inbounds [1 x %LV], ptr %a219653, i64 0, i64 0
+  %r219655 = load i64, ptr %a217676
+  %r219656 = getelementptr inbounds i8, ptr %a217676, i64 8
+  %r219658 = load i64, ptr %r219656
+  store i64 %r219655, ptr %r219654
+  %r219657 = getelementptr inbounds i8, ptr %r219654, i64 8
+  store i64 %r219658, ptr %r219657
+  call void @lvp_call(ptr %t219659, ptr %t219644, i32 1, ptr %a219653)
+  br label %endif219643
+else219642:
+  store i64 330, ptr @lv_pos
+  store i64 120296833354, ptr @lv_pos
+  store i64 85937094986, ptr @lv_pos
+  %r219661 = load i64, ptr @g_usage
+  %r219662 = icmp eq i64 %r219661, 17
+  br i1 %r219662, label %gundef219663, label %gdef219664
+gundef219663:
   call void @lvp_gundef(ptr @g_usage, ptr @.s6241)
-  br label %gdef219781
-gdef219781:
-  %r219782 = load i64, ptr @g_usage
-  %r219783 = getelementptr inbounds i8, ptr @g_usage, i64 8
-  %r219785 = load i64, ptr %r219783
-  store i64 %r219782, ptr %t219777
-  %r219784 = getelementptr inbounds i8, ptr %t219777, i64 8
-  store i64 %r219785, ptr %r219784
-  store i64 120296833357, ptr @lv_pos
-  call void @lvp_call(ptr %t219786, ptr %t219777, i32 0, ptr null)
-  br label %endif219760
-endif219760:
-  br label %endif219674
-endif219674:
-  br label %endif219528
-endif219528:
-  br label %endif219233
-endif219233:
-  br label %endif219087
-endif219087:
-  br label %endif218941
-endif218941:
-  br label %endif218795
-endif218795:
-  br label %endif218649
-endif218649:
-  br label %endif218503
-endif218503:
-  %r219787 = load i64, ptr %a217830
-  call void @lv_box_release_scope(i64 %r219787)
+  br label %gdef219664
+gdef219664:
+  %r219665 = load i64, ptr @g_usage
+  %r219666 = getelementptr inbounds i8, ptr @g_usage, i64 8
+  %r219668 = load i64, ptr %r219666
+  store i64 %r219665, ptr %t219660
+  %r219667 = getelementptr inbounds i8, ptr %t219660, i64 8
+  store i64 %r219668, ptr %r219667
+  store i64 120296833354, ptr @lv_pos
+  call void @lvp_call(ptr %t219669, ptr %t219660, i32 0, ptr null)
+  br label %endif219643
+endif219643:
+  br label %endif219601
+endif219601:
+  br label %endif219455
+endif219455:
+  br label %endif219160
+endif219160:
+  br label %endif219014
+endif219014:
+  br label %endif218868
+endif218868:
+  br label %endif218722
+endif218722:
+  br label %endif218576
+endif218576:
+  br label %endif218430
+endif218430:
+  %r219670 = load i64, ptr %a217757
+  call void @lv_box_release_scope(i64 %r219670)
   ret %LV zeroinitializer
 }
 define internal void @entry() {
@@ -340564,12 +340377,12 @@ entry:
   %t215729 = alloca %LV, align 8
   %t216412 = alloca %LV, align 8
   %t216694 = alloca %LV, align 8
-  %t216798 = alloca %LV, align 8
-  %t216910 = alloca %LV, align 8
-  %t217470 = alloca %LV, align 8
-  %t217740 = alloca %LV, align 8
-  %t219789 = alloca %LV, align 8
-  %t219794 = alloca %LV, align 8
+  %t216725 = alloca %LV, align 8
+  %t216837 = alloca %LV, align 8
+  %t217397 = alloca %LV, align 8
+  %t217667 = alloca %LV, align 8
+  %t219672 = alloca %LV, align 8
+  %t219677 = alloca %LV, align 8
   store ptr @mod_0, ptr @lv_pos_mod
   store i64 22, ptr @lv_pos
   %r14726 = load i32, ptr @mod_1_state
@@ -340902,51 +340715,51 @@ modend212945:
   %r216697 = getelementptr inbounds i8, ptr @g_ast_main, i64 8
   store i64 %r216698, ptr %r216697
   store i64 244, ptr @lv_pos
-  %r216797 = call %LV @lv_closure(ptr @fn_216699, ptr @.s6250, i32 0, ptr null)
-  store %LV %r216797, ptr %t216798
-  %r216799 = load i64, ptr %t216798
-  %r216800 = getelementptr inbounds i8, ptr %t216798, i64 8
-  %r216802 = load i64, ptr %r216800
-  store i64 %r216799, ptr @g_check_main
-  %r216801 = getelementptr inbounds i8, ptr @g_check_main, i64 8
-  store i64 %r216802, ptr %r216801
-  store i64 252, ptr @lv_pos
-  %r216909 = call %LV @lv_closure(ptr @fn_216803, ptr @.s6251, i32 0, ptr null)
-  store %LV %r216909, ptr %t216910
-  %r216911 = load i64, ptr %t216910
-  %r216912 = getelementptr inbounds i8, ptr %t216910, i64 8
-  %r216914 = load i64, ptr %r216912
-  store i64 %r216911, ptr @g_unparse_main
-  %r216913 = getelementptr inbounds i8, ptr @g_unparse_main, i64 8
-  store i64 %r216914, ptr %r216913
-  store i64 260, ptr @lv_pos
-  %r217469 = call %LV @lv_closure(ptr @fn_216915, ptr @.s6252, i32 0, ptr null)
-  store %LV %r217469, ptr %t217470
-  %r217471 = load i64, ptr %t217470
-  %r217472 = getelementptr inbounds i8, ptr %t217470, i64 8
-  %r217474 = load i64, ptr %r217472
-  store i64 %r217471, ptr @g_native_main
-  %r217473 = getelementptr inbounds i8, ptr @g_native_main, i64 8
-  store i64 %r217474, ptr %r217473
-  store i64 284, ptr @lv_pos
-  %r217739 = call %LV @lv_closure(ptr @fn_217475, ptr @.s6253, i32 0, ptr null)
-  store %LV %r217739, ptr %t217740
-  %r217741 = load i64, ptr %t217740
-  %r217742 = getelementptr inbounds i8, ptr %t217740, i64 8
-  %r217744 = load i64, ptr %r217742
-  store i64 %r217741, ptr @g_positional_main
-  %r217743 = getelementptr inbounds i8, ptr @g_positional_main, i64 8
-  store i64 %r217744, ptr %r217743
-  store i64 299, ptr @lv_pos
-  %r219788 = call %LV @lv_closure(ptr @fn_217745, ptr @.s6254, i32 0, ptr null)
-  store %LV %r219788, ptr %t219789
-  %r219790 = load i64, ptr %t219789
-  %r219791 = getelementptr inbounds i8, ptr %t219789, i64 8
-  %r219793 = load i64, ptr %r219791
-  store i64 %r219790, ptr @g_main
-  %r219792 = getelementptr inbounds i8, ptr @g_main, i64 8
-  store i64 %r219793, ptr %r219792
-  call void @lvp_call(ptr %t219794, ptr @g_main, i32 0, ptr null)
+  %r216724 = call %LV @lv_closure(ptr @fn_216699, ptr @.s6250, i32 0, ptr null)
+  store %LV %r216724, ptr %t216725
+  %r216726 = load i64, ptr %t216725
+  %r216727 = getelementptr inbounds i8, ptr %t216725, i64 8
+  %r216729 = load i64, ptr %r216727
+  store i64 %r216726, ptr @g_check_main
+  %r216728 = getelementptr inbounds i8, ptr @g_check_main, i64 8
+  store i64 %r216729, ptr %r216728
+  store i64 249, ptr @lv_pos
+  %r216836 = call %LV @lv_closure(ptr @fn_216730, ptr @.s6251, i32 0, ptr null)
+  store %LV %r216836, ptr %t216837
+  %r216838 = load i64, ptr %t216837
+  %r216839 = getelementptr inbounds i8, ptr %t216837, i64 8
+  %r216841 = load i64, ptr %r216839
+  store i64 %r216838, ptr @g_unparse_main
+  %r216840 = getelementptr inbounds i8, ptr @g_unparse_main, i64 8
+  store i64 %r216841, ptr %r216840
+  store i64 257, ptr @lv_pos
+  %r217396 = call %LV @lv_closure(ptr @fn_216842, ptr @.s6252, i32 0, ptr null)
+  store %LV %r217396, ptr %t217397
+  %r217398 = load i64, ptr %t217397
+  %r217399 = getelementptr inbounds i8, ptr %t217397, i64 8
+  %r217401 = load i64, ptr %r217399
+  store i64 %r217398, ptr @g_native_main
+  %r217400 = getelementptr inbounds i8, ptr @g_native_main, i64 8
+  store i64 %r217401, ptr %r217400
+  store i64 281, ptr @lv_pos
+  %r217666 = call %LV @lv_closure(ptr @fn_217402, ptr @.s6253, i32 0, ptr null)
+  store %LV %r217666, ptr %t217667
+  %r217668 = load i64, ptr %t217667
+  %r217669 = getelementptr inbounds i8, ptr %t217667, i64 8
+  %r217671 = load i64, ptr %r217669
+  store i64 %r217668, ptr @g_positional_main
+  %r217670 = getelementptr inbounds i8, ptr @g_positional_main, i64 8
+  store i64 %r217671, ptr %r217670
+  store i64 296, ptr @lv_pos
+  %r219671 = call %LV @lv_closure(ptr @fn_217672, ptr @.s6254, i32 0, ptr null)
+  store %LV %r219671, ptr %t219672
+  %r219673 = load i64, ptr %t219672
+  %r219674 = getelementptr inbounds i8, ptr %t219672, i64 8
+  %r219676 = load i64, ptr %r219674
+  store i64 %r219673, ptr @g_main
+  %r219675 = getelementptr inbounds i8, ptr @g_main, i64 8
+  store i64 %r219676, ptr %r219675
+  call void @lvp_call(ptr %t219677, ptr @g_main, i32 0, ptr null)
   ret void
 }
 define i32 @main(i32 %argc, ptr %argv) {

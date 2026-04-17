@@ -302,6 +302,8 @@ The words `template`, `bloc`, `box`, `unsafe`, `use`, `export`, `import`, `case`
 are keywords and cannot be used as variable or function names. `data`, `in` and `from` are
 keywords only where they mean something (`data Name {`, `for (let x in xs)`, `use {a} from`) and
 are ordinary names everywhere else. After a `.` any word is a field name: `m.data`, `m.in`.
+The keyword aliases above are reserved too: a variable cannot be called `balls`, `big_balls`, `shared_balls`, `grab_balls`,
+`if_balls`, `else_balls`, `spin_balls`, `loop_your_balls`, `switch_balls`, `drop_balls` or `jiggle_balls`.
 
 ## Line breaks
 

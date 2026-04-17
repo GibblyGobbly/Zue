@@ -12,6 +12,8 @@ system("bin/zue explain E9999")
 system("bin/zue check test/fixtures/error_type.zu")
 # CASE check prints every syntax error
 system("bin/zue check test/fixtures/error_syntax.zu")
+# CASE check finds a bad import even in a branch that never runs
+system("bin/zue check test/fixtures/error_import.zu")
 # CASE check prints nothing for a good program
 system("bin/zue check examples/hello.zu")
 # CASE compile errors as JSON, one object per line
