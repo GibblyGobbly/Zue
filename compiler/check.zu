@@ -14,7 +14,7 @@
 
 use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
-use { diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, span_at, span_line, suggest } from "diag.zu"
+use { diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, span_at, span_line, node_span, suggest } from "diag.zu"
 use { cut } from "ranges.zu"
 
 let SCOPES = []
@@ -355,7 +355,7 @@ func type_origin(name) {
     if (ORIGINS[i] == null or ORIGINS[i][name] == null) {
         return null
     }
-    return nspan(ORIGINS[i][name])
+    return node_span(ORIGINS[i][name])
 }
 
 # The scope map that holds name, or null.
@@ -421,7 +421,7 @@ func check_name(n, what) {
     if (BUILTIN_NAMES[name] == true or name == "null") {
         return false
     }
-    append(PENDING, {"span": nspan(n), "name": name, "what": what, "scopes": cut(SCOPES, 0, len(SCOPES))})
+    append(PENDING, {"span": node_span(n), "name": name, "what": what, "scopes": cut(SCOPES, 0, len(SCOPES))})
     return true
 }
 
@@ -442,18 +442,10 @@ func undefined_error(span, name, what, scopes) {
 # types, so the same mistake could be found again; it is reported once.
 let REPORTED = {}
 
-# The place of node n as a span; only its line when the compiler made the node.
-func nspan(n) {
-    if (n.col == 0) {
-        return span_line(n.line)
-    }
-    return span_at(n.line, n.col, n.eline, n.ecol)
-}
-
 # sp, or the place of node n when sp is not known.
 func span_or(sp, n) {
     if (sp == null) {
-        return nspan(n)
+        return node_span(n)
     }
     return sp
 }
@@ -482,7 +474,7 @@ func fail_at(span, msg, kind = "Type Error") {
 }
 
 func fail_node(n, msg) {
-    return fail_at(nspan(n), msg)
+    return fail_at(node_span(n), msg)
 }
 
 # What to write to get a value of type want from one of type got, or "".
@@ -530,14 +522,14 @@ func op_span(n) {
     if (n.ospan != null) {
         return n.ospan
     }
-    return nspan(n)
+    return node_span(n)
 }
 
 func operand_error(n, a, b) {
     let op = n.op
     let d = fail_at(op_span(n), "cannot use '{op}' on {describe(a)} and {describe(b)}")
-    diag_label(d, nspan(n.l), describe(a))
-    diag_label(d, nspan(n.r), describe(b))
+    diag_label(d, node_span(n.l), describe(a))
+    diag_label(d, node_span(n.r), describe(b))
     if (op == "+" and (a == "string" or b == "string")) {
         diag_hint(d, "'+' joins two strings. Build text with interpolation, \"\{x} and \{y}\", or convert with to_string(x)")
     } else if (is_number(a) and is_number(b)) {
@@ -551,7 +543,7 @@ func operand_error(n, a, b) {
 func bin_error(n, a, b) {
     if (n.unary == true) {
         let d = fail_at(op_span(n), "cannot negate {describe(b)}")
-        diag_label(d, nspan(n.r), describe(b))
+        diag_label(d, node_span(n.r), describe(b))
         diag_hint(d, "Only an int or a float can be negated")
         return null
     }
@@ -724,7 +716,7 @@ func args_span(n) {
     if (n.aspan != null) {
         return n.aspan
     }
-    return nspan(n)
+    return node_span(n)
 }
 
 func ck_builtin_call(n, name, alts, argtypes) {
@@ -751,7 +743,7 @@ func ck_builtin_call(n, name, alts, argtypes) {
         }
         let d = fail_at(args_span(n), "{name}() expects {wanted} argument{plural}, but got {len(argtypes)}")
         diag_text(d, "found {len(argtypes)}")
-        diag_label(d, nspan(n.callee), "{name} takes {wanted}")
+        diag_label(d, node_span(n.callee), "{name} takes {wanted}")
         let forms = []
         for (let alt in alts) {
             append(forms, "{name}{alt_text(alt)}")
@@ -774,7 +766,7 @@ func ck_builtin_call(n, name, alts, argtypes) {
         let idx = first_miss[0]
         let d = fail_node(n.args[idx], "{name}() argument {idx + 1} must be {article(first_miss[1])} {first_miss[1]}, got {describe(argtypes[idx])}")
         diag_text(d, "expected {first_miss[1]}, found {describe(argtypes[idx])}")
-        diag_label(d, nspan(n.callee), "argument {idx + 1} of {name}()")
+        diag_label(d, node_span(n.callee), "argument {idx + 1} of {name}()")
         diag_hint(d, convert_hint(first_miss[1], argtypes[idx], n.args[idx]))
         return "any"
     }
@@ -790,7 +782,7 @@ func ck_builtin_call(n, name, alts, argtypes) {
     let or_text = " or "
     let d = fail_at(args_span(n), "{name}() cannot be called with ({join(got, sep)}); use {join(forms, or_text)}")
     diag_text(d, "no form takes ({join(got, sep)})")
-    diag_label(d, nspan(n.callee), name)
+    diag_label(d, node_span(n.callee), name)
     return "any"
 }
 
@@ -935,7 +927,7 @@ func ck_builtin(n, name, argtypes) {
             if (not fits_slot(vt, el)) {
                 let d = fail_node(n.args[1], "cannot append {describe(vt)} to {first}")
                 diag_text(d, "this is {describe(vt)}")
-                diag_label(d, nspan(n.args[0]), "{first}")
+                diag_label(d, node_span(n.args[0]), "{first}")
                 diag_hint(d, convert_hint(el, vt, n.args[1]))
             }
         }
@@ -1486,7 +1478,7 @@ func ck_stmt(n) {
             if (not fits_slot(et, el)) {
                 let d = fail_node(n.e, "cannot store {describe(et)} in {tt}")
                 diag_text(d, "this is {describe(et)}")
-                diag_label(d, nspan(n.target), "{tt}")
+                diag_label(d, node_span(n.target), "{tt}")
                 let how = convert_hint(el, et, n.e)
                 if (len(how) == 0) {
                     how = "A {tt} holds only {el} items"

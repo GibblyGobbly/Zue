@@ -283,23 +283,6 @@ func lvp_mod(o, a, b) {
     _operand_error(cstr("%"), a, b)
 }
 
-func lvp_neg(o, a) {
-    if (_tag(a) == T_INT) {
-        if (_val(a) == -9223372036854775807 - 1) {
-            _overflow(cstr("-"))
-        }
-        _int(o, 0 - _val(a))
-        return 0
-    }
-    if (_tag(a) == T_FLOAT) {
-        _flt(o, fneg(_val(a)))
-        return 0
-    }
-    let zero = stack_buf(16)
-    _int(zero, 0)
-    _operand_error(cstr("-"), zero, a)
-}
-
 # Bitwise operators work on ints only.
 func _bit_ints(op, a, b) {
     if (_tag(a) != T_INT or _tag(b) != T_INT) {

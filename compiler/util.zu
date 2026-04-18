@@ -3,7 +3,6 @@
 #
 # util.zu: compile errors, path handling and file reading.
 
-use { ST } from "state.zu"
 use { die_line } from "diag.zu"
 use { cut } from "ranges.zu"
 

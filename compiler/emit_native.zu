@@ -24,9 +24,9 @@
 
 use { die } from "util.zu"
 use { mk_id_line, node_children } from "ast_nodes.zu"
-use { uid } from "shared.zu"
 use { ll, ll_alloca, ll_br, ll_condbr, ll_escape, ll_label, ll_new_ctx, ll_new_label } from "ll_state.zu"
 use { ll_reg } from "ll_state.zu"
+use { find_local } from "ll_scope.zu"
 use { ST } from "state.zu"
 
 let NS = {"funcs": {}, "order": [], "externs": {}, "consts": {}, "gvars": {}, "datas": {},
@@ -211,18 +211,6 @@ func band_free(a, b) {
 }
 
 # Expressions
-
-func find_local(name) {
-    let i = len(ST.ctx.scopes) - 1
-    while (i >= 0) {
-        let v = ST.ctx.scopes[i][name]
-        if (v != null) {
-            return v
-        }
-        i -= 1
-    }
-    return null
-}
 
 func nx_list(nodes) {
     let res = []

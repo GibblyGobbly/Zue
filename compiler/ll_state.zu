@@ -8,7 +8,7 @@
 # LV go through the pointer entry points (lvp_*) of the runtime, which is written in
 # Zue: compiler/runtime/zue_rt_*.zu.
 
-use { MODULES, MOD_LIST, uid } from "shared.zu"
+use { uid } from "shared.zu"
 use { ST } from "state.zu"
 use { cut } from "ranges.zu"
 

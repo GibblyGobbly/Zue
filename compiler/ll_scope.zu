@@ -4,7 +4,7 @@
 # ll_scope.zu: variable scopes and deferred calls of the LLVM IR backend.
 
 use { BUILTINS, uid } from "shared.zu"
-use { ll, ll_alloca, ll_args_array, ll_call_out, ll_copy, ll_reg, ll_slot } from "ll_state.zu"
+use { ll, ll_alloca, ll_args_array, ll_copy, ll_reg, ll_slot } from "ll_state.zu"
 use { box_raw, new_typed_var, ty_load, ty_store, unbox_checked } from "ll_unbox.zu"
 use { ST } from "state.zu"
 

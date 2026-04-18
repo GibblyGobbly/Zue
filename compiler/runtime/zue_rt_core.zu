@@ -618,24 +618,6 @@ func lv_error_labeled(kind_i, msg_p, hint_p, main_p, l_p, r_p) {
     lv_error(kind_i, msg_p, hint_p)
 }
 
-# A lint error found before the program ran, reported in the same layout as a runtime error.
-func lv_static_error(line_i, msg_p, hint_p) {
-    fflush(_stdout())
-    let m = ld64(addr_of("lv_pos_mod"))
-    fprintf(_stderr(), cstr("Static Error"))
-    _put_code(msg_p)
-    if (m != 0 and ld64(m + MOD_PATH) != 0) {
-        fprintf(_stderr(), cstr(" in %s"), ld64(m + MOD_PATH))
-    }
-    fprintf(_stderr(), cstr(" at line %d:\n  %s\n"), line_i, msg_p)
-    _error_source(line_i)
-    if (hint_p != 0) {
-        fprintf(_stderr(), cstr("Hint: %s\n"), hint_p)
-    }
-    fprintf(_stderr(), cstr("Parsing failed.\n"))
-    exit(1)
-}
-
 # printf-style errors with up to four arguments (strings or integers).
 func _errf4(kind, hint, fmt, a, b, c, d) {
     let msg = stack_buf(512)
@@ -649,12 +631,6 @@ func _errf(kind, hint, fmt, a, b, c) {
 
 func lv_undefined(name) {
     _errf(E_NAME, cstr("Declare variables with 'let' before using them"), cstr("Variable '%s' is not defined"), name, 0, 0)
-}
-
-# The name error that generated code raises for names that are not defined; fmt has up to
-# two %s places.
-func lv_name_error(hint_p, fmt_p, a_p, b_p) {
-    _errf(E_NAME, hint_p, fmt_p, a_p, b_p, 0)
 }
 
 func _type_name(v) {
@@ -720,12 +696,6 @@ func _str(o, s) {
 func lv_str_n(s, n) {
     let o = stack_buf(16)
     _str_n(o, s, n)
-    retp(o)
-}
-
-func lv_str(s) {
-    let o = stack_buf(16)
-    _str(o, s)
     retp(o)
 }
 

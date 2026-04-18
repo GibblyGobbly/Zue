@@ -18,7 +18,7 @@ use { ll_call_out, ll_char, ll_condbr, ll_copy, ll_cstr, ll_float, ll_gname, ll_
 use { DBG, dbg_function, dbg_module_text, ll_store_pos, ll_ic, ll_kstr, ll_label, ll_mark, ll_mark_line, ll_mark_pos, ll_new_ctx, ll_new_label, ll_null, ll_pos, ll_pos_range, ll_reg } from "ll_state.zu"
 use { ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } from "ll_state.zu"
 use { at_top, cap_cell, declare, find_local_index, pop_scope, push_scope, resolve, run_defers } from "ll_scope.zu"
-use { declare_typed, find_local, var_get, var_set } from "ll_scope.zu"
+use { declare_typed, var_get, var_set } from "ll_scope.zu"
 use { box_raw, ty_load, ty_store, unbox_checked, uses_address } from "ll_unbox.zu"
 use { lit_int, skind, tex, tex_step } from "ll_typed.zu"
 use { check_program } from "check.zu"
@@ -998,14 +998,6 @@ func st_forin(n) {
     pop_scope()
 }
 
-func st_scoped(stmts) {
-    push_scope()
-    for (let s in stmts) {
-        st(s)
-    }
-    pop_scope()
-}
-
 func st_switch(n) {
     push_scope()
     let sv = copy_slot(ex(n.e))
@@ -1022,11 +1014,11 @@ func st_switch(n) {
         let no = ll_new_label("next")
         ll_condbr(flag, yes, no)
         ll_label(yes)
-        st_scoped(c.body)
+        st_block(c.body)
         ll_br(done)
         ll_label(no)
     }
-    st_scoped(n.dflt)
+    st_block(n.dflt)
     ll_br(done)
     ll_label(done)
     loop_pop()
@@ -1158,7 +1150,7 @@ func st(n) {
     } else if (k == "typedef") {
         ll_mark_line(n)
     } else if (k == "block") {
-        st_scoped(n.body)
+        st_block(n.body)
     } else if (k == "incdec") {
         ex_incdec(n, true)
     } else {
@@ -1437,7 +1429,6 @@ func declarations() {
     append(d, "declare %LV @lv_addr(ptr)")
     append(d, "declare %LV @lv_addr_invalid(i32)")
     append(d, "declare void @lv_arity(ptr, i32, i32, i32)")
-    append(d, "declare void @lv_name_error(ptr, ptr, ptr, ptr)")
     append(d, "declare void @lvv_unbox_fail(ptr, i64, i64, i64)")
     append(d, "declare i32 @lv_main(i32, ptr, ptr)")
     for (let b in LL_BUILTINS) {

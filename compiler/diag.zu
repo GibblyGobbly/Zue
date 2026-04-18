@@ -39,14 +39,17 @@ export func span_line(line) {
     return Span(line, 0, line, 0)
 }
 
+# The place of an AST node: the whole node, or only its line when it has no column.
+export func node_span(n) {
+    if (n.col == 0) {
+        return span_line(n.line)
+    }
+    return span_at(n.line, n.col, n.eline, n.ecol)
+}
+
 # The span of one token that starts at line, col and ends before ecol on the same line.
 export func span_tok(line, col, ecol) {
     return Span(line, col, line, ecol)
-}
-
-# From the start of a to the end of b.
-export func span_join(a, b) {
-    return Span(a.line, a.col, b.eline, b.ecol)
 }
 
 # Records an error and returns it, so the caller can add labels, a hint or notes.
@@ -83,14 +86,6 @@ export func diag_hint(d, text) {
     return d
 }
 
-export func diag_note(d, text) {
-    if (d == null) {
-        return null
-    }
-    append(d.notes, text)
-    return d
-}
-
 # A line printed under the message, before the source: the chain of calls the checker followed.
 export func diag_trace(d, text) {
     if (d == null) {
@@ -98,10 +93,6 @@ export func diag_trace(d, text) {
     }
     append(d.trace, text)
     return d
-}
-
-export func diag_count() {
-    return len(DIAGS)
 }
 
 # True when an error is already recorded on this line of the current file.

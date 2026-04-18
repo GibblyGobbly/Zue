@@ -14,7 +14,7 @@
 #
 # The tree of a program with errors is never used.
 
-use { diag_new, diag_text, diag_hint, diag_label, diag_on_line, diag_exit_if_errors, span_at, span_line } from "diag.zu"
+use { diag_new, diag_text, diag_hint, diag_label, diag_on_line, diag_exit_if_errors, span_at, span_line, node_span } from "diag.zu"
 use { lex } from "lexer.zu"
 use { KEYWORDS } from "token.zu"
 use { mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_slice, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_typedef, mk_use, mk_block, mk_return, mk_jump, mk_neg } from "ast_nodes.zu"
@@ -41,14 +41,6 @@ let P_scopes = [{}]
 
 # Set when p_close_angle used up the first character of a token such as >> and left the rest.
 let P_split_tok = null
-
-# The place of a node as a span, or only its line when the node was made by the compiler.
-func node_span(n) {
-    if (n.col == 0) {
-        return span_line(n.line)
-    }
-    return span_at(n.line, n.col, n.eline, n.ecol)
-}
 
 # Records an error unless the parser is already in panic mode or the line has an error. A syntax
 # error puts the parser in panic mode (panic is true); a rule error such as a repeated name does not.
@@ -104,10 +96,6 @@ func p_sync() {
     }
     P_tk = P_toks[P_pos]
     P_kind = P_tk.t
-}
-
-func p_tok() {
-    return P_tk
 }
 
 func p_at(t) {
