@@ -875,6 +875,45 @@ func ck_typed_construct(n, name, argtypes) {
     return name
 }
 
+# How many "{}" placeholders a string literal holds, or -1 when the node is not a string literal.
+func literal_holes(n) {
+    let text = ""
+    if (n.k == "str") {
+        text = n.v
+    } else if (n.k == "tmpl") {
+        for (let part in n.parts) {
+            if (type(part) == "string") {
+                text = text + part
+            }
+        }
+    } else {
+        return -1
+    }
+    let holes = 0
+    let i = 0
+    while (i + 1 < len(text)) {
+        if (substring(text, i, 2) == "\{}") {
+            holes += 1
+            i += 1
+        }
+        i += 1
+    }
+    return holes
+}
+
+# print("... {} ...", a, b): one value for each placeholder.
+func check_print_holes(n) {
+    if (len(n.args) < 2) {
+        return null
+    }
+    let holes = literal_holes(n.args[0])
+    if (holes > 0 and holes != len(n.args) - 1) {
+        let d = fail_node(n, "print() has {holes} \{} placeholder(s) but got {len(n.args) - 1} value(s)")
+        diag_text(d, "{holes} placeholder(s) in the first string")
+        diag_hint(d, "Give one value for each \{} in the first string, or print the values on their own lines by leaving \{} out.")
+    }
+}
+
 func ck_call(n) {
     let argtypes = []
     for (let a in n.args) {
@@ -895,6 +934,7 @@ func ck_call(n) {
         }
     }
     if (name == "print" and known == null) {
+        check_print_holes(n)
         return "null"
     }
     if (name == "input" and known == null) {

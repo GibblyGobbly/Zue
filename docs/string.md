@@ -78,7 +78,6 @@ characters (the lexer uses them).
 | `repeat(s, n)` | string | `""` when `n` is 0 or less |
 | `pad_left(s, w, ch)`, `pad_right(s, w, ch)` | string | Pad to width `w` with the character `ch` |
 | `concat(a, b)` | string | Both must be strings |
-| `format(s, ...)` | string | Replaces each `{}` with the next argument |
 
 ### Converting
 
@@ -243,7 +242,7 @@ How it works:
 Aligned columns, a ruled line, and a total.
 
 ```javascript
-# A report table: pad_left, pad_right, repeat, format, to_string
+# A report table: pad_left, pad_right, repeat, print placeholders, to_string
 
 let names = ["Apples", "Bread", "Milk"]
 let prices = [1.5, 2.25, 0.99]
@@ -261,7 +260,7 @@ for (let i = 0; i < len(names); i++) {
 }
 print(line)
 print(pad_left("Total " + to_string(round(grand, 2)), 30, " "))
-print(format("{} items, {} lines", sum(counts), len(names)))
+print("{} items, {} lines", sum(counts), len(names))
 print("id: " + pad_left(to_string(42), 6, "0"))
 print(to_upper("receipt") + " " + repeat("*", 3))
 ```
@@ -288,7 +287,7 @@ How it works:
 - `pad_right(text, w, " ")` fills the right side so a column starts at the same place, and `pad_left` fills the left side so numbers line up on the right.
 - Numbers are not strings, so `to_string(counts[i])` converts them before padding. `round(total, 2)` keeps two decimals.
 - `float(counts[i])` converts the quantity on purpose, because `prices[i] * counts[i]` would mix a float with an int.
-- `format("{} items, {} lines", ...)` fills each `{}` with the next argument, and `pad_left(to_string(42), 6, "0")` makes `000042`.
+- `print("{} items, {} lines", ...)` fills each `{}` with the next value and prints one line, and `pad_left(to_string(42), 6, "0")` makes `000042`.
 
 ### Program 4: Transforming text
 

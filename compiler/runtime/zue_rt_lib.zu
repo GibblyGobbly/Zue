@@ -170,7 +170,56 @@ func lb_len(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# How many "{}" placeholders the string f holds.
+func _holes(f) {
+    let n = ld64(f)
+    let holes = 0
+    let i = 0
+    while (i + 1 < n) {
+        if (ld8(f + S_DATA + i) == 123 and ld8(f + S_DATA + i + 1) == 125) {
+            holes += 1
+            i += 1
+        }
+        i += 1
+    }
+    return holes
+}
+
+# print(a, b, c) prints each value on its own line. When the first value is a string with {}
+# placeholders, print(text, x, y) fills them with the values after it and prints one line: there
+# must be exactly one value for each placeholder.
 func lb_print(self_p, argc_i, argv_p) {
+    if (argc_i >= 2 and _tag(argv_p) == T_STR) {
+        let f = _val(argv_p)
+        let holes = _holes(f)
+        if (holes > 0) {
+            if (holes != argc_i - 1) {
+                _errf4(E_ARGUMENT, cstr("Give one value for each \{} in the first string, or print the values on their own lines by leaving \{} out."),
+                       cstr("print() has %d \{} placeholder(s) but got %d value(s)"), holes, argc_i - 1, 0, 0)
+            }
+            let b = stack_buf(B_SIZE)
+            let line = stack_buf(16)
+            _buf_init(b)
+            let next = 1
+            let n = ld64(f)
+            let i = 0
+            while (i < n) {
+                if (ld8(f + S_DATA + i) == 123 and i + 1 < n and ld8(f + S_DATA + i + 1) == 125) {
+                    _buf_value(b, argv_p + 16 * next)
+                    next += 1
+                    i += 1
+                } else {
+                    _buf_add(b, f + S_DATA + i, 1)
+                }
+                i += 1
+            }
+            _buf_done(line, b)
+            lvp_print(line)
+            let o = stack_buf(16)
+            _null(o)
+            retp(o)
+        }
+    }
     for (let i = 0; i < argc_i; i++) {
         lvp_print(argv_p + 16 * i)
     }
@@ -1303,31 +1352,6 @@ func lb_pad_right(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 3, 3)
     let o = stack_buf(16)
     _pad(self_p, argv_p, 0, o)
-    retp(o)
-}
-
-func lb_format(self_p, argc_i, argv_p) {
-    if (argc_i < 1) {
-        lv_arity(self_p, argc_i, 1, 1)
-    }
-    let f = _arg_str(self_p, argv_p, 0)
-    let b = stack_buf(B_SIZE)
-    let o = stack_buf(16)
-    _buf_init(b)
-    let next = 1
-    let n = ld64(f)
-    let i = 0
-    while (i < n) {
-        if (ld8(f + S_DATA + i) == 123 and i + 1 < n and ld8(f + S_DATA + i + 1) == 125 and next < argc_i) {
-            _buf_value(b, argv_p + 16 * next)
-            next += 1
-            i += 1
-        } else {
-            _buf_add(b, f + S_DATA + i, 1)
-        }
-        i += 1
-    }
-    _buf_done(o, b)
     retp(o)
 }
 

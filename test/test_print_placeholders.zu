@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// print(text, a, b): a first string with {} placeholders is filled with the values after it.
+
+# CASE values in a sentence
+let name = "Zue"
+let count = 3
+let price = 4.5
+print("hello {}{}{}", name, count, price)
+print("{} has {} items costing {} each", name, count, price)
+# CASE other value types
+print("list {} map {} flag {} null {}", [1, 2], {"a": 1}, true, null)
+# CASE interpolation and placeholders together
+let n = 7
+print("n is {n}, then {}", n * 2)
+# CASE arguments without placeholders still print on their own lines
+print("first", 2, 3.5)
+# CASE a single string is printed as it is
+print("braces {} stay")
+# CASE too few values
+print("two {} and {}", 1)
+# CASE too many values
+print("one {}", 1, 2)
+# CASE the count is checked at run time when the text comes from a variable
+func pass(v) { return [v, null][0] }
+let text = pass("a {} b {}")
+print(text, 1)

@@ -1,0 +1,7 @@
+Argument Error [E0203] in /tmp/zue_test_case.zu at line 3:
+  print() has 2 {} placeholder(s) but got 1 value(s)
+
+   3 | print(text, 1)
+     | ^^^^^^^^^^^^^^
+
+Hint: Give one value for each {} in the first string, or print the values on their own lines by leaving {} out.

@@ -1,0 +1,7 @@
+Type Error [E0203] in /tmp/zue_test_case.zu at line 1:
+  print() has 2 {} placeholder(s) but got 1 value(s)
+
+   1 | print("two {} and {}", 1)
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^ 2 placeholder(s) in the first string
+
+Hint: Give one value for each {} in the first string, or print the values on their own lines by leaving {} out.

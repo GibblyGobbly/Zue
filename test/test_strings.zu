@@ -50,7 +50,6 @@ print("Testing conversions...")
 assert(to_int("123") == 123)
 assert(is_digit("123") == true)
 assert(is_alpha("abc") == true)
-assert(format("Hi {}", "Zue") == "Hi Zue")
 
 print("Testing interpolation...")
 let pilot = "Zue"

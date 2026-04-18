@@ -16,7 +16,7 @@ as `sqrt() argument 1 must be a number, got string`.
 
 | Function | Returns |
 |---|---|
-| `print(a, ...)` | Prints each argument on its own line; returns `null` |
+| `print(a, ...)` | Prints each argument on its own line; returns `null`. When the first argument is a string with `{}` placeholders, `print(text, x, y)` fills each `{}` with the next value and prints one line: `print("{} and {}", 1, "b")` prints `1 and b`. There must be one value for each `{}` |
 | `input(prompt)` | One line read from standard input, without the newline, as a string; `""` at end of input. The prompt is optional (`input()`), and `input` is a keyword like `print` |
 | `type(v)` | Type name: `"int"`, `"float"`, `"char"`, `"string"`, `"boolean"`, `"null"`, `"list"`, `"map"`, `"function"`, `"native_function"`, `"file"`, `"bloc"`, `"box"`, `"template"`, `"pointer"`. A dense list reports `"list"` and a `data` value reports `"map"` |
 | `shape(v)` | Constructor name of a `data` / `bloc` / `template` value, for example `"Vec2"`; `null` for other values |
@@ -127,7 +127,6 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 | `repeat(s, n)` | `n` copies of `s`; `""` when `n` is 0 or less | `repeat("Na", 3)` is `"NaNaNa"` |
 | `pad_left(s, w, ch)` | Pads the start of `s` with the character `ch` up to width `w` | `pad_left("7", 3, "0")` is `"007"` |
 | `pad_right(s, w, ch)` | Pads the end of `s` | `pad_right("Ok", 5, ".")` is `"Ok..."` |
-| `format(s, ...)` | Replaces each `{}` with the next argument; extra placeholders stay as `{}` | `format("Hi {}", "Zue")` is `"Hi Zue"` |
 | `to_string(v)` | Text of any value | `to_string(12)` is `"12"` |
 | `to_int(s)`, `to_float(s)` | Parse the whole text as a number (spaces around it are allowed). Text that is not a number, a value outside the 64-bit range, and the names `nan`, `inf` and hex digits are errors | `to_int("12")` is `12` |
 
@@ -152,7 +151,7 @@ A string literal evaluates any expression written inside `{ }` and inserts its t
 | `"slot = {items[0]}"` | `"slot = 7"` when `items` is `[7]` |
 
 The text inside `{ }` is parsed as a normal Zue expression. Write `\{` for a literal opening
-brace. `format()` is still useful when you want positional `{}` placeholders.
+brace. To fill placeholders by position, give `print` a string with `{}` and the values after it: `print("{} items, {} lines", 4, 3)`.
 
 Values print as follows: integers in decimal, floats with up to six significant digits
 (`1.0` prints as `1.0`), `true` / `false`, `null`, lists as `[1, 2]` (strings inside a list are

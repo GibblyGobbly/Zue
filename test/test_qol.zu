@@ -89,7 +89,6 @@ let seen = debug(version)
 assert(seen == "0.1")
 
 // fixed it now it will work.
-assert(format("Hello {}, you are {}", "Zue", 2) == "Hello Zue, you are 2")
 
 let player = {"name": "Astra", "hp": 100, "zone": "forest"}
 assert(type(player) == "map")
