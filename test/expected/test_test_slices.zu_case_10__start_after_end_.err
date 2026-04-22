@@ -1,7 +1,7 @@
 Index Error [E0401] in /tmp/zue_test_case.zu at line 2:
-  Slice start 3 is after its end 2
+  Slice start 2 is after its end 1
 
-   2 | print(s[3:2])
+   2 | print(s[2:1])
      |       ^^^^^^
 
 Hint: The start of a slice must not come after its end

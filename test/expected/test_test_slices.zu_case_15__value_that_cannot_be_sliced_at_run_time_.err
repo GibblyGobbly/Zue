@@ -1,7 +1,7 @@
 Type Error [E0206] in /tmp/zue_test_case.zu at line 4:
   cannot slice a value of type int
 
-   4 | print(pass(5)[1:2])
+   4 | print(pass(5)[0:1])
      |       ^^^^^^^^^^^^
 
 Hint: Slices work on strings and lists

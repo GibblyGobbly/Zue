@@ -1,7 +1,7 @@
 Type Error [E0202] in /tmp/zue_test_case.zu at line 5:
   slice start must be an int, got string
 
-   5 | print(s[pass("1"):2])
+   5 | print(s[pass("1"):1])
      |       ^^^^^^^^^^^^^^
 
 Hint: Use an int index

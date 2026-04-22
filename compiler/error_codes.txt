@@ -253,7 +253,7 @@ fix: Write a comparison: if (n != 0).
 title: An index or a slice position is not valid
 match: list index must be | slice position must be | cannot slice | Use an int index | cannot index | map key must be
 text: A list is indexed by a whole number counting from 0, a map by a string, and a slice
-    s[a:b] takes whole numbers counting from 1.
+    s[a:b] takes whole numbers counting from 0.
 example:
     let xs = [1, 2]
     print(xs["a"])
@@ -327,8 +327,8 @@ fix: Check the path (it is relative to the file with the use), mark the name wit
 == E0401
 title: An index or slice is outside its list or string
 match: is out of bounds | Slice start
-text: Positions in a list or string count from 0 up to length - 1. A slice s[a:b] counts from 1
-    and includes both ends. A position past either end stops the program.
+text: Positions in a list or string count from 0 up to length - 1. A slice s[a:b] counts from 0
+    like an index and includes both ends. A position past either end stops the program.
 example:
     let xs = [1, 2, 3]
     print(xs[3])

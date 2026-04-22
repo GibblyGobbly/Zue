@@ -195,7 +195,7 @@ func variance(values) {
 }
 
 let scores = [72.0, 88.5, 91.0, 65.5, 88.5, 79.0, 94.5]
-let ordered = slice(scores, 0, len(scores))
+let ordered = slice(scores, 0, len(scores) - 1)
 sort(ordered)
 print("count    {len(scores)}")
 print("sum      {sum(scores)}")
@@ -222,7 +222,7 @@ clamped  100.0
 
 How it works:
 
-- `slice(scores, 0, len(scores))` copies the list, so `sort(ordered)` does not disturb the original.
+- `slice(scores, 0, len(scores) - 1)` copies the list, so `sort(ordered)` does not disturb the original.
 - `sum` and `mean` take a list of numbers. `mean` is always a float, and `round(x, 2)` rounds it to two places.
 - `floor_div(n, 2)` is the middle index. An odd count uses that item; an even count averages the two in the middle.
 - The variance adds up each squared distance from the mean, and `sqrt` turns it into the standard deviation. `float(len(values))` converts the count on purpose, because ints and floats do not mix.

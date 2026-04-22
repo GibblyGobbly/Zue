@@ -1,7 +1,0 @@
-Index Error [E0401] in /tmp/zue_test_case.zu at line 2:
-  Slice 0:2 is out of bounds for a string of length 3
-
-   2 | print(slice("abc", pass(0), 2))
-     |       ^^^^^^^^^^^^^^^^^^^^^^^^
-
-Hint: Positions start at 1 and both ends are included, so a slice stays within 1 to the length

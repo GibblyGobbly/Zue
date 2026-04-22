@@ -1258,7 +1258,7 @@ func ck_expr(n) {
                 if (bt != "any" and bt != "int" and bt != "int~") {
                     let d = fail_node(bound, "slice position must be an int, got {describe(bt)}")
                     diag_text(d, "this is {describe(bt)}")
-                    diag_hint(d, "A slice position is a whole number counting from 1, both ends included")
+                    diag_hint(d, "A slice position is a whole number counting from 0, both ends included")
                 }
             }
         }

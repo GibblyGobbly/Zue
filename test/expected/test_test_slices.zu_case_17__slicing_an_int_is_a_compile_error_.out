@@ -1,7 +1,7 @@
 Type Error [E0206] in /tmp/zue_test_case.zu at line 2:
   cannot slice int
 
-   2 | print(n[1:2])
+   2 | print(n[0:1])
      |       ^ this is int
 
 Hint: Only a string or a list can be sliced

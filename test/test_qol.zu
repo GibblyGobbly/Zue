@@ -81,7 +81,7 @@ assert(version == "0.1")
 let nums = [4, 8, 15, 16]
 assert(find(nums, 15) == 2)
 assert(find(nums, 99) == -1)
-assert(slice(nums, 2, 3)[0] == 8)
+assert(slice(nums, 1, 2)[0] == 8)
 assert(remove(nums, -1) == 16)
 assert(len(nums) == 3)
 

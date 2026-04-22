@@ -1,0 +1,7 @@
+Index Error [E0401] in /tmp/zue_test_case.zu at line 2:
+  Slice 1:9 is out of bounds for a list of length 3
+
+   2 | print(l[1:9])
+     |       ^^^^^^
+
+Hint: Positions start at 0 like indexes and both ends are included, so a slice stays within 0 to the last index

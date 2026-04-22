@@ -632,7 +632,7 @@ declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64)
 @.n538 = private unnamed_addr constant [32 x i8] c"cannot slice a value of type %s\00"
 @.n539 = private unnamed_addr constant [35 x i8] c"slice start must be an int, got %s\00"
 @.n540 = private unnamed_addr constant [33 x i8] c"slice end must be an int, got %s\00"
-@.n541 = private unnamed_addr constant [89 x i8] c"Positions start at 1 and both ends are included, so a slice stays within 1 to the length\00"
+@.n541 = private unnamed_addr constant [106 x i8] c"Positions start at 0 like indexes and both ends are included, so a slice stays within 0 to the last index\00"
 @.n542 = private unnamed_addr constant [57 x i8] c"Slice %lld:%lld is out of bounds for a %s of length %lld\00"
 @.n543 = private unnamed_addr constant [49 x i8] c"The start of a slice must not come after its end\00"
 @.n544 = private unnamed_addr constant [39 x i8] c"Slice start %lld is after its end %lld\00"
@@ -38408,9 +38408,9 @@ entry:
   %a29063 = alloca i64, align 8
   %a29093 = alloca i64, align 8
   %a29114 = alloca i64, align 8
-  %a29116 = alloca i64, align 8
-  %a29141 = alloca i64, align 8
-  %a29152 = alloca i64, align 8
+  %a29117 = alloca i64, align 8
+  %a29142 = alloca i64, align 8
+  %a29153 = alloca i64, align 8
   br label %start
 start:
   store i64 %p0, ptr %a29056
@@ -38484,125 +38484,125 @@ it29090:
 d29113:
   br label %ix29092
 ix29092:
-  store i64 1, ptr %a29114
+  store i64 0, ptr %a29114
   %r29115 = load i64, ptr %a29063
-  store i64 %r29115, ptr %a29116
-  %r29120 = load i64, ptr %a29058
-  %r29121 = call i64 @_tag(i64 %r29120)
-  %r29123 = icmp ne i64 %r29121, 0
-  %r29122 = zext i1 %r29123 to i64
+  %r29116 = sub i64 %r29115, 1
+  store i64 %r29116, ptr %a29117
+  %r29121 = load i64, ptr %a29058
+  %r29122 = call i64 @_tag(i64 %r29121)
   %r29124 = icmp ne i64 %r29122, 0
-  br i1 %r29124, label %it29117, label %ix29119
-it29117:
-  %r29125 = load i64, ptr %a29058
-  %r29126 = call i64 @_need_int_index(i64 %r29125, i64 ptrtoint (ptr @.n539 to i64))
-  %r29127 = load i64, ptr %a29058
-  %r29128 = call i64 @_val(i64 %r29127)
-  store i64 %r29128, ptr %a29114
-  br label %ix29119
-ix29119:
-  %r29132 = load i64, ptr %a29059
-  %r29133 = call i64 @_tag(i64 %r29132)
-  %r29135 = icmp ne i64 %r29133, 0
-  %r29134 = zext i1 %r29135 to i64
+  %r29123 = zext i1 %r29124 to i64
+  %r29125 = icmp ne i64 %r29123, 0
+  br i1 %r29125, label %it29118, label %ix29120
+it29118:
+  %r29126 = load i64, ptr %a29058
+  %r29127 = call i64 @_need_int_index(i64 %r29126, i64 ptrtoint (ptr @.n539 to i64))
+  %r29128 = load i64, ptr %a29058
+  %r29129 = call i64 @_val(i64 %r29128)
+  store i64 %r29129, ptr %a29114
+  br label %ix29120
+ix29120:
+  %r29133 = load i64, ptr %a29059
+  %r29134 = call i64 @_tag(i64 %r29133)
   %r29136 = icmp ne i64 %r29134, 0
-  br i1 %r29136, label %it29129, label %ix29131
-it29129:
-  %r29137 = load i64, ptr %a29059
-  %r29138 = call i64 @_need_int_index(i64 %r29137, i64 ptrtoint (ptr @.n540 to i64))
-  %r29139 = load i64, ptr %a29059
-  %r29140 = call i64 @_val(i64 %r29139)
-  store i64 %r29140, ptr %a29116
-  br label %ix29131
-ix29131:
-  store i64 ptrtoint (ptr @.n244 to i64), ptr %a29141
-  %r29145 = load i64, ptr %a29062
-  %r29147 = icmp eq i64 %r29145, 6
-  %r29146 = zext i1 %r29147 to i64
-  %r29148 = icmp ne i64 %r29146, 0
-  br i1 %r29148, label %it29142, label %ix29144
-it29142:
-  store i64 ptrtoint (ptr @.n245 to i64), ptr %a29141
-  br label %ix29144
-ix29144:
-  %r29155 = load i64, ptr %a29114
-  %r29157 = icmp slt i64 %r29155, 1
-  %r29156 = zext i1 %r29157 to i64
-  %r29158 = icmp ne i64 %r29156, 0
-  %r29159 = zext i1 %r29158 to i64
-  store i64 %r29159, ptr %a29152
-  br i1 %r29158, label %ld29154, label %lr29153
-lr29153:
-  %r29160 = load i64, ptr %a29116
-  %r29161 = load i64, ptr %a29063
-  %r29163 = icmp sgt i64 %r29160, %r29161
-  %r29162 = zext i1 %r29163 to i64
-  %r29164 = icmp ne i64 %r29162, 0
-  %r29165 = zext i1 %r29164 to i64
-  store i64 %r29165, ptr %a29152
-  br label %ld29154
-ld29154:
-  %r29166 = load i64, ptr %a29152
-  %r29167 = icmp ne i64 %r29166, 0
-  br i1 %r29167, label %it29149, label %ix29151
-it29149:
-  %r29168 = load i64, ptr %a29114
-  %r29169 = load i64, ptr %a29116
-  %r29170 = load i64, ptr %a29141
-  %r29171 = load i64, ptr %a29063
-  %r29172 = call i64 @_errf4(i64 3, i64 ptrtoint (ptr @.n541 to i64), i64 ptrtoint (ptr @.n542 to i64), i64 %r29168, i64 %r29169, i64 %r29170, i64 %r29171)
-  br label %ix29151
-ix29151:
-  %r29176 = load i64, ptr %a29114
-  %r29177 = load i64, ptr %a29116
-  %r29179 = icmp sgt i64 %r29176, %r29177
-  %r29178 = zext i1 %r29179 to i64
-  %r29180 = icmp ne i64 %r29178, 0
-  br i1 %r29180, label %it29173, label %ix29175
-it29173:
-  %r29181 = load i64, ptr %a29114
-  %r29182 = load i64, ptr %a29116
-  %r29183 = call i64 @_errf(i64 3, i64 ptrtoint (ptr @.n543 to i64), i64 ptrtoint (ptr @.n544 to i64), i64 %r29181, i64 %r29182, i64 0)
-  br label %ix29175
-ix29175:
-  %r29187 = load i64, ptr %a29062
-  %r29189 = icmp eq i64 %r29187, 5
-  %r29188 = zext i1 %r29189 to i64
-  %r29190 = icmp ne i64 %r29188, 0
-  br i1 %r29190, label %it29184, label %ie29185
-it29184:
-  %r29191 = load i64, ptr %a29056
-  %r29192 = load i64, ptr %a29057
-  %r29193 = call i64 @_val(i64 %r29192)
-  %r29194 = add i64 %r29193, 8
-  %r29195 = load i64, ptr %a29114
-  %r29196 = add i64 %r29194, %r29195
-  %r29197 = sub i64 %r29196, 1
-  %r29198 = load i64, ptr %a29116
-  %r29199 = load i64, ptr %a29114
-  %r29200 = sub i64 %r29198, %r29199
-  %r29201 = add i64 %r29200, 1
-  %r29202 = call i64 @_str_n(i64 %r29191, i64 %r29197, i64 %r29201)
-  br label %ix29186
-ie29185:
-  %r29203 = load i64, ptr %a29056
-  %r29204 = load i64, ptr %a29116
-  %r29205 = load i64, ptr %a29114
-  %r29206 = sub i64 %r29204, %r29205
-  %r29207 = add i64 %r29206, 1
-  %r29208 = trunc i64 %r29207 to i32
-  %r29209 = load i64, ptr %a29057
-  %r29210 = call i64 @_val(i64 %r29209)
-  %r29211 = add i64 %r29210, 16
-  %r29213 = inttoptr i64 %r29211 to ptr
-  %r29212 = load i64, ptr %r29213, align 8
-  %r29214 = load i64, ptr %a29114
-  %r29215 = sub i64 %r29214, 1
+  %r29135 = zext i1 %r29136 to i64
+  %r29137 = icmp ne i64 %r29135, 0
+  br i1 %r29137, label %it29130, label %ix29132
+it29130:
+  %r29138 = load i64, ptr %a29059
+  %r29139 = call i64 @_need_int_index(i64 %r29138, i64 ptrtoint (ptr @.n540 to i64))
+  %r29140 = load i64, ptr %a29059
+  %r29141 = call i64 @_val(i64 %r29140)
+  store i64 %r29141, ptr %a29117
+  br label %ix29132
+ix29132:
+  store i64 ptrtoint (ptr @.n244 to i64), ptr %a29142
+  %r29146 = load i64, ptr %a29062
+  %r29148 = icmp eq i64 %r29146, 6
+  %r29147 = zext i1 %r29148 to i64
+  %r29149 = icmp ne i64 %r29147, 0
+  br i1 %r29149, label %it29143, label %ix29145
+it29143:
+  store i64 ptrtoint (ptr @.n245 to i64), ptr %a29142
+  br label %ix29145
+ix29145:
+  %r29156 = load i64, ptr %a29114
+  %r29158 = icmp slt i64 %r29156, 0
+  %r29157 = zext i1 %r29158 to i64
+  %r29159 = icmp ne i64 %r29157, 0
+  %r29160 = zext i1 %r29159 to i64
+  store i64 %r29160, ptr %a29153
+  br i1 %r29159, label %ld29155, label %lr29154
+lr29154:
+  %r29161 = load i64, ptr %a29117
+  %r29162 = load i64, ptr %a29063
+  %r29163 = sub i64 %r29162, 1
+  %r29165 = icmp sgt i64 %r29161, %r29163
+  %r29164 = zext i1 %r29165 to i64
+  %r29166 = icmp ne i64 %r29164, 0
+  %r29167 = zext i1 %r29166 to i64
+  store i64 %r29167, ptr %a29153
+  br label %ld29155
+ld29155:
+  %r29168 = load i64, ptr %a29153
+  %r29169 = icmp ne i64 %r29168, 0
+  br i1 %r29169, label %it29150, label %ix29152
+it29150:
+  %r29170 = load i64, ptr %a29114
+  %r29171 = load i64, ptr %a29117
+  %r29172 = load i64, ptr %a29142
+  %r29173 = load i64, ptr %a29063
+  %r29174 = call i64 @_errf4(i64 3, i64 ptrtoint (ptr @.n541 to i64), i64 ptrtoint (ptr @.n542 to i64), i64 %r29170, i64 %r29171, i64 %r29172, i64 %r29173)
+  br label %ix29152
+ix29152:
+  %r29178 = load i64, ptr %a29114
+  %r29179 = load i64, ptr %a29117
+  %r29181 = icmp sgt i64 %r29178, %r29179
+  %r29180 = zext i1 %r29181 to i64
+  %r29182 = icmp ne i64 %r29180, 0
+  br i1 %r29182, label %it29175, label %ix29177
+it29175:
+  %r29183 = load i64, ptr %a29114
+  %r29184 = load i64, ptr %a29117
+  %r29185 = call i64 @_errf(i64 3, i64 ptrtoint (ptr @.n543 to i64), i64 ptrtoint (ptr @.n544 to i64), i64 %r29183, i64 %r29184, i64 0)
+  br label %ix29177
+ix29177:
+  %r29189 = load i64, ptr %a29062
+  %r29191 = icmp eq i64 %r29189, 5
+  %r29190 = zext i1 %r29191 to i64
+  %r29192 = icmp ne i64 %r29190, 0
+  br i1 %r29192, label %it29186, label %ie29187
+it29186:
+  %r29193 = load i64, ptr %a29056
+  %r29194 = load i64, ptr %a29057
+  %r29195 = call i64 @_val(i64 %r29194)
+  %r29196 = add i64 %r29195, 8
+  %r29197 = load i64, ptr %a29114
+  %r29198 = add i64 %r29196, %r29197
+  %r29199 = load i64, ptr %a29117
+  %r29200 = load i64, ptr %a29114
+  %r29201 = sub i64 %r29199, %r29200
+  %r29202 = add i64 %r29201, 1
+  %r29203 = call i64 @_str_n(i64 %r29193, i64 %r29198, i64 %r29202)
+  br label %ix29188
+ie29187:
+  %r29204 = load i64, ptr %a29056
+  %r29205 = load i64, ptr %a29117
+  %r29206 = load i64, ptr %a29114
+  %r29207 = sub i64 %r29205, %r29206
+  %r29208 = add i64 %r29207, 1
+  %r29209 = trunc i64 %r29208 to i32
+  %r29210 = load i64, ptr %a29057
+  %r29211 = call i64 @_val(i64 %r29210)
+  %r29212 = add i64 %r29211, 16
+  %r29214 = inttoptr i64 %r29212 to ptr
+  %r29213 = load i64, ptr %r29214, align 8
+  %r29215 = load i64, ptr %a29114
   %r29216 = mul i64 16, %r29215
-  %r29217 = add i64 %r29212, %r29216
-  %r29218 = call i64 @_list_of(i64 %r29203, i32 %r29208, i64 %r29217)
-  br label %ix29186
-ix29186:
+  %r29217 = add i64 %r29213, %r29216
+  %r29218 = call i64 @_list_of(i64 %r29204, i32 %r29209, i64 %r29217)
+  br label %ix29188
+ix29188:
   ret i64 0
 }
 define i64 @lvp_index(i64 %p0, i64 %p1, i64 %p2) {

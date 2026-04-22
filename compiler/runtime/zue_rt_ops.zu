@@ -613,9 +613,9 @@ func _need_int_index(idx, what) {
     }
 }
 
-# target[lo:hi] in generated code. Positions count from 1 and both ends are included, so "bug"[1:2]
+# target[lo:hi] in generated code. Positions count from 0 like indexes and both ends are included, so "bug"[0:1]
 # is "bu". lo or hi is null when it was left out: it then stands for the first or the last position.
-# Zero, a position past the end, and a start after the end are errors.
+# A negative position, a position past the end, and a start after the end are errors.
 func lvp_slice(o, t, lo, hi) {
     let tt = _tag(t)
     let n = 0
@@ -630,8 +630,8 @@ func lvp_slice(o, t, lo, hi) {
         _cp(o, t)
         return 0
     }
-    let a = 1
-    let b = n
+    let a = 0
+    let b = n - 1
     if (_tag(lo) != T_NULL) {
         _need_int_index(lo, cstr("slice start must be an int, got %s"))
         a = _val(lo)
@@ -644,8 +644,8 @@ func lvp_slice(o, t, lo, hi) {
     if (tt == T_LIST) {
         what = cstr("list")
     }
-    if (a < 1 or b > n) {
-        _errf4(E_INDEX, cstr("Positions start at 1 and both ends are included, so a slice stays within 1 to the length"),
+    if (a < 0 or b > n - 1) {
+        _errf4(E_INDEX, cstr("Positions start at 0 like indexes and both ends are included, so a slice stays within 0 to the last index"),
                cstr("Slice %lld:%lld is out of bounds for a %s of length %lld"), a, b, what, n)
     }
     if (a > b) {
@@ -653,9 +653,9 @@ func lvp_slice(o, t, lo, hi) {
               cstr("Slice start %lld is after its end %lld"), a, b, 0)
     }
     if (tt == T_STR) {
-        _str_n(o, _val(t) + S_DATA + a - 1, b - a + 1)
+        _str_n(o, _val(t) + S_DATA + a, b - a + 1)
     } else {
-        _list_of(o, b - a + 1, ld64(_val(t) + L_ITEMS) + 16 * (a - 1))
+        _list_of(o, b - a + 1, ld64(_val(t) + L_ITEMS) + 16 * a)
     }
 }
 

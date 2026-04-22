@@ -4,7 +4,7 @@
 # ranges.zu: cut(x, a, b) takes the part of a string or list from offset a up to, not including,
 # offset b, counting from 0. A negative offset counts from the end, an offset past either end is
 # clamped, and a range that is empty gives "" or []. The compiler uses it because the builtin slice
-# counts from 1 and includes both ends, and never gives an empty result.
+# counts from 0 and includes both ends, and never gives an empty result.
 
 export func cut(x, a, b) {
     let n = len(x)

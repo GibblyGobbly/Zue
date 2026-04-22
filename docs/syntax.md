@@ -92,31 +92,30 @@ Indexing a string returns a `char`, and negative indices count from the end: `"Z
 
 ### Slices
 
-`x[a:b]` takes part of a string or a list. Slice positions count from **1** and **both ends are
-included**, so `"bug"[1:3]` is `"bug"` and `"bug"[2:3]` is `"ug"`. This is different from plain
-indexing, which starts at 0.
+`x[a:b]` takes part of a string or a list. Slice positions count from **0**, like indexes, and **both ends are
+included**, so `"bug"[0:2]` is `"bug"` and `"bug"[1:2]` is `"ug"`. A slice never takes negative positions.
 
 ```javascript
 let s = "bug"
-print(s[1:3])            # bug
-print(s[2:3])            # ug
-print(s[:2])             # bu    (from the first position)
-print(s[2:])             # ug    (to the last position)
+print(s[0:2])            # bug
+print(s[1:2])            # ug
+print(s[:1])             # bu    (from the first position)
+print(s[1:])             # ug    (to the last position)
 print(s[:])              # bug   (all of it)
-print([10, 20, 30, 40][2:3])     # [20, 30]
+print([10, 20, 30, 40][1:2])     # [20, 30]
 ```
 
 | Rule | Result |
 |---|---|
 | `a` or `b` left out | The first or the last position |
-| `a` is 0 or negative | `Index Error` |
-| `b` is past `len`, so `"bug"[1:4]` | `Index Error` |
-| `a` is after `b`, so `"bug"[3:2]` | `Index Error` |
+| `a` is negative | `Index Error` |
+| `b` is past the last index, so `"bug"[0:3]` | `Index Error` |
+| `a` is after `b`, so `"bug"[2:1]` | `Index Error` |
 | `a` or `b` is not an int | `Type Error` (a compile error when the checker can see it) |
 | Anything but a string or a list | `Type Error` |
 
 A slice of a list is a new list (the items are not copied deeply). A slice cannot be assigned to.
-The builtin `slice(x, a, b)` is the same operation: `slice(x, 2, 3)` is `x[2:3]`, with the same errors.
+The builtin `slice(x, a, b)` is the same operation: `slice(x, 1, 2)` is `x[1:2]`, with the same errors.
 
 ## Operators
 

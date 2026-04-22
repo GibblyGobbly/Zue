@@ -126,7 +126,7 @@ export func mk_index(st, en, target, index) {
     return NIndex("index", st.line, target, index, st.col, en.eline, en.ecol)
 }
 
-# target[lo:hi]: positions from lo to hi, counting from 1, both included. lo or hi is null when left out.
+# target[lo:hi]: positions from lo to hi, counting from 0, both included. lo or hi is null when left out.
 export func mk_slice(st, en, target, lo, hi) {
     return NSlice("slice", st.line, target, lo, hi, st.col, en.eline, en.ecol)
 }

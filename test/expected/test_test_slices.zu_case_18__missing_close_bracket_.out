@@ -1,7 +1,7 @@
 Syntax Error [E0111] in /tmp/zue_test_case.zu at line 2:
   Expected ']' after slice
 
-   2 | print(s[1:2
+   2 | print(s[0:1
      |        -   ^ unexpected end of line
      |        |
      |        this '[' is never closed

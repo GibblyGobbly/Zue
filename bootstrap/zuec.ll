@@ -786,7 +786,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s660 = private unnamed_addr constant [381 x i8] c"    {\22code\22: \22E0203\22, \22title\22: \22A function was called with the wrong number of arguments\22, \22match\22: [\22but got\22, \22expects exactly\22, \22expects 1 pointer\22, \22takes exactly\22], \22text\22: \22Each function takes a fixed number of arguments (some allow a range). The call has too many\5Cnor too few.\22, \22example\22: \22print(sqrt(1, 2))\22, \22fix\22: \22Pass exactly the arguments that the function takes.\22},\00"
 @.s661 = private unnamed_addr constant [399 x i8] c"    {\22code\22: \22E0204\22, \22title\22: \22A value of the wrong type is stored\22, \22match\22: [\22cannot assign\22, \22cannot store\22, \22cannot append\22, \22must be a bool, got\22, \22variable '\22], \22text\22: \22A variable keeps the type of its first value, and a list or typed field holds one type.\22, \22example\22: \22let n = 1\5Cnn = \5C\22one\5C\22\22, \22fix\22: \22Use another variable for the new value, or convert it to the type the variable has.\22},\00"
 @.s662 = private unnamed_addr constant [343 x i8] c"    {\22code\22: \22E0205\22, \22title\22: \22A condition is not true or false\22, \22match\22: [\22needs a bool\22, \22needs bool operands\22, \22condition must be a boolean\22], \22text\22: \22if, while, for, and, or and not need a bool. A number or text is never turned into one.\22, \22example\22: \22let n = 1\5Cnif (n) \5C{ print(\5C\22yes\5C\22) }\22, \22fix\22: \22Write a comparison: if (n != 0).\22},\00"
-@.s663 = private unnamed_addr constant [450 x i8] c"    {\22code\22: \22E0206\22, \22title\22: \22An index or a slice position is not valid\22, \22match\22: [\22list index must be\22, \22slice position must be\22, \22cannot slice\22, \22Use an int index\22, \22cannot index\22, \22map key must be\22], \22text\22: \22A list is indexed by a whole number counting from 0, a map by a string, and a slice\5Cns[a:b] takes whole numbers counting from 1.\22, \22example\22: \22let xs = [1, 2]\5Cnprint(xs[\5C\22a\5C\22])\22, \22fix\22: \22Use an int index, or a string key for a map.\22},\00"
+@.s663 = private unnamed_addr constant [450 x i8] c"    {\22code\22: \22E0206\22, \22title\22: \22An index or a slice position is not valid\22, \22match\22: [\22list index must be\22, \22slice position must be\22, \22cannot slice\22, \22Use an int index\22, \22cannot index\22, \22map key must be\22], \22text\22: \22A list is indexed by a whole number counting from 0, a map by a string, and a slice\5Cns[a:b] takes whole numbers counting from 0.\22, \22example\22: \22let xs = [1, 2]\5Cnprint(xs[\5C\22a\5C\22])\22, \22fix\22: \22Use an int index, or a string key for a map.\22},\00"
 @.s664 = private unnamed_addr constant [256 x i8] c"    {\22code\22: \22E0207\22, \22title\22: \22A division by zero\22, \22match\22: [\22division by zero\22], \22text\22: \22Dividing or taking a remainder with 0 is always an error, because Zue has no infinity.\22, \22example\22: \22print(10 / 0)\22, \22fix\22: \22Check the divisor before dividing.\22},\00"
 @.s665 = private unnamed_addr constant [360 x i8] c"    {\22code\22: \22E0208\22, \22title\22: \22Strict mode needs a type that is not known\22, \22match\22: [\22strict mode\22], \22text\22: \22A file that starts with the comment # strict must give a type to every parameter and to\5Cnevery value whose type the checker cannot work out.\22, \22example\22: \22# strict\5Cnfunc add(a, b) \5C{ return a + b }\22, \22fix\22: \22Add types: func add(a: int, b: int).\22},\00"
 @.s666 = private unnamed_addr constant [289 x i8] c"    {\22code\22: \22E0209\22, \22title\22: \22A type name is not known\22, \22match\22: [\22unknown type\22], \22text\22: \22The name after a colon is not a built-in type or one of your types.\22, \22example\22: \22let x: integer = 1\22, \22fix\22: \22Use int, float, bool, char, string, list, map, function, or a type you defined.\22},\00"
@@ -794,7 +794,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s668 = private unnamed_addr constant [452 x i8] c"    {\22code\22: \22E0211\22, \22title\22: \22A call or value cannot be used this way\22, \22match\22: [\22cannot call\22, \22cannot compare\22, \22cannot order\22, \22cannot read field\22, \22for-in expects\22, \22cannot negate\22, \22cannot convert\22], \22text\22: \22Only functions can be called, only numbers, strings and chars are ordered, and only lists,\5Cnstrings and numbers can be iterated or converted.\22, \22example\22: \22let n = 3\5Cnn()\22, \22fix\22: \22Check the type of the value; the message names it.\22},\00"
 @.s669 = private unnamed_addr constant [324 x i8] c"    {\22code\22: \22E0301\22, \22title\22: \22A name is not defined\22, \22match\22: [\22is not defined\22], \22text\22: \22The program uses a name that no let, func, parameter or use declares. Often it is a typo.\22, \22example\22: \22let items = [1, 2]\5Cnprint(itms[0])\22, \22fix\22: \22Fix the spelling (the hint suggests the closest name) or declare it with let.\22},\00"
 @.s670 = private unnamed_addr constant [599 x i8] c"    {\22code\22: \22E0302\22, \22title\22: \22An import cannot be resolved\22, \22match\22: [\22Could not import\22, \22Circular import\22, \22does not export\22], \22text\22: \22A use statement names a file that does not exist, a file that imports back into the one that\5Cnis loading it, or a name the file does not export. The compiler reports it at the use line,\5Cneven when that line is in a branch that never runs.\22, \22example\22: \22use \5C{ helper } from \5C\22missing.zu\5C\22\22, \22fix\22: \22Check the path (it is relative to the file with the use), mark the name with export in the\5Cnmodule, or move shared code to a third module to break a cycle.\22},\00"
-@.s671 = private unnamed_addr constant [418 x i8] c"    {\22code\22: \22E0401\22, \22title\22: \22An index or slice is outside its list or string\22, \22match\22: [\22is out of bounds\22, \22Slice start\22], \22text\22: \22Positions in a list or string count from 0 up to length - 1. A slice s[a:b] counts from 1\5Cnand includes both ends. A position past either end stops the program.\22, \22example\22: \22let xs = [1, 2, 3]\5Cnprint(xs[3])\22, \22fix\22: \22Check len(xs) first, or use an index from 0 to len(xs) - 1.\22},\00"
+@.s671 = private unnamed_addr constant [432 x i8] c"    {\22code\22: \22E0401\22, \22title\22: \22An index or slice is outside its list or string\22, \22match\22: [\22is out of bounds\22, \22Slice start\22], \22text\22: \22Positions in a list or string count from 0 up to length - 1. A slice s[a:b] counts from 0\5Cnlike an index and includes both ends. A position past either end stops the program.\22, \22example\22: \22let xs = [1, 2, 3]\5Cnprint(xs[3])\22, \22fix\22: \22Check len(xs) first, or use an index from 0 to len(xs) - 1.\22},\00"
 @.s672 = private unnamed_addr constant [298 x i8] c"    {\22code\22: \22E0402\22, \22title\22: \22A field or key does not exist\22, \22match\22: [\22does not exist\22], \22text\22: \22A template, bloc or box has only the fields that were declared.\22, \22example\22: \22template P \5C{ x }\5Cnlet p = P(1)\5Cnprint(p.y)\22, \22fix\22: \22Use a field that was declared, or add it to the declaration.\22},\00"
 @.s673 = private unnamed_addr constant [352 x i8] c"    {\22code\22: \22E0410\22, \22title\22: \22An integer calculation overflowed\22, \22match\22: [\22integer overflow\22, \22does not fit in a 64-bit int\22, \22shift count\22], \22text\22: \22Ints are 64 bits (about 9.2 quintillion). A result that does not fit is an error, never a\5Cnwrap-around.\22, \22example\22: \22print(9223372036854775807 + 1)\22, \22fix\22: \22Use floats for very large numbers.\22},\00"
 @.s674 = private unnamed_addr constant [421 x i8] c"    {\22code\22: \22E0411\22, \22title\22: \22A float calculation went out of range or outside its domain\22, \22match\22: [\22float overflow\22, \22does not fit in a 64-bit float\22], \22text\22: \22Zue has no infinity and no NaN. A float result that is too large, or an input outside what\5Cna function accepts (the square root of a negative number), is an error.\22, \22example\22: \22print(exp(1000.0))\22, \22fix\22: \22Check the range of the input before calling.\22},\00"
@@ -822,7 +822,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s696 = private unnamed_addr constant [97 x i8] c"# ranges.zu: cut(x, a, b) takes the part of a string or list from offset a up to, not including,\00"
 @.s697 = private unnamed_addr constant [97 x i8] c"# offset b, counting from 0. A negative offset counts from the end, an offset past either end is\00"
 @.s698 = private unnamed_addr constant [100 x i8] c"# clamped, and a range that is empty gives \22\22 or []. The compiler uses it because the builtin slice\00"
-@.s699 = private unnamed_addr constant [73 x i8] c"# counts from 1 and includes both ends, and never gives an empty result.\00"
+@.s699 = private unnamed_addr constant [73 x i8] c"# counts from 0 and includes both ends, and never gives an empty result.\00"
 @.s700 = private unnamed_addr constant [27 x i8] c"export func cut(x, a, b) {\00"
 @.s701 = private unnamed_addr constant [19 x i8] c"    let n = len(x)\00"
 @.s702 = private unnamed_addr constant [17 x i8] c"    if (a < 0) {\00"
@@ -2264,7 +2264,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s2138 = private unnamed_addr constant [82 x i8] c"    return NCall(\22call\22, st.line, callee, args, st.col, en.eline, en.ecol, aspan)\00"
 @.s2139 = private unnamed_addr constant [46 x i8] c"export func mk_index(st, en, target, index) {\00"
 @.s2140 = private unnamed_addr constant [78 x i8] c"    return NIndex(\22index\22, st.line, target, index, st.col, en.eline, en.ecol)\00"
-@.s2141 = private unnamed_addr constant [106 x i8] c"# target[lo:hi]: positions from lo to hi, counting from 1, both included. lo or hi is null when left out.\00"
+@.s2141 = private unnamed_addr constant [106 x i8] c"# target[lo:hi]: positions from lo to hi, counting from 0, both included. lo or hi is null when left out.\00"
 @.s2142 = private unnamed_addr constant [47 x i8] c"export func mk_slice(st, en, target, lo, hi) {\00"
 @.s2143 = private unnamed_addr constant [79 x i8] c"    return NSlice(\22slice\22, st.line, target, lo, hi, st.col, en.eline, en.ecol)\00"
 @.s2144 = private unnamed_addr constant [53 x i8] c"export func mk_field(st, en, target, field, fspan) {\00"
@@ -5052,7 +5052,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s4926 = private unnamed_addr constant [68 x i8] c"                if (bt != \22any\22 and bt != \22int\22 and bt != \22int~\22) {\00"
 @.s4927 = private unnamed_addr constant [98 x i8] c"                    let d = fail_node(bound, \22slice position must be an int, got {describe(bt)}\22)\00"
 @.s4928 = private unnamed_addr constant [59 x i8] c"                    diag_text(d, \22this is {describe(bt)}\22)\00"
-@.s4929 = private unnamed_addr constant [107 x i8] c"                    diag_hint(d, \22A slice position is a whole number counting from 1, both ends included\22)\00"
+@.s4929 = private unnamed_addr constant [107 x i8] c"                    diag_hint(d, \22A slice position is a whole number counting from 0, both ends included\22)\00"
 @.s4930 = private unnamed_addr constant [53 x i8] c"        if (t == \22string\22 or kind_of(t) == \22list\22) {\00"
 @.s4931 = private unnamed_addr constant [21 x i8] c"            return t\00"
 @.s4932 = private unnamed_addr constant [26 x i8] c"        if (t != \22any\22) {\00"
@@ -6630,7 +6630,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s6504 = private unnamed_addr constant [17 x i8] c"Use an int index\00"
 @.s6505 = private unnamed_addr constant [13 x i8] c"cannot index\00"
 @.s6506 = private unnamed_addr constant [16 x i8] c"map key must be\00"
-@.s6507 = private unnamed_addr constant [128 x i8] c"A list is indexed by a whole number counting from 0, a map by a string, and a slice\0As[a:b] takes whole numbers counting from 1.\00"
+@.s6507 = private unnamed_addr constant [128 x i8] c"A list is indexed by a whole number counting from 0, a map by a string, and a slice\0As[a:b] takes whole numbers counting from 0.\00"
 @.s6508 = private unnamed_addr constant [31 x i8] c"let xs = [1, 2]\0Aprint(xs[\22a\22])\00"
 @.s6509 = private unnamed_addr constant [45 x i8] c"Use an int index, or a string key for a map.\00"
 @.s6510 = private unnamed_addr constant [6 x i8] c"E0207\00"
@@ -6687,7 +6687,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s6561 = private unnamed_addr constant [48 x i8] c"An index or slice is outside its list or string\00"
 @.s6562 = private unnamed_addr constant [17 x i8] c"is out of bounds\00"
 @.s6563 = private unnamed_addr constant [12 x i8] c"Slice start\00"
-@.s6564 = private unnamed_addr constant [160 x i8] c"Positions in a list or string count from 0 up to length - 1. A slice s[a:b] counts from 1\0Aand includes both ends. A position past either end stops the program.\00"
+@.s6564 = private unnamed_addr constant [174 x i8] c"Positions in a list or string count from 0 up to length - 1. A slice s[a:b] counts from 0\0Alike an index and includes both ends. A position past either end stops the program.\00"
 @.s6565 = private unnamed_addr constant [32 x i8] c"let xs = [1, 2, 3]\0Aprint(xs[3])\00"
 @.s6566 = private unnamed_addr constant [60 x i8] c"Check len(xs) first, or use an index from 0 to len(xs) - 1.\00"
 @.s6567 = private unnamed_addr constant [6 x i8] c"E0402\00"
@@ -7398,7 +7398,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s7272 = private unnamed_addr constant [24 x i8] c"the value being indexed\00"
 @.s7273 = private unnamed_addr constant [23 x i8] c"the value being sliced\00"
 @.s7274 = private unnamed_addr constant [36 x i8] c"slice position must be an int, got \00"
-@.s7275 = private unnamed_addr constant [71 x i8] c"A slice position is a whole number counting from 1, both ends included\00"
+@.s7275 = private unnamed_addr constant [71 x i8] c"A slice position is a whole number counting from 0, both ends included\00"
 @.s7276 = private unnamed_addr constant [14 x i8] c"cannot slice \00"
 @.s7277 = private unnamed_addr constant [38 x i8] c"Only a string or a list can be sliced\00"
 @.s7278 = private unnamed_addr constant [24 x i8] c"the value whose field '\00"
@@ -9521,7 +9521,7 @@ entry:
   store %LV %s269, ptr getelementptr inbounds (%LV, ptr @K, i64 269)
   %s270 = call %LV @lv_str_n(ptr @.s6563, i64 11)
   store %LV %s270, ptr getelementptr inbounds (%LV, ptr @K, i64 270)
-  %s271 = call %LV @lv_str_n(ptr @.s6564, i64 159)
+  %s271 = call %LV @lv_str_n(ptr @.s6564, i64 173)
   store %LV %s271, ptr getelementptr inbounds (%LV, ptr @K, i64 271)
   %s272 = call %LV @lv_str_n(ptr @.s6565, i64 31)
   store %LV %s272, ptr getelementptr inbounds (%LV, ptr @K, i64 272)
