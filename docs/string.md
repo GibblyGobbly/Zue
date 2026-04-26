@@ -74,7 +74,7 @@ characters (the lexer uses them).
 | `to_upper(s)`, `to_lower(s)` | string | ASCII letters only |
 | `trim(s)`, `trim_left(s)`, `trim_right(s)` | string | Remove spaces, tabs and line breaks |
 | `replace(s, old, new)` | string | Replaces every match. An empty `old` changes nothing |
-| `reverse(s)` | string | Also works on a list |
+| `reverse(s)` | string | Also works on a list, which it reverses in place |
 | `repeat(s, n)` | string | `""` when `n` is 0 or less |
 | `pad_left(s, w, ch)`, `pad_right(s, w, ch)` | string | Pad to width `w` with the character `ch` |
 | `concat(a, b)` | string | Both must be strings |

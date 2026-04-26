@@ -117,6 +117,11 @@ print([10, 20, 30, 40][1:2])     # [20, 30]
 A slice of a list is a new list (the items are not copied deeply). A slice cannot be assigned to.
 The builtin `slice(x, a, b)` is the same operation: `slice(x, 1, 2)` is `x[1:2]`, with the same errors.
 
+A slice only runs forward and takes no negative positions. To take from the end, start at
+`len(x) - n`: `l[len(l) - 2:]` is the last two items, and `l[-1]` (an index) is the last item. For
+last to first, use `reverse(x)`; on a list it reverses the list itself, so write `reverse(l[:])` to
+keep the original.
+
 ## Operators
 
 | Kind | Operators |

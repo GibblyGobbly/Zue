@@ -114,3 +114,15 @@ print(slice([1, 2, 3], pass(2), 1))
 # CASE the slice builtin needs ints
 func pass(v) { return [v, null][0] }
 print(slice("abc", pass("1"), 1))
+# CASE the whole-list slice is a copy too
+let a = [1, 2, 3]
+let b = a[:]
+append(b, 4)
+reverse(b)
+print(a)
+print(b)
+let e = []
+let f = e[:]
+append(f, 1)
+print(e)
+print(f)

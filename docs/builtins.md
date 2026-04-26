@@ -123,7 +123,7 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 | `to_upper(s)`, `to_lower(s)` | Case conversion (ASCII) | `to_upper("abc")` is `"ABC"` |
 | `trim(s)`, `trim_left(s)`, `trim_right(s)` | Remove whitespace from both ends, the start or the end | `trim("  hi  ")` is `"hi"` |
 | `replace(s, old, new)` | Replaces all occurrences of `old` with `new`. An empty `old` changes nothing | `replace("foobar", "o", "a")` is `"faabar"` |
-| `reverse(s)` | Reverses a string (also a list) | `reverse("Zue")` is `"euZ"` |
+| `reverse(s)` | Reverses a string, or a list in place (copy with `l[:]` first to keep the original) | `reverse("Zue")` is `"euZ"` |
 | `repeat(s, n)` | `n` copies of `s`; `""` when `n` is 0 or less | `repeat("Na", 3)` is `"NaNaNa"` |
 | `pad_left(s, w, ch)` | Pads the start of `s` with the character `ch` up to width `w` | `pad_left("7", 3, "0")` is `"007"` |
 | `pad_right(s, w, ch)` | Pads the end of `s` | `pad_right("Ok", 5, ".")` is `"Ok..."` |

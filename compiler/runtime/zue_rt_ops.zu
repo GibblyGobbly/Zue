@@ -627,7 +627,11 @@ func lvp_slice(o, t, lo, hi) {
         _errf(E_TYPE, cstr("Slices work on strings and lists"), cstr("cannot slice a value of type %s"), _type_name(t), 0, 0)
     }
     if (_tag(lo) == T_NULL and _tag(hi) == T_NULL) {
-        _cp(o, t)
+        if (tt == T_LIST) {
+            _list_of(o, n, ld64(_val(t) + L_ITEMS))
+        } else {
+            _cp(o, t)
+        }
         return 0
     }
     let a = 0
