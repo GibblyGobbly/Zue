@@ -118,7 +118,7 @@ print(slice("abc", pass("1"), 1))
 let a = [1, 2, 3]
 let b = a[:]
 append(b, 4)
-reverse(b)
+b = reverse(b)
 print(a)
 print(b)
 let e = []

@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 2:
+  to_string() digits must be between 1 and 17
+
+   2 | print(to_string(1.5, pass(18)))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Use a number of significant digits from 1 to 17.

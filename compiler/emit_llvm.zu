@@ -939,6 +939,7 @@ func st_for(n) {
     st_block(n.body)
     ll_br(step)
     ll_label(step)
+    fresh_loop_cells()
     if (n.incr != null) {
         st(n.incr)
     }
@@ -946,6 +947,22 @@ func st_for(n) {
     ll_label(done)
     loop_pop()
     pop_scope()
+}
+
+# A closure made in one iteration keeps that iteration's value of a loop variable: before the step,
+# every loop variable that a closure uses moves to a new cell holding the current value.
+func fresh_loop_cells() {
+    let vars = ST.ctx.scopes[len(ST.ctx.scopes) - 1]
+    for (let name in map_keys(vars)) {
+        let v = vars[name]
+        if (v.ty == null and v.cell) {
+            let old = ll_reg()
+            ll("{old} = load ptr, ptr {v.c}")
+            let fresh = ll_reg()
+            ll("{fresh} = call ptr @lvp_cell(ptr {old})")
+            ll("store ptr {fresh}, ptr {v.c}")
+        }
+    }
 }
 
 func st_forin(n) {

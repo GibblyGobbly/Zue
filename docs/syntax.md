@@ -49,7 +49,9 @@ followed directly by a letter (`12abc`) or a value that does not fit in 64 bits 
 
 Floats print with up to six significant digits, as C's `%g` does, and always show that they are
 floats: `print(1.0)` prints `1.0`, `print(100.0 / 3)` prints `33.3333` and `print(1234567.0)` prints
-`1.23457e+06`.
+`1.23457e+06`. To see more, use `fixed(x, decimals)` for a set number of places
+(`fixed(29814127.78, 2)` is `"29814127.78"`) or `to_string(x, digits)` for up to 17 significant
+digits (`to_string(0.1 + 0.2, 17)` is `"0.30000000000000004"`).
 
 ## Variables
 
@@ -119,8 +121,7 @@ The builtin `slice(x, a, b)` is the same operation: `slice(x, 1, 2)` is `x[1:2]`
 
 A slice only runs forward and takes no negative positions. To take from the end, start at
 `len(x) - n`: `l[len(l) - 2:]` is the last two items, and `l[-1]` (an index) is the last item. For
-last to first, use `reverse(x)`; on a list it reverses the list itself, so write `reverse(l[:])` to
-keep the original.
+last to first, use `reverse(x)`, which returns a new string or list and leaves `x` alone.
 
 ## Operators
 
@@ -211,8 +212,10 @@ switch (choice) {
 the next case, and `break` inside a `switch` leaves it.
 
 A `for-in` or `while` body gets a fresh scope on each iteration, so closures created in the
-body capture that iteration's variables. The variable of a C-style `for (let i = ...; ...)`
-loop is a single variable shared by every iteration.
+body capture that iteration's variables. The same holds for the variable of a C-style
+`for (let i = ...; ...)` loop: each iteration has its own `i`, and a closure made in the
+third iteration sees `2` even after the loop has finished. A variable declared before the loop
+(`for (k = 0; ...)`) is one variable and stays shared.
 
 ## Functions
 

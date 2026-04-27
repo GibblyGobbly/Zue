@@ -412,9 +412,58 @@ func lb_float(self_p, argc_i, argv_p) {
 }
 
 func lb_to_string(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 1, 1)
+    lv_arity(self_p, argc_i, 1, 2)
     let o = stack_buf(16)
+    if (argc_i == 2) {
+        if (_tag(argv_p) != T_FLOAT) {
+            _arg_fail(self_p, argv_p, 0, cstr("float"))
+        }
+        let digits = _arg_int(self_p, argv_p, 1)
+        if (digits < 1 or digits > 17) {
+            _errf(E_ARGUMENT, cstr("Use a number of significant digits from 1 to 17."),
+                  cstr("to_string() digits must be between 1 and 17"), 0, 0, 0)
+        }
+        let tmp = stack_buf(64)
+        _float_text(tmp, _val(argv_p), digits)
+        _str_n(o, tmp, strlen(tmp))
+        retp(o)
+    }
     _to_string(o, argv_p)
+    retp(o)
+}
+
+# fixed(x, decimals): a float as text with exactly that many places after the point.
+func lb_fixed(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 2)
+    if (_tag(argv_p) != T_FLOAT) {
+        _arg_fail(self_p, argv_p, 0, cstr("float"))
+    }
+    let decimals = _arg_int(self_p, argv_p, 1)
+    if (decimals < 0 or decimals > 15) {
+        _errf(E_ARGUMENT, cstr("Use a number of decimal places from 0 to 15."),
+              cstr("fixed() decimals must be between 0 and 15"), 0, 0, 0)
+    }
+    let fmt = stack_buf(16)
+    snprintf(fmt, 16, cstr("%%.%df"), decimals)
+    let tmp = stack_buf(400)
+    snprintf(tmp, 400, fmt, dbl(_val(argv_p)))
+    # A tiny negative number rounds to zero: write 0.00, not -0.00.
+    let start = 0
+    if (ld8(tmp) == 45) {
+        let all_zero = 1
+        let p = tmp + 1
+        while (ld8(p) != 0) {
+            if (ld8(p) != 48 and ld8(p) != 46) {
+                all_zero = 0
+            }
+            p += 1
+        }
+        if (all_zero != 0) {
+            start = 1
+        }
+    }
+    let o = stack_buf(16)
+    _str_n(o, tmp + start, strlen(tmp) - start)
     retp(o)
 }
 
@@ -1270,10 +1319,12 @@ func lb_reverse(self_p, argc_i, argv_p) {
     let o = stack_buf(16)
     if (_tag(argv_p) == T_LIST) {
         let l = _val(argv_p)
-        let items = ld64(l + L_ITEMS)
+        let n = ld64(l + L_COUNT)
+        _list_of(o, n, ld64(l + L_ITEMS))
+        let items = ld64(_val(o) + L_ITEMS)
         let t = stack_buf(16)
         let i = 0
-        let j = ld64(l + L_COUNT) - 1
+        let j = n - 1
         while (i < j) {
             _cp(t, items + 16 * i)
             _cp(items + 16 * i, items + 16 * j)
@@ -1281,7 +1332,6 @@ func lb_reverse(self_p, argc_i, argv_p) {
             i++
             j -= 1
         }
-        _cp(o, argv_p)
         retp(o)
     }
     let s = _arg_str(self_p, argv_p, 0)

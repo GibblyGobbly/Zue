@@ -106,7 +106,8 @@ func ck_init_sigs() {
     sig("to_float", [[["any"], "float"]])
     sig("int", [[["any"], "int"]])
     sig("to_int", [[["any"], "int"]])
-    sig("to_string", [[["any"], "string"]])
+    sig("to_string", [[["any"], "string"], [["float", "int"], "string"]])
+    sig("fixed", [[["float", "int"], "string"]])
 }
 
 ck_init_sigs()

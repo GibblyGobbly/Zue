@@ -972,11 +972,19 @@ func _buf_cstr(b, s) {
 }
 
 # The text of the double whose bits are f, printed like %.6g, with ".0" added when the text has
-# neither a point nor an exponent, so that a float never prints like an int.
+# neither a point nor an exponent, so that a float never prints like an int (see _float_text).
 func _buf_float(b, f) {
     let tmp = stack_buf(64)
-    snprintf(tmp, 64, cstr("%.6g"), dbl(f))
+    _float_text(tmp, f, 6)
     _buf_cstr(b, tmp)
+}
+
+# Writes into tmp (64 bytes) the text of the double whose bits are f with that many significant
+# digits (1 to 17), in the %g style.
+func _float_text(tmp, f, digits) {
+    let fmt = stack_buf(16)
+    snprintf(fmt, 16, cstr("%%.%dg"), digits)
+    snprintf(tmp, 64, fmt, dbl(f))
     let p = tmp
     let plain = 1
     while (ld8(p) != 0) {
@@ -986,7 +994,9 @@ func _buf_float(b, f) {
         p += 1
     }
     if (plain != 0) {
-        _buf_cstr(b, cstr(".0"))
+        st8(p, 46)
+        st8(p + 1, 48)
+        st8(p + 2, 0)
     }
 }
 

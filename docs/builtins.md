@@ -123,11 +123,13 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 | `to_upper(s)`, `to_lower(s)` | Case conversion (ASCII) | `to_upper("abc")` is `"ABC"` |
 | `trim(s)`, `trim_left(s)`, `trim_right(s)` | Remove whitespace from both ends, the start or the end | `trim("  hi  ")` is `"hi"` |
 | `replace(s, old, new)` | Replaces all occurrences of `old` with `new`. An empty `old` changes nothing | `replace("foobar", "o", "a")` is `"faabar"` |
-| `reverse(s)` | Reverses a string, or a list in place (copy with `l[:]` first to keep the original) | `reverse("Zue")` is `"euZ"` |
+| `reverse(s)` | Returns a new string or list in the opposite order; the original does not change | `reverse("Zue")` is `"euZ"` |
 | `repeat(s, n)` | `n` copies of `s`; `""` when `n` is 0 or less | `repeat("Na", 3)` is `"NaNaNa"` |
 | `pad_left(s, w, ch)` | Pads the start of `s` with the character `ch` up to width `w` | `pad_left("7", 3, "0")` is `"007"` |
 | `pad_right(s, w, ch)` | Pads the end of `s` | `pad_right("Ok", 5, ".")` is `"Ok..."` |
 | `to_string(v)` | Text of any value | `to_string(12)` is `"12"` |
+| `to_string(x, digits)` | Text of a float with 1 to 17 significant digits instead of 6; another type or a count outside 1 to 17 is an error | `to_string(0.1 + 0.2, 17)` is `"0.30000000000000004"` |
+| `fixed(x, decimals)` | Text of a float with exactly that many places after the point (0 to 15); an int is a `Type Error`, and a tiny negative number gives `0.00`, not `-0.00` | `fixed(29814127.78, 1)` is `"29814127.8"` |
 | `to_int(s)`, `to_float(s)` | Parse the whole text as a number (spaces around it are allowed). Text that is not a number, a value outside the 64-bit range, and the names `nan`, `inf` and hex digits are errors | `to_int("12")` is `12` |
 
 `replace` always replaces every match; there is no single-occurrence version. `+` joins two

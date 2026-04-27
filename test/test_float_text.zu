@@ -1,0 +1,45 @@
+// fixed(x, decimals) and to_string(x, digits): float text with more than the six default digits.
+
+# CASE fixed decimals
+let a = 29814127.78
+print(fixed(a, 2))
+print(fixed(a, 0))
+print(fixed(2.5, 3))
+print(fixed(1.0e20, 1))
+print(fixed(0.1 + 0.2, 15))
+print(fixed(-2.345, 1))
+# CASE a tiny negative number is not negative zero
+print(fixed(-0.001, 2))
+print(fixed(-0.0, 1))
+# CASE fixed inside a string
+let a = 3.14159
+print("pi is {fixed(a, 2)} or {a}")
+print("{} and {}", fixed(2.0 / 3.0, 4), 2.0 / 3.0)
+# CASE to_string with digits
+let a = 29814127.78
+print(to_string(a, 10))
+print(to_string(0.1 + 0.2, 17))
+print(to_string(0.1 + 0.2, 6))
+print(to_string(3.0, 3))
+print(to_string(1.5e300, 17))
+# CASE to_string with one argument is unchanged
+print(to_string(5))
+print(to_string(1.5))
+print(to_string(29814127.78))
+# CASE fixed needs a float
+func pass(v) { return [v, null][0] }
+print(fixed(pass(5), 2))
+# CASE fixed decimals must be an int
+func pass(v) { return [v, null][0] }
+print(fixed(1.5, pass("2")))
+# CASE fixed decimals out of range
+func pass(v) { return [v, null][0] }
+print(fixed(1.5, pass(16)))
+# CASE to_string digits out of range
+func pass(v) { return [v, null][0] }
+print(to_string(1.5, pass(18)))
+# CASE to_string digits needs a float
+func pass(v) { return [v, null][0] }
+print(to_string(pass(5), 3))
+# CASE fixed with an int is a compile error
+print(fixed(5, 2))

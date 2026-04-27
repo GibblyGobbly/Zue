@@ -322,6 +322,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("digits must be between")) != 0) {
         return cstr("E0412")
     }
+    if (strstr(msg, cstr("decimals must be between")) != 0) {
+        return cstr("E0412")
+    }
     if (strstr(msg, cstr("exponent of an int")) != 0) {
         return cstr("E0412")
     }

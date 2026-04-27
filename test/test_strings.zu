@@ -23,6 +23,12 @@ print("Testing transformations...")
 assert(to_upper("abc") == "ABC")
 assert(to_lower("ABC") == "abc")
 assert(reverse("Zue") == "euZ")
+assert(reverse("bad") == "dab")
+let rl = [1, 2, 3]
+let rr = reverse(rl)
+assert(rr[0] == 3 and rr[2] == 1)
+assert(rl[0] == 1 and rl[2] == 3)
+assert(len(reverse([])) == 0)
 assert(repeat("Na", 4) == "NaNaNaNa")
 assert(concat("He", "llo") == "Hello")
 

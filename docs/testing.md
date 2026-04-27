@@ -45,6 +45,8 @@ compiler is meant to reject.
 | `test/test_string_scanning.zu` | `index_of` with a start, `index_of_any`, `skip_chars` and their errors |
 | `test/test_lexer_scanning.zu` | Lexer edge cases: braces and interpolation in strings, numbers with underscores, comments, and the lexer errors (unterminated string, non-ASCII outside a string, unexpected character) |
 | `test/test_slices.zu` | `s[a:b]` on strings and lists: both ends included, open ends, and every out-of-range error |
+| `test/test_float_text.zu` | `fixed(x, decimals)` and `to_string(x, digits)`: more digits than the default six, no negative zero, and the argument errors |
+| `test/test_loop_closures.zu` | Closures made in a C-style `for` loop: each iteration has its own variable, with `break`, `continue`, nested loops and a variable declared before the loop |
 | `test/test_sort.zu` | `sort` on every item type, both sides of the radix cutoff (256 items), digit counts from 1 to 8 passes, `ssort`, and the argument errors |
 | `test/test_random.zu` | `rand`, `srand`, `trand` and `shuffle`/`tshuffle`: inclusive ends, reversed bounds, 64-bit ranges, repeatable seeds, evenness over all six orders of three items, and the errors |
 

@@ -1,0 +1,92 @@
+// A closure made inside a C-style for loop keeps the value its iteration had.
+
+# CASE each closure sees its own iteration
+let fs = []
+for (let i = 0; i < 3; i++) {
+    append(fs, func() { return i })
+}
+print(fs[0](), fs[1](), fs[2]())
+# CASE the loop still counts correctly
+let fs = []
+let seen = 0
+for (let i = 0; i < 5; i++) {
+    seen += 1
+    append(fs, func() { return i * 10 })
+}
+print(seen)
+print(fs[4]())
+# CASE the body can change the variable and the loop follows
+let fs = []
+for (let i = 0; i < 10; i++) {
+    i += 1
+    append(fs, func() { return i })
+}
+print(len(fs))
+print(fs[0](), fs[4]())
+# CASE continue keeps each value
+let fs = []
+for (let i = 0; i < 6; i++) {
+    if (i % 2 == 1) {
+        continue
+    }
+    append(fs, func() { return i })
+}
+print(fs[0](), fs[1](), fs[2]())
+# CASE break keeps the value of the last iteration
+let fs = []
+for (let i = 0; i < 10; i++) {
+    append(fs, func() { return i })
+    if (i == 3) {
+        break
+    }
+}
+print(len(fs))
+print(fs[3]())
+# CASE a closure that changes its variable does not change the loop
+let fs = []
+for (let i = 0; i < 3; i++) {
+    append(fs, func() {
+        i += 100
+        return i
+    })
+}
+print(fs[0](), fs[0](), fs[1]())
+print(fs[2]())
+# CASE the loop variable and a variable of the body
+let fs = []
+for (let i = 0; i < 3; i++) {
+    let j = 10 - i
+    append(fs, func() { return i * 100 + j })
+}
+print(fs[0](), fs[1](), fs[2]())
+# CASE nested loops
+let fs = []
+for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+        append(fs, func() { return i * 10 + j })
+    }
+}
+print(fs[0](), fs[1](), fs[2](), fs[3]())
+# CASE a variable declared outside the loop is still shared
+let fs = []
+let k = 0
+for (k = 0; k < 3; k++) {
+    append(fs, func() { return k })
+}
+print(fs[0](), fs[1](), fs[2]())
+# CASE closures in a function
+func make() {
+    let out = []
+    for (let n = 1; n <= 3; n++) {
+        append(out, func(x) { return x * n })
+    }
+    return out
+}
+let ms = make()
+print(ms[0](5), ms[1](5), ms[2](5))
+# CASE a loop without closures is unchanged
+let total = 0
+for (let i = 0; i < 1000; i++) {
+    total += i
+}
+print(total)
