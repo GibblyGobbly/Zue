@@ -297,6 +297,13 @@ export func ll_reg() {
     return "%r{uid()}"
 }
 
+# Like ll_copy, for a cell in a heap object. The write barrier of the collector sees the value that is
+# being overwritten (see zue_gc.zu).
+export func ll_copy_heap(dst, src) {
+    ll("call void @lv_wb_cell(ptr {dst})")
+    ll_copy(dst, src)
+}
+
 export func ll_copy(dst, src) {
     let r = ll_reg()
     # two 8-byte moves: a 16-byte vector load right after two 8-byte stores cannot be forwarded

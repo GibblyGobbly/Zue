@@ -1,0 +1,172 @@
+# Each case moves an object out of a heap location, overwrites the location, and keeps the object
+# somewhere else while the collector works. Run with ZUE_RT_GC_INCR=1 ZUE_RT_GC_STRESS=1 to make the
+# collector mark in many tiny steps: an overwrite that the collector does not see loses the object.
+
+template Holder { item }
+
+func make_obj(i) {
+    return [i, i * 2, "n{i}", [i, i + 1]]
+}
+
+func check_obj(o, i) {
+    if (len(o) != 4 or o[0] != i or o[1] != i * 2 or o[2] != "n{i}" or o[3][0] != i or o[3][1] != i + 1) {
+        print("object {i} was damaged")
+        exit(1)
+    }
+}
+
+func case_list_set() {
+    let n = 2000
+    let big = []
+    for (let i = 0; i < n; i++) {
+        append(big, make_obj(i))
+    }
+    let saved = []
+    for (let i = n - 1; i >= 0; i--) {
+        let x = big[i]
+        big[i] = 0
+        let junk = make_obj(0 - i)
+        append(saved, x)
+    }
+    for (let k = 0; k < n; k++) {
+        check_obj(saved[k], n - 1 - k)
+    }
+}
+
+func case_map_set() {
+    let n = 2000
+    let m = {}
+    for (let i = 0; i < n; i++) {
+        m["k{i}"] = make_obj(i)
+    }
+    let saved = []
+    for (let i = n - 1; i >= 0; i--) {
+        let x = m["k{i}"]
+        m["k{i}"] = 0
+        let junk = make_obj(0 - i)
+        append(saved, x)
+    }
+    for (let k = 0; k < n; k++) {
+        check_obj(saved[k], n - 1 - k)
+    }
+}
+
+func make_cell(i) {
+    let v = make_obj(i)
+    return [func() { return v }, func(x) { v = x }]
+}
+
+func case_closure_cell() {
+    let n = 1500
+    let cells = []
+    for (let i = 0; i < n; i++) {
+        append(cells, make_cell(i))
+    }
+    let saved = []
+    for (let i = n - 1; i >= 0; i--) {
+        let get = cells[i][0]
+        let put = cells[i][1]
+        let x = get()
+        put(0)
+        let junk = make_obj(0 - i)
+        append(saved, x)
+    }
+    for (let k = 0; k < n; k++) {
+        check_obj(saved[k], n - 1 - k)
+    }
+}
+
+func case_template_field() {
+    let n = 1500
+    let holders = []
+    for (let i = 0; i < n; i++) {
+        append(holders, Holder(make_obj(i)))
+    }
+    let saved = []
+    for (let i = n - 1; i >= 0; i--) {
+        let x = holders[i].item
+        holders[i].item = 0
+        let junk = make_obj(0 - i)
+        append(saved, x)
+    }
+    for (let k = 0; k < n; k++) {
+        check_obj(saved[k], n - 1 - k)
+    }
+}
+
+func case_list_remove() {
+    let n = 1200
+    let big = []
+    for (let i = 0; i < n; i++) {
+        append(big, make_obj(i))
+    }
+    let saved = []
+    for (let i = 0; i < n; i++) {
+        let x = remove(big, 0)
+        let junk = make_obj(0 - i)
+        append(saved, x)
+    }
+    for (let k = 0; k < n; k++) {
+        check_obj(saved[k], k)
+    }
+}
+
+func case_sort() {
+    for (let round = 0; round < 30; round++) {
+        let n = 1200
+        let l = []
+        let want = 0
+        for (let i = 0; i < n; i++) {
+            let v = (i * 7919 + round * 31) % 100003
+            want += v
+            append(l, pad_left(to_string(v), 6, "0"))
+        }
+        sort(l)
+        let got = 0
+        let prev = ""
+        for (let k = 0; k < n; k++) {
+            let s = l[k]
+            if (len(s) != 6 or s < prev) {
+                print("sort round {round} damaged element {k}")
+                exit(1)
+            }
+            got += to_int(s)
+            prev = s
+        }
+        if (got != want) {
+            print("sort round {round} lost a string")
+            exit(1)
+        }
+    }
+}
+
+func case_map_churn() {
+    let m = {}
+    let keep = []
+    for (let r = 0; r < 12; r++) {
+        for (let i = 0; i < 300; i++) {
+            m["r{r}k{i}"] = make_obj(r * 1000 + i)
+        }
+        for (let i = 0; i < 300; i++) {
+            if (i % 6 != 0) {
+                map_delete(m, "r{r}k{i}")
+            } else {
+                append(keep, [r, i])
+            }
+        }
+    }
+    for (let k = 0; k < len(keep); k++) {
+        let r = keep[k][0]
+        let i = keep[k][1]
+        check_obj(m["r{r}k{i}"], r * 1000 + i)
+    }
+}
+
+case_list_set()
+case_map_set()
+case_closure_cell()
+case_template_field()
+case_list_remove()
+case_sort()
+case_map_churn()
+print("barrier cases ok")

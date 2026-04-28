@@ -66,6 +66,9 @@ const MIN_THRESHOLD = 16777216
 const CHUNK_SIZE = 2097152    # small-object pages are cut from chunks of this size (32 pages)
 const NCLASSES = 31
 const SPAN_CACHE_SLOTS = 512
+const CHUNK_BYTES = 4096      # a larger object is scanned in pieces of this size
+const STEP_WORDS = 16384      # words an incremental step scans before it gives control back
+const STEP_BYTES = 8192       # bytes the program allocates between two steps
 
 table("_class_sizes", "i32", 16, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768, 1024, 1280, 1536, 2048, 3072, 4096, 6144, 8192, 10920, 13104, 16368, 21840, 32752)
 space("_class_of", 2056)       # u8[MAX_SMALL / 16 + 1]
@@ -106,6 +109,14 @@ let g_stack_low = 0        # lowest usable address of the program thread stack; 
 let g_chunk_next = 0         # next unused page in the current chunk
 let g_chunk_end = 0
 let g_idx = 0              # object index set by _page_of
+let g_marking = 0          # 1 from the start of an incremental cycle until its marks are final
+let g_incremental = 0      # 1: collect in steps with a write barrier; 0: stop the world
+let g_verify = 0           # 1: at the end of each incremental cycle check that no live object is unmarked
+let g_vmode = 0            # 1 while the verifier walks the heap
+let g_vstack = 0           # 1 while the verifier reads the stack
+let g_slice_max = 0        # the longest incremental mark step, in nanoseconds
+let g_finish_max = 0       # the longest end of a cycle (verify, hook, sweep), in nanoseconds
+let g_begin_max = 0        # the longest start of a cycle (marking the roots), in nanoseconds
 let g_cache_count = 0
 let g_cache_bytes = 0
 let g_cache_span = 0       # span of the slot taken by _cache_take
@@ -364,6 +375,7 @@ func _alloc_large(n, atomic) {
     st64(pg + PG_USED, pg + PG_SIZE)
     st64(pg + PG_MARK, pg + PG_SIZE + 1)
     st8(pg + PG_SIZE, 1)
+    st8(pg + PG_SIZE + 1, g_marking)    # allocated during a cycle: survives it
     _note_heap(mem, span)
     let off = 0
     while (off < span) {
@@ -394,6 +406,9 @@ func _set_limit() {
     g_limit = 4611686018427387904
     if (g_gc_ready != 0 and g_gc_busy == 0) {
         g_limit = g_threshold
+        if (g_marking != 0) {
+            g_limit = g_bytes_since_gc + STEP_BYTES
+        }
         if (g_stress_every != 0) {
             g_limit = -1
         }
@@ -404,8 +419,14 @@ func _set_limit() {
 func _gc_check() {
     g_alloc_count++
     if (g_gc_ready != 0 and g_gc_busy == 0) {
-        if (g_bytes_since_gc > g_threshold or (g_stress_every != 0 and g_alloc_count % g_stress_every == 0)) {
-            _collect()
+        if (g_marking != 0) {
+            _gc_work()
+        } else if (g_bytes_since_gc > g_threshold or (g_stress_every != 0 and g_alloc_count % g_stress_every == 0)) {
+            if (g_incremental != 0) {
+                _gc_work()
+            } else {
+                _collect()
+            }
         }
     }
 }
@@ -450,6 +471,9 @@ func _gc_alloc(size, atomic) {
         st32(pg + PG_BUMP, idx + 1)
     }
     st8(ld64(pg + PG_USED) + idx, 1)
+    if (g_marking != 0) {
+        st8(ld64(pg + PG_MARK) + idx, 1)    # allocated during a cycle: survives it
+    }
     let obj = ld64(pg + PG_BASE) + idx * osz
     g_bytes_since_gc += osz
     return obj
@@ -520,6 +544,7 @@ func _push(p, n) {
         } else {
             g_mcap = 4096
         }
+        g_mstack_grow++
         g_mstack = realloc(g_mstack, g_mcap * 16)
         if (g_mstack == 0) {
             _die_oom()
@@ -537,6 +562,9 @@ func _mark_word(w) {
     }
     let idx = g_idx
     let m = ld64(pg + PG_MARK) + idx
+    if (g_vmode != 0) {
+        return _vmark(pg, idx)
+    }
     if (ld8(m) != 0) {
         return 0
     }
@@ -559,12 +587,56 @@ func _scan_range(lo, hi) {
     }
 }
 
+# Write barrier. While a cycle is marking, an object the program is about to overwrite a pointer to
+# is marked first, so everything that was reachable when the cycle began is found (snapshot at the
+# beginning). An overwritten word that is not a pointer is ignored by _mark_word.
+
+# Before the 16-byte value at p is overwritten.
+func lv_wb_cell(p) {
+    if (g_marking != 0) {
+        _mark_word(ld64(p + 8))
+    }
+    return 0
+}
+
+# Before the pointer stored at p is overwritten.
+func lv_wb_word(p) {
+    if (g_marking != 0) {
+        _mark_word(ld64(p))
+    }
+    return 0
+}
+
+# Before the n bytes at p are overwritten or moved.
+func lv_wb_range(p, n) {
+    if (g_marking != 0) {
+        let q = band(p + 7, -8)
+        let e = p + n
+        while (ule(q + 8, e)) {
+            _mark_word(ld64(q))
+            q += 8
+        }
+    }
+    return 0
+}
+
+# Scans the piece of the top mark item (at most CHUNK_BYTES; the rest stays on the stack) and
+# returns the number of words scanned.
+func _scan_top() {
+    g_mtop--
+    let p = ld64(g_mstack + g_mtop * 16)
+    let n = ld64(g_mstack + g_mtop * 16 + 8)
+    if (n > CHUNK_BYTES) {
+        _push(p + CHUNK_BYTES, n - CHUNK_BYTES)
+        n = CHUNK_BYTES
+    }
+    _scan_range(p, p + n)
+    return n / 8
+}
+
 func _drain() {
     while (g_mtop != 0) {
-        g_mtop--
-        let p = ld64(g_mstack + g_mtop * 16)
-        let n = ld64(g_mstack + g_mtop * 16 + 8)
-        _scan_range(p, p + n)
+        _scan_top()
     }
 }
 
@@ -583,6 +655,9 @@ func lv_gc_root_add(lo, hi) {
     st64(g_roots + g_root_count * 16, lo)
     st64(g_roots + g_root_count * 16 + 8, hi)
     g_root_count++
+    if (g_marking != 0) {
+        _scan_range(lo, hi)    # a range added during a cycle holds what the program put there
+    }
 }
 
 func lv_gc_root_remove(lo) {
@@ -606,13 +681,29 @@ func lv_gc_is_marked(p) {
 
 # Kept out of line, with every callee-saved register spilled into its frame, so that
 # values held only in registers are found by the stack scan.
-func _scan_stack_and_registers() {
+# Marks what the stack and the registers point to, without following it.
+func _scan_stack() {
     spill_regs()
     let sp = stack_ptr()
     if (ult(sp, g_stack_base)) {
         _scan_range(sp, g_stack_base)
     }
+}
+
+func _scan_stack_and_registers() {
+    _scan_stack()
     _drain()
+}
+
+# Marks what the data segment and the registered root ranges point to, without following it.
+func _scan_roots() {
+    # lv_frames (2.4 MB of call positions and static names) never holds a heap pointer
+    let frames = addr_of("lv_frames")
+    _scan_range(addr_of("__data_start"), frames)
+    _scan_range(frames + 2400072, addr_of("_end"))
+    for (let i = 0; i < g_root_count; i++) {
+        _scan_range(ld64(g_roots + i * 16), ld64(g_roots + i * 16 + 8))
+    }
 }
 
 # Sweeping
@@ -685,6 +776,9 @@ func _sweep() {
             }
             st8(used + j, 0)
             st32(base + j * osz, ld32(pg + PG_FREE))
+            if (g_verify != 0) {
+                memset(base + j * osz + 4, 221, osz - 4)    # a use after free then reads obvious garbage
+            }
             st32(pg + PG_FREE, j + 1)
             st32(pg + PG_NFREE, ld32(pg + PG_NFREE) + 1)
         }
@@ -711,6 +805,16 @@ func _sweep() {
     g_all_count = keep
 }
 
+func _cpu_ns() {
+    let ts = stack_buf(16)
+    clock_gettime(3, ts)
+    return ld64(ts) * 1000000000 + ld64(ts + 8)
+}
+
+let g_cpu_max = 0          # the longest incremental mark step in thread CPU time; wall time also counts being descheduled
+let g_mstack_grow = 0      # how often the mark stack was enlarged
+let g_stats = 0            # 1 when ZUE_RT_GC_STATS is set
+
 func _now_ns() {
     let ts = stack_buf(16)
     clock_gettime(1, ts)
@@ -723,10 +827,7 @@ func _collect() {
     _set_limit()
     g_collections++
     g_mtop = 0
-    _scan_range(addr_of("__data_start"), addr_of("_end"))
-    for (let i = 0; i < g_root_count; i++) {
-        _scan_range(ld64(g_roots + i * 16), ld64(g_roots + i * 16 + 8))
-    }
+    _scan_roots()
     _drain()
     _scan_stack_and_registers()
     lv_data_gc_hook()
@@ -734,30 +835,174 @@ func _collect() {
     _sweep()
     g_mark_total += t1 - t0
     g_sweep_total += _now_ns() - t1
+    _after_sweep()
+    g_gc_busy = 0
+    _set_limit()
+    _count_pause(_now_ns() - t0)
+}
+
+# After a sweep: the next collection comes when as many bytes have been allocated as are live.
+func _after_sweep() {
     g_bytes_since_gc = 0
     if (g_live_bytes > MIN_THRESHOLD) {
         g_threshold = g_live_bytes
     } else {
         g_threshold = MIN_THRESHOLD
     }
-    g_gc_busy = 0
-    _set_limit()
-    let dt = _now_ns() - t0
+}
+
+func _count_pause(dt) {
     g_pause_total += dt
     if (dt > g_pause_max) {
         g_pause_max = dt
     }
 }
 
+# Incremental collection. A cycle begins by marking the roots (the stack, the registers, the data
+# segment and the root ranges), which is the snapshot. The program then runs between steps; each step
+# scans a bounded number of words. When nothing is left to scan the marks are final, the cycle ends
+# with a sweep, and the next cycle can begin.
+
+func _gc_begin() {
+    g_collections++
+    g_mtop = 0
+    g_marking = 1
+    _scan_roots()
+    _scan_stack()
+}
+
+# Scans up to budget words. Returns 1 when no object is left to scan.
+func _mark_some(budget) {
+    let work = 0
+    while (g_mtop != 0 and work < budget) {
+        work += _scan_top()
+    }
+    if (g_mtop == 0) {
+        return 1
+    }
+    return 0
+}
+
+# The marks are final: check them if asked, free the boxes of dead templates, sweep.
+func _gc_finish() {
+    if (g_verify != 0) {
+        _verify_marks()
+    }
+    g_marking = 0
+    lv_data_gc_hook()
+    let t = _now_ns()
+    _sweep()
+    g_sweep_total += _now_ns() - t
+    _after_sweep()
+}
+
+# One stop of the incremental collector: begin a cycle if none is running, scan one step, and end the
+# cycle when the marking is done.
+func _gc_work() {
+    let t0 = _now_ns()
+    g_gc_busy = 1
+    if (g_marking == 0) {
+        _gc_begin()
+        if (_now_ns() - t0 > g_begin_max) {
+            g_begin_max = _now_ns() - t0
+        }
+    }
+    let budget = STEP_WORDS
+    if (g_stress_every != 0) {
+        budget = 64    # many small steps, to interleave the program with the marking as much as possible
+    }
+    let c0 = 0
+    if (g_stats != 0) {
+        c0 = _cpu_ns()
+    }
+    let done = _mark_some(budget)
+    if (g_stats != 0 and _cpu_ns() - c0 > g_cpu_max) {
+        g_cpu_max = _cpu_ns() - c0
+    }
+    let t1 = _now_ns()
+    g_mark_total += t1 - t0
+    if (t1 - t0 > g_slice_max) {
+        g_slice_max = t1 - t0
+    }
+    if (done != 0) {
+        _gc_finish()
+        if (_now_ns() - t1 > g_finish_max) {
+            g_finish_max = _now_ns() - t1
+        }
+    }
+    g_gc_busy = 0
+    _set_limit()
+    _count_pause(_now_ns() - t0)
+}
+
+# The verifier. At the end of a cycle every object that can be reached from the roots must be marked.
+# It walks the heap again, with a second bit in the mark byte as the visited flag. A word on the stack
+# that points at an unmarked object is skipped: a stale word left in an unused stack slot can point at
+# an object that died before the cycle began, and the program cannot reach it through that word.
+
+func _verify_fail(pg, idx) {
+    let obj = ld64(pg + PG_BASE)
+    if (ld8(pg + PG_LARGE) == 0) {
+        obj = obj + idx * ld64(pg + PG_OBJ)
+    }
+    let buf = stack_buf(192)
+    let n = snprintf(buf, 192, cstr("Runtime Error: GC verify failed: the object at %p (%zu bytes) can be reached but was not marked\n"), obj, ld64(pg + PG_OBJ))
+    write(2, buf, n)
+    exit(1)
+}
+
+func _vmark(pg, idx) {
+    let m = ld64(pg + PG_MARK) + idx
+    let v = ld8(m)
+    if (band(v, 2) != 0) {
+        return 0
+    }
+    if (band(v, 1) == 0) {
+        if (g_vstack != 0) {
+            return 0
+        }
+        _verify_fail(pg, idx)
+    }
+    st8(m, v + 2)
+    if (ld8(pg + PG_ATOMIC) == 0) {
+        let obj = ld64(pg + PG_BASE)
+        if (ld8(pg + PG_LARGE) == 0) {
+            obj = obj + idx * ld64(pg + PG_OBJ)
+        }
+        _push(obj, ld64(pg + PG_OBJ))
+    }
+    return 0
+}
+
+func _verify_marks() {
+    g_vmode = 1
+    g_mtop = 0
+    _scan_roots()
+    _drain()
+    g_vstack = 1
+    _scan_stack()
+    g_vstack = 0
+    _drain()
+    g_vmode = 0
+}
+
 func lv_gc_collect() {
     if (g_gc_ready != 0 and g_gc_busy == 0) {
-        _collect()
+        if (g_marking != 0) {
+            g_gc_busy = 1
+            _mark_some(4611686018427387904)
+            _gc_finish()
+            g_gc_busy = 0
+            _set_limit()
+        } else {
+            _collect()
+        }
     }
 }
 
 func _gc_report() {
-    let buf = stack_buf(256)
-    let n = snprintf(buf, 256, cstr("ZUE_RT_GC_STATS,%llu collections,%zu live bytes,%zu pages,%llu total pause ns,%llu max pause ns,%llu mark ns,%llu sweep ns\n"), g_collections, g_live_bytes, g_all_count, g_pause_total, g_pause_max, g_mark_total, g_sweep_total)
+    let buf = stack_buf(448)
+    let n = snprintf(buf, 448, cstr("ZUE_RT_GC_STATS,%llu collections,%zu live bytes,%zu pages,%llu total pause ns,%llu max pause ns,%llu mark ns,%llu sweep ns,%llu max mark step ns,%llu max cycle end ns,%llu max cycle start ns,%llu max step cpu ns,%llu mark stack grows\n"), g_collections, g_live_bytes, g_all_count, g_pause_total, g_pause_max, g_mark_total, g_sweep_total, g_slice_max, g_finish_max, g_begin_max, g_cpu_max, g_mstack_grow)
     write(2, buf, n)
 }
 
@@ -780,7 +1025,16 @@ func lv_gc_start() {
     if (s != 0 and ld8(s) != 0) {
         g_stress_every = strtoull(s, 0, 10)
     }
+    let inc = getenv(cstr("ZUE_RT_GC_INCR"))
+    if (inc != 0 and ld8(inc) != 0 and ld8(inc) != 48) {
+        g_incremental = 1
+    }
+    let ver = getenv(cstr("ZUE_RT_GC_VERIFY"))
+    if (ver != 0 and ld8(ver) != 0 and ld8(ver) != 48) {
+        g_verify = 1
+    }
     if (getenv(cstr("ZUE_RT_GC_STATS")) != 0) {
+        g_stats = 1
         atexit(fn_addr("_gc_report"))
     }
     g_gc_ready = 1

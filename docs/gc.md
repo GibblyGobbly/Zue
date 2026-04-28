@@ -61,6 +61,35 @@ reachable heap object).
 The collector runs on the program's single thread and pauses the program for the whole
 collection.
 
+## Incremental mode
+
+With `ZUE_RT_GC_INCR=1` the collector marks in short steps between allocations instead of stopping
+the program for the whole mark. It is off by default while it is being proven. A cycle works like this:
+
+1. **Start.** The data segment (without `lv_frames`, which never holds heap pointers), the root
+   ranges and the stack and registers are marked. This is the snapshot. It takes about 25 microseconds.
+2. **Steps.** After every 8 KB of allocation the collector scans up to 16384 words (a larger object
+   is scanned in pieces of 4 KB). New objects are allocated already marked, so they survive the cycle.
+3. **Write barrier.** While a cycle marks, any code that is about to overwrite a pointer inside a heap
+   object first marks the object it points to (snapshot at the beginning). Without this an object that
+   the program moves out of a heap location, and holds only in a local, could be freed.
+4. **End.** When nothing is left to scan the marks are final. The boxes of dead templates are freed,
+   and a stop-the-world sweep frees the unmarked objects. The sweep is the one long pause left.
+
+Where the barrier is applied:
+
+| Place | How |
+|---|---|
+| Every value cell written by `_set` or `_cp` | `lv_wb_cell` before the write (whether the cell is on the stack or in a heap object) |
+| List items pointer, map entries pointer, map index pointer, map entry key | `lv_wb_word` before the store |
+| Map rehash, list `remove`, sort copy-back | `lv_wb_range` over the cells that are overwritten or moved |
+| Compiled assignment to a captured variable | the compiler emits a call to `lv_wb_cell` (`ll_copy_heap`) |
+
+Not needed: stores to the stack, to globals and to root ranges (they are scanned at the start of the
+cycle), initial stores into a new object (its old contents are zero), and dense lists, strings and box
+bytes (they hold no heap pointers). A new store of a pointer into a heap object must call a barrier
+function; the tests below fail when one is missing.
+
 ## Environment variables
 
 Read once at program start, by the compiled program itself:
@@ -68,17 +97,23 @@ Read once at program start, by the compiled program itself:
 | Variable | Effect |
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
-| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns` to standard error. The mark and sweep times add up to the total pause |
+| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max mark step ns,<ns> max cycle end ns,<ns> max cycle start ns,<ns> max step cpu ns,<n> mark stack grows` to standard error. In incremental mode a pause is one stop (a step, or the start or end of a cycle); `max step cpu` is the longest mark step in thread CPU time, which excludes time the operating system took the processor away |
+| `ZUE_RT_GC_INCR=1` | Collect incrementally with the write barrier (see above) |
+| `ZUE_RT_GC_VERIFY=1` | With `ZUE_RT_GC_INCR`: at the end of each cycle walk the heap again and stop with an error if a reachable object is not marked. Freed objects are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it |
 
 ```bash
 ZUE_RT_GC_STATS=1 ./prog
 ZUE_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_safety.zu
+ZUE_RT_GC_INCR=1 ZUE_RT_GC_VERIFY=1 ZUE_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_barrier.zu
 ```
 
 ## Testing the collector
 
-`test_gc_safety.zu`, `test_gc_large_safety.zu`, `test_gc_callbacks.zu` and
-`test_gc_recursion.zu` build and drop many objects and check that live data stays intact. Run
+`test_gc_safety.zu`, `test_gc_large_safety.zu`, `test_gc_callbacks.zu`, `test_gc_span_reuse.zu` and
+`test_gc_recursion.zu` build and drop many objects and check that live data stays intact.
+`test_gc_barrier.zu` moves objects out of lists, maps, closure cells, template fields, `remove` and
+`sort`, overwrites the old location, and keeps the object elsewhere; it is the test for the write barrier.
+Switching off any one barrier function makes it fail under `ZUE_RT_GC_INCR=1 ZUE_RT_GC_VERIFY=1 ZUE_RT_GC_STRESS=1`. Run
 them under `ZUE_RT_GC_STRESS=1` after any change to `zue_gc.zu`, to a runtime function that
 allocates, or to how generated code keeps values in memory. `make` also exercises the collector:
 the compiler compiles itself twice, and the two outputs must be identical.

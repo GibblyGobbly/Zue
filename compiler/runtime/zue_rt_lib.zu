@@ -763,6 +763,7 @@ func lb_remove(self_p, argc_i, argv_p) {
     let items = ld64(l + L_ITEMS)
     let o = stack_buf(16)
     _cp(o, items + 16 * i)
+    lv_wb_range(items + 16 * i, 16 * (count - i))
     memmove(items + 16 * i, items + 16 * (i + 1), 16 * (count - i - 1))
     st64(l + L_COUNT, count - 1)
     retp(o)
@@ -849,6 +850,7 @@ func _merge_sort(items, tmp, n) {
         j++
         k++
     }
+    lv_wb_range(items, 16 * n)
     memcpy(items, tmp, 16 * n)
 }
 

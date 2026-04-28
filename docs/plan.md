@@ -110,6 +110,43 @@ figures in this size range as 400 to 640 ms until the collector no longer stops 
 Known limits of this step: the 32752-byte class limit is a compromise, and the span cache search is
 linear (512 slots at most). Neither matters until lazy sweep (phase 5).
 
+## Phase 6 result (measured)
+
+Incremental marking with the write barrier works and is checked. The sweep at the end of each cycle
+is still stop-the-world, so the full pause is not under 1 ms yet.
+
+Program: `bench/gc/live_heap.zu`, many small objects (and big lists), incremental mode.
+
+| Live heap | Longest mark step | Cycle start | Cycle end (sweep) | Peak memory / live | CPU | Churn rate |
+|---|---|---|---|---|---|---|
+| 1181 MiB (small) | 122 us | 24 us | 138 ms | 2.14 | 5.60 s | 4.7 M/s |
+| 4722 MiB (small) | 163 us | 26 us | 170 ms | 1.77 | 9.43 s | 4.5 M/s |
+| 4785 MiB (big) | 120 us | 27 us | 249 ms | 1.84 | 10.48 s | 5.2 M/s |
+
+Compared with the stop-the-world collector at the same sizes (above): the marking pause fell from
+933 ms (4444 MiB) to 163 us. The sweep is the remaining pause (170 to 250 ms). Churn throughput is
+about 15 percent lower (4.5 to 4.7 M/s against 5.4 to 5.7 M/s) and CPU use about 15 to 18 percent
+higher. Peak memory is unchanged.
+
+Measuring pauses: a mark step is bounded in work, but its wall-clock time sometimes shows 700 to 1000
+microseconds. In those runs the thread's CPU time for the same step was 120 to 180 microseconds, so the
+extra time is the operating system taking the processor away. `ZUE_RT_GC_STATS` reports both. The
+claim of a bound is on CPU time. Wall time cannot be guaranteed in user space.
+
+What was done to make it safe:
+
+- Barrier sites found by reading every pointer-width store in the runtime (about 160) and every
+  compiled store into a heap cell. The list is in [gc](gc.md).
+- Mutation tests: switching off the cell, word or range barrier each makes `test_gc_barrier.zu` fail
+  under the verifier. Before that test existed, the cell barrier could be switched off and the whole
+  suite still passed.
+- The compiler compiling itself (15 MB of IR) gives identical output under incremental mode with the
+  verifier on, with up to 848 collections. The whole suite passes with the verifier on and a collection
+  step every 25 allocations.
+
+Open items: the sweep (phase 5); a mark step starts at a fixed 8 KB of allocation with no pacing
+against how fast the program allocates; the barrier makes every cell write test one flag.
+
 ## How Hush works
 
 | Technique | What it does |
@@ -174,7 +211,7 @@ Decisions made from reading [memory](memory.md), [unsafe](unsafe.md) and the dat
 | `template` | GC object with mutable fields | Field stores get the SATB barrier. Allocated black |
 | `box` | Raw bytes outside the heap (stack frame or C heap) | Holds bytes, not Zue values, so it is never scanned. Needs no barrier |
 | Box owned by a template | Freed by the data hook when the template is unmarked | The hook runs only when marking has finished (cycle end), so a live template is never seen as unmarked. A template that dies mid-cycle keeps its box one more cycle |
-| `alloc()` buffer (unsafe) | C heap, registered as a root range | The range is scanned at cycle start. `store` into a buffer applies the barrier to the old slot value. A range registered during a cycle is scanned immediately. `free` of a range during a cycle is safe because the scan reads only the ranges still registered |
+| `alloc()` buffer (unsafe) | C heap, registered as a root range | The range is scanned in full at cycle start, so a store into it needs no barrier (everything it held was marked). A range registered during a cycle is scanned immediately. A very large buffer makes the cycle start slower; it is not scanned in steps because a freed range would then be read after `free` |
 | `alloc(object)` copy of a template or bloc | C heap root range | Same as an `alloc()` buffer |
 | `address_of` pointers | Point into the stack | Never reach the heap, so no GC handling |
 | Raw pointers in GC values | Forbidden by rule R2 | The collector never sees one, and this is unchanged |
@@ -202,7 +239,7 @@ Each phase ends with `make test` green, then `make seed` only when the tests pas
 | 3 | Memory trigger: configurable heap growth ratio replaces "equal to live"; return empty pages with `madvise` | Peak memory under 1.5 times live in `lowpause` |
 | 4 | Move collector state out of module-level globals into one struct | Tests pass; no behaviour change |
 | 5 | Lazy sweep and chunked scanning of large objects | Longest pause no longer grows with page count |
-| 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Verify mode clean under stress for the whole suite |
+| 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Done, off by default (`ZUE_RT_GC_INCR=1`). See "Phase 6 result" |
 | 7 | `--gc=lowpause` and `--gc=throughput` flags; remove the old collector | Both modes pass `make test`; comparison table filled in |
 | 8 | Marking on the GC thread, in parallel with the program | Longest pause under 1 ms at 4 GiB; verify mode clean |
 | 9 | Optional generational layer (sticky mark bits and card marking) | Throughput gain measured |

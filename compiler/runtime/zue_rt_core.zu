@@ -150,12 +150,16 @@ func _val(p) {
     return ld64(p + 8)
 }
 
+# Every write of a value cell goes through _set or _cp. They apply the write barrier (see zue_gc.zu) to the
+# value being overwritten, whether the cell is on the stack or in a heap object.
 func _set(p, t, v) {
+    lv_wb_cell(p)
     st64(p, t)
     st64(p + 8, v)
 }
 
 func _cp(dst, src) {
+    lv_wb_cell(dst)
     st64(dst, ld64(src))
     st64(dst + 8, ld64(src + 8))
 }
@@ -740,7 +744,9 @@ func _list_push(list, v) {
     let l = _val(list)
     if (ld64(l + L_COUNT) == ld64(l + L_CAP)) {
         st64(l + L_CAP, ld64(l + L_CAP) * 2)
-        st64(l + L_ITEMS, lv_realloc(ld64(l + L_ITEMS), 16 * ld64(l + L_CAP)))
+        let grown = lv_realloc(ld64(l + L_ITEMS), 16 * ld64(l + L_CAP))
+        lv_wb_word(l + L_ITEMS)
+        st64(l + L_ITEMS, grown)
     }
     _cp(ld64(l + L_ITEMS) + 16 * ld64(l + L_COUNT), v)
     st64(l + L_COUNT, ld64(l + L_COUNT) + 1)
@@ -869,6 +875,7 @@ func _map_slot(m, key) {
 func _map_rehash(m) {
     # Compact live entries, then rebuild the index.
     let entries = ld64(m + M_ENTRIES)
+    lv_wb_range(entries, E_SIZE * ld64(m + M_USED))    # live entries move down over dead ones
     let w = 0
     for (let r = 0; r < ld64(m + M_USED); r++) {
         if (ld32(entries + r * E_SIZE + E_LIVE) != 0) {
@@ -882,7 +889,9 @@ func _map_rehash(m) {
     while (ld64(m + M_ICAP) < (ld64(m + M_COUNT) + 1) * 2) {
         st64(m + M_ICAP, ld64(m + M_ICAP) * 2)
     }
-    st64(m + M_INDEX, lv_alloc_atomic(8 * ld64(m + M_ICAP)))
+    let fresh = lv_alloc_atomic(8 * ld64(m + M_ICAP))
+    lv_wb_word(m + M_INDEX)
+    st64(m + M_INDEX, fresh)
     for (let e = 0; e < w; e++) {
         let slot = _map_slot(m, ld64(entries + e * E_SIZE + E_KEY))
         let index = ld64(m + M_INDEX)
@@ -915,12 +924,15 @@ func _map_put(map, key, val) {
             _map_rehash(m)
         } else {
             st64(m + M_CAP, ld64(m + M_CAP) * 2)
-            st64(m + M_ENTRIES, lv_realloc(ld64(m + M_ENTRIES), E_SIZE * ld64(m + M_CAP)))
+            let grown = lv_realloc(ld64(m + M_ENTRIES), E_SIZE * ld64(m + M_CAP))
+            lv_wb_word(m + M_ENTRIES)
+            st64(m + M_ENTRIES, grown)
         }
         slot = _map_slot(m, key)
         index = ld64(m + M_INDEX)
     }
     let e = ld64(m + M_ENTRIES) + ld64(m + M_USED) * E_SIZE
+    lv_wb_word(e + E_KEY)
     st64(e + E_KEY, key)
     _cp(e + E_VAL, val)
     st32(e + E_LIVE, 1)
