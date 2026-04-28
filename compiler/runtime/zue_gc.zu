@@ -47,7 +47,6 @@ const PG_NFREE = 28       # u32
 const PG_USED_COUNT = 32  # u32
 const PG_ATOMIC = 36      # u8
 const PG_LARGE = 37       # u8
-const PG_DEAD = 38        # u8
 const PG_IN_LIST = 39     # u8
 const PG_CLS = 40         # i32
 const PG_SPAN = 48        # bytes owned by a large page
@@ -62,14 +61,16 @@ const SLOT_SIZE = 16
 
 const PAGE_SHIFT = 16
 const PAGE_SIZE = 65536
-const MAX_SMALL = 8192
+const MAX_SMALL = 32752
 const MIN_THRESHOLD = 16777216
 const CHUNK_SIZE = 2097152    # small-object pages are cut from chunks of this size (32 pages)
-const NCLASSES = 26
+const NCLASSES = 31
+const SPAN_CACHE_SLOTS = 512
 
-table("_class_sizes", "i32", 16, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768, 1024, 1280, 1536, 2048, 3072, 4096, 6144, 8192)
-space("_class_of", 520)        # u8[MAX_SMALL / 16 + 1]
+table("_class_sizes", "i32", 16, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768, 1024, 1280, 1536, 2048, 3072, 4096, 6144, 8192, 10920, 13104, 16368, 21840, 32752)
+space("_class_of", 2056)       # u8[MAX_SMALL / 16 + 1]
 space("_class_list", 512)      # Page*[2][32]: pages with room, per [atomic][class]
+space("_span_cache", 16384)    # SpanSlot[512] { base, span, stamp, touched }: freed large spans kept for reuse
 
 let g_setup_done = 0
 let g_all_pages = 0
@@ -99,10 +100,15 @@ let g_root_count = 0
 let g_root_cap = 0
 let g_pause_total = 0      # nanoseconds spent in collections
 let g_pause_max = 0        # the longest single collection, in nanoseconds
+let g_mark_total = 0       # nanoseconds spent marking
+let g_sweep_total = 0      # nanoseconds spent sweeping
 let g_stack_low = 0        # lowest usable address of the program thread stack; 0 when unknown
 let g_chunk_next = 0         # next unused page in the current chunk
 let g_chunk_end = 0
 let g_idx = 0              # object index set by _page_of
+let g_cache_count = 0
+let g_cache_bytes = 0
+let g_cache_span = 0       # span of the slot taken by _cache_take
 
 func _die_oom() {
     write(2, cstr("Runtime Error: out of memory\n"), 29)
@@ -195,7 +201,6 @@ func _init_small_page(pg, cls, atomic) {
     st32(pg + PG_USED_COUNT, 0)
     st8(pg + PG_ATOMIC, atomic)
     st8(pg + PG_LARGE, 0)
-    st8(pg + PG_DEAD, 0)
     st8(pg + PG_IN_LIST, 0)
     free(ld64(pg + PG_USED))
     free(ld64(pg + PG_MARK))
@@ -258,14 +263,96 @@ func _new_small_page(cls, atomic) {
     return pg
 }
 
+# A freed large span is kept for reuse, because mapping and unmapping memory costs more than clearing
+# it. The cache holds at most g_threshold bytes of touched memory, which is no more than the garbage that
+# was resident before the sweep, so the peak does not grow. A span not reused within one collection is given back.
+func _cache_take(need) {
+    for (let i = g_cache_count - 1; i >= 0; i--) {
+        let e = addr_of("_span_cache") + i * 32
+        let sp = ld64(e + 8)
+        if (sp >= need and sp <= need + need / 4) {
+            let base = ld64(e)
+            g_cache_span = sp
+            g_cache_bytes -= ld64(e + 24)
+            g_cache_count--
+            let last = addr_of("_span_cache") + g_cache_count * 32
+            st64(e, ld64(last))
+            st64(e + 8, ld64(last + 8))
+            st64(e + 16, ld64(last + 16))
+            st64(e + 24, ld64(last + 24))
+            st64(last, 0)    # a stale address in the data segment would keep a dead object alive
+            st64(last + 8, 0)
+            st64(last + 16, 0)
+            st64(last + 24, 0)
+            return base
+        }
+    }
+    return 0
+}
+
+func _cache_put(mem, span, used) {
+    let touched = band(used + 4095, -4096)    # the part of the span that was ever written
+    if (g_cache_count < SPAN_CACHE_SLOTS and g_cache_bytes + touched <= g_threshold) {
+        let e = addr_of("_span_cache") + g_cache_count * 32
+        st64(e, mem)
+        st64(e + 8, span)
+        st64(e + 16, g_collections)
+        st64(e + 24, touched)
+        g_cache_count++
+        g_cache_bytes += touched
+        return 0
+    }
+    munmap(mem, span)
+}
+
+# Gives back the cached spans that no allocation used since the previous collection.
+func _cache_trim() {
+    let i = 0
+    while (i < g_cache_count) {
+        let e = addr_of("_span_cache") + i * 32
+        if (ld64(e + 16) < g_collections) {
+            munmap(ld64(e), ld64(e + 8))
+            g_cache_bytes -= ld64(e + 24)
+            g_cache_count--
+            let last = addr_of("_span_cache") + g_cache_count * 32
+            st64(e, ld64(last))
+            st64(e + 8, ld64(last + 8))
+            st64(e + 16, ld64(last + 16))
+            st64(e + 24, ld64(last + 24))
+            st64(last, 0)    # a stale address in the data segment would keep a dead object alive
+            st64(last + 8, 0)
+            st64(last + 16, 0)
+            st64(last + 24, 0)
+        } else {
+            i++
+        }
+    }
+}
+
+# An object over MAX_SMALL gets its own span, rounded up to whole pages and aligned to 64 KB. A fresh
+# mapping is zeroed by the kernel and touched only when used; a reused span is cleared here. The used
+# and mark bytes live at the end of the descriptor.
 func _alloc_large(n, atomic) {
     let span = band(n + PAGE_SIZE - 1, bnot(PAGE_SIZE - 1))
-    let mem = aligned_alloc(PAGE_SIZE, span)
-    let pg = calloc(1, PG_SIZE)
-    if (mem == 0 or pg == 0) {
+    let mem = _cache_take(span)
+    if (mem != 0) {
+        span = g_cache_span
+        memset(mem, 0, n)
+    } else {
+        let raw = mmap(0, span + PAGE_SIZE, 3, 34, -1, 0)    # read and write, private and anonymous
+        if (raw == -1 or raw == 0) {
+            _die_oom()
+        }
+        mem = band(raw + PAGE_SIZE - 1, bnot(PAGE_SIZE - 1))
+        if (mem > raw) {
+            munmap(raw, mem - raw)
+        }
+        munmap(mem + span, raw + PAGE_SIZE - mem)
+    }
+    let pg = calloc(1, PG_SIZE + 2)
+    if (pg == 0) {
         _die_oom()
     }
-    memset(mem, 0, span)
     st64(pg + PG_BASE, mem)
     st64(pg + PG_OBJ, n)
     st32(pg + PG_NOBJS, 1)
@@ -274,10 +361,9 @@ func _alloc_large(n, atomic) {
     st8(pg + PG_ATOMIC, atomic)
     st8(pg + PG_LARGE, 1)
     st64(pg + PG_SPAN, span)
-    let used = calloc(1, 1)
-    st64(pg + PG_USED, used)
-    st64(pg + PG_MARK, calloc(1, 1))
-    st8(used, 1)
+    st64(pg + PG_USED, pg + PG_SIZE)
+    st64(pg + PG_MARK, pg + PG_SIZE + 1)
+    st8(pg + PG_SIZE, 1)
     _note_heap(mem, span)
     let off = 0
     while (off < span) {
@@ -285,8 +371,21 @@ func _alloc_large(n, atomic) {
         off += PAGE_SIZE
     }
     _track_page(pg)
-    g_bytes_since_gc += span
+    g_bytes_since_gc += n
     return mem
+}
+
+# Retires a dead large object: its page table entries and descriptor go, its span is cached or unmapped.
+func _free_large(pg) {
+    let mem = ld64(pg + PG_BASE)
+    let span = ld64(pg + PG_SPAN)
+    let off = 0
+    while (off < span) {
+        _table_insert(shr(mem + off, PAGE_SHIFT), 0)
+        off += PAGE_SIZE
+    }
+    _cache_put(mem, span, ld64(pg + PG_OBJ))
+    free(pg)
 }
 
 # Sets g_limit: the threshold while collecting is allowed, -1 when every allocation is to be counted
@@ -373,7 +472,7 @@ func _page_of(w) {
         return 0
     }
     let pg = _table_find(shr(w, PAGE_SHIFT))
-    if (pg == 0 or ld8(pg + PG_DEAD) != 0) {
+    if (pg == 0) {
         return 0
     }
     let idx = 0
@@ -548,13 +647,11 @@ func _pool_push(pg) {
 
 func _sweep() {
     g_live_bytes = 0
+    _cache_trim()
     _rebuild_lists()
     let keep = 0
     for (let i = 0; i < g_all_count; i++) {
         let pg = ld64(g_all_pages + i * 8)
-        if (ld8(pg + PG_DEAD) != 0) {
-            continue
-        }
         if (ld8(pg + PG_IN_LIST) == 2) {
             st64(g_all_pages + keep * 8, pg)
             keep++
@@ -562,13 +659,7 @@ func _sweep() {
         }
         if (ld8(pg + PG_LARGE) != 0) {
             if (ld8(ld64(pg + PG_MARK)) == 0) {
-                st8(pg + PG_DEAD, 1)
-                free(ld64(pg + PG_BASE))
-                free(ld64(pg + PG_USED))
-                free(ld64(pg + PG_MARK))
-                st64(pg + PG_USED, 0)
-                st64(pg + PG_MARK, 0)
-                st64(pg + PG_BASE, 0)
+                _free_large(pg)
                 continue
             }
             st8(ld64(pg + PG_MARK), 0)
@@ -639,7 +730,10 @@ func _collect() {
     _drain()
     _scan_stack_and_registers()
     lv_data_gc_hook()
+    let t1 = _now_ns()
     _sweep()
+    g_mark_total += t1 - t0
+    g_sweep_total += _now_ns() - t1
     g_bytes_since_gc = 0
     if (g_live_bytes > MIN_THRESHOLD) {
         g_threshold = g_live_bytes
@@ -663,7 +757,7 @@ func lv_gc_collect() {
 
 func _gc_report() {
     let buf = stack_buf(256)
-    let n = snprintf(buf, 256, cstr("ZUE_RT_GC_STATS,%llu collections,%zu live bytes,%zu pages,%llu total pause ns,%llu max pause ns\n"), g_collections, g_live_bytes, g_all_count, g_pause_total, g_pause_max)
+    let n = snprintf(buf, 256, cstr("ZUE_RT_GC_STATS,%llu collections,%zu live bytes,%zu pages,%llu total pause ns,%llu max pause ns,%llu mark ns,%llu sweep ns\n"), g_collections, g_live_bytes, g_all_count, g_pause_total, g_pause_max, g_mark_total, g_sweep_total)
     write(2, buf, n)
 }
 

@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# live_heap.zu: builds a live heap of about N MiB, then allocates short-lived objects while
+# reading the live data, so the collector has to keep finding the live part. Used by
+# bench/gc/measure.sh to record pause time, memory, CPU time and throughput.
+#   live_heap.zu <live MiB> <churn iterations> [big]
+# With a third argument the live data is a few large lists instead of many small ones.
+
+let a = args()
+let live_mb = to_int(a[0])
+let churn = to_int(a[1])
+let big = len(a) > 2
+
+let t0 = clock()
+let live = []
+if (big) {
+    # about 1 MiB lists of ints: 65536 cells of 16 bytes
+    let lists = live_mb
+    for (let i = 0; i < lists; i++) {
+        let row = []
+        for (let j = 0; j < 65536; j++) {
+            append(row, j)
+        }
+        append(live, row)
+    }
+} else {
+    # about 200 bytes per object: a list of eight ints
+    let objects = floor_div(live_mb * 1048576, 200)
+    for (let i = 0; i < objects; i++) {
+        let row = []
+        for (let j = 0; j < 8; j++) {
+            append(row, i + j)
+        }
+        append(live, row)
+    }
+}
+let t1 = clock()
+
+let n = len(live)
+let sum = 0
+for (let i = 0; i < churn; i++) {
+    let tmp = [i, i + 1, i + 2, i + 3]
+    let s = "k{i}"
+    sum += tmp[0] % 7 + len(s) + len(live[i % n])
+}
+let t2 = clock()
+
+print("build_s {t1 - t0}")
+print("churn_s {t2 - t1}")
+print("churn_per_s {float(churn) / (t2 - t1)}")
+print("check {sum}")

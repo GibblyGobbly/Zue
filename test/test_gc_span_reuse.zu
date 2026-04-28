@@ -1,0 +1,52 @@
+# Objects on both sides of every size-class boundary and of the large-object limit keep their
+# contents while others are freed and their memory is reused.
+
+func check_string(size, ch) {
+    let s = pad_left("", size, ch)
+    if (len(s) != size or char_at(s, 0) != ch or char_at(s, size - 1) != ch) {
+        print("bad string of {size}")
+        exit(1)
+    }
+    return s
+}
+
+func check_list(size) {
+    let l = []
+    for (let i = 0; i < size; i++) {
+        append(l, i)
+    }
+    let total = 0
+    for (let i = 0; i < size; i++) {
+        total += l[i]
+    }
+    if (total != floor_div(size * (size - 1), 2)) {
+        print("bad list of {size}")
+        exit(1)
+    }
+    return l
+}
+
+let sizes = [8000, 8191, 8192, 8193, 10000, 10920, 13104, 16367, 16368, 21840, 32751, 32752, 32753,
+             40000, 65535, 65536, 65537, 100000, 300000, 1000000]
+let kept = []
+for (let round = 0; round < 6; round++) {
+    for (let k = 0; k < len(sizes); k++) {
+        let size = sizes[k]
+        let tmp = check_string(size, "a")
+        let l = check_list(floor_div(size, 16) + 1)
+        if (round % 2 == 0 and k % 3 == 0) {
+            append(kept, tmp)
+            append(kept, l)
+        }
+    }
+}
+let total = 0
+for (let i = 0; i < len(kept); i += 2) {
+    let s = kept[i]
+    if (char_at(s, 0) != "a" or char_at(s, len(s) - 1) != "a") {
+        print("kept string damaged")
+        exit(1)
+    }
+    total += len(s) + len(kept[i + 1])
+}
+print("kept {len(kept)} objects, {total} units")

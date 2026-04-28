@@ -15,12 +15,17 @@ aligned word it scans as a possible pointer.
 
 ## Heap layout
 
-- **Small objects** (up to 8192 bytes) are served from 64 KB pages. A page holds objects of one
-  size class; there are 26 classes from 16 to 8192 bytes. A page keeps a bump index for objects
+- **Small objects** (up to 32752 bytes) are served from 64 KB pages. A page holds objects of one
+  size class; there are 31 classes from 16 to 32752 bytes. The five largest hold 6, 5, 4, 3 and 2 objects per page. A page keeps a bump index for objects
   never handed out and a free list of recycled ones.
 - **Atomic objects** (strings, doubles, byte buffers, dense list data) are allocated from
   separate pages and are never scanned for pointers.
-- **Large objects** (over 8192 bytes) get pages of their own.
+- **Large objects** (over 32752 bytes) get a span of their own: whole 64 KB pages mapped with `mmap`,
+  which the kernel zeroes, and touched only when used. A freed span goes into a cache of at most
+  `g_threshold` bytes of touched memory and is reused (and cleared) by the next large allocation; a
+  cached span that no allocation used during a whole collection is returned with `munmap`. The
+  used and mark bytes of a large object sit at the end of its descriptor, and the descriptor and
+  its page table entries are freed with it.
 - Small-object pages are cut from 2 MB chunks of anonymous memory that the kernel zeroes, and each
   chunk is marked as a candidate for huge pages. That means far fewer page faults than one
   allocation per page. A page that was emptied and reused is cleared again.
@@ -63,7 +68,7 @@ Read once at program start, by the compiled program itself:
 | Variable | Effect |
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
-| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns` to standard error |
+| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns` to standard error. The mark and sweep times add up to the total pause |
 
 ```bash
 ZUE_RT_GC_STATS=1 ./prog
@@ -84,8 +89,6 @@ the compiler compiles itself twice, and the two outputs must be identical.
   no incremental or generational mode yet.
 - No compaction. Fragmented pages are reused through their free lists.
 - The threshold rule (the larger of 16 MiB and the live size) is not tuned.
-- Large objects (over 8192 bytes) are taken with `calloc` and not from the 2 MB chunks, so they miss
-  the huge-page benefit and cost more to allocate and free.
 - The heap can grow to about twice the live size before a collection, because the threshold is the
   live size of the last collection.
 
