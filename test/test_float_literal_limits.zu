@@ -1,0 +1,4 @@
+# The largest float literal is accepted; a big exponent on a small mantissa is fine.
+print("{}", 1.7976931348623157e308)
+print("{}", 0.0001e312)
+print("{}", 1e-400)

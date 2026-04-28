@@ -9,7 +9,7 @@
 # overflows, a zero divisor, and a float result that is not finite all end in the same runtime
 # call, which reports the error.
 
-use { die } from "util.zu"
+use { diag_exit_if_errors, diag_hint, diag_new, node_span } from "diag.zu"
 use { ll, ll_alloca, ll_br, ll_condbr, ll_float_text, ll_label, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
 use { find_local, resolve } from "ll_scope.zu"
 use { ty_load } from "ll_unbox.zu"
@@ -34,7 +34,9 @@ export func lit_int(n) {
         digits = cut(digits, 1, len(digits))
     }
     if (len(digits) > 19 or (len(digits) == 19 and digits > limit)) {
-        die("Syntax Error", n.line, "Integer literal {n.v} does not fit in 64 bits")
+        let d = diag_new("Syntax Error", node_span(n), "Integer literal does not fit in 64 bits")
+        diag_hint(d, "The largest int is 9223372036854775807")
+        diag_exit_if_errors()
     }
     return n.v
 }
@@ -65,7 +67,20 @@ export func skind(n) {
         return null
     }
     if (k == "bin") {
-        return bin_kind(n)
+        # kc keeps the answer ("-" for none) so a long chain is walked once, not once per level
+        if (n.kc != null) {
+            if (n.kc == "-") {
+                return null
+            }
+            return n.kc
+        }
+        let r = bin_kind(n)
+        if (r == null) {
+            n.kc = "-"
+        } else {
+            n.kc = r
+        }
+        return r
     }
     if (k == "call" and is_float_of_int(n)) {
         return "float"

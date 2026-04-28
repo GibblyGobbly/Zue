@@ -41,7 +41,7 @@ fix: Remove the character, or put it inside a string or a comment.
 
 == E0104
 title: A number is written wrongly
-match: number literal | Misplaced '_' | Integer literal does not fit
+match: number literal | Misplaced '_' | Integer literal does not fit | Float literal does not fit
 text: A number is digits, optionally with a single _ between two digits (1_000), a decimal
     point with digits on both sides (2.5), 0x or 0b followed by digits, and it must fit in 64 bits.
 example:

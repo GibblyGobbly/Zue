@@ -40,7 +40,7 @@ Other values report `file` (from `open`), `bloc`, `box`, `template`, `pointer` (
 
 Number literals are decimal (`42`), hexadecimal (`0xFF`), binary (`0b1010`) or floating point
 (`3.14`, `1e3`, `2.5e-4`). A single `_` may separate digits (`1_000_000`, `0x7FFF_FFFF`). A number
-followed directly by a letter (`12abc`) or a value that does not fit in 64 bits is a syntax error.
+followed directly by a letter (`12abc`) or a value that does not fit in 64 bits (an int above 9223372036854775807, a float above about 1.7976931348623157e308) is a syntax error.
 
 `/` follows the operand types: two ints give an int that truncates toward zero (`7 / 2` is `3`,
 `-7 / 2` is `-3`), and if either side is a float the result is a float (`7 / 2.0` is `3.5`).

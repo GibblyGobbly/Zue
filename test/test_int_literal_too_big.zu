@@ -1,0 +1,2 @@
+# A decimal integer literal that does not fit in 64 bits has the same message and code as a hex one.
+print("{}", 9223372036854775808)

@@ -11,7 +11,7 @@
 # in after the node is built; a node made by the compiler itself keeps col 0, which means "no place
 # known beyond the line". A template keeps its fields at fixed places, so a node costs less memory
 # than a map and is built in one call. A field a kind does not use is not declared; a field it may
-# leave empty holds null. The checker adds sty to let and for-in nodes. NODE_FIELDS lists the fields of
+# leave empty holds null. The checker adds sty to let and for-in nodes, and the emitter caches the raw kind of a binary node in kc. NODE_FIELDS lists the fields of
 # each kind after k and line, in the order of the template; ast_dump.zu and the tree walkers read it. Fields that end in span hold a Span from diag.zu, or null: they say where a name, an
 # operator, a type or an argument list is, so the checker can point at exactly that text.
 
@@ -27,7 +27,7 @@ export template NIndex { k, line, target, index, col, eline, ecol }
 export template NSlice { k, line, target, lo, hi, col, eline, ecol }
 export template NField { k, line, target, field, col, eline, ecol, fspan }
 export template NIncdec { k, line, name, op, prefix, col, eline, ecol, nspan }
-export template NBin { k, line, op, l, r, unary, col, eline, ecol, ospan }
+export template NBin { k, line, op, l, r, unary, kc, col, eline, ecol, ospan }
 export template NNot { k, line, e, col, eline, ecol }
 export template NLet { k, line, name, init, exported, const_decl, type, sty, col, eline, ecol, nspan, tspan }
 export template NGroup { k, line, items, col, eline, ecol }
@@ -57,7 +57,7 @@ export const NODE_FIELDS = {
     "slice": ["target", "lo", "hi"],
     "field": ["target", "field"],
     "incdec": ["name", "op", "prefix"],
-    "bin": ["op", "l", "r", "unary"],
+    "bin": ["op", "l", "r", "unary", "kc"],
     "not": ["e"],
     "let": ["name", "init", "exported", "const_decl", "type", "sty"],
     "group": ["items"],
@@ -76,7 +76,7 @@ export const NODE_FIELDS = {
 }
 
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
-export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "sty"]
+export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty"]
 
 # The constructors take st and en, the first and the last token of the node (a node can stand for
 # either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and
@@ -141,12 +141,12 @@ export func mk_incdec(st, en, name, op, prefix, nspan) {
 
 # ospan is the operator.
 export func mk_bin(st, en, op, l, r, ospan) {
-    return NBin("bin", st.line, op, l, r, null, st.col, en.eline, en.ecol, ospan)
+    return NBin("bin", st.line, op, l, r, null, null, st.col, en.eline, en.ecol, ospan)
 }
 
 # Unary minus is stored as 0 - r, with unary set.
 export func mk_neg(st, en, zero, r, ospan) {
-    return NBin("bin", st.line, "-", zero, r, true, st.col, en.eline, en.ecol, ospan)
+    return NBin("bin", st.line, "-", zero, r, true, null, st.col, en.eline, en.ecol, ospan)
 }
 
 export func mk_not(st, en, e) {

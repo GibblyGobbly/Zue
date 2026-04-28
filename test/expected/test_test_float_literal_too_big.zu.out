@@ -1,0 +1,7 @@
+Syntax Error [E0104] in test/test_float_literal_too_big.zu at line 2:
+  Float literal does not fit in a 64-bit float
+
+   2 | print("{}", 1e400)
+     |             ^^^^^
+
+Hint: The largest float is about 1.7976931348623157e308. Zue has no infinity

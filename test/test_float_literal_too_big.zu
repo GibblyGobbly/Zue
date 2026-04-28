@@ -1,0 +1,2 @@
+# A float literal larger than the largest 64-bit float is a compile-time error.
+print("{}", 1e400)

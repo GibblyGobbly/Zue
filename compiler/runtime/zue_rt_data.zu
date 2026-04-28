@@ -118,10 +118,6 @@ let g_defer_ptrs = 0
 let g_defer_count = 0
 let g_defer_cap = 0
 
-func _wrap(o, tag) {
-    _set(o, tag, 0)
-}
-
 # Declared field types
 
 # The code for a field type written as text in a declaration, or FK_ANY for no type. The size of a

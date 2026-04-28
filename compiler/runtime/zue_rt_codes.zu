@@ -31,6 +31,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("Integer literal does not fit")) != 0) {
         return cstr("E0104")
     }
+    if (strstr(msg, cstr("Float literal does not fit")) != 0) {
+        return cstr("E0104")
+    }
     if (strstr(msg, cstr("character literal")) != 0) {
         return cstr("E0105")
     }

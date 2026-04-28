@@ -1,0 +1,3 @@
+# to_int of a float outside the int range is an error with a code.
+func pass(v) { return [v, null][0] }
+print("{}", to_int(pass(1e30)))
