@@ -1,6 +1,6 @@
 # Each case moves an object out of a heap location, overwrites the location, and keeps the object
-# somewhere else while the collector works. Run with ZUE_RT_GC_INCR=1 ZUE_RT_GC_STRESS=1 to make the
-# collector mark in many tiny steps: an overwrite that the collector does not see loses the object.
+# somewhere else while the collector works. Run with ZUE_RT_GC_STRESS=1 ZUE_RT_GC_VERIFY=1 to make the
+# collector mark and sweep in many tiny steps: an overwrite that the collector does not see loses the object.
 
 template Holder { item }
 

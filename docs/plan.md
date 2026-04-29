@@ -153,7 +153,7 @@ The sweep now runs in steps of at most 50 microseconds between allocations, and 
 memory is given back at most 1 MiB per step. In incremental mode no single pause is longer than about
 0.5 ms in the benchmark, at every size up to 4.7 GiB of live data.
 
-Program: `bench/gc/live_heap.zu`, incremental mode (`ZUE_RT_GC_INCR=1`). All times are the longest
+Program: `bench/gc/live_heap.zu`, incremental mode (now `--gc=lowpause`, the default). All times are the longest
 single stop; the pause is the longest of the columns before it.
 
 | Live heap | Shape | Cycle start | Mark step | Cycle end | Sweep step | Longest pause | Peak memory / live | CPU | Churn rate |
@@ -181,7 +181,53 @@ What still limits the claim: the numbers are for one benchmark on one machine; t
 pause can be longer when the operating system takes the processor away (the stats line reports
 CPU time separately); `lv_data_gc_hook` (freeing the boxes of dead templates) runs in one piece at the
 end of marking and its time grows with the number of live boxes (at most 4096); a very large root range
-from `unsafe` is scanned in one piece at the start of a cycle; and incremental mode is still opt-in.
+from `unsafe` is scanned in one piece at the start of a cycle.
+
+## Phase 7 result (measured)
+
+One collector remains. `--gc=lowpause` (default) runs cycles in steps with the write barrier;
+`--gc=throughput` runs each cycle in one piece and the compiler leaves the barrier out. The separate
+stop-the-world collector, the `ZUE_RT_GC_INCR` switch and the unused `lv_gc_collect` are gone.
+
+Program: `bench/gc/live_heap.zu`, 20 million short-lived objects over a live heap, same machine as
+the baseline. "Old" is the stop-the-world collector from the baseline table.
+
+| Live heap (shape) | Collector | Longest pause | Peak memory / live | CPU | Churn rate |
+|---|---|---|---|---|---|
+| 4444 MiB (small) | old | 933 ms | 1.78 | 7.95 s | 5.65 M/s |
+| 4722 MiB (small) | `lowpause` | 340 us | 1.56 | 9.62 s | 4.53 M/s |
+| 4444 MiB (small) | `throughput` | 1554 ms | 1.76 | 10.16 s | 4.53 M/s |
+| 4352 MiB (big) | old | 410 ms | 2.01 | 9.50 s | 6.73 M/s |
+| 4610 MiB (big) | `lowpause` | 241 us | 1.87 | 10.95 s | 4.85 M/s |
+| 4352 MiB (big) | `throughput` | 1186 ms | 1.95 | 12.28 s | 4.93 M/s |
+
+At 1 GiB: `lowpause` 254 us (small) and 344 us (big); `throughput` 415 ms and 314 ms.
+At 256 MiB: `lowpause` 188 us and 210 us; `throughput` 104 ms and 81 ms.
+
+What this shows, without softening:
+
+- `lowpause` meets the pause goal in this benchmark: every size stayed under 0.35 ms.
+- `lowpause` costs throughput against the old collector: about 15 to 20 percent fewer churn
+  iterations per second on small objects and 20 to 28 percent on big lists, and 10 to 20 percent more CPU.
+- **`throughput` is not yet faster than `lowpause`, and is slower than the old collector.** Its churn
+  rate is the same as `lowpause`, its CPU use is higher, and its longest pause is longer than the old
+  collector's (1554 ms against 933 ms at 4.4 GiB). Total pause over the run was 4413 ms for
+  `throughput` against 2821 ms for the old collector, at 13 collections each. The cause has not been
+  found. Two suspects, neither tested: the runtime's own cell writes still call the barrier function
+  in both modes, and marking now goes through chunked scanning. This is the next item to fix, and until
+  it is, the flag does not deliver what its name says.
+- Peak memory is still about twice the live size in both modes (phase 3).
+
+Compile speed is not affected by the mode: compiling the compiler takes 0.31 s with `lowpause` and
+0.30 s with `ZUE_RT_GC_MODE=throughput`, against 0.33 s with the collector before this work.
+
+Checked on the final code: the whole suite passes in both modes (756 tests), also with the verifier on and a
+collection every 25 allocations; the box, bloc, template and unsafe tests (141 cases) pass in both modes
+at a collection every 3 allocations with the verifier on; the compiler's 15 MB self-build is
+byte-identical in both modes and under stress; five mutants (the three barrier functions, allocate-black and
+the sweep epoch) each make `test_gc_barrier.zu` fail. `test_gc_barrier.zu` with `ZUE_RT_GC_STRESS=1`
+in `throughput` mode with the verifier takes 107 s (a full collection and a full check on every
+allocation), longer than the test runner's 60 s limit; it passes when run directly.
 
 ## How Hush works
 
@@ -275,8 +321,8 @@ Each phase ends with `make test` green, then `make seed` only when the tests pas
 | 3 | Memory trigger: configurable heap growth ratio replaces "equal to live"; return empty pages with `madvise` | Peak memory under 1.5 times live in `lowpause` |
 | 4 | Move collector state out of module-level globals into one struct | Tests pass; no behaviour change |
 | 5 | Lazy sweep and chunked scanning of large objects | Done (in incremental mode). See "Phase 5 result" |
-| 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Done, off by default (`ZUE_RT_GC_INCR=1`). See "Phase 6 result" |
-| 7 | `--gc=lowpause` and `--gc=throughput` flags; remove the old collector | Both modes pass `make test`; comparison table filled in |
+| 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Done. See "Phase 6 result" |
+| 7 | `--gc=lowpause` and `--gc=throughput` flags; remove the old collector | Done. See "Phase 7 result" |
 | 8 | Marking on the GC thread, in parallel with the program | Longest pause under 1 ms at 4 GiB; verify mode clean |
 | 9 | Optional generational layer (sticky mark bits and card marking) | Throughput gain measured |
 

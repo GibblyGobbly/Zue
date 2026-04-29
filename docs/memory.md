@@ -51,7 +51,9 @@ variable, and frees the rest.
 
 - Cycles are collected: two lists that point at each other are freed once nothing else refers
   to them.
-- A collection pauses the program. Pauses grow with the amount of live data.
+- A collection runs in short steps between allocations, so no single pause is long: 0.2 to 0.5
+  milliseconds in the benchmarks up to 4.7 GiB of live data. `zue build --gc=throughput` runs each
+  collection in one piece instead, and its pauses grow with the amount of live data.
 - Large strings and lists are fine, but a request that cannot be met stops the program with
   `Runtime Error: out of memory` (for example `range(0, 3000000000)`, or any single allocation
   above 64 TiB).

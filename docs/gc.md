@@ -1,9 +1,9 @@
 # Garbage Collector
 
 Every compiled Zue program carries a garbage collector. It is part of the runtime, written in
-Zue: `compiler/runtime/zue_gc.zu`. It is a conservative, non-moving, stop-the-world
-mark-and-sweep collector. It does not need type maps from the compiler: it treats every
-aligned word it scans as a possible pointer.
+Zue: `compiler/runtime/zue_gc.zu`. It is a conservative, non-moving, incremental mark-and-sweep
+collector with a write barrier (named Hush in [plan](plan.md)). It does not need type maps from the
+compiler: it treats every aligned word it scans as a possible pointer.
 
 ## Memory domains
 
@@ -58,13 +58,30 @@ object alive longer than needed. It can never free a live object, as long as eve
 kept in a scanned location (the stack, registers, the data segment, a registered range, or a
 reachable heap object).
 
-The collector runs on the program's single thread and pauses the program for the whole
-collection.
+The collector runs on the program's single thread.
 
-## Incremental mode
+## Collector modes
 
-With `ZUE_RT_GC_INCR=1` the collector marks in short steps between allocations instead of stopping
-the program for the whole mark. It is off by default while it is being proven. A cycle works like this:
+There is one collector with two ways of running a cycle. The mode is chosen when the program is built.
+
+| Build option | What a cycle does | Write barrier in the program | Use it when |
+|---|---|---|---|
+| `--gc=lowpause` (default) | Marks and sweeps in short steps between allocations | Yes | Pause time matters |
+| `--gc=throughput` | Runs the whole cycle in one piece when the threshold is reached | No | Pauses do not matter |
+
+```bash
+zue build prog.zu -o prog                    # lowpause
+zue build --gc=throughput prog.zu -o prog    # throughput
+GC_MODE=throughput compiler/run_tests.sh     # the whole test suite built that way
+```
+
+The option goes before the file name. The run-time variable `ZUE_RT_GC_MODE=throughput` makes any program
+run its cycles in one piece; this is always safe. The other way round is not possible, because a program
+built with `--gc=throughput` has no barrier.
+
+## How a cycle runs
+
+In `lowpause` mode the collector marks and sweeps in short steps. A cycle works like this:
 
 1. **Start.** The data segment (without `lv_frames`, which never holds heap pointers), the root
    ranges and the stack and registers are marked. This is the snapshot. It takes about 25 microseconds.
@@ -106,13 +123,13 @@ Read once at program start, by the compiled program itself:
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
 | `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max mark step ns,<ns> max cycle end ns,<ns> max cycle start ns,<ns> max step cpu ns,<n> mark stack grows,<ns> max sweep step ns` to standard error. In incremental mode a pause is one stop (a step, or the start or end of a cycle); `max step cpu` is the longest mark step in thread CPU time, which excludes time the operating system took the processor away |
-| `ZUE_RT_GC_INCR=1` | Collect incrementally with the write barrier (see above) |
-| `ZUE_RT_GC_VERIFY=1` | With `ZUE_RT_GC_INCR`: at the end of each cycle walk the heap again and stop with an error if a reachable object is not marked. Freed objects are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it |
+| `ZUE_RT_GC_MODE=throughput` | Run every cycle in one piece (see "Collector modes") |
+| `ZUE_RT_GC_VERIFY=1` | At the end of each marking walk the heap again and stop with an error if a reachable object is not marked. Freed objects are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it |
 
 ```bash
 ZUE_RT_GC_STATS=1 ./prog
 ZUE_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_safety.zu
-ZUE_RT_GC_INCR=1 ZUE_RT_GC_VERIFY=1 ZUE_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_barrier.zu
+ZUE_RT_GC_VERIFY=1 ZUE_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_barrier.zu
 ```
 
 ## Testing the collector
@@ -121,15 +138,15 @@ ZUE_RT_GC_INCR=1 ZUE_RT_GC_VERIFY=1 ZUE_RT_GC_STRESS=1 compiler/run_tests.sh tes
 `test_gc_recursion.zu` build and drop many objects and check that live data stays intact.
 `test_gc_barrier.zu` moves objects out of lists, maps, closure cells, template fields, `remove` and
 `sort`, overwrites the old location, and keeps the object elsewhere; it is the test for the write barrier.
-Switching off any one barrier function makes it fail under `ZUE_RT_GC_INCR=1 ZUE_RT_GC_VERIFY=1 ZUE_RT_GC_STRESS=1`. Run
+Switching off any one barrier function makes it fail under `ZUE_RT_GC_VERIFY=1 ZUE_RT_GC_STRESS=1`. Run
 them under `ZUE_RT_GC_STRESS=1` after any change to `zue_gc.zu`, to a runtime function that
 allocates, or to how generated code keeps values in memory. `make` also exercises the collector:
 the compiler compiles itself twice, and the two outputs must be identical.
 
 ## Known limits
 
-- Stop-the-world and single-threaded: all collection work counts as pause time, and there is
-  no incremental or generational mode yet.
+- Single-threaded: the collector runs on the program's thread, in steps. There is no generational mode
+  and no GC thread yet. `--gc=throughput` is not faster than `--gc=lowpause` yet (see [plan](plan.md)).
 - No compaction. Fragmented pages are reused through their free lists.
 - The threshold rule (the larger of 16 MiB and the live size) is not tuned.
 - The heap can grow to about twice the live size before a collection, because the threshold is the
@@ -137,14 +154,14 @@ the compiler compiles itself twice, and the two outputs must be identical.
 
 ## Measured cost
 
-Compiling the compiler (a 212 KB source file, 11 MB of generated IR, about 275 MB allocated in
-total):
+Compiling the compiler (`bin/zue emit compiler/zuec.zu`, 15 MB of generated IR), best of three:
 
-| Run | Wall time | Peak memory | Page faults |
-|---|---|---|---|
-| Collector on (14 collections, 26 to 36 ms of pauses in all) | 220 ms | 85 MB | 17 thousand |
-| Collector off | 220 ms | 281 MB | 33 thousand |
+| Build | Wall time | Peak memory |
+|---|---|---|
+| Before the incremental collector (commit 432c756) | 0.33 s | 111 MB |
+| Now, `lowpause` (default) | 0.31 s | 86 MB |
+| Now, `ZUE_RT_GC_MODE=throughput` | 0.30 s | 83 MB |
 
-The collector costs memory, not time, here: switching it off saves nothing. The time goes into
-building the IR text (see [development](development.md#where-the-time-goes)). Measure it yourself
-with `ZUE_RT_GC_STATS=1`.
+The mode of a program does not change how fast `zue` compiles it. The two builds of the compiler's IR
+differ by 35 bytes, and `clang -O1` took 7.26 s (`lowpause`) and 7.51 s (`throughput`) for it.
+Measure your own program with `ZUE_RT_GC_STATS=1`.

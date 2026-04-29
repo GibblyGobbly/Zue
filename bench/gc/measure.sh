@@ -14,7 +14,7 @@ SIZES=${SIZES:-"256 1024 4096"}
 CHURN=${CHURN:-20000000}
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-bin/zue build bench/gc/live_heap.zu -o "$TMP/live_heap" "$@" || exit 1
+bin/zue build "$@" bench/gc/live_heap.zu -o "$TMP/live_heap" || exit 1
 for mb in $SIZES; do
     extra=""
     [ "$MODE" = big ] && extra=big

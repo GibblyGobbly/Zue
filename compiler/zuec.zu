@@ -26,7 +26,7 @@ use { compile_native } from "emit_native.zu"
 use { ST } from "state.zu"
 use { dump_program } from "ast_dump.zu"
 use { unparse_program } from "ast_unparse.zu"
-use { dbg_enable } from "ll_state.zu"
+use { dbg_enable, gc_set_mode } from "ll_state.zu"
 use { diag_set_format } from "diag.zu"
 use { ERROR_CODES } from "error_codes.zu"
 use { cut } from "ranges.zu"
@@ -58,9 +58,9 @@ func build_command(code_path, out_path) {
 }
 
 func usage() {
-    print("usage: zue build prog.zu -o program [-S]")
-    print("       zue run prog.zu [args...]")
-    print("       zue emit prog.zu [-o out.ll]")
+    print("usage: zue build [-g] [--gc=lowpause|throughput] prog.zu -o program [-S]")
+    print("       zue run [-g] [--gc=lowpause|throughput] prog.zu [args...]")
+    print("       zue emit [-g] [--gc=lowpause|throughput] prog.zu [-o out.ll]")
     print("       zue ast prog.zu")
     print("       zue unparse prog.zu")
     print("")
@@ -68,6 +68,8 @@ func usage() {
     print("  run    build into C/run/ and run it with the given arguments")
     print("  emit   write LLVM IR only (default C/<name>.ll)")
     print("  check  parse and type-check only; print every error found, nothing when there is none")
+    print("  --gc=lowpause    (default) the collector works in small steps: pauses stay under a millisecond")
+    print("  --gc=throughput  the collector runs each cycle in one piece: no write barrier in the program")
     print("  explain [code]  describe an error code such as E0201; without a code, list them all")
     print("  ast    print the parsed syntax tree, one statement per line (--spans adds the places)")
     print("  unparse  print the parsed program as source again")
@@ -277,7 +279,18 @@ func native_main(a) {
 
 # zuec input.zu output.ll [cwd]: the form the test runner and the bootstrap use. The cwd
 # is the directory that relative paths in the program resolve against.
+# Applies an option of the form --gc=lowpause or --gc=throughput.
+func set_gc_mode(option) {
+    if (not gc_set_mode(cut(option, 5, len(option)))) {
+        print("unknown collector '{cut(option, 5, len(option))}': use --gc=lowpause (the default) or --gc=throughput")
+        exit(1)
+    }
+}
+
 func positional_main(a) {
+    if (len(a) >= 4 and starts_with(a[3], "--gc=")) {
+        set_gc_mode(a[3])
+    }
     ST.src_file = a[0]
     let text = read_file(a[0])
     ST.src_lines = split_lines(text)
@@ -305,6 +318,10 @@ func main() {
     }
     if (len(rest) >= 2 and rest[0] == "-g" and (cmd == "run" or cmd == "build" or cmd == "emit")) {
         dbg_enable()
+        rest = cut(rest, 1, len(rest))
+    }
+    if (len(rest) >= 2 and starts_with(rest[0], "--gc=") and (cmd == "run" or cmd == "build" or cmd == "emit")) {
+        set_gc_mode(rest[0])
         rest = cut(rest, 1, len(rest))
     }
     if (cmd == "--native") {
