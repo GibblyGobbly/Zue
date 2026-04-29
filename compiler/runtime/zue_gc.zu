@@ -49,6 +49,7 @@ const PG_ATOMIC = 36      # u8
 const PG_LARGE = 37       # u8
 const PG_IN_LIST = 39     # u8
 const PG_CLS = 40         # i32
+const PG_EPOCH = 44       # u32, the sweep that last handled this page; a page of the current sweep is skipped
 const PG_SPAN = 48        # bytes owned by a large page
 const PG_USED = 56
 const PG_MARK = 64
@@ -69,6 +70,8 @@ const SPAN_CACHE_SLOTS = 512
 const CHUNK_BYTES = 4096      # a larger object is scanned in pieces of this size
 const STEP_WORDS = 16384      # words an incremental step scans before it gives control back
 const STEP_BYTES = 8192       # bytes the program allocates between two steps
+const SWEEP_STEP_NS = 50000   # time an incremental sweep step may take
+const TRIM_BYTES = 1048576    # cached large-object memory given back per call of _cache_trim
 
 table("_class_sizes", "i32", 16, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768, 1024, 1280, 1536, 2048, 3072, 4096, 6144, 8192, 10920, 13104, 16368, 21840, 32752)
 space("_class_of", 2056)       # u8[MAX_SMALL / 16 + 1]
@@ -114,6 +117,11 @@ let g_incremental = 0      # 1: collect in steps with a write barrier; 0: stop t
 let g_verify = 0           # 1: at the end of each incremental cycle check that no live object is unmarked
 let g_vmode = 0            # 1 while the verifier walks the heap
 let g_vstack = 0           # 1 while the verifier reads the stack
+let g_sweeping = 0         # 1 from the end of marking until every page is swept
+let g_sweep_i = 0          # next page to sweep
+let g_sweep_keep = 0       # pages kept so far; the list of pages is compacted as it is swept
+let g_sweep_epoch = 0
+let g_sweepstep_max = 0    # the longest incremental sweep step, in nanoseconds
 let g_slice_max = 0        # the longest incremental mark step, in nanoseconds
 let g_finish_max = 0       # the longest end of a cycle (verify, hook, sweep), in nanoseconds
 let g_begin_max = 0        # the longest start of a cycle (marking the roots), in nanoseconds
@@ -203,6 +211,7 @@ func _track_page(pg) {
 func _init_small_page(pg, cls, atomic) {
     let size = _class_size(cls)
     st32(pg + PG_CLS, cls)
+    st32(pg + PG_EPOCH, g_sweep_epoch)
     st64(pg + PG_OBJ, size)
     st64(pg + PG_RECIP, udiv(4294967296, size) + 1)
     st32(pg + PG_NOBJS, PAGE_SIZE / size)
@@ -303,11 +312,15 @@ func _cache_take(need) {
 
 func _cache_put(mem, span, used) {
     let touched = band(used + 4095, -4096)    # the part of the span that was ever written
-    if (g_cache_count < SPAN_CACHE_SLOTS and g_cache_bytes + touched <= g_threshold) {
+    if (g_cache_count < SPAN_CACHE_SLOTS) {
         let e = addr_of("_span_cache") + g_cache_count * 32
+        let stamp = g_collections
+        if (g_cache_bytes + touched > g_threshold) {
+            stamp = 0    # over the cap: expired at once, given back by _cache_trim in small pieces
+        }
         st64(e, mem)
         st64(e + 8, span)
-        st64(e + 16, g_collections)
+        st64(e + 16, stamp)
         st64(e + 24, touched)
         g_cache_count++
         g_cache_bytes += touched
@@ -316,28 +329,59 @@ func _cache_put(mem, span, used) {
     munmap(mem, span)
 }
 
-# Gives back the cached spans that no allocation used since the previous collection.
+# Gives back the cached spans that no allocation used since the previous collection, at most TRIM_BYTES
+# at a time so that one call stays short. Returns 1 when it gave something back.
 func _cache_trim() {
+    let budget = TRIM_BYTES
+    let released = 0
     let i = 0
-    while (i < g_cache_count) {
+    while (i < g_cache_count and budget > 0) {
         let e = addr_of("_span_cache") + i * 32
         if (ld64(e + 16) < g_collections) {
-            munmap(ld64(e), ld64(e + 8))
-            g_cache_bytes -= ld64(e + 24)
-            g_cache_count--
-            let last = addr_of("_span_cache") + g_cache_count * 32
-            st64(e, ld64(last))
-            st64(e + 8, ld64(last + 8))
-            st64(e + 16, ld64(last + 16))
-            st64(e + 24, ld64(last + 24))
-            st64(last, 0)    # a stale address in the data segment would keep a dead object alive
-            st64(last + 8, 0)
-            st64(last + 16, 0)
-            st64(last + 24, 0)
+            let sp = ld64(e + 8)
+            let n = sp
+            if (n > budget) {
+                n = budget
+            }
+            munmap(ld64(e), n)
+            released = 1
+            budget -= n
+            let t = ld64(e + 24)
+            let drop = n
+            if (drop > t) {
+                drop = t
+            }
+            g_cache_bytes -= drop
+            if (n == sp) {
+                g_cache_count--
+                let last = addr_of("_span_cache") + g_cache_count * 32
+                st64(e, ld64(last))
+                st64(e + 8, ld64(last + 8))
+                st64(e + 16, ld64(last + 16))
+                st64(e + 24, ld64(last + 24))
+                st64(last, 0)    # a stale address in the data segment would keep a dead object alive
+                st64(last + 8, 0)
+                st64(last + 16, 0)
+                st64(last + 24, 0)
+            } else {
+                st64(e, ld64(e) + n)
+                st64(e + 8, sp - n)
+                st64(e + 24, t - drop)
+            }
         } else {
             i++
         }
     }
+    return released
+}
+
+# Gives back every expired cached span, for the stop-the-world collector and for an explicit collection.
+func _cache_trim_all() {
+    let rounds = 0
+    while (_cache_trim() != 0) {
+        rounds++
+    }
+    return rounds
 }
 
 # An object over MAX_SMALL gets its own span, rounded up to whole pages and aligned to 64 KB. A fresh
@@ -366,6 +410,7 @@ func _alloc_large(n, atomic) {
     }
     st64(pg + PG_BASE, mem)
     st64(pg + PG_OBJ, n)
+    st32(pg + PG_EPOCH, g_sweep_epoch)
     st32(pg + PG_NOBJS, 1)
     st32(pg + PG_BUMP, 1)
     st32(pg + PG_USED_COUNT, 1)
@@ -406,7 +451,7 @@ func _set_limit() {
     g_limit = 4611686018427387904
     if (g_gc_ready != 0 and g_gc_busy == 0) {
         g_limit = g_threshold
-        if (g_marking != 0) {
+        if (g_marking != 0 or g_sweeping != 0) {
             g_limit = g_bytes_since_gc + STEP_BYTES
         }
         if (g_stress_every != 0) {
@@ -419,7 +464,7 @@ func _set_limit() {
 func _gc_check() {
     g_alloc_count++
     if (g_gc_ready != 0 and g_gc_busy == 0) {
-        if (g_marking != 0) {
+        if (g_marking != 0 or g_sweeping != 0) {
             _gc_work()
         } else if (g_bytes_since_gc > g_threshold or (g_stress_every != 0 and g_alloc_count % g_stress_every == 0)) {
             if (g_incremental != 0) {
@@ -708,18 +753,6 @@ func _scan_roots() {
 
 # Sweeping
 
-func _rebuild_lists() {
-    memset(addr_of("_class_list"), 0, 512)
-    for (let i = 0; i < g_all_count; i++) {
-        let pg = ld64(g_all_pages + i * 8)
-        if (ld8(pg + PG_IN_LIST) == 2) {
-            continue
-        }
-        st8(pg + PG_IN_LIST, 0)
-        st64(pg + PG_NEXT, 0)
-    }
-}
-
 func _pool_push(pg) {
     if (g_pool_count == g_pool_cap) {
         if (g_pool_cap != 0) {
@@ -736,73 +769,123 @@ func _pool_push(pg) {
     g_pool_count++
 }
 
-func _sweep() {
+# Sweeping works page by page. A sweep starts with empty class lists; each page that is swept and has
+# room goes back on its list, so the allocator only ever sees swept pages, and a page made during the
+# sweep carries the current epoch and is not swept again. The list of pages is compacted as it is walked.
+
+func _sweep_begin() {
     g_live_bytes = 0
-    _cache_trim()
-    _rebuild_lists()
-    let keep = 0
-    for (let i = 0; i < g_all_count; i++) {
-        let pg = ld64(g_all_pages + i * 8)
-        if (ld8(pg + PG_IN_LIST) == 2) {
-            st64(g_all_pages + keep * 8, pg)
-            keep++
+    memset(addr_of("_class_list"), 0, 512)
+    g_sweep_epoch++
+    g_sweep_i = 0
+    g_sweep_keep = 0
+    g_sweeping = 1
+}
+
+# Sweeps one page. Returns 0 when the page was a dead large object and is gone.
+func _sweep_page(pg) {
+    st32(pg + PG_EPOCH, g_sweep_epoch)
+    if (ld8(pg + PG_IN_LIST) == 2) {
+        return 1
+    }
+    if (ld8(pg + PG_LARGE) != 0) {
+        if (ld8(ld64(pg + PG_MARK)) == 0) {
+            _free_large(pg)
+            return 0
+        }
+        st8(ld64(pg + PG_MARK), 0)
+        g_live_bytes += ld64(pg + PG_SPAN)
+        return 1
+    }
+    st8(pg + PG_IN_LIST, 0)
+    st64(pg + PG_NEXT, 0)
+    let used = ld64(pg + PG_USED)
+    let mark = ld64(pg + PG_MARK)
+    let osz = ld64(pg + PG_OBJ)
+    let base = ld64(pg + PG_BASE)
+    let bump = ld32(pg + PG_BUMP)
+    let live = 0
+    for (let j = 0; j < bump; j++) {
+        if (ld8(used + j) == 0) {
             continue
         }
-        if (ld8(pg + PG_LARGE) != 0) {
-            if (ld8(ld64(pg + PG_MARK)) == 0) {
-                _free_large(pg)
-                continue
-            }
-            st8(ld64(pg + PG_MARK), 0)
-            g_live_bytes += ld64(pg + PG_SPAN)
-            st64(g_all_pages + keep * 8, pg)
-            keep++
+        if (ld8(mark + j) != 0) {
+            st8(mark + j, 0)
+            live++
             continue
         }
-        let used = ld64(pg + PG_USED)
-        let mark = ld64(pg + PG_MARK)
-        let osz = ld64(pg + PG_OBJ)
-        let base = ld64(pg + PG_BASE)
-        let bump = ld32(pg + PG_BUMP)
-        let live = 0
-        for (let j = 0; j < bump; j++) {
-            if (ld8(used + j) == 0) {
-                continue
-            }
-            if (ld8(mark + j) != 0) {
-                st8(mark + j, 0)
-                live++
-                continue
-            }
-            st8(used + j, 0)
-            st32(base + j * osz, ld32(pg + PG_FREE))
-            if (g_verify != 0) {
-                memset(base + j * osz + 4, 221, osz - 4)    # a use after free then reads obvious garbage
-            }
-            st32(pg + PG_FREE, j + 1)
-            st32(pg + PG_NFREE, ld32(pg + PG_NFREE) + 1)
+        st8(used + j, 0)
+        st32(base + j * osz, ld32(pg + PG_FREE))
+        if (g_verify != 0) {
+            memset(base + j * osz + 4, 221, osz - 4)    # a use after free then reads obvious garbage
         }
-        st32(pg + PG_USED_COUNT, live)
-        g_live_bytes += live * osz
-        st64(g_all_pages + keep * 8, pg)
-        keep++
-        if (ld32(pg + PG_USED_COUNT) == 0) {
-            # Empty: recycle the whole page for any size class.
-            _pool_push(pg)
-            st32(pg + PG_BUMP, 0)
-            st32(pg + PG_FREE, 0)
-            st32(pg + PG_NFREE, 0)
-            st8(pg + PG_IN_LIST, 2)
-            continue
+        st32(pg + PG_FREE, j + 1)
+        st32(pg + PG_NFREE, ld32(pg + PG_NFREE) + 1)
+    }
+    st32(pg + PG_USED_COUNT, live)
+    g_live_bytes += live * osz
+    if (live == 0) {
+        # Empty: recycle the whole page for any size class.
+        _pool_push(pg)
+        st32(pg + PG_BUMP, 0)
+        st32(pg + PG_FREE, 0)
+        st32(pg + PG_NFREE, 0)
+        st8(pg + PG_IN_LIST, 2)
+        return 1
+    }
+    if (ld32(pg + PG_FREE) != 0 or ld32(pg + PG_BUMP) < ld32(pg + PG_NOBJS)) {
+        let head = addr_of("_class_list") + ld8(pg + PG_ATOMIC) * 256 + ld32(pg + PG_CLS) * 8
+        st64(pg + PG_NEXT, ld64(head))
+        st64(head, pg)
+        st8(pg + PG_IN_LIST, 1)
+    }
+    return 1
+}
+
+# Sweeps pages for up to budget_ns (0: no time limit) or max_pages pages (0: no limit). Returns 1 when
+# every page has been swept.
+func _sweep_some(budget_ns, max_pages) {
+    let t_end = 0
+    if (budget_ns != 0) {
+        t_end = _now_ns() + budget_ns
+    }
+    let pages = 0
+    while (g_sweep_i < g_all_count) {
+        let pg = ld64(g_all_pages + g_sweep_i * 8)
+        g_sweep_i++
+        let keep = 1
+        if (ld32(pg + PG_EPOCH) != g_sweep_epoch) {
+            keep = _sweep_page(pg)
         }
-        if (ld32(pg + PG_FREE) != 0 or ld32(pg + PG_BUMP) < ld32(pg + PG_NOBJS)) {
-            let head = addr_of("_class_list") + ld8(pg + PG_ATOMIC) * 256 + ld32(pg + PG_CLS) * 8
-            st64(pg + PG_NEXT, ld64(head))
-            st64(head, pg)
-            st8(pg + PG_IN_LIST, 1)
+        if (keep != 0) {
+            st64(g_all_pages + g_sweep_keep * 8, pg)
+            g_sweep_keep++
+        }
+        pages++
+        if (max_pages != 0 and pages >= max_pages) {
+            break
+        }
+        if (t_end != 0 and _now_ns() >= t_end) {
+            break
         }
     }
-    g_all_count = keep
+    if (g_sweep_i >= g_all_count) {
+        return 1
+    }
+    return 0
+}
+
+func _sweep_end() {
+    g_all_count = g_sweep_keep
+    g_sweeping = 0
+}
+
+# The whole sweep at once, for the stop-the-world collector.
+func _sweep() {
+    _sweep_begin()
+    _sweep_some(0, 0)
+    _sweep_end()
+    _cache_trim_all()
 }
 
 func _cpu_ns() {
@@ -883,51 +966,67 @@ func _mark_some(budget) {
     return 0
 }
 
-# The marks are final: check them if asked, free the boxes of dead templates, sweep.
+# The marks are final: check them if asked, free the boxes of dead templates, and start the sweep.
 func _gc_finish() {
     if (g_verify != 0) {
         _verify_marks()
     }
     g_marking = 0
     lv_data_gc_hook()
-    let t = _now_ns()
-    _sweep()
-    g_sweep_total += _now_ns() - t
-    _after_sweep()
+    _sweep_begin()
 }
 
-# One stop of the incremental collector: begin a cycle if none is running, scan one step, and end the
-# cycle when the marking is done.
+# One stop of the incremental collector. While sweeping it sweeps for a short time. Otherwise it begins
+# a cycle if none is running, scans one step, and ends the marking when nothing is left to scan.
 func _gc_work() {
     let t0 = _now_ns()
     g_gc_busy = 1
-    if (g_marking == 0) {
-        _gc_begin()
-        if (_now_ns() - t0 > g_begin_max) {
-            g_begin_max = _now_ns() - t0
+    if (g_sweeping != 0) {
+        let ns = SWEEP_STEP_NS
+        let pages = 0
+        if (g_stress_every != 0) {
+            ns = 0
+            pages = 1    # one page per step, to interleave the program with the sweep as much as possible
         }
-    }
-    let budget = STEP_WORDS
-    if (g_stress_every != 0) {
-        budget = 64    # many small steps, to interleave the program with the marking as much as possible
-    }
-    let c0 = 0
-    if (g_stats != 0) {
-        c0 = _cpu_ns()
-    }
-    let done = _mark_some(budget)
-    if (g_stats != 0 and _cpu_ns() - c0 > g_cpu_max) {
-        g_cpu_max = _cpu_ns() - c0
-    }
-    let t1 = _now_ns()
-    g_mark_total += t1 - t0
-    if (t1 - t0 > g_slice_max) {
-        g_slice_max = t1 - t0
-    }
-    if (done != 0) {
-        _gc_finish()
-        if (_now_ns() - t1 > g_finish_max) {
-            g_finish_max = _now_ns() - t1
+        _cache_trim()
+        if (_sweep_some(ns, pages) != 0) {
+            _sweep_end()
+            _after_sweep()
+        }
+        let dt = _now_ns() - t0
+        g_sweep_total += dt
+        if (dt > g_sweepstep_max) {
+            g_sweepstep_max = dt
+        }
+    } else {
+        if (g_marking == 0) {
+            _gc_begin()
+            if (_now_ns() - t0 > g_begin_max) {
+                g_begin_max = _now_ns() - t0
+            }
+        }
+        let budget = STEP_WORDS
+        if (g_stress_every != 0) {
+            budget = 64    # many small steps, to interleave the program with the marking as much as possible
+        }
+        let c0 = 0
+        if (g_stats != 0) {
+            c0 = _cpu_ns()
+        }
+        let done = _mark_some(budget)
+        if (g_stats != 0 and _cpu_ns() - c0 > g_cpu_max) {
+            g_cpu_max = _cpu_ns() - c0
+        }
+        let t1 = _now_ns()
+        g_mark_total += t1 - t0
+        if (t1 - t0 > g_slice_max) {
+            g_slice_max = t1 - t0
+        }
+        if (done != 0) {
+            _gc_finish()
+            if (_now_ns() - t1 > g_finish_max) {
+                g_finish_max = _now_ns() - t1
+            }
         }
     }
     g_gc_busy = 0
@@ -988,10 +1087,16 @@ func _verify_marks() {
 
 func lv_gc_collect() {
     if (g_gc_ready != 0 and g_gc_busy == 0) {
-        if (g_marking != 0) {
+        if (g_marking != 0 or g_sweeping != 0) {
             g_gc_busy = 1
-            _mark_some(4611686018427387904)
-            _gc_finish()
+            if (g_marking != 0) {
+                _mark_some(4611686018427387904)
+                _gc_finish()
+            }
+            _sweep_some(0, 0)
+            _sweep_end()
+            _after_sweep()
+            _cache_trim_all()
             g_gc_busy = 0
             _set_limit()
         } else {
@@ -1002,7 +1107,7 @@ func lv_gc_collect() {
 
 func _gc_report() {
     let buf = stack_buf(448)
-    let n = snprintf(buf, 448, cstr("ZUE_RT_GC_STATS,%llu collections,%zu live bytes,%zu pages,%llu total pause ns,%llu max pause ns,%llu mark ns,%llu sweep ns,%llu max mark step ns,%llu max cycle end ns,%llu max cycle start ns,%llu max step cpu ns,%llu mark stack grows\n"), g_collections, g_live_bytes, g_all_count, g_pause_total, g_pause_max, g_mark_total, g_sweep_total, g_slice_max, g_finish_max, g_begin_max, g_cpu_max, g_mstack_grow)
+    let n = snprintf(buf, 448, cstr("ZUE_RT_GC_STATS,%llu collections,%zu live bytes,%zu pages,%llu total pause ns,%llu max pause ns,%llu mark ns,%llu sweep ns,%llu max mark step ns,%llu max cycle end ns,%llu max cycle start ns,%llu max step cpu ns,%llu mark stack grows,%llu max sweep step ns\n"), g_collections, g_live_bytes, g_all_count, g_pause_total, g_pause_max, g_mark_total, g_sweep_total, g_slice_max, g_finish_max, g_begin_max, g_cpu_max, g_mstack_grow, g_sweepstep_max)
     write(2, buf, n)
 }
 

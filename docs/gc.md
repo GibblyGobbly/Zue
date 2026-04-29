@@ -73,8 +73,13 @@ the program for the whole mark. It is off by default while it is being proven. A
 3. **Write barrier.** While a cycle marks, any code that is about to overwrite a pointer inside a heap
    object first marks the object it points to (snapshot at the beginning). Without this an object that
    the program moves out of a heap location, and holds only in a local, could be freed.
-4. **End.** When nothing is left to scan the marks are final. The boxes of dead templates are freed,
-   and a stop-the-world sweep frees the unmarked objects. The sweep is the one long pause left.
+4. **End of marking.** When nothing is left to scan the marks are final. The boxes of dead templates
+   are freed and the sweep is set up. This takes a few microseconds.
+5. **Sweep in steps.** Each step (every 8 KB of allocation) sweeps pages for up to 50 microseconds, then
+   returns. The class lists start empty and each swept page with room goes back on its list, so the
+   allocator only uses swept pages; a page created during the sweep has the current epoch and is not
+   swept again. A dead large object gives its span to the cache, and the cache gives expired spans back
+   with `munmap`, at most 1 MiB per step.
 
 Where the barrier is applied:
 
@@ -84,6 +89,9 @@ Where the barrier is applied:
 | List items pointer, map entries pointer, map index pointer, map entry key | `lv_wb_word` before the store |
 | Map rehash, list `remove`, sort copy-back | `lv_wb_range` over the cells that are overwritten or moved |
 | Compiled assignment to a captured variable | the compiler emits a call to `lv_wb_cell` (`ll_copy_heap`) |
+
+A new cycle cannot begin while one is marking or sweeping. `ZUE_RT_GC_STRESS` makes the steps tiny (64
+words of marking, one page of sweeping) so the program interleaves with the collector as much as possible.
 
 Not needed: stores to the stack, to globals and to root ranges (they are scanned at the start of the
 cycle), initial stores into a new object (its old contents are zero), and dense lists, strings and box
@@ -97,7 +105,7 @@ Read once at program start, by the compiled program itself:
 | Variable | Effect |
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
-| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max mark step ns,<ns> max cycle end ns,<ns> max cycle start ns,<ns> max step cpu ns,<n> mark stack grows` to standard error. In incremental mode a pause is one stop (a step, or the start or end of a cycle); `max step cpu` is the longest mark step in thread CPU time, which excludes time the operating system took the processor away |
+| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max mark step ns,<ns> max cycle end ns,<ns> max cycle start ns,<ns> max step cpu ns,<n> mark stack grows,<ns> max sweep step ns` to standard error. In incremental mode a pause is one stop (a step, or the start or end of a cycle); `max step cpu` is the longest mark step in thread CPU time, which excludes time the operating system took the processor away |
 | `ZUE_RT_GC_INCR=1` | Collect incrementally with the write barrier (see above) |
 | `ZUE_RT_GC_VERIFY=1` | With `ZUE_RT_GC_INCR`: at the end of each cycle walk the heap again and stop with an error if a reachable object is not marked. Freed objects are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it |
 

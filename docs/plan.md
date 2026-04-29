@@ -144,8 +144,44 @@ What was done to make it safe:
   verifier on, with up to 848 collections. The whole suite passes with the verifier on and a collection
   step every 25 allocations.
 
-Open items: the sweep (phase 5); a mark step starts at a fixed 8 KB of allocation with no pacing
+Open items: a mark step starts at a fixed 8 KB of allocation with no pacing
 against how fast the program allocates; the barrier makes every cell write test one flag.
+
+## Phase 5 result (measured)
+
+The sweep now runs in steps of at most 50 microseconds between allocations, and cached large-object
+memory is given back at most 1 MiB per step. In incremental mode no single pause is longer than about
+0.5 ms in the benchmark, at every size up to 4.7 GiB of live data.
+
+Program: `bench/gc/live_heap.zu`, incremental mode (`ZUE_RT_GC_INCR=1`). All times are the longest
+single stop; the pause is the longest of the columns before it.
+
+| Live heap | Shape | Cycle start | Mark step | Cycle end | Sweep step | Longest pause | Peak memory / live | CPU | Churn rate |
+|---|---|---|---|---|---|---|---|---|---|
+| 295 MiB | small | 40 us | 137 us | 6 us | 521 us | 521 us | 2.11 | 4.42 s | 5.1 M/s |
+| 1181 MiB | small | 26 us | 126 us | 5 us | 527 us | 527 us | 2.15 | 5.06 s | 5.2 M/s |
+| 4722 MiB | small | 26 us | 220 us | 4 us | 425 us | 425 us | 1.56 | 8.96 s | 4.9 M/s |
+| 288 MiB | big | 29 us | 256 us | 6 us | 471 us | 471 us | 2.41 | 4.03 s | 5.5 M/s |
+| 1152 MiB | big | 28 us | 71 us | 6 us | 350 us | 350 us | 2.14 | 5.43 s | 5.3 M/s |
+| 4609 MiB | big | 37 us | 79 us | 5 us | 190 us | 190 us | 1.87 | 10.22 s | 5.3 M/s |
+
+After this table the release chunk was cut from 4 MiB to 1 MiB; six runs at 1 GiB then gave longest
+pauses of 151 to 392 microseconds.
+
+Compared with the stop-the-world collector at the same sizes: the longest pause fell from 933 ms to
+under 0.5 ms (4.4 GiB, small) and from 410 to 636 ms to 190 us (4.6 GiB, big). Churn throughput is
+about 5 percent lower (4.9 to 5.5 M/s against 5.4 to 6.4 M/s), CPU use is about the same, and peak
+memory is unchanged at about twice the live size (the trigger ratio is phase 3).
+
+How the sweep was checked: a mutation test that makes the sweeper sweep pages created during a sweep
+makes the tests crash; the whole suite passes with the verifier on and a step every 25 allocations;
+the compiler compiling itself (15 MB of IR) gives identical output, with and without stress.
+
+What still limits the claim: the numbers are for one benchmark on one machine; the longest wall-clock
+pause can be longer when the operating system takes the processor away (the stats line reports
+CPU time separately); `lv_data_gc_hook` (freeing the boxes of dead templates) runs in one piece at the
+end of marking and its time grows with the number of live boxes (at most 4096); a very large root range
+from `unsafe` is scanned in one piece at the start of a cycle; and incremental mode is still opt-in.
 
 ## How Hush works
 
@@ -238,7 +274,7 @@ Each phase ends with `make test` green, then `make seed` only when the tests pas
 | 2 | Large-object fixes: size classes up to 32 KiB, `mmap` spans without `memset`, dead descriptors and table entries freed, real bytes counted toward the trigger, a bounded cache of freed spans | Done. See "Phase 2 result" |
 | 3 | Memory trigger: configurable heap growth ratio replaces "equal to live"; return empty pages with `madvise` | Peak memory under 1.5 times live in `lowpause` |
 | 4 | Move collector state out of module-level globals into one struct | Tests pass; no behaviour change |
-| 5 | Lazy sweep and chunked scanning of large objects | Longest pause no longer grows with page count |
+| 5 | Lazy sweep and chunked scanning of large objects | Done (in incremental mode). See "Phase 5 result" |
 | 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Done, off by default (`ZUE_RT_GC_INCR=1`). See "Phase 6 result" |
 | 7 | `--gc=lowpause` and `--gc=throughput` flags; remove the old collector | Both modes pass `make test`; comparison table filled in |
 | 8 | Marking on the GC thread, in parallel with the program | Longest pause under 1 ms at 4 GiB; verify mode clean |
