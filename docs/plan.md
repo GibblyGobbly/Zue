@@ -209,13 +209,18 @@ What this shows, without softening:
 - `lowpause` meets the pause goal in this benchmark: every size stayed under 0.35 ms.
 - `lowpause` costs throughput against the old collector: about 15 to 20 percent fewer churn
   iterations per second on small objects and 20 to 28 percent on big lists, and 10 to 20 percent more CPU.
-- **`throughput` is not yet faster than `lowpause`, and is slower than the old collector.** Its churn
-  rate is the same as `lowpause`, its CPU use is higher, and its longest pause is longer than the old
-  collector's (1554 ms against 933 ms at 4.4 GiB). Total pause over the run was 4413 ms for
-  `throughput` against 2821 ms for the old collector, at 13 collections each. The cause has not been
-  found. Two suspects, neither tested: the runtime's own cell writes still call the barrier function
-  in both modes, and marking now goes through chunked scanning. This is the next item to fix, and until
-  it is, the flag does not deliver what its name says.
+- **Slowdown against the old collector: cause found and fixed (2026-10-31).** Neither suspect was the
+  cause. The old compiler inlined `_mark_word` into the scan loop; with the barrier functions as extra
+  callers it became a real call, made once per scanned word (44 M calls in a 64 MiB run), although most
+  words (tags, ints) are not heap addresses. `_scan_range` now checks the heap range inline and calls
+  `_mark_word` only for words inside it. Instructions in a 64 MiB run with 1 M churn: old 2.78 G, before
+  the fix 3.49 G, after 2.94 G. At 1 GiB live, churn went from 4.9 to 5.74 M/s (`lowpause`) and from 4.8
+  to 5.58 M/s (`throughput`); the old collector did 5.65 M/s. Mark time halved (1.66 s to 0.87 s). The
+  suite passes (756 tests). A mutant of the new filter crashed the compiler's self-build.
+- **`throughput` is still not faster than `lowpause`** in churn rate (5.58 against 5.74 M/s), so the
+  barrier is not what costs throughput here. Its one-piece pause is long (265 ms at 1 GiB). Not yet
+  measured: the 4 GiB runs after the fix, and where the last 5 percent of instructions against the old
+  collector goes. Decide what the flag is for after that.
 - Peak memory is still about twice the live size in both modes (phase 3).
 
 Compile speed is not affected by the mode: compiling the compiler takes 0.31 s with `lowpause` and

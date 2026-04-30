@@ -626,8 +626,13 @@ func _mark_word(w) {
 
 func _scan_range(lo, hi) {
     let p = band(lo + 7, -8)
+    let heap_lo = g_heap_lo
+    let heap_hi = g_heap_hi
     while (ule(p + 8, hi)) {
-        _mark_word(ld64(p))
+        let w = ld64(p)
+        if (uge(w, heap_lo) and ult(w, heap_hi)) {    # most words (tags, ints) are not heap addresses: skip the call
+            _mark_word(w)
+        }
         p += 8
     }
 }
