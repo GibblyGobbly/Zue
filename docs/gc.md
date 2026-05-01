@@ -41,7 +41,8 @@ compiler: it treats every aligned word it scans as a possible pointer.
 
 A collection is triggered inside an allocation. It happens when the bytes allocated since the
 last collection exceed a threshold: 16 MiB at the start, and after each collection the larger
-of 16 MiB and the live bytes that survived. (With `ZUE_RT_GC_STRESS`, see below, also every
+of 16 MiB and the growth percentage of the live bytes that survived. The growth percentage is 45 with
+`--gc=lowpause` and 200 with `--gc=throughput`; `ZUE_RT_GC_GROWTH=N` sets it. (With `ZUE_RT_GC_STRESS`, see below, also every
 Nth allocation.)
 
 1. **Roots.** The data segment (all module-level variables and constants of the program and the
@@ -123,6 +124,7 @@ Read once at program start, by the compiled program itself:
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
 | `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max mark step ns,<ns> max cycle end ns,<ns> max cycle start ns,<ns> max step cpu ns,<n> mark stack grows,<ns> max sweep step ns` to standard error. In incremental mode a pause is one stop (a step, or the start or end of a cycle); `max step cpu` is the longest mark step in thread CPU time, which excludes time the operating system took the processor away |
+| `ZUE_RT_GC_GROWTH=N` | Start the next collection after N percent of the live bytes have been allocated (default 45, or 200 with `--gc=throughput`) |
 | `ZUE_RT_GC_MODE=throughput` | Run every cycle in one piece (see "Collector modes") |
 | `ZUE_RT_GC_VERIFY=1` | At the end of each marking walk the heap again and stop with an error if a reachable object is not marked. Freed objects are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it |
 
@@ -148,9 +150,10 @@ the compiler compiles itself twice, and the two outputs must be identical.
 - Single-threaded: the collector runs on the program's thread, in steps. There is no generational mode
   and no GC thread yet. `--gc=throughput` is not faster than `--gc=lowpause` yet (see [plan](plan.md)).
 - No compaction. Fragmented pages are reused through their free lists.
-- The threshold rule (the larger of 16 MiB and the live size) is not tuned.
-- The heap can grow to about twice the live size before a collection, because the threshold is the
-  live size of the last collection.
+- The growth percentage trades memory for speed. At 1 GiB live, `lowpause` peaks at about 1.5 times
+  the live size; a lower percentage costs speed because every collection scans all live data.
+- Empty pages go back to the OS (`madvise`) a few per collector step, keeping as many as the next
+  cycle can allocate.
 
 ## Measured cost
 

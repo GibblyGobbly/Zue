@@ -1,0 +1,3 @@
+garbage loop done 3000000
+peak over 200 MiB: true
+resident memory under half of the peak: true

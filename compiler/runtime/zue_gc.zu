@@ -67,6 +67,7 @@ const MIN_THRESHOLD = 16777216
 const CHUNK_SIZE = 2097152    # small-object pages are cut from chunks of this size (32 pages)
 const NCLASSES = 31
 const SPAN_CACHE_SLOTS = 512
+const TRIM_BATCH = 16         # empty pages given back to the OS per collector step
 const CHUNK_BYTES = 4096      # a larger object is scanned in pieces of this size
 const STEP_WORDS = 16384      # words an incremental step scans before it gives control back
 const STEP_BYTES = 8192       # bytes the program allocates between two steps
@@ -85,11 +86,13 @@ let g_all_cap = 0
 let g_pool = 0
 let g_pool_count = 0
 let g_pool_cap = 0
+let g_pool_cold = 0        # pool entries below this index have been given back to the OS
 let g_table = 0            # top level of the page table: 65536 pointers to second-level tables
 let g_heap_lo = -1
 let g_heap_hi = 0
 let g_bytes_since_gc = 0
 let g_threshold = MIN_THRESHOLD
+let g_growth_pct = 45       # collect after this percentage of the live bytes has been allocated (200 with --gc=throughput)
 let g_limit = 4611686018427387904    # bytes allocated since the last collection that make _gc_alloc look at the collector
 let g_live_bytes = 0
 let g_gc_ready = 0
@@ -263,6 +266,9 @@ func _new_small_page(cls, atomic) {
     if (g_pool_count != 0) {
         g_pool_count--
         pg = ld64(g_pool + g_pool_count * 8)
+        if (g_pool_cold > g_pool_count) {
+            g_pool_cold = g_pool_count
+        }
     }
     if (pg != 0) {
         st64(pg + PG_NEXT, 0)
@@ -921,14 +927,33 @@ func _gc_full() {
     _count_pause(_now_ns() - t0)
 }
 
-# After a sweep: the next collection comes when as many bytes have been allocated as are live.
+# Gives the memory of the oldest empty pages back to the OS. The newest ones stay, as many as the
+# program can allocate before the next collection; a recycled page is cleared when it is reused.
+# At most TRIM_BATCH pages per call, so that a step of the collector stays short.
+func _pool_trim() {
+    let keep = g_threshold / PAGE_SIZE
+    if (g_pool_count > keep) {
+        let cold = g_pool_count - keep
+        if (cold > g_pool_cold + TRIM_BATCH) {
+            cold = g_pool_cold + TRIM_BATCH
+        }
+        while (g_pool_cold < cold) {
+            madvise(ld64(ld64(g_pool + g_pool_cold * 8) + PG_BASE), PAGE_SIZE, 4)    # MADV_DONTNEED
+            g_pool_cold++
+        }
+    }
+}
+
+# After a sweep: the next collection comes when g_growth_pct percent of the live bytes have been allocated.
 func _after_sweep() {
     g_bytes_since_gc = 0
-    if (g_live_bytes > MIN_THRESHOLD) {
-        g_threshold = g_live_bytes
+    let grown = g_live_bytes / 100 * g_growth_pct
+    if (grown > MIN_THRESHOLD) {
+        g_threshold = grown
     } else {
         g_threshold = MIN_THRESHOLD
     }
+    _pool_trim()
 }
 
 func _count_pause(dt) {
@@ -978,6 +1003,7 @@ func _gc_finish() {
 func _gc_work() {
     let t0 = _now_ns()
     g_gc_busy = 1
+    _pool_trim()
     if (g_sweeping != 0) {
         let ns = SWEEP_STEP_NS
         let pages = 0
@@ -1091,6 +1117,9 @@ func _gc_report() {
 # Called first thing by every compiled program: 0 for --gc=lowpause (the default), 1 for --gc=throughput.
 func lv_gc_set_mode(mode_i) {
     g_throughput = mode_i
+    if (mode_i != 0) {
+        g_growth_pct = 200    # throughput trades memory for fewer collections
+    }
 }
 
 # Called once from the thread that runs the program.
@@ -1115,6 +1144,11 @@ func lv_gc_start() {
     let mode = getenv(cstr("ZUE_RT_GC_MODE"))
     if (mode != 0 and ld8(mode) == 116) {    # "throughput": always safe, a cycle in one piece needs no barrier
         g_throughput = 1
+        g_growth_pct = 200
+    }
+    let growth = getenv(cstr("ZUE_RT_GC_GROWTH"))
+    if (growth != 0 and ld8(growth) != 0) {
+        g_growth_pct = strtoull(growth, 0, 10)
     }
     let ver = getenv(cstr("ZUE_RT_GC_VERIFY"))
     if (ver != 0 and ld8(ver) != 0 and ld8(ver) != 48) {

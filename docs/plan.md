@@ -234,6 +234,40 @@ the sweep epoch) each make `test_gc_barrier.zu` fail. `test_gc_barrier.zu` with 
 in `throughput` mode with the verifier takes 107 s (a full collection and a full check on every
 allocation), longer than the test runner's 60 s limit; it passes when run directly.
 
+## Phase 3 result (measured)
+
+The next collection now starts after a percentage of the live bytes has been allocated (`ZUE_RT_GC_GROWTH`;
+before it was 100). Defaults: 45 for `lowpause`, 200 for `throughput`. Empty pages are given back with
+`madvise(MADV_DONTNEED)`, 16 per collector step, keeping as many as the next cycle can allocate.
+
+At 1 GiB live (1.24 GB real), 20 M churn iterations, `lowpause`:
+
+| Growth | Peak memory | Peak / live | Churn rate |
+|---|---|---|---|
+| 25 | 1.59 GB | 1.28 | 3.7 M/s |
+| 40 | 1.84 GB | 1.49 | 4.4 M/s |
+| 50 | 1.90 GB | 1.54 | 4.9 M/s |
+| 100 (before) | 2.60 GB | 2.1 | 5.7 M/s |
+| 200 | 3.85 GB | 3.1 | 6.1 M/s |
+
+Final defaults: `lowpause` (45) peak 1.84 GB (1.49 times live), 4.29 M/s, longest pause 0.24 ms;
+`throughput` (200) peak 3.55 GB, 5.97 M/s, longest pause 378 ms. The test `test_gc_pages_returned.zu`
+checks that resident memory falls under half of the peak after a large structure is dropped
+(373 MB to 29 MB); with the trim disabled it fails.
+
+What this shows, without softening:
+
+- Memory is bought with speed: `lowpause` at 45 is about 25 percent slower than at 100. Moving the work
+  to a GC thread (phase 8) is what should win that back.
+- Raising the ratio is a weak lever for speed: 200 instead of 100 gives about 8 percent. It cannot reach
+  the 2 times throughput goal.
+- Unbounded trimming at the end of a cycle made one sweep step 7.3 ms; trimming 16 pages per step keeps
+  the longest pause at 0.24 ms.
+- Earlier "peak is 1.5 times live at 4 GiB" was an artifact: that run allocates less garbage than the
+  threshold, so the peak was never reached.
+- `test_gc_pages_returned.zu` takes over 60 s with a full collection every 25 allocations in
+  `throughput` mode, so it is left out of that stress run; it passes in `lowpause` under stress.
+
 ## How Hush works
 
 | Technique | What it does |
@@ -323,7 +357,7 @@ Each phase ends with `make test` green, then `make seed` only when the tests pas
 |---|---|---|
 | 1 | Baseline with `bench/gc/measure.sh` | The table above (done) |
 | 2 | Large-object fixes: size classes up to 32 KiB, `mmap` spans without `memset`, dead descriptors and table entries freed, real bytes counted toward the trigger, a bounded cache of freed spans | Done. See "Phase 2 result" |
-| 3 | Memory trigger: configurable heap growth ratio replaces "equal to live"; return empty pages with `madvise` | Peak memory under 1.5 times live in `lowpause` |
+| 3 | Memory trigger: configurable heap growth ratio replaces "equal to live"; return empty pages with `madvise` | Done. See "Phase 3 result" |
 | 4 | Move collector state out of module-level globals into one struct | Tests pass; no behaviour change |
 | 5 | Lazy sweep and chunked scanning of large objects | Done (in incremental mode). See "Phase 5 result" |
 | 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Done. See "Phase 6 result" |
