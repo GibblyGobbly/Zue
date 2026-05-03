@@ -268,6 +268,20 @@ What this shows, without softening:
 - `test_gc_pages_returned.zu` takes over 60 s with a full collection every 25 allocations in
   `throughput` mode, so it is left out of that stress run; it passes in `lowpause` under stress.
 
+## Phase 4 result (measured)
+
+All 55 module-level variables of the collector, the class lists and the span cache are now one
+zero-filled block of 17336 bytes (`_heap0`) in `zue_gc.zu`. A field is read with `ld64(h + H_NAME)`
+where `h = _heap()`. `_gc_setup` sets the four fields that start non-zero (heap low bound, threshold,
+growth percentage, limit); `lv_gc_set_mode` runs it first. The only use outside the file is the stack
+check in `zue_rt_ops.zu`. Nothing else changed, which was the goal: the suite passes (757 tests), the
+GC tests pass in both modes under stress and the verifier, and the 1 GiB benchmark gives the same
+number of collections (20 and 8) and the same peak memory as before, at 4.46 and 6.17 M/s (4.29
+and 5.97 before). A mutant that gave two fields the same offset crashed the compiler's self-build.
+
+For a process to own its own collector (ZueG) or a GC thread to use the state, `_heap()` is the one
+place to change: it returns the block in use.
+
 ## How Hush works
 
 | Technique | What it does |
@@ -358,7 +372,7 @@ Each phase ends with `make test` green, then `make seed` only when the tests pas
 | 1 | Baseline with `bench/gc/measure.sh` | The table above (done) |
 | 2 | Large-object fixes: size classes up to 32 KiB, `mmap` spans without `memset`, dead descriptors and table entries freed, real bytes counted toward the trigger, a bounded cache of freed spans | Done. See "Phase 2 result" |
 | 3 | Memory trigger: configurable heap growth ratio replaces "equal to live"; return empty pages with `madvise` | Done. See "Phase 3 result" |
-| 4 | Move collector state out of module-level globals into one struct | Tests pass; no behaviour change |
+| 4 | Move collector state out of module-level globals into one struct | Done. See "Phase 4 result" |
 | 5 | Lazy sweep and chunked scanning of large objects | Done (in incremental mode). See "Phase 5 result" |
 | 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Done. See "Phase 6 result" |
 | 7 | `--gc=lowpause` and `--gc=throughput` flags; remove the old collector | Done. See "Phase 7 result" |

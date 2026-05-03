@@ -891,7 +891,8 @@ func lvp_call(o, f, argc_i, argv) {
     st64(fr, pos)
     st64(fr + 8, mod)
     st64(fr + 16, ld64(fn + F_NAME))
-    if (g_stack_low != 0 and ult(stack_ptr(), g_stack_low)) {
+    let stack_low = ld64(addr_of("_heap0") + H_STACK_LOW)
+    if (stack_low != 0 and ult(stack_ptr(), stack_low)) {
         lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
                  cstr("The program ran out of stack. Check for a recursion that never stops."))
     }
