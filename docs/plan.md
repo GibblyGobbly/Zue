@@ -279,7 +279,7 @@ GC tests pass in both modes under stress and the verifier, and the 1 GiB benchma
 number of collections (20 and 8) and the same peak memory as before, at 4.46 and 6.17 M/s (4.29
 and 5.97 before). A mutant that gave two fields the same offset crashed the compiler's self-build.
 
-For a process to own its own collector (ZueG) or a GC thread to use the state, `_heap()` is the one
+For a process to own its own collector (blue threads) or a GC thread to use the state, `_heap()` is the one
 place to change: it returns the block in use.
 
 ## How Hush works
@@ -391,7 +391,7 @@ For each phase from 3 onward, run `bench/gc/measure.sh` for the old collector, `
 | CPU use | user plus system time from `/usr/bin/time` |
 | Throughput | churn iterations per second, printed by the program |
 
-## After the collector: ZueG
+## After the collector: blue threads
 
 Light green processes come after Hush is done. Each process gets its own small heap, its own
 collection, and its own stack. Large strings and lists live outside process heaps with a
