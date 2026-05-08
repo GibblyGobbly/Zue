@@ -161,6 +161,7 @@ func lb_len(self_p, argc_i, argv_p) {    // _p is a pointer parameter, _i a C in
 | Group | Intrinsics |
 | --- | --- |
 | Memory | `ld8 ld16 ld32 ld64 lds8 lds16 lds32 st8 st16 st32 st64`, `p[i]` and `p[i] = v` on words |
+| Shared between threads | `ld8a ld64a` (acquire loads), `st8a st64a` (release stores), `cas8(p, expected, new)` (1 when the byte was swapped, full ordering), `fence()`. Plain `ld`/`st` have no ordering between threads |
 | Bits | `band bor bxor shl shr sar bnot` |
 | Unsigned | `ult ule ugt uge udiv urem` |
 | Overflow | `addof subof mulof` (1 when the signed result overflows) |

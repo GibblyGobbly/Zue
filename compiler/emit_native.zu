@@ -19,6 +19,7 @@
 # Intrinsics: ld8 ld16 ld32 ld64 lds8 lds16 lds32 st8 st16 st32 st64, band bor bxor
 # shl shr sar bnot, ult ule ugt uge udiv urem, addof subof mulof (overflow flags),
 # fadd fsub fmul fdiv fneg flt fle fgt fge feq fne i2f f2i dbl, cstr addr_of fn_addr
+# ld8a ld64a (acquire loads) st8a st64a (release stores) cas8 fence (for data shared between threads),
 # stack_buf frame_addr stack_ptr spill_regs call_ptr callv retv retp trap. p[i] reads and
 # p[i] = v writes the 64-bit word at p + 8 * i.
 
@@ -46,6 +47,8 @@ let LOADS = {
     "lds8": "i8", "lds16": "i16", "lds32": "i32"
 }
 let STORES = {"st8": "i8", "st16": "i16", "st32": "i32", "st64": "i64"}
+let ALOADS = {"ld8a": "i8", "ld64a": "i64"}
+let ASTORES = {"st8a": "i8", "st64a": "i64"}
 let WIDTH = {"i8": 1, "i16": 2, "i32": 4, "i64": 8}
 let OVF = {"addof": "sadd", "subof": "ssub", "mulof": "smul"}
 let ARITY = {
@@ -55,6 +58,7 @@ let ARITY = {
     "fadd": 2, "fsub": 2, "fmul": 2, "fdiv": 2, "fneg": 1, "flt": 2, "fle": 2, "fgt": 2,
     "fge": 2, "feq": 2, "fne": 2, "i2f": 1, "f2i": 1,
     "ld8": 1, "ld16": 1, "ld32": 1, "ld64": 1, "lds8": 1, "lds16": 1, "lds32": 1,
+    "ld8a": 1, "ld64a": 1, "st8a": 2, "st64a": 2, "cas8": 3, "fence": 0,
     "st8": 2, "st16": 2, "st32": 2, "st64": 2, "frame_addr": 0, "stack_ptr": 0, "spill_regs": 0,
     "trap": 0, "retv": 2, "retp": 1
 }
@@ -390,6 +394,47 @@ func nx_intrinsic(n, name, a) {
             ll("{r} = zext {ty} {v} to i64")
         }
         return r
+    }
+    if (ALOADS[name] != null) {
+        let ty = ALOADS[name]
+        let p = ptr_of(a[0])
+        if (ty == "i64") {
+            ll("{r} = load atomic i64, ptr {p} acquire, align 8")
+            return r
+        }
+        let v = ll_reg()
+        ll("{v} = load atomic {ty}, ptr {p} acquire, align {WIDTH[ty]}")
+        ll("{r} = zext {ty} {v} to i64")
+        return r
+    }
+    if (ASTORES[name] != null) {
+        let ty = ASTORES[name]
+        let p = ptr_of(a[0])
+        let v = a[1]
+        if (ty != "i64") {
+            v = ll_reg()
+            ll("{v} = trunc i64 {a[1]} to {ty}")
+        }
+        ll("store atomic {ty} {v}, ptr {p} release, align {WIDTH[ty]}")
+        return "0"
+    }
+    if (name == "cas8") {
+        # cas8(p, expected, new): sets the byte to new if it was expected; 1 when it did
+        let p = ptr_of(a[0])
+        let e = ll_reg()
+        ll("{e} = trunc i64 {a[1]} to i8")
+        let nv = ll_reg()
+        ll("{nv} = trunc i64 {a[2]} to i8")
+        let pair = ll_reg()
+        ll("{pair} = cmpxchg ptr {p}, i8 {e}, i8 {nv} seq_cst seq_cst")
+        let f = ll_reg()
+        ll("{f} = extractvalue \{ i8, i1 } {pair}, 1")
+        ll("{r} = zext i1 {f} to i64")
+        return r
+    }
+    if (name == "fence") {
+        ll("fence seq_cst")
+        return "0"
     }
     if (STORES[name] != null) {
         let ty = STORES[name]

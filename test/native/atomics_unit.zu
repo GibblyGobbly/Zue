@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Unit tests for the atomic intrinsics of the native dialect (ld8a ld64a st8a st64a cas8 fence),
+# compiled by test/native/run.sh. It checks the values; run.sh also checks that the generated IR
+# contains atomic instructions with the intended ordering.
+
+extern("printf", "i32", "ptr,...")
+
+let failures = 0
+let checks = 0
+
+func expect(label, got, want) {
+    checks += 1
+    if (got != want) {
+        failures += 1
+        printf(cstr("[FAIL] %s: got %ld, want %ld\n"), label, got, want)
+    }
+}
+
+func main() {
+    let buf = stack_buf(32)
+    st64(buf, 0)
+    st64(buf + 8, 0)
+    st64a(buf, 123456789012)
+    expect("st64a then ld64a", ld64a(buf), 123456789012)
+    expect("st64a is a plain 64-bit store", ld64(buf), 123456789012)
+    st8a(buf + 8, 200)
+    expect("st8a then ld8a", ld8a(buf + 8), 200)
+    expect("st8a writes one byte", ld8(buf + 9), 0)
+    st8(buf + 16, 0)
+    st8(buf + 17, 0)
+    expect("cas8 swaps when equal", cas8(buf + 16, 0, 1), 1)
+    expect("cas8 stored the new value", ld8(buf + 16), 1)
+    expect("cas8 fails when different", cas8(buf + 16, 0, 7), 0)
+    expect("cas8 left the byte alone", ld8(buf + 16), 1)
+    expect("cas8 swaps from 1 to 5", cas8(buf + 16, 1, 5), 1)
+    expect("neighbour byte untouched", ld8(buf + 17), 0)
+    fence()
+    if (failures != 0) {
+        printf(cstr("[ERROR] %ld of %ld checks failed\n"), failures, checks)
+        return 1
+    }
+    printf(cstr("[OK] %ld atomic checks passed\n"), checks)
+    return 0
+}
