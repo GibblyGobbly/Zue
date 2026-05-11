@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# stalls.zu: the pauses the program itself sees. It builds a live heap like live_heap.zu, then times
+# every iteration of an allocating loop and reports the longest gaps. Unlike the collector's own
+# counters it includes everything that holds the program back: collector steps, the throttle, waiting
+# for the GC thread, page faults and the scheduler.
+#   stalls.zu <live MiB> <churn iterations>
+let a = args()
+let live_mb = to_int(a[0])
+let churn = to_int(a[1])
+
+let live = []
+let objects = floor_div(live_mb * 1048576, 200)
+for (let i = 0; i < objects; i++) {
+    let row = []
+    for (let j = 0; j < 8; j++) {
+        append(row, i + j)
+    }
+    append(live, row)
+}
+
+let n = len(live)
+let sum = 0
+let worst = 0.0
+let over_100us = 0
+let over_500us = 0
+let over_1ms = 0
+let total_over_100us = 0.0
+let prev = clock()
+for (let i = 0; i < churn; i++) {
+    let tmp = [i, i + 1, i + 2, i + 3]
+    let s = "k{i}"
+    sum += tmp[0] % 7 + len(s) + len(live[i % n])
+    let now = clock()
+    let gap = now - prev
+    prev = now
+    if (gap > 0.0001) {
+        over_100us += 1
+        total_over_100us += gap
+        if (gap > 0.0005) {
+            over_500us += 1
+            if (gap > 0.001) {
+                over_1ms += 1
+            }
+        }
+        if (gap > worst) {
+            worst = gap
+        }
+    }
+}
+print("worst_stall_ms {worst * 1000.0}")
+print("stalls_over_100us {over_100us}")
+print("stalls_over_500us {over_500us}")
+print("stalls_over_1ms {over_1ms}")
+print("time_in_stalls_over_100us_s {total_over_100us}")
+print("check {sum}")

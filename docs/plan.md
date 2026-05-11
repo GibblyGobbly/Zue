@@ -282,6 +282,108 @@ and 5.97 before). A mutant that gave two fields the same offset crashed the comp
 For a process to own its own collector (blue threads) or a GC thread to use the state, `_heap()` is the one
 place to change: it returns the block in use.
 
+## Phase 8 stage 1: concurrent marking (plan, then result below)
+
+Measured first (4 GiB live, `lowpause`, 20 M churn): wall 9.97 s, of which the collector takes 4.24 s
+(marking 3.58 s, sweeping 0.65 s). With all of that off the program thread the run would be about
+5.7 s, so a concurrent collector alone gives at most 1.75 times; the 2 times goal needs cheaper
+allocation as well. Marking is 85 percent of the collector's time, so it goes first.
+
+Stage 1, concurrent marking, sweep stays incremental on the program thread:
+
+| Part | Design |
+|---|---|
+| GC thread | One thread, started with the program, asleep on a condition variable between cycles. It owns the mark stack |
+| Cycle start | The program thread scans its own stack, registers, data segment and root ranges (the snapshot), then wakes the GC thread. Short pause, same as today |
+| Mark bytes | Set with a compare-and-swap, so an object is pushed once whichever thread gets there first |
+| Write barrier | Still the SATB barrier, but it no longer touches the mark stack: it sets the mark byte and appends the object to a buffer that the GC thread drains |
+| Root ranges added during a cycle | Scanned by the program thread through the same buffer |
+| New pages | A page descriptor is completely written before it is put in the page table (a store fence between), so the GC thread never sees a half-made page |
+| Cycle end | When the GC thread's stack is empty it says so. At the next allocation check the program thread drains the buffer; if nothing new arrived, marks are final and the sweep starts. Short pause |
+| Backpressure | If the program allocates more than a set share of the live size during a cycle (allocate-black), it waits for the GC thread instead of growing memory without bound |
+| Verify mode | Stays: at cycle end, with the program thread stopped, the heap is walked again |
+| Thread tests | A mode that makes the GC thread slow (sleep between objects) so races show up; the whole suite runs under it |
+
+Stage 2, later: concurrent sweeping, which touches the page lists the allocator uses and is harder.
+
+Not changed: only one thread runs Zue code. Pause goal is still under 1 ms at 4 GiB.
+
+## Phase 8 result (measured)
+
+Marking now runs on a GC thread in `lowpause` mode; sweeping stays in steps on the program thread. First
+the new pieces: atomic intrinsics in the native dialect (`ld8a ld64a st8a st64a cas8 fence`, with a
+unit test and a mutant that weakens the ordering), the GC thread with a mutex and two condition
+variables, mark bytes set with a compare-and-swap, the page table published with release stores, a
+local batch of objects the barrier marked that is handed to the GC thread, and a throttle for a program
+that allocates faster than the thread marks.
+
+Audit (2026-10-31, after a first version of these numbers was questioned): single runs were misleading, so
+every figure below is the mean of 5 interleaved runs with the range, 20 M churn iterations, and the old
+`lowpause` is the committed collector built from the previous commit. "4 GiB" is only the request: the real
+live data was 4.54 GB (`throughput`), 4.95 GB (old `lowpause`) and 5.0 to 6.0 GB (new, because what is
+allocated during a long cycle stays until the next one), so compare peaks for the same workload, not ratios.
+
+| 4 GiB requested | Wall time | Churn rate | Peak memory | Longest pause |
+|---|---|---|---|---|
+| old `lowpause` | 9.68 s (9.65-9.72) | 4.49 M/s | 7.33 GB | 0.27 ms (0.22-0.34) |
+| new, cap 1/25 (default) | 8.82 s (8.50-8.93) | 4.91 M/s | 7.49 GB | 0.25 ms (0.22-0.30) |
+| new, cap 1/4 | 7.37 s (7.17-7.69) | 5.78 M/s | 9.32 GB | 0.27 ms (0.18-0.36) |
+| new, cap 1/1 | 7.05 s (6.94-7.10) | 6.12 M/s | 9.17 GB | 0.18 ms (0.17-0.18) |
+| old and new `throughput` (same code) | 6.90 and 6.87 s | 7.68 and 7.59 M/s | 9.32 GB | 788 and 793 ms |
+
+At 1 GiB (earlier version of the throttle): old 5.76 s and 1.84 GB, new default 4.84 s and 2.07 GB, cap 1/4
+4.42 s and 2.55 GB.
+
+What this shows, without softening:
+
+- **The two `throughput` rows are the noise baseline**: the same code, 0.5 percent apart. Differences
+  above about 2 percent are real.
+- **At the old memory the gain is about 9 percent.** One GC thread marks about 4 GB per second while
+  the program allocates about 1 GB per second, so a cycle at 4.5 GB takes 0.8 to 1.2 s and everything
+  allocated meanwhile stays until the next cycle. The cap (the throttle) holds that back and costs speed:
+  in the default run it held the program back 13,700 times for 2.1 s in total, a quarter of the run.
+- **Speed can be bought with memory.** With a loose cap the program is 24 to 27 percent faster and
+  reaches the speed of `throughput` mode (7.05 against 6.90 s) with a 0.2 ms pause instead of 790 ms, for
+  25 to 27 percent more memory than the old `lowpause` and the same as `throughput`.
+- **The growth percentage hardly changes memory now** (1 GiB: 2.1 GB at 15, 2.5 GB at 45), because
+  floating garbage dominates.
+- **The GC thread alone cannot give 2 times.** The collector's work was 4.2 s of the old 9.97 s run; moving
+  it off the program thread cannot give more than about 1.75 times, and the single marker is too slow to
+  get there without much more memory. Next steps for speed: faster marking (prefetching, several marking
+  threads), concurrent sweeping, cheaper allocation, the generational layer.
+
+Mistakes found and fixed during the audit:
+
+- The first version waited for the GC thread when the program ran ahead. That made a 154 ms pause (the
+  program stopped until marking finished), so it became a throttle.
+- The throttle slept with `usleep`, which overshoots: one run in five had a pause of 3 ms. A spin made the
+  pause 0.25 ms.
+- The spin called `sched_yield`, which handed the core away: the program saw one stall of 1.4 to 2.2 ms in
+  4 of 5 runs (old collector: none over 0.4 ms). Found by tracing the program thread's system calls
+  (`strace`) and by `bench/gc/stalls.zu`, which times every iteration; without the yield the worst stall
+  is 0.28 to 0.40 ms in 6 of 6 runs at 1 GiB and 0.32 to 0.39 ms at 4 GiB, the same as before.
+- The collector's pause counter does not include the program waiting inside the write barrier, so it
+  under-reports; judge pauses with `bench/gc/stalls.zu`.
+- My first "no throttle" test divided by a huge number, which shrinks the cap; the loose settings are
+  small divisors.
+
+How it was checked:
+
+- The suite passes (757 tests) and the GC tests pass under `ZUE_RT_GC_STRESS` 3, 7 and 25, with the
+  verifier, with `ZUE_RT_GC_SLOW` set, three times over.
+- Mutants run against the test programs alone (the compiler built from good sources): the barrier that
+  does not mark (`test_gc_barrier.zu` fails), no hand-over at the end of a cycle and no allocate-black
+  (all GC tests fail). A guard against recycling pooled pages during a cycle is not covered by any test;
+  without it memory was the same and nothing failed, so it is defence in depth that no test shows to be needed.
+- `tools/gc_race_check.sh` builds with ThreadSanitizer and reports only two kinds of race, both intended
+  (the scan reading object contents, and the page lookup reading the used count and used flags while an
+  object is handed out). Mutants with a plain store in the page table, a plain mark store instead of the
+  compare-and-swap, and a hand-over without the mutex are each reported.
+- With the program sleeping in `system("sleep 3")` the process used 0.02 s of CPU, so the GC thread sleeps
+  when idle.
+
+Not changed: only one thread runs Zue code.
+
 ## How Hush works
 
 | Technique | What it does |
@@ -376,7 +478,7 @@ Each phase ends with `make test` green, then `make seed` only when the tests pas
 | 5 | Lazy sweep and chunked scanning of large objects | Done (in incremental mode). See "Phase 5 result" |
 | 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Done. See "Phase 6 result" |
 | 7 | `--gc=lowpause` and `--gc=throughput` flags; remove the old collector | Done. See "Phase 7 result" |
-| 8 | Marking on the GC thread, in parallel with the program | Longest pause under 1 ms at 4 GiB; verify mode clean |
+| 8 | Marking on the GC thread, in parallel with the program | Stage 1 done (marking). See "Phase 8 result". Concurrent sweeping and more marking threads not done |
 | 9 | Optional generational layer (sticky mark bits and card marking) | Throughput gain measured |
 
 ## Comparison to fill in
