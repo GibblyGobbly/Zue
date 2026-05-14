@@ -12,7 +12,7 @@ use { die, path_dir, path_join, path_norm, split_lines } from "util.zu"
 use { parse_source } from "parser.zu"
 use { MODULES, MOD_LIST, uid } from "shared.zu"
 use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analysis.zu"
-use { GC, LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS } from "ll_state.zu"
+use { LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS } from "ll_state.zu"
 use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.zu"
 use { ll_call_out, ll_char, ll_condbr, ll_copy, ll_copy_heap, ll_cstr, ll_float, ll_gname, ll_int } from "ll_state.zu"
 use { DBG, dbg_function, dbg_module_text, ll_store_pos, ll_ic, ll_kstr, ll_label, ll_mark, ll_mark_line, ll_mark_pos, ll_new_ctx, ll_new_label, ll_null, ll_pos, ll_pos_range, ll_reg } from "ll_state.zu"
@@ -1428,7 +1428,6 @@ func declarations() {
     append(d, "declare void @lvp_print(ptr)")
     append(d, "declare ptr @lvp_cell(ptr)")
     append(d, "declare void @lv_wb_cell(ptr)")
-    append(d, "declare void @lv_gc_set_mode(i32)")
     append(d, "declare %LV @lv_str_n(ptr, i64)")
     append(d, "declare %LV @lv_list_new(i64)")
     append(d, "declare %LV @lv_list_of(i32, ptr)")
@@ -1510,9 +1509,6 @@ export func compile_program_ll(stmts) {
         append(out, f)
     }
     append(out, "define i32 @main(i32 %argc, ptr %argv) \{")
-    if (GC.mode == "throughput") {
-        append(out, "  call void @lv_gc_set_mode(i32 1)")
-    }
     append(out, "  call void @lv_init_consts()")
     append(out, "  %r = call i32 @lv_main(i32 %argc, ptr %argv, ptr @entry)")
     append(out, "  ret i32 %r")

@@ -4,7 +4,7 @@
 #
 # measure.sh: builds bench/gc/live_heap.zu once and runs it for several live-heap sizes, printing
 # wall time, CPU time (user + system), peak memory and the collector's own statistics.
-#   bench/gc/measure.sh [build flags]       e.g. bench/gc/measure.sh --gc=throughput
+#   bench/gc/measure.sh [build flags]
 #   SIZES="256 1024 4096" CHURN=20000000 bench/gc/measure.sh
 # The flags go to `zue build`. MODE=big uses a few huge lists instead of many small objects.
 

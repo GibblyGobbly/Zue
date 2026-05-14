@@ -11,27 +11,21 @@ parallel with the program.
 
 ## Goals and priorities
 
-Low pause and low memory come first. CPU use and throughput come second and are opt-in.
+Low pause and low memory come first. CPU use and throughput come second.
 
 | Goal | Target |
 |---|---|
 | Pause time | Under 1 ms for live heaps up to 4 GiB |
 | Memory | Peak memory close to live memory, empty pages returned to the OS |
-| CPU use | Low by default; more only when asked for |
-| Throughput | Raised only by the throughput flag |
+| CPU use | The GC thread may use another core; no program-side work that scales with heap size (phase 9) |
+| Throughput | At least twice at the same pause, later |
 
-## Build flags
+## Options
 
-The write barrier is emitted by the compiler, so the mode is chosen at build time.
-
-| Flag | Meaning |
-|---|---|
-| `zue build --gc=lowpause` (default) | Incremental marking with the write barrier; small heap growth ratio; empty pages returned to the OS |
-| `zue build --gc=throughput` | No barrier in the generated code; larger heap growth ratio; more CPU spent on parallel marking; fewer collections |
-
-Run-time tuning uses environment variables, like `ZUE_RT_GC_STRESS` and `ZUE_RT_GC_STATS`.
-The old stop-the-world collector is removed once Hush works. The throughput mode reuses its
-code paths (mark, sweep) without the barrier. There is one collector, with two modes.
+There are no collector flags. The write barrier is always emitted. The policy (when to start a cycle,
+how much the program may allocate during one) is worked out at run time by the pacer (see "Phase 8b
+result"). Run-time tuning uses environment variables for tests only: `ZUE_RT_GC_STRESS`, `_STATS`,
+`_VERIFY`, `_SLOW`.
 
 ## Where we start (measured, old collector)
 
@@ -512,6 +506,7 @@ Each phase ends with `make test` green, then `make seed` only when the tests pas
 | 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Done. See "Phase 6 result" |
 | 7 | `--gc=lowpause` and `--gc=throughput` flags; remove the old collector | Done. See "Phase 7 result"; since phase 8 `throughput` is a profile of the one collector, not a different one |
 | 8 | Marking on the GC thread, in parallel with the program | Stage 1 done (marking). See "Phase 8 result". Concurrent sweeping and more marking threads not done |
+| 8b | The pacer replaces fixed growth and throttle numbers; `--gc` flags removed | Done. See "Phase 8b result" |
 | 9 | Optional generational layer (sticky mark bits and card marking) | Throughput gain measured |
 
 ## Comparison to fill in
@@ -540,7 +535,7 @@ process can own one.
 |---|---|
 | A missing barrier frees a live object | Verify mode, stress runs, the store audit. Atomic objects hold no pointers and need no barrier |
 | A race once marking moves to a thread | Phase 8 comes after the single-thread version is verified; shared state is listed and made safe first |
-| Barrier and slicing cost throughput | Measured in phase 6; the throughput flag removes the barrier |
+| Barrier and slicing cost throughput | Measured in phase 6 and 8 |
 | Fragmentation, since nothing is compacted | Size classes, page reuse, `madvise` |
 | The OS adds latency (scheduling, page faults) | Cannot be removed in user space; track the maximum pause over long runs |
 | The compiler and runtime are compiled by themselves | Follow the seed rules in CLAUDE.md |
@@ -557,3 +552,27 @@ process can own one.
 | Erlang per-process heaps | https://www.erlang-factory.com/upload/presentations/765/EFSF2013Hitchhikers-Tour-of-the-BEAM.pdf |
 | Pony ORCA | https://tutorial.ponylang.io/runtime-basics/garbage-collection |
 | Verona regions | https://arxiv.org/pdf/2309.02983 |
+
+## Phase 8b result: the pacer
+
+The growth percentage (45 or 200), `CAPDIV` and the 64 MiB slack are gone, and so are `--gc=throughput`,
+`ZUE_RT_GC_MODE`, `_GROWTH` and `_CAPDIV`. `_after_sweep` measures the allocation rate and the cycle cost
+per MiB of live data and sets the next start and the heap goal (see `docs/gc.md`, "The pacer").
+
+Program `bench/gc/stalls.zu`, 20 million iterations, one run per build and size, `ulimit -v 22000000`.
+Live is the collector's own count, which differs between the builds. Ratios computed by script.
+
+| Request | Wall old to new | Peak / live old to new | Worst stall old to new | Throttle old to new |
+|---|---|---|---|---|
+| 100 MiB | 4.44 to 4.64 s | 2.11 to 2.06 | 0.60 to 0.33 ms | 0 to 0.01 s |
+| 1 GiB | 5.52 to 5.57 s | 1.61 to 1.50 | 0.30 to 0.26 ms | 0.59 to 0.10 s |
+| 4 GiB | 9.27 to 8.87 s | 1.49 to 1.50 | 0.37 to 0.22 ms | 1.93 to 0.46 s |
+| 8 GiB | 14.67 to 15.59 s | 1.31 to 1.23 | 0.37 to 0.69 ms | 3.82 to 1.67 s |
+| 10 GiB | 16.40 to 19.89 s | 1.50 to 1.15 | 3.43 to 0.43 ms | 4.13 to 3.44 s |
+
+- The old build stalled at 10 GiB (3.43 ms, 5 stalls over 1 ms, peak 16.5 GB) and again in two earlier runs
+  at 8 GiB (14 ms once). The cause is not proven; the stall went away when the peak fell to 14.1 GB.
+- Peak memory falls at 10 GiB only. The pacer runs more cycles there (22 against 16) and each marks all
+  live data again, so user CPU rose from 20.2 to 31.9 s and wall time by 21 percent. Phase 9 targets this.
+- Not done: `ulimit -v` is not read; the constants 2 (margin), one half of free memory and 16 MiB remain;
+  no test checks the pacer's numbers, only that every collector test passes (also with stress and verify).

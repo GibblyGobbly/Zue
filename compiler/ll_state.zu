@@ -297,20 +297,6 @@ export func ll_reg() {
     return "%r{uid()}"
 }
 
-# The collector profile the program is built for: "lowpause" (the default) or "throughput". Both are the
-# same collector with the same write barrier; the profile only sets how much memory it may use for speed
-# (see zue_gc.zu). A map, so that every module sees the same one.
-export const GC = {"mode": "lowpause"}
-
-# Returns false when mode is not a collector profile.
-export func gc_set_mode(mode) {
-    if (mode != "lowpause" and mode != "throughput") {
-        return false
-    }
-    GC.mode = mode
-    return true
-}
-
 # Like ll_copy, for a cell in a heap object. The write barrier of the collector sees the value that is
 # being overwritten (see zue_gc.zu).
 export func ll_copy_heap(dst, src) {

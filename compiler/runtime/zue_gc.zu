@@ -15,7 +15,7 @@
 # Environment:
 #   ZUE_RT_GC_STRESS=N  collect every N allocations (testing)
 #   ZUE_RT_GC_STATS=1   print the collection count, live bytes, pages and the total and longest pause at exit
-#   see docs/gc.md for ZUE_RT_GC_MODE, _GROWTH, _CAPDIV, _SLOW and _VERIFY
+#   see docs/gc.md for ZUE_RT_GC_STATS, _STRESS, _SLOW and _VERIFY
 
 extern("malloc", "ptr", "i64")
 extern("calloc", "ptr", "i64,i64")
@@ -45,6 +45,7 @@ extern("pthread_cond_wait", "i32", "ptr,ptr")
 extern("pthread_cond_signal", "i32", "ptr")
 extern("pthread_cond_broadcast", "i32", "ptr")
 extern("usleep", "i32", "i32")
+extern("sysconf", "i64", "i32")
 
 # struct Page
 const PG_BASE = 0
@@ -100,7 +101,7 @@ const H_HEAP_LO = 72
 const H_HEAP_HI = 80
 const H_BYTES_SINCE_GC = 88
 const H_THRESHOLD = 96
-const H_GROWTH_PCT = 104       # collect after this percentage of the live bytes has been allocated (200 with --gc=throughput)
+const H_EXTRA = 104            # the pacer's heap goal: bytes the program may allocate between two cycle ends before it is slowed down
 const H_LIMIT = 112    # bytes allocated since the last collection that make _gc_alloc look at the collector
 const H_LIVE_BYTES = 120
 const H_GC_READY = 128
@@ -153,8 +154,7 @@ func _gc_setup() {
     st64(h + H_SETUP_DONE, 1)
     st64(h + H_HEAP_LO, -1)
     st64(h + H_THRESHOLD, MIN_THRESHOLD)
-    st64(h + H_GROWTH_PCT, 45)
-    st64(h + H_CAP_DIV, 25)
+    st64(h + H_EXTRA, 4 * MIN_THRESHOLD)
     st64(h + H_LIMIT, 4611686018427387904)
     let c = 0
     let tab = addr_of("_class_of")
@@ -1024,7 +1024,7 @@ const H_MSTACK_GROW = 424      # how often the mark stack was enlarged
 const H_STATS = 432            # 1 when ZUE_RT_GC_STATS is set
 const H_CLASS_LIST = 440    # Page*[2][32]: pages with room, per [atomic][class]
 const H_SPAN_CACHE = 952    # SpanSlot[512] { base, span, stamp, touched }: freed large spans kept for reuse
-# The GC thread (--gc=lowpause). Everything below is guarded by H_MUTEX except H_LOCAL_BUF and H_LOCAL_N,
+# The GC thread. Everything below is guarded by H_MUTEX except H_LOCAL_BUF and H_LOCAL_N,
 # which only the program thread touches, and H_IDX_GC, which only the thread that marks uses.
 const H_GCT_STATE = 17336      # 0: no cycle (the GC thread sleeps), 1: marking, 2: its mark stack is empty and it waits
 const H_IDX_GC = 17352         # object index set by _page_find for the marking thread
@@ -1041,18 +1041,19 @@ const H_COND_DONE = 17504      # pthread_cond_t: the GC thread has run out of wo
 const H_LOCAL_BUF = 17552      # MarkItem[LOCAL_CAP]
 const LOCAL_CAP = 256
 const GCT_BATCH = 16384        # words the GC thread marks before it looks at what the program thread handed over
-const CYCLE_SLACK = 67108864   # bytes the program may allocate during a cycle beyond a quarter of the heap, before it is slowed down
 const THROTTLE_NS_STEP = 100000  # time a collector step of a program that allocates too fast is held back
 const H_CYCLE_T0 = 21648       # when the running cycle began
 const H_CYCLE_MAX = 21656      # the longest cycle from its start to final marks, in nanoseconds
 const H_CYCLE_GCT0 = 21664     # H_GCT_NS when the running cycle began
-const H_CAP_DIV = 21672        # the program may allocate 1 / H_CAP_DIV of the heap during a cycle before it is slowed down
+const H_CYCLE_COST = 21672     # the pacer's measure of a cycle: nanoseconds from its start to the end of its sweep, per MiB of live data
 const H_THROTTLE_CALL = 21680  # nanoseconds the running collector step has slept to slow the program down
 const H_THROTTLE_NS = 21688    # nanoseconds slept in all steps
 const H_THROTTLE_N = 21696     # steps that slept
 const H_PAUSE_MAX_SLEEP = 21704  # of the longest pause, the nanoseconds that were the throttle's sleep
 const H_THROTTLE_MAX = 21712   # the longest single sleep
-const HEAP_SIZE = 21720
+const H_LAST_END = 21720      # when the last cycle ended
+const H_ALLOC_RATE = 21728     # the pacer's measure of the program: bytes allocated per millisecond
+const HEAP_SIZE = 21736
 space("_heap0", HEAP_SIZE)
 
 # The collector state in use. Zero filled until _gc_setup sets the fields that start non-zero.
@@ -1084,16 +1085,59 @@ func _pool_trim() {
     }
 }
 
-# After a sweep: the next collection comes when H_GROWTH_PCT percent of the live bytes have been allocated.
+# After a sweep: the pacer. It measures how fast the program allocated and how long the cycle took for
+# the live data it had, and from them estimates what the program will allocate during the next cycle (a).
+# The heap goal is twice that, so the marker finishes before the program is slowed down, but never more
+# than the live size and never more than half of the free memory of the machine. The next cycle begins
+# when the rest of the goal (goal minus a) has been allocated. A heap this small has a floor,
+# MIN_THRESHOLD, so that it does not collect all the time.
 func _after_sweep() {
     let h = _heap()
-    st64(h + H_BYTES_SINCE_GC, 0)
-    let grown = ld64(h + H_LIVE_BYTES) / 100 * ld64(h + H_GROWTH_PCT)
-    if (grown > MIN_THRESHOLD) {
-        st64(h + H_THRESHOLD, grown)
-    } else {
-        st64(h + H_THRESHOLD, MIN_THRESHOLD)
+    let now = _now_ns()
+    let live = ld64(h + H_LIVE_BYTES)
+    let since = ld64(h + H_BYTES_SINCE_GC)
+    let elapsed = now - ld64(h + H_LAST_END)
+    if (ld64(h + H_LAST_END) != 0 and elapsed > 0) {
+        let rate = since * 1000000 / elapsed
+        if (ld64(h + H_ALLOC_RATE) != 0) {
+            rate = (rate + ld64(h + H_ALLOC_RATE)) / 2
+        }
+        st64(h + H_ALLOC_RATE, rate)
     }
+    st64(h + H_LAST_END, now)
+    let mib = live / 1048576
+    if (mib < 1) {
+        mib = 1
+    }
+    let cost = (now - ld64(h + H_CYCLE_T0)) / mib
+    if (ld64(h + H_CYCLE_COST) != 0) {
+        cost = (cost + ld64(h + H_CYCLE_COST)) / 2
+    }
+    st64(h + H_CYCLE_COST, cost)
+    let cycle_ms = mib * cost / 1000000
+    let a = ld64(h + H_ALLOC_RATE) * cycle_ms
+    let goal = 2 * a
+    let top = live
+    if (top < 2 * MIN_THRESHOLD) {
+        top = 2 * MIN_THRESHOLD
+    }
+    let free = sysconf(86) * sysconf(30) / 2    # _SC_AVPHYS_PAGES * page size, half of it
+    if (goal > top) {
+        goal = top
+    }
+    if (goal > free) {
+        goal = free
+    }
+    if (goal < 2 * MIN_THRESHOLD) {
+        goal = 2 * MIN_THRESHOLD
+    }
+    st64(h + H_EXTRA, goal)
+    let next = goal - a
+    if (next < MIN_THRESHOLD) {
+        next = MIN_THRESHOLD
+    }
+    st64(h + H_THRESHOLD, next)
+    st64(h + H_BYTES_SINCE_GC, 0)
     _pool_trim()
 }
 
@@ -1194,8 +1238,7 @@ func _cycle_poll() {
         st64(h + H_GCT_STATE, 0)    # the GC thread sleeps again, so the marks are the program thread's to use
         done = 1
     } else {
-        let cap = (ld64(h + H_LIVE_BYTES) + ld64(h + H_CYCLE_BYTES)) / ld64(h + H_CAP_DIV) + CYCLE_SLACK
-        if (ld64(h + H_BYTES_SINCE_GC) - ld64(h + H_CYCLE_BYTES) > cap) {
+        if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_EXTRA)) {
             slow = 1
         }
     }
@@ -1343,25 +1386,6 @@ func _gc_report() {
     write(2, buf2, n2)
 }
 
-# The throughput profile of the one collector: collect after the heap has grown by 200 percent, and let
-# the program allocate a whole heap's worth during a cycle before it is held back. More memory, more speed.
-func _profile_throughput() {
-    let h = _heap()
-    st64(h + H_GROWTH_PCT, 200)
-    st64(h + H_CAP_DIV, 1)
-}
-
-# Called first thing by every compiled program: 0 for --gc=lowpause (the default), 1 for --gc=throughput.
-func lv_gc_set_mode(mode_i) {
-    let h = _heap()
-    if (ld64(h + H_SETUP_DONE) == 0) {
-        _gc_setup()    # the starting values are set once, before this profile overrides some of them
-    }
-    if (mode_i != 0) {
-        _profile_throughput()
-    }
-}
-
 # Called once from the thread that runs the program.
 func lv_gc_start() {
     let h = _heap()
@@ -1382,14 +1406,6 @@ func lv_gc_start() {
     if (s != 0 and ld8(s) != 0) {
         st64(h + H_STRESS_EVERY, strtoull(s, 0, 10))
     }
-    let mode = getenv(cstr("ZUE_RT_GC_MODE"))
-    if (mode != 0 and ld8(mode) == 116) {    # "throughput"
-        _profile_throughput()
-    }
-    let growth = getenv(cstr("ZUE_RT_GC_GROWTH"))
-    if (growth != 0 and ld8(growth) != 0) {
-        st64(h + H_GROWTH_PCT, strtoull(growth, 0, 10))
-    }
     let ver = getenv(cstr("ZUE_RT_GC_VERIFY"))
     if (ver != 0 and ld8(ver) != 0 and ld8(ver) != 48) {
         st64(h + H_VERIFY, 1)
@@ -1400,10 +1416,6 @@ func lv_gc_start() {
             st64(h + H_STATS, 2)    # "2": also one line per cycle
         }
         atexit(fn_addr("_gc_report"))
-    }
-    let capdiv = getenv(cstr("ZUE_RT_GC_CAPDIV"))
-    if (capdiv != 0 and ld8(capdiv) != 0 and strtoull(capdiv, 0, 10) != 0) {
-        st64(h + H_CAP_DIV, strtoull(capdiv, 0, 10))
     }
     let slow = getenv(cstr("ZUE_RT_GC_SLOW"))
     if (slow != 0 and ld8(slow) != 0) {

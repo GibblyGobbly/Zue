@@ -40,10 +40,8 @@ compiler: it treats every aligned word it scans as a possible pointer.
 ## Collection
 
 A collection is triggered inside an allocation. It happens when the bytes allocated since the
-last collection exceed a threshold: 16 MiB at the start, and after each collection the larger
-of 16 MiB and the growth percentage of the live bytes that survived. The growth percentage is 45 with
-`--gc=lowpause` and 200 with `--gc=throughput`; `ZUE_RT_GC_GROWTH=N` sets it. (With `ZUE_RT_GC_STRESS`, see below, also every
-Nth allocation.)
+last collection exceed a threshold: 16 MiB at the start, then the value the pacer works out (see
+"The pacer"). (With `ZUE_RT_GC_STRESS`, see below, also every Nth allocation.)
 
 1. **Roots.** The data segment (all module-level variables and constants of the program and the
    runtime), every registered root range (the `alloc()` buffers), the machine stack of the
@@ -62,31 +60,27 @@ reachable heap object).
 Only one thread runs Zue code. By default one more thread, the GC thread, does the marking (see
 [Threads](#threads)); the sweep runs in short steps on the program's thread.
 
-## Collector modes
+## The pacer
 
-There is one collector: a GC thread marks while the program runs, and the program sweeps in short steps.
-The two options are profiles of it that trade memory for speed. Both have the write barrier and the short
-pauses. The profile is chosen when the program is built.
+There is one collector and no options for it. A GC thread marks while the program runs, and the program
+sweeps in short steps. When to start a cycle, and how much the program may allocate before it is held
+back, are worked out at the end of every cycle from what was measured, not from fixed percentages.
 
-| Build option | Next cycle after the heap grew by | During a cycle the program may allocate (before it is held back) | Use it when |
-|---|---|---|---|
-| `--gc=lowpause` (default) | 45 percent of the live size | 1/25 of the heap plus 64 MiB | Memory matters |
-| `--gc=throughput` | 200 percent of the live size | 1 heap plus 64 MiB | Speed matters more than memory |
+| Step | What the pacer does |
+|---|---|
+| Measure | The allocation rate of the program (bytes per millisecond between two cycle ends) and the cost of a cycle (nanoseconds from its start to the end of its sweep, per MiB of live data). Each is averaged with the last value |
+| Estimate | `a`, the bytes the program will allocate during the next cycle: rate times the cycle time for the live size |
+| Goal | Twice `a`, but at least 32 MiB, at most the live size (or 32 MiB for a small heap), and at most half of the free memory of the machine (`sysconf`) |
+| Start | The next cycle starts when the goal minus `a` has been allocated, at least 16 MiB |
+| Hold back | While a cycle runs, the program is slowed down in 100 microsecond steps only once the bytes allocated since the last cycle end pass the goal |
 
-```bash
-zue build prog.zu -o prog                    # lowpause
-zue build --gc=throughput prog.zu -o prog    # throughput
-GC_MODE=throughput compiler/run_tests.sh     # the whole test suite built that way
-```
-
-The option goes before the file name. The run-time variable `ZUE_RT_GC_MODE=throughput` selects the
-throughput profile for any program. `ZUE_RT_GC_GROWTH` and `ZUE_RT_GC_CAPDIV` set the two numbers by hand.
-At 4 GiB of requested live data the throughput profile was 47 percent faster than the default (6.28 s
-against 9.22 s) and used 25 percent more memory (9.8 GB against 7.8 GB); see [plan](plan.md).
+A slow marker therefore starts earlier and a fast one later, and a large heap gets only the room it needs.
+The numbers that remain are the factor 2, the half of free memory and the 16 MiB floor. The memory limit
+set by `ulimit -v` is not read yet.
 
 ## How a cycle runs
 
-In `lowpause` mode the GC thread marks and the program thread sweeps in short steps. A cycle works like this:
+The GC thread marks and the program thread sweeps in short steps. A cycle works like this:
 
 1. **Start.** The program thread marks the data segment (without `lv_frames`, which never holds heap
    pointers), the root ranges and its own stack and registers. This is the snapshot. It takes about 25
@@ -137,10 +131,7 @@ Read once at program start, by the compiled program itself:
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
 | `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max cycle end ns,<ns> max cycle start ns,<n> mark stack grows,<ns> max sweep step ns,<ns> longest cycle ns` to standard error. A pause is one stop of the program thread (a step, or the start or end of a cycle). `mark ns` is the GC thread's marking time. A second line, `ZUE_RT_GC_THROTTLE`, gives how many steps were held back, the total and longest hold, and how much of the longest pause was that hold. `ZUE_RT_GC_STATS=2` also prints a `ZUE_RT_GC_CYCLE` line per cycle (wall time, GC thread time, bytes allocated during and before the cycle). The collector's pause counter does not see time the program waits inside the write barrier; `bench/gc/stalls.zu` times every loop iteration and shows what the program itself sees |
-| `ZUE_RT_GC_GROWTH=N` | Start the next collection after N percent of the live bytes have been allocated (default 45, or 200 with `--gc=throughput`) |
 | `ZUE_RT_GC_SLOW=N` | The GC thread sleeps N microseconds after each piece of marking. For tests: it widens the time the program and the GC thread overlap |
-| `ZUE_RT_GC_CAPDIV=N` | The program may allocate 1/N of the heap (plus 64 MiB) during a cycle before it is held back (default 25). A smaller N is faster and uses more memory; a large N holds the program back more. At 4 GiB, compared with the earlier collector: 25 takes 9% less time with 2% more memory, 4 takes 24% less with 27% more, 1 takes 27% less with 25% more |
-| `ZUE_RT_GC_MODE=throughput` | Select the throughput profile (see "Collector modes") |
 | `ZUE_RT_GC_VERIFY=1` | At the end of each marking walk the heap again and stop with an error if a reachable object is not marked. Freed objects are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it |
 
 ```bash
@@ -199,8 +190,5 @@ Compiling the compiler (`bin/zue emit compiler/zuec.zu`, 15 MB of generated IR),
 |---|---|---|
 | Before the incremental collector (commit 432c756) | 0.33 s | 111 MB |
 | Now, `lowpause` (default) | 0.28 s | 86 MB |
-| Now, `ZUE_RT_GC_MODE=throughput` | 0.27 s | 112 MB |
 
-The profile of a program does not change how fast `zue` compiles it. The two builds of the compiler's IR
-differ by one line, the call that selects the profile.
 Measure your own program with `ZUE_RT_GC_STATS=1`.
