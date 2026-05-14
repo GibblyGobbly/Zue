@@ -338,11 +338,11 @@ What this shows, without softening:
 
 - **The two `throughput` rows are the noise baseline**: the same code, 0.5 percent apart. Differences
   above about 2 percent are real.
-- **At the old memory the gain is about 9 percent.** One GC thread marks about 4 GB per second while
+- **At the old memory the wall time is about 9 percent shorter** (the churn rate about 10 percent higher). One GC thread marks about 4 GB per second while
   the program allocates about 1 GB per second, so a cycle at 4.5 GB takes 0.8 to 1.2 s and everything
   allocated meanwhile stays until the next cycle. The cap (the throttle) holds that back and costs speed:
   in the default run it held the program back 13,700 times for 2.1 s in total, a quarter of the run.
-- **Speed can be bought with memory.** With a loose cap the program is 24 to 27 percent faster and
+- **Speed can be bought with memory.** With a loose cap the wall time is 24 to 27 percent shorter (the churn rate 29 to 36 percent higher) and
   reaches the speed of `throughput` mode (7.05 against 6.90 s) with a 0.2 ms pause instead of 790 ms, for
   25 to 27 percent more memory than the old `lowpause` and the same as `throughput`.
 - **The growth percentage hardly changes memory now** (1 GiB: 2.1 GB at 15, 2.5 GB at 45), because
@@ -383,6 +383,39 @@ How it was checked:
   when idle.
 
 Not changed: only one thread runs Zue code.
+
+## One collector (2026-10-31)
+
+The one-piece (stop-the-world) cycle was removed: `_gc_full`, `_mark_some`, `_cache_trim_all`, the
+no-barrier code generation of `--gc=throughput` and the fallback when the GC thread cannot be created.
+There is one collector. `--gc=throughput` (and `ZUE_RT_GC_MODE=throughput`) now only sets two numbers:
+collect after the heap grew by 200 percent (45 for `lowpause`), and let the program allocate a whole heap
+during a cycle before it is held back (1/25 for `lowpause`). If the GC thread cannot be created the program
+stops with a precise error (checked by making `pthread_create` fail through `LD_PRELOAD`).
+
+Final measurements, 5 interleaved runs each, mean (range), live data requested 4096 MiB:
+
+| | Wall time | Churn rate | Peak memory | Longest pause |
+|---|---|---|---|---|
+| before this phase, `lowpause` | 9.73 s (9.67-9.82) | 4.46 M/s | 7.33 GB | 0.26 ms (0.20-0.34) |
+| now, `lowpause` | 9.22 s (9.12-9.31) | 4.65 M/s | 7.81 GB | 0.30 ms (0.22-0.47) |
+| before this phase, `throughput` | 6.88 s (6.86-6.90) | 7.64 M/s | 9.32 GB | 785 ms (780-791) |
+| now, `throughput` | 6.28 s (6.26-6.31) | 7.37 M/s | 9.78 GB | 0.16 ms (0.16-0.17) |
+
+At 1 GiB requested: `lowpause` 5.71 to 4.96 s, 1.84 to 2.07 GB, pause 0.31 to 0.40 ms (worst single run
+0.85 ms); `throughput` 4.19 to 3.98 s, 3.55 to 5.01 GB, pause 355 ms to 0.19 ms.
+
+What this shows, without softening:
+
+- `throughput` is now 9 percent faster than the old stop-the-world one and its pause fell from 785 ms to
+  0.16 ms, for 5 percent more memory. It is 55 percent faster than the old `lowpause` (6.28 against 9.73 s).
+- `lowpause` is only 5 percent faster than before at 7 percent more memory in this batch (an earlier batch
+  gave 9 percent at 2 percent; the machine's clock varies between batches, within a batch the runs agree).
+  Its worst pause at 1 GiB reached 0.85 ms in one run: under the 1 ms goal, with little margin.
+- At 1 GiB the throughput profile uses 5.0 GB for 1.5 GB of live data. A fixed 200 percent growth is
+  memory-hungry on small heaps.
+- The whole suite passes built with either profile (757 tests), and the GC tests pass under stress in
+  both, including the page-return test that used to time out in the one-piece mode.
 
 ## How Hush works
 
@@ -477,7 +510,7 @@ Each phase ends with `make test` green, then `make seed` only when the tests pas
 | 4 | Move collector state out of module-level globals into one struct | Done. See "Phase 4 result" |
 | 5 | Lazy sweep and chunked scanning of large objects | Done (in incremental mode). See "Phase 5 result" |
 | 6 | Incremental marking on one thread: SATB barrier (runtime and compiler), allocate black, pacing, verify mode | Done. See "Phase 6 result" |
-| 7 | `--gc=lowpause` and `--gc=throughput` flags; remove the old collector | Done. See "Phase 7 result" |
+| 7 | `--gc=lowpause` and `--gc=throughput` flags; remove the old collector | Done. See "Phase 7 result"; since phase 8 `throughput` is a profile of the one collector, not a different one |
 | 8 | Marking on the GC thread, in parallel with the program | Stage 1 done (marking). See "Phase 8 result". Concurrent sweeping and more marking threads not done |
 | 9 | Optional generational layer (sticky mark bits and card marking) | Throughput gain measured |
 

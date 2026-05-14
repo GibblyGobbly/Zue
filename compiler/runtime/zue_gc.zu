@@ -2,7 +2,8 @@
 # Copyright (c) 2026 GibblyGobbly
 #
 # zue_gc.zu: memory management for compiled Zue programs: a conservative,
-# non-moving mark-and-sweep collector. Compiled with `zue --native`.
+# non-moving mark-and-sweep collector with a write barrier. A GC thread marks while the program runs;
+# the program thread sweeps in short steps. Compiled with `zue --native`.
 #
 # Every runtime object is allocated here. Small objects come from 64 KB pages split
 # into size classes; large ones get pages of their own. A collection marks everything
@@ -14,6 +15,7 @@
 # Environment:
 #   ZUE_RT_GC_STRESS=N  collect every N allocations (testing)
 #   ZUE_RT_GC_STATS=1   print the collection count, live bytes, pages and the total and longest pause at exit
+#   see docs/gc.md for ZUE_RT_GC_MODE, _GROWTH, _CAPDIV, _SLOW and _VERIFY
 
 extern("malloc", "ptr", "i64")
 extern("calloc", "ptr", "i64,i64")
@@ -122,7 +124,6 @@ const H_CHUNK_NEXT = 264         # next unused page in the current chunk
 const H_CHUNK_END = 272
 const H_IDX = 280              # object index set by _page_of
 const H_MARKING = 288          # 1 from the start of an incremental cycle until its marks are final
-const H_THROUGHPUT = 296       # 1: every cycle runs in one piece (programs built with --gc=throughput have no barrier); 0: in steps
 const H_VERIFY = 304           # 1: at the end of each incremental cycle check that no live object is unmarked
 const H_VMODE = 312            # 1 while the verifier walks the heap
 const H_VSTACK = 320           # 1 while the verifier reads the stack
@@ -404,15 +405,6 @@ func _cache_trim() {
     return released
 }
 
-# Gives back every expired cached span, for a cycle that runs in one piece.
-func _cache_trim_all() {
-    let rounds = 0
-    while (_cache_trim() != 0) {
-        rounds++
-    }
-    return rounds
-}
-
 # An object over MAX_SMALL gets its own span, rounded up to whole pages and aligned to 64 KB. A fresh
 # mapping is zeroed by the kernel and touched only when used; a reused span is cleared here. The used
 # and mark bytes live at the end of the descriptor.
@@ -499,11 +491,7 @@ func _gc_check() {
         if (ld64(h + H_MARKING) != 0 or ld64(h + H_SWEEPING) != 0) {
             _gc_work()
         } else if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_THRESHOLD) or (ld64(h + H_STRESS_EVERY) != 0 and ld64(h + H_ALLOC_COUNT) % ld64(h + H_STRESS_EVERY) == 0)) {
-            if (ld64(h + H_CONCURRENT) != 0) {
-                _gc_work()
-            } else {
-                _gc_full()
-            }
+            _gc_work()
         }
     }
 }
@@ -706,11 +694,7 @@ func _shade_word(w) {
         if (ld8(pg + PG_LARGE) == 0) {
             obj = obj + idx * ld64(pg + PG_OBJ)
         }
-        if (ld64(h + H_CONCURRENT) != 0) {
-            _local_add(obj, ld64(pg + PG_OBJ))
-        } else {
-            _push(obj, ld64(pg + PG_OBJ))
-        }
+        _local_add(obj, ld64(pg + PG_OBJ))
     }
     return 0
 }
@@ -1043,7 +1027,6 @@ const H_SPAN_CACHE = 952    # SpanSlot[512] { base, span, stamp, touched }: free
 # The GC thread (--gc=lowpause). Everything below is guarded by H_MUTEX except H_LOCAL_BUF and H_LOCAL_N,
 # which only the program thread touches, and H_IDX_GC, which only the thread that marks uses.
 const H_GCT_STATE = 17336      # 0: no cycle (the GC thread sleeps), 1: marking, 2: its mark stack is empty and it waits
-const H_CONCURRENT = 17344     # 1 when a GC thread does the marking
 const H_IDX_GC = 17352         # object index set by _page_find for the marking thread
 const H_SHARED_N = 17360       # items the program thread has handed over and the GC thread has not taken yet
 const H_SHARED_CAP = 17368
@@ -1081,27 +1064,6 @@ func _now_ns() {
     let ts = stack_buf(16)
     clock_gettime(1, ts)
     return ld64(ts) * 1000000000 + ld64(ts + 8)
-}
-
-# One whole cycle in one piece, for programs built with --gc=throughput and for an explicit collection.
-# It is the same collector as the incremental one, run without handing control back in between.
-func _gc_full() {
-    let h = _heap()
-    let t0 = _now_ns()
-    st64(h + H_GC_BUSY, 1)
-    _gc_begin()
-    _mark_some(4611686018427387904)
-    let t1 = _now_ns()
-    st64(h + H_MARK_TOTAL, ld64(h + H_MARK_TOTAL) + (t1 - t0))
-    _gc_finish()
-    _sweep_some(0, 0)
-    _sweep_end()
-    _cache_trim_all()
-    _after_sweep()
-    st64(h + H_SWEEP_TOTAL, ld64(h + H_SWEEP_TOTAL) + (_now_ns() - t1))
-    st64(h + H_GC_BUSY, 0)
-    _set_limit()
-    _count_pause(_now_ns() - t0)
 }
 
 # Gives the memory of the oldest empty pages back to the OS. The newest ones stay, as many as the
@@ -1156,16 +1118,14 @@ func _gc_begin() {
     st64(h + H_MARKING, 1)
     _scan_roots()
     _scan_stack()
-    if (ld64(h + H_CONCURRENT) != 0) {
-        # The roots are the snapshot. From here the GC thread owns the mark stack.
-        st64(h + H_CYCLE_BYTES, ld64(h + H_BYTES_SINCE_GC))
-        st64(h + H_CYCLE_T0, _now_ns())
-        st64(h + H_CYCLE_GCT0, ld64(h + H_GCT_NS))
-        pthread_mutex_lock(h + H_MUTEX)
-        st64(h + H_GCT_STATE, 1)
-        pthread_cond_signal(h + H_COND_GC)
-        pthread_mutex_unlock(h + H_MUTEX)
-    }
+    # The roots are the snapshot. From here the GC thread owns the mark stack.
+    st64(h + H_CYCLE_BYTES, ld64(h + H_BYTES_SINCE_GC))
+    st64(h + H_CYCLE_T0, _now_ns())
+    st64(h + H_CYCLE_GCT0, ld64(h + H_GCT_NS))
+    pthread_mutex_lock(h + H_MUTEX)
+    st64(h + H_GCT_STATE, 1)
+    pthread_cond_signal(h + H_COND_GC)
+    pthread_mutex_unlock(h + H_MUTEX)
 }
 
 # The GC thread. It sleeps while no cycle runs. During a cycle it marks from its own mark stack, takes
@@ -1256,19 +1216,6 @@ func _cycle_poll() {
         }
     }
     return done
-}
-
-# Scans up to budget words. Returns 1 when no object is left to scan.
-func _mark_some(budget) {
-    let h = _heap()
-    let work = 0
-    while (ld64(h + H_MTOP) != 0 and work < budget) {
-        work += _scan_top()
-    }
-    if (ld64(h + H_MTOP) == 0) {
-        return 1
-    }
-    return 0
 }
 
 # The marks are final: check them if asked, free the boxes of dead templates, and start the sweep.
@@ -1396,15 +1343,22 @@ func _gc_report() {
     write(2, buf2, n2)
 }
 
+# The throughput profile of the one collector: collect after the heap has grown by 200 percent, and let
+# the program allocate a whole heap's worth during a cycle before it is held back. More memory, more speed.
+func _profile_throughput() {
+    let h = _heap()
+    st64(h + H_GROWTH_PCT, 200)
+    st64(h + H_CAP_DIV, 1)
+}
+
 # Called first thing by every compiled program: 0 for --gc=lowpause (the default), 1 for --gc=throughput.
 func lv_gc_set_mode(mode_i) {
     let h = _heap()
     if (ld64(h + H_SETUP_DONE) == 0) {
-        _gc_setup()    # the starting values are set once, before this mode overrides some of them
+        _gc_setup()    # the starting values are set once, before this profile overrides some of them
     }
-    st64(h + H_THROUGHPUT, mode_i)
     if (mode_i != 0) {
-        st64(h + H_GROWTH_PCT, 200)    # throughput trades memory for fewer collections
+        _profile_throughput()
     }
 }
 
@@ -1429,9 +1383,8 @@ func lv_gc_start() {
         st64(h + H_STRESS_EVERY, strtoull(s, 0, 10))
     }
     let mode = getenv(cstr("ZUE_RT_GC_MODE"))
-    if (mode != 0 and ld8(mode) == 116) {    # "throughput": always safe, a cycle in one piece needs no barrier
-        st64(h + H_THROUGHPUT, 1)
-        st64(h + H_GROWTH_PCT, 200)
+    if (mode != 0 and ld8(mode) == 116) {    # "throughput"
+        _profile_throughput()
     }
     let growth = getenv(cstr("ZUE_RT_GC_GROWTH"))
     if (growth != 0 and ld8(growth) != 0) {
@@ -1456,12 +1409,10 @@ func lv_gc_start() {
     if (slow != 0 and ld8(slow) != 0) {
         st64(h + H_SLOW_US, strtoull(slow, 0, 10))
     }
-    if (ld64(h + H_THROUGHPUT) == 0) {
-        # without the thread (it could not be created) every cycle runs in one piece, as with --gc=throughput
-        let th = stack_buf(16)
-        if (pthread_create(th, 0, fn_addr("_gct_main"), 0) == 0) {
-            st64(h + H_CONCURRENT, 1)
-        }
+    let th = stack_buf(16)
+    if (pthread_create(th, 0, fn_addr("_gct_main"), 0) != 0) {
+        write(2, cstr("Runtime Error: cannot start the garbage collector thread\n"), 57)
+        exit(1)
     }
     st64(h + H_GC_READY, 1)
     _set_limit()

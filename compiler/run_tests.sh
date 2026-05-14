@@ -5,7 +5,7 @@
 # must equal the recorded files in test/expected/. Files made of "# CASE <name>" sections run
 # each case on its own.
 # Usage: compiler/run_tests.sh [file.zu ...]   (default: test/*.zu)
-# GC_MODE=throughput compiler/run_tests.sh   builds every test with that collector (default lowpause).
+# GC_MODE=throughput compiler/run_tests.sh   builds every test with that collector profile (default lowpause).
 # VERIFY_IR=1 compiler/run_tests.sh   also runs $OPT (default opt-18) -passes=verify on every generated IR file.
 # RECORD=1 compiler/run_tests.sh   writes test/expected/ from the compiled programs. Read the
 #                                  diff (git diff test/expected) before committing it.
