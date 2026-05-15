@@ -1,6 +1,6 @@
 # Builtin Functions
 
-Every builtin is a runtime function; the names are listed in `compiler/shared.zu`.
+Every builtin is a runtime function; the names are listed in `compiler/shared.zu`. Blue threads have their own section below.
 
 ## Core
 Builtins are always available and need no import. The compiler knows their names (the
@@ -18,7 +18,7 @@ as `sqrt() argument 1 must be a number, got string`.
 |---|---|
 | `print(a, ...)` | Prints each argument on its own line; returns `null`. When the first argument is a string with `{}` placeholders, `print(text, x, y)` fills each `{}` with the next value and prints one line: `print("{} and {}", 1, "b")` prints `1 and b`. There must be one value for each `{}` |
 | `input(prompt)` | One line read from standard input, without the newline, as a string; `""` at end of input. The prompt is optional (`input()`), and `input` is a keyword like `print` |
-| `type(v)` | Type name: `"int"`, `"float"`, `"char"`, `"string"`, `"boolean"`, `"null"`, `"list"`, `"map"`, `"function"`, `"native_function"`, `"file"`, `"bloc"`, `"box"`, `"template"`, `"pointer"`. A dense list reports `"list"` and a `data` value reports `"map"` |
+| `type(v)` | Type name: `"int"`, `"float"`, `"char"`, `"string"`, `"boolean"`, `"null"`, `"list"`, `"map"`, `"function"`, `"native_function"`, `"file"`, `"bloc"`, `"box"`, `"template"`, `"pointer"`, `"thread"`, `"channel"`. A dense list reports `"list"` and a `data` value reports `"map"` |
 | `shape(v)` | Constructor name of a `data` / `bloc` / `template` value, for example `"Vec2"`; `null` for other values |
 | `int(v)` | Integer from a float (truncated toward zero), char (its code), boolean (0 or 1) or string (the whole text must be a base-10 integer, otherwise an error). Also the only allowed pointer cast |
 | `float(v)` | Float from an int, char, boolean or string (the whole text must be a number such as `"3.5"` or `"1e3"`, otherwise an error) |
@@ -73,6 +73,53 @@ A `for-in` loop does not iterate a map directly: loop over `map_keys(m)`.
 `defer(call(...))` for scope cleanup works everywhere
 ([syntax](syntax.md#scope-cleanup-with-defer)). `free` also frees a
 `box` (see [data-types](data-types.md)).
+
+## Blue threads
+
+Blue threads are light threads that share the program's memory and run one at a time on the program's own
+thread. A blue thread runs until it waits; it waits only in `wait`, `yield`, `send` and `recv`, so two threads
+never change a value at the same moment and no lock is needed. A new thread first runs when the running
+thread waits. When the program's own thread ends, the program ends, even if other threads have not finished.
+
+| Function | Effect |
+|---|---|
+| `spawn(fn, args...)` | Starts a thread that runs `fn(args...)` and returns its handle (type `"thread"`) |
+| `wait(thread)` | Waits until the thread has finished and returns what its function returned. Only one thread can wait for a given thread, and a thread cannot wait for itself |
+| `yield()` | Lets the other ready threads run first; returns `null` |
+| `channel(n)` | A channel (type `"channel"`) that holds up to `n` values. `channel()` holds none: `send` and `recv` meet |
+| `send(ch, v)` | Gives `v` to a thread waiting in `recv`, or stores it, or waits until there is room; returns `null` |
+| `recv(ch)` | Takes the oldest value, or waits for one |
+| `channel_close(ch)` | No more sends. Values already stored can still be received |
+
+Every failure is an error, as everywhere in Zue:
+
+| Situation | Error |
+|---|---|
+| `recv` on a closed channel with no values left, `send` on a closed channel, closing twice | `Runtime Error` |
+| A thread waits in `send` or `recv` when the channel is closed | `Runtime Error` for that thread |
+| Every thread waits and none can wake another | `Runtime Error`: deadlock |
+| `wait`, `yield`, `send` or `recv` inside an `unsafe` block | `Runtime Error` |
+| An error inside a thread | The program stops, as an error in the main thread does |
+| Recursion too deep in a thread | `Runtime Error`: stack overflow |
+
+Each thread has a stack of 1 MiB of address space (memory is used as it grows, with 128 KiB kept for the
+runtime), so a thread can nest roughly 1200 calls where the main thread allows 100000. The operating
+system's limit on mappings (`vm.max_map_count`) bounds the number of threads at once: each one uses two mappings. On a machine where it is 1048576, 70000 threads ran and the spawn after about 500000 failed; a thread that cannot get a stack is an error.
+
+```
+func worker(id, results) {
+    send(results, id * id)
+}
+let results = channel(4)
+for (let i = 1; i <= 4; i++) {
+    spawn(worker, i, results)
+}
+let sum = 0
+for (let i = 0; i < 4; i++) {
+    sum += recv(results)
+}
+print(sum)    // 30
+```
 
 ## Strings
 For the full list with five worked programs, see [string](string.md). Text manipulation, searching and formatting. All of these are builtins. Strings are

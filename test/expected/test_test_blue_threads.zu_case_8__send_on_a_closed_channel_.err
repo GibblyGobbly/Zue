@@ -1,0 +1,7 @@
+Runtime Error in /tmp/zue_test_case.zu at line 3:
+  send on a closed channel
+
+   3 | send(ch, 1)
+     | ^^^^^^^^^^^
+
+Hint: Do not close a channel that is still being sent to.

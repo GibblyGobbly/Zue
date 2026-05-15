@@ -48,6 +48,8 @@ const T_TEMPLATE = 14
 const T_BOX = 15
 const T_PTR = 16
 const T_UNDEF = 17
+const T_THREAD = 18    # a blue thread: the payload is its object (see zue_rt_blue.zu)
+const T_CHAN = 19      # a channel between blue threads
 
 # error kinds
 const E_RUNTIME = 0
@@ -672,6 +674,12 @@ func _type_name(v) {
         }
         return cstr("function")
     }
+    if (t == T_THREAD) {
+        return cstr("thread")
+    }
+    if (t == T_CHAN) {
+        return cstr("channel")
+    }
     if (t == T_FILE) {
         return cstr("file")
     }
@@ -1071,6 +1079,10 @@ func _buf_value(b, v) {
             _buf_float(b, ld64(ld64(d + D_DATA) + i * 8))
         }
         _buf_cstr(b, cstr("]"))
+    } else if (t == T_THREAD) {
+        _buf_cstr(b, cstr("<thread>"))
+    } else if (t == T_CHAN) {
+        _buf_cstr(b, cstr("<channel>"))
     } else if (t == T_FUNC) {
         if (ld32(_val(v) + F_NATIVE) != 0) {
             _buf_cstr(b, cstr("<native function>"))

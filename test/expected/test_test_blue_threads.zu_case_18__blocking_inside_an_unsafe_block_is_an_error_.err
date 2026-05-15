@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 6:
+  cannot switch blue threads inside an unsafe block
+
+   6 |     yield()
+     |     ^^^^^^^
+
+Hint: Finish the block first, then wait, yield, send or receive.

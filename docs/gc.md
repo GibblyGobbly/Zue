@@ -45,7 +45,9 @@ last collection exceed a threshold: 16 MiB at the start, then the value the pace
 
 1. **Roots.** The data segment (all module-level variables and constants of the program and the
    runtime), every registered root range (the `alloc()` buffers), the machine stack of the
-   thread running the program, and the registers (spilled to the stack first) are scanned.
+   thread running the program, and the registers (spilled to the stack first) are scanned. The stacks
+   of the blue threads that are away are scanned too, from the stack pointer saved when they gave up
+   the processor, and so are the registers they saved (kept in a ucontext object on the heap).
 2. **Mark.** Each scanned word that points into a live object marks it, and the object's
    contents are scanned in turn, using an explicit mark stack. Atomic objects are marked but
    not scanned.

@@ -1,0 +1,7 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  channel() size -1 is out of range
+
+   1 | channel(0 - 1)
+     | ^^^^^^^^^^^^^^
+
+Hint: Use a size from 0 to 134217728

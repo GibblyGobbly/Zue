@@ -3625,7 +3625,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s3498 = private unnamed_addr constant [65 x i8] c"# shared.zu: tables and counters shared by the compiler modules.\00"
 @.s3499 = private unnamed_addr constant [87 x i8] c"# Names of the builtin functions. Each one is implemented as lb_<name> in the runtime.\00"
 @.s3500 = private unnamed_addr constant [27 x i8] c"export const BUILTINS = {}\00"
-@.s3501 = private unnamed_addr constant [940 x i8] c"for (let nm in split(\22len str_len append list_append type int float to_string fixed to_int to_float assert input print debug range args exit system clock map_set map_get map_has map_delete map_keys map_values map_items remove find slice sort map filter reduce is_empty concat substring char_at index_of index_of_any skip_chars last_index_of contains starts_with ends_with to_upper to_lower trim trim_left trim_right replace reverse repeat pad_left pad_right split join is_digit is_alpha is_alnum is_space abs min max clamp sign pow sqrt cbrt exp ln log10 sin cos tan asin acos atan atan2 sinh cosh tanh floor ceil round trunc fract mod floor_div divmod sum mean gcd lcm isqrt lerp deg_to_rad rad_to_deg open close read read_line write file_exists remove_file flush alloc free load deref store ptr_offset ptr_add defer dense_list vec_add vec_sub vec_mul vec_div vec_mul_inline mat_mul rand srand trand shuffle tshuffle ssort shape\22, \22 \22)) {\00"
+@.s3501 = private unnamed_addr constant [989 x i8] c"for (let nm in split(\22len str_len append list_append type int float to_string fixed to_int to_float assert input print debug range args exit system clock map_set map_get map_has map_delete map_keys map_values map_items remove find slice sort map filter reduce is_empty concat substring char_at index_of index_of_any skip_chars last_index_of contains starts_with ends_with to_upper to_lower trim trim_left trim_right replace reverse repeat pad_left pad_right split join is_digit is_alpha is_alnum is_space abs min max clamp sign pow sqrt cbrt exp ln log10 sin cos tan asin acos atan atan2 sinh cosh tanh floor ceil round trunc fract mod floor_div divmod sum mean gcd lcm isqrt lerp deg_to_rad rad_to_deg open close read read_line write file_exists remove_file flush alloc free load deref store ptr_offset ptr_add defer dense_list vec_add vec_sub vec_mul vec_div vec_mul_inline mat_mul rand srand trand shuffle tshuffle ssort shape spawn wait yield channel send recv channel_close\22, \22 \22)) {\00"
 @.s3502 = private unnamed_addr constant [24 x i8] c"    BUILTINS[nm] = true\00"
 @.s3503 = private unnamed_addr constant [84 x i8] c"# Modules being compiled: by canonical path, and in the order they were first seen.\00"
 @.s3504 = private unnamed_addr constant [26 x i8] c"export const MODULES = {}\00"
@@ -7197,7 +7197,7 @@ declare %LV @lb_args(ptr, i32, ptr)
 @.s7070 = private unnamed_addr constant [26 x i8] c"Expected '{' after unsafe\00"
 @.s7071 = private unnamed_addr constant [43 x i8] c"Unexpected '}': there is no block to close\00"
 @.s7072 = private unnamed_addr constant [47 x i8] c"Remove it, or add the '{' that it should close\00"
-@.s7073 = private unnamed_addr constant [908 x i8] c"len str_len append list_append type int float to_string fixed to_int to_float assert input print debug range args exit system clock map_set map_get map_has map_delete map_keys map_values map_items remove find slice sort map filter reduce is_empty concat substring char_at index_of index_of_any skip_chars last_index_of contains starts_with ends_with to_upper to_lower trim trim_left trim_right replace reverse repeat pad_left pad_right split join is_digit is_alpha is_alnum is_space abs min max clamp sign pow sqrt cbrt exp ln log10 sin cos tan asin acos atan atan2 sinh cosh tanh floor ceil round trunc fract mod floor_div divmod sum mean gcd lcm isqrt lerp deg_to_rad rad_to_deg open close read read_line write file_exists remove_file flush alloc free load deref store ptr_offset ptr_add defer dense_list vec_add vec_sub vec_mul vec_div vec_mul_inline mat_mul rand srand trand shuffle tshuffle ssort shape\00"
+@.s7073 = private unnamed_addr constant [957 x i8] c"len str_len append list_append type int float to_string fixed to_int to_float assert input print debug range args exit system clock map_set map_get map_has map_delete map_keys map_values map_items remove find slice sort map filter reduce is_empty concat substring char_at index_of index_of_any skip_chars last_index_of contains starts_with ends_with to_upper to_lower trim trim_left trim_right replace reverse repeat pad_left pad_right split join is_digit is_alpha is_alnum is_space abs min max clamp sign pow sqrt cbrt exp ln log10 sin cos tan asin acos atan atan2 sinh cosh tanh floor ceil round trunc fract mod floor_div divmod sum mean gcd lcm isqrt lerp deg_to_rad rad_to_deg open close read read_line write file_exists remove_file flush alloc free load deref store ptr_offset ptr_add defer dense_list vec_add vec_sub vec_mul vec_div vec_mul_inline mat_mul rand srand trand shuffle tshuffle ssort shape spawn wait yield channel send recv channel_close\00"
 @.s7074 = private unnamed_addr constant [17 x i8] c"0123456789ABCDEF\00"
 @.s7075 = private unnamed_addr constant [2 x i8] c"s\00"
 @.s7076 = private unnamed_addr constant [4 x i8] c"@.s\00"
@@ -10621,7 +10621,7 @@ entry:
   store %LV %s753, ptr getelementptr inbounds (%LV, ptr @K, i64 753)
   %s754 = call %LV @lv_str_n(ptr @.s7072, i64 46)
   store %LV %s754, ptr getelementptr inbounds (%LV, ptr @K, i64 754)
-  %s755 = call %LV @lv_str_n(ptr @.s7073, i64 907)
+  %s755 = call %LV @lv_str_n(ptr @.s7073, i64 956)
   store %LV %s755, ptr getelementptr inbounds (%LV, ptr @K, i64 755)
   %s756 = call %LV @lv_str_n(ptr @.s633, i64 3)
   store %LV %s756, ptr getelementptr inbounds (%LV, ptr @K, i64 756)
@@ -115127,7 +115127,7 @@ gchecked69055:
   store i64 %r69058, ptr @m11_BUILTINS
   %r69060 = getelementptr inbounds i8, ptr @m11_BUILTINS, i64 8
   store i64 %r69061, ptr %r69060
-  store i64 15822726627338, ptr @lv_pos
+  store i64 16664540217354, ptr @lv_pos
   %r69063 = getelementptr inbounds [2 x %LV], ptr %a69062, i64 0, i64 0
   %r69064 = load i64, ptr getelementptr inbounds (%LV, ptr @K, i64 755)
   %r69065 = getelementptr inbounds i8, ptr getelementptr inbounds (%LV, ptr @K, i64 755), i64 8

@@ -1,0 +1,6 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 1:
+  spawn() argument 1 must be a function, got int
+
+   1 | spawn(5)
+     |       ^ expected function, found int
+

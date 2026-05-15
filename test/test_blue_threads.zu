@@ -1,0 +1,205 @@
+# Blue threads: spawn, wait, yield and channels. Each CASE runs on its own. Run with
+# ZUE_RT_GC_STRESS=1 ZUE_RT_GC_VERIFY=1 to check that the collector sees the stacks of threads that are away.
+
+# CASE results and order
+func add(a, b) {
+    return a + b
+}
+let t1 = spawn(add, 2, 3)
+let t2 = spawn(add, 10, 20)
+print(wait(t2), wait(t1))
+print(type(t1), type(channel()))
+
+# CASE threads run only when the running thread waits
+func say(name) {
+    print("in {name}")
+    return name
+}
+let t = spawn(say, "child")
+print("before wait")
+print(wait(t))
+
+# CASE yield alternates between threads
+func count(name, n) {
+    for (let i = 0; i < n; i++) {
+        print("{name} {i}")
+        yield()
+    }
+    return n
+}
+let a = spawn(count, "a", 3)
+let b = spawn(count, "b", 3)
+print(wait(a) + wait(b))
+
+# CASE unbuffered channel hands values over in order
+func producer(ch, n) {
+    for (let i = 0; i < n; i++) {
+        send(ch, i * i)
+    }
+}
+let ch = channel()
+let p = spawn(producer, ch, 5)
+let out = []
+for (let i = 0; i < 5; i++) {
+    append(out, recv(ch))
+}
+wait(p)
+print(out)
+
+# CASE buffered channel fills and the sender waits for room
+func fill(ch) {
+    for (let i = 0; i < 6; i++) {
+        send(ch, i)
+        print("sent {i}")
+    }
+}
+let ch = channel(2)
+let f = spawn(fill, ch)
+yield()
+print("main wakes")
+let sum = 0
+for (let i = 0; i < 6; i++) {
+    sum += recv(ch)
+}
+wait(f)
+print(sum)
+
+# CASE a pipeline of three threads
+func gen(out, n) {
+    for (let i = 1; i <= n; i++) {
+        send(out, i)
+    }
+    channel_close(out)
+}
+func square(inp, out, n) {
+    for (let i = 0; i < n; i++) {
+        send(out, recv(inp) * recv_one_more())
+    }
+}
+func recv_one_more() {
+    return 1
+}
+let c1 = channel(1)
+let c2 = channel(1)
+let g = spawn(gen, c1, 4)
+let s = spawn(square, c1, c2, 4)
+let total = 0
+for (let i = 0; i < 4; i++) {
+    total += recv(c2)
+}
+print(total)
+
+# CASE closed channel keeps its buffered values
+let ch = channel(3)
+send(ch, "x")
+send(ch, "y")
+channel_close(ch)
+print(recv(ch), recv(ch))
+recv(ch)
+
+# CASE send on a closed channel
+let ch = channel(1)
+channel_close(ch)
+send(ch, 1)
+
+# CASE deadlock is an error
+let ch = channel()
+recv(ch)
+
+# CASE a thread waiting for itself
+func me(cell) {
+    return wait(cell[0])
+}
+let holder = [0]
+holder[0] = spawn(me, holder)
+wait(holder[0])
+
+# CASE wait needs a thread
+wait(5)
+
+# CASE spawn needs a function
+spawn(5)
+
+# CASE channel size must not be negative
+channel(0 - 1)
+
+# CASE a thread keeps its own call depth
+func deep(n) {
+    if (n == 0) {
+        yield()
+        return 0
+    }
+    return 1 + deep(n - 1)
+}
+let a = spawn(deep, 50)
+let b = spawn(deep, 80)
+print(deep(30), wait(a), wait(b))
+
+# CASE recursion too deep in a thread is an error, not a crash
+func forever(n) {
+    return forever(n + 1) + 1
+}
+wait(spawn(forever, 0))
+
+# CASE many threads
+func square_of(n) {
+    return n * n
+}
+let ts = []
+for (let i = 0; i < 2000; i++) {
+    append(ts, spawn(square_of, i))
+}
+let total = 0
+for (let i = 0; i < 2000; i++) {
+    total += wait(ts[i])
+}
+print(total)
+
+# CASE objects held only by a thread that is away survive collections
+func holder_thread(ch, id) {
+    let mine = []
+    for (let i = 0; i < 200; i++) {
+        append(mine, [id, i, "s{id}-{i}"])
+    }
+    send(ch, id)
+    yield()
+    let sum = 0
+    for (let i = 0; i < 200; i++) {
+        let row = mine[i]
+        if (row[0] != id or row[1] != i or row[2] != "s{id}-{i}") {
+            print("thread {id} lost data at {i}")
+            exit(1)
+        }
+        sum += row[1]
+    }
+    return sum
+}
+let ch = channel(100)
+let ts = []
+for (let id = 0; id < 20; id++) {
+    append(ts, spawn(holder_thread, ch, id))
+}
+for (let id = 0; id < 20; id++) {
+    recv(ch)
+}
+let junk = []
+for (let i = 0; i < 20000; i++) {
+    append(junk, [i, "j{i}"])
+    if (len(junk) > 100) {
+        junk = []
+    }
+}
+let total = 0
+for (let id = 0; id < 20; id++) {
+    total += wait(ts[id])
+}
+print(total)
+
+# CASE blocking inside an unsafe block is an error
+func blocked() {
+    yield()
+}
+let t = spawn(blocked)
+unsafe {
+    yield()
+}

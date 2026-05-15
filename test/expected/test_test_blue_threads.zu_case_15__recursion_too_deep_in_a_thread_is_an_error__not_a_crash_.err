@@ -1,0 +1,18 @@
+Runtime Error [E0440] in /tmp/zue_test_case.zu at line 2:
+  stack overflow: recursion is too deep
+
+   2 |     return forever(n + 1) + 1
+     |            ^^^^^^^^^^^^^^
+
+Hint: The program ran out of stack. Check for a recursion that never stops.
+Call stack, innermost call first:
+  in forever(), called at line 2: return forever(n + 1) + 1
+  in forever(), called at line 2: return forever(n + 1) + 1
+  in forever(), called at line 2: return forever(n + 1) + 1
+  in forever(), called at line 2: return forever(n + 1) + 1
+  in forever(), called at line 2: return forever(n + 1) + 1
+  in forever(), called at line 2: return forever(n + 1) + 1
+  ... 1233 more calls ...
+  in forever(), called at line 2: return forever(n + 1) + 1
+  in forever(), called at line 2: return forever(n + 1) + 1
+  in forever(), called at line 0

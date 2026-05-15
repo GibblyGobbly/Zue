@@ -1,0 +1,479 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# zue_rt_blue.zu: blue threads. Light threads that all run on the one thread of the program and share
+# its heap. A blue thread has its own stack; it gives up the processor only where it waits: wait,
+# yield, send and recv. Nothing runs in parallel, so no lock is needed anywhere in this file.
+#
+# A thread and a channel are objects on the collector's heap (the collector frees them when nothing
+# refers to them). The list of all threads and the queue of runnable ones are linked through the
+# objects, and their heads are module variables, which the collector scans as roots.
+#
+# Pointer fields of an object that already exists are written with _pw, which applies the write barrier.
+# A field of an object that was just allocated is empty, so it can be written plainly.
+
+extern("getcontext", "i32", "ptr")
+extern("makecontext", "void", "ptr,ptr,i32,...")
+extern("swapcontext", "i32", "ptr,ptr")
+extern("mprotect", "i32", "ptr,i64,i32")
+
+# struct Co { the thread }
+const CO_STATE = 0       # CO_NEW, CO_READY, CO_RUNNING, CO_WAITING or CO_DONE
+const CO_UC = 8          # the saved registers (a ucontext_t, an object of its own)
+const CO_LO = 16         # lowest address of the stack mapping, 0 once it is unmapped
+const CO_HI = 24         # end of the stack
+const CO_LOW = 32        # lowest usable stack address, the limit the call depth check uses
+const CO_SP = 40         # stack pointer when the thread gave up the processor
+const CO_FN = 48         # LV: the function to run
+const CO_ARGC = 64
+const CO_ARGV = 72       # LV[argc]
+const CO_RES = 80        # LV: what the function returned
+const CO_NEXT = 96       # next thread in the run queue or in a wait queue
+const CO_DEPTH = 104     # call depth, kept while the thread is away
+const CO_FRAMES = 112    # copy of the call frames (an object holding no pointers)
+const CO_FCAP = 120      # bytes in the copy of the frames
+const CO_POS = 128
+const CO_POSMOD = 136
+const CO_VAL = 144       # LV: the value handed over by send or recv
+const CO_JOINER = 160    # the thread that waits for this one to finish
+const CO_ANEXT = 168     # list of all threads that are not done
+const CO_APREV = 176
+const CO_WOKE = 184      # 1 when a wait ended because the channel was closed
+const CO_SIZE = 192
+
+const CO_NEW = 0
+const CO_READY = 1
+const CO_RUNNING = 2
+const CO_WAITING = 3
+const CO_DONE = 4
+
+# struct Chan
+const CH_CAP = 0
+const CH_COUNT = 8
+const CH_HEAD = 16
+const CH_BUF = 24        # LV[cap]
+const CH_CLOSED = 32
+const CH_RECVQ = 40      # threads waiting to receive, oldest first
+const CH_RECVT = 48
+const CH_SENDQ = 56      # threads waiting to send, oldest first
+const CH_SENDT = 64
+const CH_SIZE = 72
+
+const UC_SIZE = 1024
+const BLUE_STACK = 1048576    # address space of one stack, 1 MiB; memory is used only as the stack grows
+const BLUE_GUARD = 4096       # no access: running off the end of the stack is a fault, not silent damage
+const BLUE_RESERVE = 131072   # kept free for the runtime itself, as for the main thread
+
+let g_blue_cur = 0       # the thread that runs
+let g_blue_all = 0       # every thread that is not done
+let g_blue_runh = 0      # run queue
+let g_blue_runt = 0
+let g_blue_zombie = 0    # finished threads whose stack is still to be unmapped
+let g_blue_count = 0
+
+func _pw(a, v) {
+    lv_wb_word(a)
+    st64(a, v)
+}
+
+func _blue_fail(msg, hint) {
+    lv_error(E_RUNTIME, msg, hint)
+}
+
+# The thread of the program itself, made when the first other thread is.
+func _blue_init() {
+    let h = addr_of("_heap0")
+    let co = lv_alloc(CO_SIZE)
+    st64(co + CO_UC, lv_alloc(UC_SIZE))
+    st64(co + CO_STATE, CO_RUNNING)
+    st64(co + CO_HI, ld64(h + H_STACK_BASE))
+    st64(co + CO_LOW, ld64(h + H_STACK_LOW))
+    st64(co + CO_ANEXT, 0)
+    g_blue_all = co
+    g_blue_cur = co
+}
+
+func _blue_runq_push(co) {
+    _pw(co + CO_NEXT, 0)
+    if (g_blue_runt == 0) {
+        g_blue_runh = co
+    } else {
+        _pw(g_blue_runt + CO_NEXT, co)
+    }
+    g_blue_runt = co
+}
+
+func _blue_ready(co) {
+    st64(co + CO_STATE, CO_READY)
+    _blue_runq_push(co)
+}
+
+func _blue_pick() {
+    let co = g_blue_runh
+    if (co == 0) {
+        _blue_fail(cstr("deadlock: every blue thread is waiting for another"),
+                   cstr("A thread waits in wait, send or recv, and nothing is left that could wake it."))
+    }
+    g_blue_runh = ld64(co + CO_NEXT)
+    if (g_blue_runh == 0) {
+        g_blue_runt = 0
+    }
+    _pw(co + CO_NEXT, 0)
+    return co
+}
+
+# Before every wait. A switch inside an unsafe block would interleave the stacks of deferred calls and
+# boxes of two threads. With no other thread yet, the program's own thread is made, so that waiting for
+# nothing is reported as a deadlock.
+func _blue_check_switch() {
+    if (_unsafe_depth() != 0) {
+        _blue_fail(cstr("cannot switch blue threads inside an unsafe block"),
+                   cstr("Finish the block first, then wait, yield, send or receive."))
+    }
+    if (g_blue_cur == 0) {
+        _blue_init()
+    }
+}
+
+# The state a thread keeps for itself while it is away: the call frames and the position.
+func _blue_save(co) {
+    let depth = ld32(addr_of("lv_depth"))
+    st64(co + CO_DEPTH, depth)
+    st64(co + CO_POS, ld64(addr_of("lv_pos")))
+    st64(co + CO_POSMOD, ld64(addr_of("lv_pos_mod")))
+    let need = (depth + 1) * FRAME_SIZE
+    if (ld64(co + CO_FCAP) < need) {
+        let cap = need + 1024
+        _pw(co + CO_FRAMES, lv_alloc_atomic(cap))
+        st64(co + CO_FCAP, cap)
+    }
+    memcpy(ld64(co + CO_FRAMES), addr_of("lv_frames"), need)
+}
+
+func _blue_load(co) {
+    let depth = ld64(co + CO_DEPTH)
+    st32(addr_of("lv_depth"), depth)
+    st64(addr_of("lv_pos"), ld64(co + CO_POS))
+    st64(addr_of("lv_pos_mod"), ld64(co + CO_POSMOD))
+    if (ld64(co + CO_FRAMES) != 0) {
+        memcpy(addr_of("lv_frames"), ld64(co + CO_FRAMES), (depth + 1) * FRAME_SIZE)
+    }
+    let h = addr_of("_heap0")
+    st64(h + H_STACK_BASE, ld64(co + CO_HI))
+    st64(h + H_STACK_LOW, ld64(co + CO_LOW))
+    st64(co + CO_STATE, CO_RUNNING)
+    g_blue_cur = co
+}
+
+# Unmaps the stacks of threads that have finished. Called by the thread that runs next, never from
+# the stack that is being unmapped.
+func _blue_reap() {
+    while (g_blue_zombie != 0) {
+        let z = g_blue_zombie
+        g_blue_zombie = ld64(z + CO_NEXT)
+        if (ld64(z + CO_LO) != 0) {
+            munmap(ld64(z + CO_LO), BLUE_STACK)
+            st64(z + CO_LO, 0)
+        }
+    }
+}
+
+# Gives the processor to next. The caller has already put the running thread in the run queue or in a
+# wait queue. Returns when this thread runs again.
+func _blue_switch(next) {
+    let cur = g_blue_cur
+    if (next == cur) {
+        st64(cur + CO_STATE, CO_RUNNING)
+        return 0
+    }
+    _blue_save(cur)
+    st64(cur + CO_SP, stack_ptr())
+    _blue_load(next)
+    swapcontext(ld64(cur + CO_UC), ld64(next + CO_UC))
+    _blue_reap()
+    return 0
+}
+
+# Where a new thread starts.
+func _blue_main() {
+    _blue_reap()
+    let co = g_blue_cur
+    let o = stack_buf(16)
+    lvp_call(o, co + CO_FN, ld64(co + CO_ARGC), ld64(co + CO_ARGV))
+    _cp(co + CO_RES, o)
+    st64(co + CO_STATE, CO_DONE)
+    let j = ld64(co + CO_JOINER)
+    if (j != 0) {
+        _pw(co + CO_JOINER, 0)
+        _blue_ready(j)
+    }
+    # off the list of all threads
+    let p = ld64(co + CO_APREV)
+    let n = ld64(co + CO_ANEXT)
+    if (p != 0) {
+        _pw(p + CO_ANEXT, n)
+    } else {
+        g_blue_all = n
+    }
+    if (n != 0) {
+        _pw(n + CO_APREV, p)
+    }
+    _pw(co + CO_NEXT, g_blue_zombie)
+    g_blue_zombie = co
+    g_blue_count -= 1
+    let next = _blue_pick()
+    _blue_load(next)
+    swapcontext(ld64(co + CO_UC), ld64(next + CO_UC))
+}
+
+# Called with the registers and stack of the running thread already scanned: marks what the stacks of
+# the threads that are away point to, and the registers they saved (in their ucontext objects).
+func _blue_scan_parked() {
+    let co = g_blue_all
+    while (co != 0) {
+        if (co != g_blue_cur and ld64(co + CO_SP) != 0 and ld64(co + CO_STATE) != CO_DONE) {
+            _scan_range(ld64(co + CO_SP), ld64(co + CO_HI))
+        }
+        co = ld64(co + CO_ANEXT)
+    }
+}
+
+func _arg_thread(self_p, argv, i) {
+    if (_tag(argv + 16 * i) != T_THREAD) {
+        _arg_fail(self_p, argv, i, cstr("thread"))
+    }
+    return _val(argv + 16 * i)
+}
+
+func _arg_chan(self_p, argv, i) {
+    if (_tag(argv + 16 * i) != T_CHAN) {
+        _arg_fail(self_p, argv, i, cstr("channel"))
+    }
+    return _val(argv + 16 * i)
+}
+
+# spawn(fn, args...): starts a thread that runs fn(args...) and returns its handle. The new thread
+# first runs when the running one waits.
+func lb_spawn(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1048576)
+    if (_tag(argv_p) != T_FUNC) {
+        _arg_fail(self_p, argv_p, 0, cstr("function"))
+    }
+    if (g_blue_cur == 0) {
+        _blue_init()
+    }
+    let m = mmap(0, BLUE_STACK, 3, 149538, -1, 0)    # read and write; private, anonymous, no reserve, stack
+    if (m == -1) {
+        _blue_fail(cstr("cannot create another blue thread: no address space for its stack"),
+                   cstr("Finish some threads first, or raise the limit on mappings or address space."))
+    }
+    mprotect(m, BLUE_GUARD, 0)
+    let co = lv_alloc(CO_SIZE)
+    let uc = lv_alloc(UC_SIZE)
+    st64(co + CO_UC, uc)
+    let n = argc_i - 1
+    if (n > 0) {
+        let args = lv_alloc(n * 16)
+        for (let i = 0; i < n; i++) {
+            _cp(args + i * 16, argv_p + (i + 1) * 16)
+        }
+        st64(co + CO_ARGV, args)
+    }
+    st64(co + CO_ARGC, n)
+    _cp(co + CO_FN, argv_p)
+    st64(co + CO_LO, m)
+    st64(co + CO_HI, m + BLUE_STACK)
+    st64(co + CO_LOW, m + BLUE_GUARD + BLUE_RESERVE)
+    getcontext(uc)
+    st64(uc + 8, 0)                           # uc_link
+    st64(uc + 16, m + BLUE_GUARD)             # uc_stack.ss_sp
+    st32(uc + 24, 0)
+    st64(uc + 32, BLUE_STACK - BLUE_GUARD)    # uc_stack.ss_size
+    makecontext(uc, fn_addr("_blue_main"), 0)
+    # onto the list of all threads, then the run queue
+    st64(co + CO_ANEXT, g_blue_all)
+    _pw(g_blue_all + CO_APREV, co)
+    g_blue_all = co
+    g_blue_count += 1
+    _blue_ready(co)
+    let o = stack_buf(16)
+    _set(o, T_THREAD, co)
+    retp(o)
+}
+
+# wait(thread): waits until the thread has finished and returns what its function returned.
+func lb_wait(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let co = _arg_thread(self_p, argv_p, 0)
+    let o = stack_buf(16)
+    if (ld64(co + CO_STATE) != CO_DONE) {
+        if (co == g_blue_cur) {
+            _blue_fail(cstr("a blue thread cannot wait for itself"), cstr("Wait for another thread."))
+        }
+        if (ld64(co + CO_JOINER) != 0) {
+            _blue_fail(cstr("another blue thread already waits for this one"), cstr("Only one thread can wait for a thread."))
+        }
+        _blue_check_switch()
+        let cur = g_blue_cur
+        _pw(co + CO_JOINER, cur)
+        st64(cur + CO_STATE, CO_WAITING)
+        _blue_switch(_blue_pick())
+    }
+    _cp(o, co + CO_RES)
+    retp(o)
+}
+
+# yield(): lets the other threads that are ready run first.
+func lb_yield(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 0, 0)
+    if (g_blue_runh != 0) {
+        _blue_check_switch()
+        _blue_ready(g_blue_cur)
+        _blue_switch(_blue_pick())
+    }
+    let o = stack_buf(16)
+    _null(o)
+    retp(o)
+}
+
+# channel(n): a channel that holds n values (default 0: send and recv meet).
+func lb_channel(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 0, 1)
+    let cap = 0
+    if (argc_i == 1) {
+        cap = _arg_int(self_p, argv_p, 0)
+        if (cap < 0 or cap > 134217728) {
+            _errf(E_ARGUMENT, cstr("Use a size from 0 to 134217728"), cstr("channel() size %lld is out of range"), cap, 0, 0)
+        }
+    }
+    let ch = lv_alloc(CH_SIZE)
+    st64(ch + CH_CAP, cap)
+    if (cap > 0) {
+        st64(ch + CH_BUF, lv_alloc(cap * 16))
+    }
+    let o = stack_buf(16)
+    _set(o, T_CHAN, ch)
+    retp(o)
+}
+
+# A queue of waiting threads is a head and a tail field in the channel, linked through CO_NEXT.
+func _blue_q_push(ch, headf, tailf, co) {
+    _pw(co + CO_NEXT, 0)
+    if (ld64(ch + tailf) == 0) {
+        _pw(ch + headf, co)
+    } else {
+        _pw(ld64(ch + tailf) + CO_NEXT, co)
+    }
+    _pw(ch + tailf, co)
+}
+
+func _blue_q_pop(ch, headf, tailf) {
+    let co = ld64(ch + headf)
+    if (co == 0) {
+        return 0
+    }
+    _pw(ch + headf, ld64(co + CO_NEXT))
+    if (ld64(ch + headf) == 0) {
+        _pw(ch + tailf, 0)
+    }
+    _pw(co + CO_NEXT, 0)
+    return co
+}
+
+# send(channel, value): hands the value to a thread that waits to receive, or puts it in the buffer, or
+# waits for room.
+func lb_send(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 2, 2)
+    let ch = _arg_chan(self_p, argv_p, 0)
+    if (ld64(ch + CH_CLOSED) != 0) {
+        _blue_fail(cstr("send on a closed channel"), cstr("Do not close a channel that is still being sent to."))
+    }
+    let r = _blue_q_pop(ch, CH_RECVQ, CH_RECVT)
+    if (r != 0) {
+        _cp(r + CO_VAL, argv_p + 16)
+        _blue_ready(r)
+    } else if (ld64(ch + CH_COUNT) < ld64(ch + CH_CAP)) {
+        let at = (ld64(ch + CH_HEAD) + ld64(ch + CH_COUNT)) % ld64(ch + CH_CAP)
+        _cp(ld64(ch + CH_BUF) + at * 16, argv_p + 16)
+        st64(ch + CH_COUNT, ld64(ch + CH_COUNT) + 1)
+    } else {
+        _blue_check_switch()
+        let cur = g_blue_cur
+        _cp(cur + CO_VAL, argv_p + 16)
+        st64(cur + CO_WOKE, 0)
+        st64(cur + CO_STATE, CO_WAITING)
+        _blue_q_push(ch, CH_SENDQ, CH_SENDT, cur)
+        _blue_switch(_blue_pick())
+        if (ld64(cur + CO_WOKE) != 0) {
+            _blue_fail(cstr("the channel was closed while this thread was sending"), cstr("Close a channel only when no thread sends to it."))
+        }
+    }
+    let o = stack_buf(16)
+    _null(o)
+    retp(o)
+}
+
+# recv(channel): takes the oldest value, or waits for one.
+func lb_recv(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let ch = _arg_chan(self_p, argv_p, 0)
+    let o = stack_buf(16)
+    if (ld64(ch + CH_COUNT) > 0) {
+        let at = ld64(ch + CH_BUF) + ld64(ch + CH_HEAD) * 16
+        _cp(o, at)
+        st64(ch + CH_HEAD, (ld64(ch + CH_HEAD) + 1) % ld64(ch + CH_CAP))
+        st64(ch + CH_COUNT, ld64(ch + CH_COUNT) - 1)
+        let s = _blue_q_pop(ch, CH_SENDQ, CH_SENDT)
+        if (s != 0) {
+            let tail = (ld64(ch + CH_HEAD) + ld64(ch + CH_COUNT)) % ld64(ch + CH_CAP)
+            _cp(ld64(ch + CH_BUF) + tail * 16, s + CO_VAL)
+            st64(ch + CH_COUNT, ld64(ch + CH_COUNT) + 1)
+            _blue_ready(s)
+        }
+    } else {
+        let s = _blue_q_pop(ch, CH_SENDQ, CH_SENDT)
+        if (s != 0) {
+            _cp(o, s + CO_VAL)
+            _blue_ready(s)
+        } else if (ld64(ch + CH_CLOSED) != 0) {
+            _blue_fail(cstr("receive from a closed channel with no values left"), cstr("Send a value before closing, or stop receiving."))
+        } else {
+            _blue_check_switch()
+            let cur = g_blue_cur
+            st64(cur + CO_WOKE, 0)
+            st64(cur + CO_STATE, CO_WAITING)
+            _blue_q_push(ch, CH_RECVQ, CH_RECVT, cur)
+            _blue_switch(_blue_pick())
+            if (ld64(cur + CO_WOKE) != 0) {
+                _blue_fail(cstr("the channel was closed while this thread was receiving"), cstr("Send a value before closing, or stop receiving."))
+            }
+            _cp(o, cur + CO_VAL)
+        }
+    }
+    retp(o)
+}
+
+# channel_close(channel): no more sends. Values already in the buffer can still be received.
+func lb_channel_close(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let ch = _arg_chan(self_p, argv_p, 0)
+    if (ld64(ch + CH_CLOSED) != 0) {
+        _blue_fail(cstr("the channel is already closed"), cstr("Close a channel once."))
+    }
+    st64(ch + CH_CLOSED, 1)
+    let w = _blue_q_pop(ch, CH_RECVQ, CH_RECVT)
+    while (w != 0) {
+        st64(w + CO_WOKE, 1)
+        _blue_ready(w)
+        w = _blue_q_pop(ch, CH_RECVQ, CH_RECVT)
+    }
+    w = _blue_q_pop(ch, CH_SENDQ, CH_SENDT)
+    while (w != 0) {
+        st64(w + CO_WOKE, 1)
+        _blue_ready(w)
+        w = _blue_q_pop(ch, CH_SENDQ, CH_SENDT)
+    }
+    let o = stack_buf(16)
+    _null(o)
+    retp(o)
+}

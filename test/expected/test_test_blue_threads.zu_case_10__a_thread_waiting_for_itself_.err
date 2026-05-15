@@ -1,0 +1,9 @@
+Runtime Error in /tmp/zue_test_case.zu at line 2:
+  a blue thread cannot wait for itself
+
+   2 |     return wait(cell[0])
+     |            ^^^^^^^^^^^^^
+
+Hint: Wait for another thread.
+Call stack, innermost call first:
+  in me(), called at line 0

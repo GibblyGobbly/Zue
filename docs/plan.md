@@ -576,3 +576,20 @@ Live is the collector's own count, which differs between the builds. Ratios comp
   live data again, so user CPU rose from 20.2 to 31.9 s and wall time by 21 percent. Phase 9 targets this.
 - Not done: `ulimit -v` is not read; the constants 2 (margin), one half of free memory and 16 MiB remain;
   no test checks the pacer's numbers, only that every collector test passes (also with stress and verify).
+
+## Blue threads, version 1
+
+`compiler/runtime/zue_rt_blue.zu`. Coroutines on the one program thread and the one heap: each has a 1 MiB
+mapped stack with a guard page, `swapcontext` switches, and a thread gives up the processor only in `wait`,
+`yield`, `send` and `recv`. Channels are buffered or unbuffered. User-facing builtins: `spawn wait yield
+channel send recv channel_close` (see `docs/builtins.md`). The threads and channels are collector objects.
+At the start of a cycle `_scan_stack` also scans the stacks of the threads that are away.
+
+- Per-thread state that is saved and restored at a switch: the call depth and frames, the current position,
+  and the stack limits. Errors end the program, so no unwinding state exists. A switch inside an `unsafe`
+  block is an error, because its deferred calls and boxes are kept on stacks shared by all threads.
+- Test: `test/test_blue_threads.zu` (18 cases). Case 17 holds data only on the stack of a thread that is
+  away. With the scan of away stacks removed it fails under `ZUE_RT_GC_STRESS=1` (checked).
+- Not done: preemption, running threads on several OS threads, per-thread heaps (phase 2 of this work),
+  a closed-channel receive that is not an error, `sleep`, and a limit on the number of threads other than
+  the operating system's.

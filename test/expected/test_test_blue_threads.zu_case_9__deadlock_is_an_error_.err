@@ -1,0 +1,7 @@
+Runtime Error in /tmp/zue_test_case.zu at line 2:
+  deadlock: every blue thread is waiting for another
+
+   2 | recv(ch)
+     | ^^^^^^^^
+
+Hint: A thread waits in wait, send or recv, and nothing is left that could wake it.
