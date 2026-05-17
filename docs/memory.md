@@ -45,8 +45,8 @@ MiB, 64 MiB and 16 MiB.
 
 Objects are allocated when you create them and freed by the collector once nothing can reach
 them. You do not call it, and there is no destructor. The collector starts inside an
-allocation when 16 MiB or more has been allocated since the last collection (or the live size,
-if larger). It finds live objects from the stack, the registers and every module-level
+allocation, when the pacer says so (at least 16 MiB allocated since the last collection; see
+[gc](gc.md)). It finds live objects from the stack, the registers and every module-level
 variable, and frees the rest.
 
 - Cycles are collected: two lists that point at each other are freed once nothing else refers

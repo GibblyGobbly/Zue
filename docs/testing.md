@@ -109,6 +109,7 @@ let b = 1 + true
 | `test_unsafe_errors.zu` | One case per rule violation (R1 to R10, box, bloc, template) |
 | `test_rules_runtime.zu` | Cases for the rule functions in `zue_rt_rules.zu`, run through the language (pointer bounds, box handles, schemas) |
 | `test_gc_safety.zu`, `test_gc_large_safety.zu`, `test_gc_callbacks.zu`, `test_gc_recursion.zu` | Collector liveness under churn, large objects, callbacks and deep recursion |
+| `test_blue_threads.zu` | Blue threads: results and order, yield, buffered and unbuffered channels, a pipeline, every error, a thread's own call depth, 2000 threads, and data that only a thread that is away holds (run it with `ZUE_RT_GC_STRESS=1`) |
 | `test_compiler_blockers.zu` | Features the compiler's own source depends on |
 | `test_exit.zu` | `args()` and `exit()` |
 | `test_doc_examples.zu` | Examples from the docs |

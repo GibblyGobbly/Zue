@@ -78,6 +78,7 @@ and linked into every program.
 | `zue_rt_lib.zu` | Builtins: conversions, maps, lists, `sort` (insertion, merge and radix sort), strings and the scanning builtins, `args`, `exit`, `system`, `clock` |
 | `zue_rt_math.zu` | Math, files, dense lists, vector math, random numbers (`rand`/`srand` on xoroshiro128++, `trand`/`tshuffle` on `getrandom`), `shuffle` and `ssort` |
 | `zue_rt_data.zu` | `data`, `template`, `bloc`, `box` and `unsafe` |
+| `zue_rt_blue.zu` | Blue threads: the scheduler, thread stacks and switching, channels, and the builtins `spawn`, `wait`, `yield`, `channel`, `send`, `recv`, `channel_close` |
 | `zue_rt_rules.zu` | The validation rules behind them: bloc and template schemas, the box handle table, the allocation table and the ten pointer rules. Each rule returns 0 or an error code, which `zue_rt_data.zu` turns into the error message |
 
 Every builtin `name` listed in `compiler/shared.zu` is a runtime function `lb_name(self, argc,

@@ -593,3 +593,81 @@ At the start of a cycle `_scan_stack` also scans the stacks of the threads that 
 - Not done: preemption, running threads on several OS threads, per-thread heaps (phase 2 of this work),
   a closed-channel receive that is not an error, `sleep`, and a limit on the number of threads other than
   the operating system's.
+
+## Next steps
+
+The order of work after blue threads version 1. Each step says how to know it is done.
+
+| Step | Work | Done when |
+|---|---|---|
+| 1 | Prove or rule out the stall of 3 to 6 ms at 10 GiB (default mode, peak 14 to 16 GB). Repeat the run 5 times and record the stall times with `/proc/vmstat` deltas, `MemAvailable` and the transparent hugepage setting; try `MADV_NOHUGEPAGE` on the heap. `perf` is blocked here, so counters are the evidence | An experiment shows the cause, or it is logged as unexplained. A fix only if the cause is in our code |
+| 2 | Blue thread hardening: a long churn test (threads created and finished for minutes, with a multi-GB heap); document that `system()` and file reads stop every thread; add `sleep(seconds)` with a timer queue | The churn test shows no growth in memory and no long pause |
+| 3 | Throughput toward 2 times at the same pause: profile first with `callgrind` (`bench/instruction_count.sh`) on the churn benchmark, then the cheapest fixes in order: a faster allocation path, the barrier check inlined in generated code, concurrent sweep, parallel marking | A benchmark named beforehand reaches 2 times at the same worst stall |
+| 4 | Per-thread heaps: the runtime globals (about 54) and the compiler's globals become per-thread contexts, messages are copied, each thread has its own collector | A design is shown first. Then a thread's pause depends only on its own data |
+
+Open decisions:
+
+| Decision | Options |
+|---|---|
+| How a receiver learns that a channel is closed | `channel_closed(ch)`; or `for (let v in ch)` ending when the channel is closed and empty (needs a parser change and a seed cycle); or keep the error |
+| Which benchmark defines 2 times | The churn loop in `bench/gc/stalls.zu`, or another |
+| Whether `sleep` is needed in version 1 | Now or later |
+
+A generational layer stays out unless step 3 shows that marking is still the main cost. A page lookup in the
+write barrier cost 29 percent on a write-heavy loop (0.67 s to 0.87 s for 100 passes over 200000 lists).
+
+## Blue threads against goroutines
+
+What Go's runtime does by itself, and where blue threads version 1 stands:
+
+| Go does by itself | Blue threads (version 1) |
+|---|---|
+| Spreads goroutines across all cores | No. Everything runs on one OS thread |
+| Switches a goroutine at almost any point (preemption) | No. A thread switches only at `wait`, `yield`, `send` and `recv`. A loop that never waits starves the others |
+| Grows and shrinks stacks | No. Each stack is fixed at 1 MiB of address space, and a thread can nest only about 1200 calls |
+| Starts and stops OS threads and GC workers to fit the load | No. The GC thread is the only helper |
+
+In Go, too, the programmer starts goroutines (`go f()`); here it is `spawn(f)`.
+
+## Decision: no collector inside a blue thread
+
+The idea was to collect small heaps in a light thread on the program's own thread and to switch to the GC
+thread past 0.5 ms. It is dropped:
+
+- The GC thread is cheap. A program that prints one line starts in 1.24 ms against 0.56 ms for an empty C
+  program, and the GC thread is a few percent of that (not measured on its own).
+- 0.5 ms of marking is about 2 MB of live data (marking runs at about 4.6 GB/s), so only tiny heaps would qualify.
+- Two ways to collect means more code and more states, and the switch in the middle of a run was never proved.
+
+The related idea that stays: the pacer sizing the number of GC workers to the heap (none, one, or several marking in
+parallel). It belongs to step 3 above (parallel marking) and has not been measured.
+
+## Goal: blue threads like Go's, and a compiler that uses them
+
+The goal: blue threads that behave like goroutines but cost less, so that the compiler itself runs on them and
+becomes faster and safer. The steps, each to be shown as a design first:
+
+| Step | Work | Needs |
+|---|---|---|
+| T1 | Preemption: the compiler emits a check of a flag at loop ends and calls, and the scheduler sets the flag on a timer | A cheap check in generated code, measured |
+| T2 | Stacks that do not cost 1 MiB each: the collector scans stacks conservatively and does not move objects, so a stack cannot be copied. Options: a larger reservation with lazy commit, or a chain of stack pieces | A design and a measurement of both |
+| T3 | Per-thread heaps and contexts (step 4 above) | The list of about 54 runtime globals and the compiler's globals |
+| T4 | Run blue threads on several OS threads, with a queue per OS thread and stealing | T1 and T3 |
+| T5 | The compiler uses them | See below |
+
+Where the compiler spends its time (measured, `bin/zue emit compiler/zuec.zu`, 3 runs, and `clang -O1` on the
+15 MB of IR it writes, 2 runs):
+
+| Stage | Time |
+|---|---|
+| Zue front end: lex, parse, check, emit | 0.29 s (0.28 s user), 94 MB peak |
+| `clang -O1` on the IR | about 7.0 s |
+
+The Zue part is about 4 percent of the compile. Running it on blue threads can save at most a fraction of
+0.29 s. The large gain is the clang step: split the IR into pieces and compile them in parallel. That needs
+processes, not blue threads, and it loses optimization across pieces (inlining), so the speed of the compiled
+program must be measured before and after. Neither has been tried.
+
+"Safer" comes from threads that share nothing and talk through channels (T3), so there are no data races. It is
+not a property of version 1, where threads share one heap but cannot run at the same moment.
+
