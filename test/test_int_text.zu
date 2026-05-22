@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Int to text has its own routine, and "{...}" with only strings and ints has a one-allocation path.
+# CASE the extremes and signs
+let big = 9223372036854775807
+let small = -big - 1
+print("{big}")
+print("{small}")
+print("{0}")
+print("{-1}")
+print("{10}")
+print("{-10}")
+print("{1000000}")
+print(to_string(small))
+print(to_string(big))
+# CASE several parts, strings and ints mixed
+let a = 12
+let b = -345
+let s = "mid"
+print("a={a} b={b} s={s} end")
+print("{a}{b}{s}{a}")
+print("[{s}]")
+print("{a}")
+print("")
+print("x{a}y{b}z{a}w{b}v{a}u{b}t{a}")
+# CASE nine parts take the general path and give the same text
+let n = 7
+print("{n}{n}{n}{n}{n}{n}{n}{n}{n}")
+print("{n},{n},{n},{n},{n},{n},{n},{n}")
+# CASE other types in a string still work
+let n = 7
+let f = 1.5
+let t = true
+print("f={f} t={t} n={n}")
+print("{null}")
+print("{[1, -2, 3]}")
+# CASE a built string has the right length and can be used as a key
+let n = 7
+let k = "key{n}"
+print(len("key{123456789}"))
+let m = {}
+map_set(m, k, 5)
+print(map_get(m, "key7"))
+let total = 0
+for (let i = -50; i < 50; i++) {
+    let text = "v{i}"
+    total += len(text)
+}
+print(total)

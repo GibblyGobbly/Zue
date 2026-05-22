@@ -85,8 +85,12 @@ set by `ulimit -v` is not read yet.
 The GC thread marks and the program thread sweeps in short steps. A cycle works like this:
 
 1. **Start.** The program thread marks the data segment (without `lv_frames`, which never holds heap
-   pointers), the root ranges and its own stack and registers. This is the snapshot. It takes about 25
-   microseconds. It then wakes the GC thread.
+   pointers) and its own stack and registers. This is the snapshot. It takes about 25 microseconds,
+   whatever the size of the `unsafe` buffers. It then wakes the GC thread. The root ranges (the `alloc()`
+   buffers) are part of the snapshot too, but they are scanned in slices of 256 KB, one slice per
+   collector step on the program thread, and the cycle cannot end before the last slice. A store into a
+   buffer shades the value it overwrites (the barrier in `_cp`). A buffer that is freed, or moved in the
+   table of ranges, before its scan reached it is scanned to the end first.
 2. **Marking.** The GC thread scans from its mark stack while the program keeps running. New objects are
    allocated already marked, so they survive the cycle. Pages that are empty are not reused for new
    objects while a cycle marks.
@@ -120,8 +124,7 @@ A new cycle cannot begin while one is marking or sweeping. `ZUE_RT_GC_STRESS` st
 allocation and looks at the collector at every allocation (one page of sweeping per step), and
 `ZUE_RT_GC_SLOW` makes the GC thread slow, so the program interleaves with the collector as much as possible.
 
-Not needed: stores to the stack, to globals and to root ranges (they are scanned at the start of the
-cycle), initial stores into a new object (its old contents are zero), and dense lists, strings and box
+Not needed: stores to the stack and to globals (they are scanned at the start of the cycle), initial stores into a new object (its old contents are zero), and dense lists, strings and box
 bytes (they hold no heap pointers). A new store of a pointer into a heap object must call a barrier
 function; the tests below fail when one is missing.
 
@@ -132,7 +135,7 @@ Read once at program start, by the compiled program itself:
 | Variable | Effect |
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
-| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max cycle end ns,<ns> max cycle start ns,<n> mark stack grows,<ns> max sweep step ns,<ns> longest cycle ns` to standard error. A pause is one stop of the program thread (a step, or the start or end of a cycle). `mark ns` is the GC thread's marking time. A second line, `ZUE_RT_GC_THROTTLE`, gives how many steps were held back, the total and longest hold, and how much of the longest pause was that hold. `ZUE_RT_GC_STATS=2` also prints a `ZUE_RT_GC_CYCLE` line per cycle (wall time, GC thread time, bytes allocated during and before the cycle). The collector's pause counter does not see time the program waits inside the write barrier; `bench/gc/stalls.zu` times every loop iteration and shows what the program itself sees |
+| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max cycle end ns,<ns> max cycle start ns,<n> mark stack grows,<ns> max sweep step ns,<ns> longest cycle ns` to standard error. A pause is one stop of the program thread (a step, or the start or end of a cycle). `mark ns` is the GC thread's marking time. A second line, `ZUE_RT_GC_THROTTLE`, gives how many steps were held back, the total and longest hold, and how much of the longest pause was that hold. A third line, `ZUE_RT_GC_CHUNKS`, gives how many 2 MB chunks of heap memory the helper thread had ready and how many the program thread had to make itself. `ZUE_RT_GC_STATS=2` also prints a `ZUE_RT_GC_CYCLE` line per cycle (wall time, GC thread time, bytes allocated during and before the cycle). The collector's pause counter does not see time the program waits inside the write barrier; `bench/gc/stalls.zu` times every loop iteration and shows what the program itself sees |
 | `ZUE_RT_GC_SLOW=N` | The GC thread sleeps N microseconds after each piece of marking. For tests: it widens the time the program and the GC thread overlap |
 | `ZUE_RT_GC_VERIFY=1` | At the end of each marking walk the heap again and stop with an error if a reachable object is not marked. Freed objects are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it |
 
@@ -194,3 +197,25 @@ Compiling the compiler (`bin/zue emit compiler/zuec.zu`, 15 MB of generated IR),
 | Now, `lowpause` (default) | 0.28 s | 86 MB |
 
 Measure your own program with `ZUE_RT_GC_STATS=1`.
+
+## Heap chunks come ready
+
+Small-object pages are cut from 2 MB chunks. The first touch of a chunk asks the kernel for a huge page,
+which it must find (sometimes by compacting memory) and zero. Measured on the program thread at a 10 GiB
+heap, that took up to 55 ms and was the cause of every stall over 1 ms: 131 chunk faults over 1 ms against 137
+program stalls over 1 ms in the same run. A helper thread now maps, hints and touches chunks ahead of time
+and hands them over through a ring of 16 slots with acquire and release stores. It keeps two chunks ready
+once the program has asked for a second one, and doubles that (up to 16) each time the ring was empty. The
+first chunk and any chunk the ring cannot supply are made on the program thread, as before. The helper's
+state is in its own `calloc` block, which the collector does not scan.
+
+| 10 GiB request, `bench/gc/stalls.zu`, 20 million iterations | Worst stall | Stalls over 1 ms |
+|---|---|---|
+| Before (3 runs) | 5.7 to 15.7 ms | 58 to 635 |
+| With the helper (5 runs) | 0.32 to 1.37 ms | 0 to 2 |
+| Hugepage hint removed (5 runs) | 0.35 to 1.0 ms | 0 to 1 |
+
+Removing the hint is as good for stalls but made a 1 GiB run 22 percent slower (7.13 s against 5.85 s), so the
+hint stays. Some stalls of 1 to 2 ms remain when the kernel compacts memory, which moves pages of the heap
+(the kernel counters showed up to 993 compaction stalls in a run). That cause is likely but not proven.
+

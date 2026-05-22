@@ -671,3 +671,23 @@ program must be measured before and after. Neither has been tried.
 "Safer" comes from threads that share nothing and talk through channels (T3), so there are no data races. It is
 not a property of version 1, where threads share one heap but cannot run at the same moment.
 
+## Session result: stalls, unsafe roots, throughput (measured 2026-11-01)
+
+Machine: 16 cores, 23 GB. All counts below are from runs on it. The whole suite passes (787 cases, also under
+`ZUE_RT_GC_STRESS=1`), and `tools/gc_race_check.sh` shows only the expected races.
+
+| Change | Before | After |
+|---|---|---|
+| Heap chunks made ready by a helper thread (10 GiB) | worst stall 5.7 to 15.7 ms, 58 to 635 stalls over 1 ms | 0.32 to 1.37 ms, 0 to 2 |
+| Root ranges scanned in slices (976 MiB `unsafe` buffer) | cycle start 225 ms | cycle start 24 microseconds, worst pause 0.23 ms |
+| `ptr_offset` used the pointer table after it had grown (freed memory) | crash after about 4,000 pointers | fixed |
+| Own int to text, one-allocation `"k{i}"` | string loop 5.43 M/s | 8.36 M/s (1.54 times) |
+| `--release` (program and runtime optimized as one module) | allocation loop 6.97 M/s, string loop 8.36 M/s | 7.7 to 8.3 and 9.2 to 9.6 M/s |
+
+The allocation-only loop (`bench/gc/alloc_only.zu`) did not change with the int to text work (6.96 against
+6.97 M/s). Its profile: `_gc_alloc` 29 percent of instructions, `lvp_index` 16, the write barrier's shading 6.
+The 2 times goal is not reached: the string loop is at 1.54 times and the allocation loop at 1.0 times (1.15
+times with `--release`). Not done: a cheaper allocation path, an inlined barrier check, concurrent sweep,
+per-thread heaps. The pointer table bug was found by a new test; two more tests (`test_gc_chunks`,
+`test_gc_unsafe_roots`) were checked by breaking the code on purpose and seeing them fail.
+

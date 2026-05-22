@@ -665,7 +665,7 @@ func lvp_slice(o, t, lo, hi) {
 
 func lvp_index(o, t, idx) {
     let tt = _tag(t)
-    if (tt >= T_BLOC_TYPE and tt <= T_PTR) {
+    if (tt != T_LIST and tt >= T_BLOC_TYPE and tt <= T_PTR) {
         if (_data_index(t, idx, o) != 0) {
             return 0
         }

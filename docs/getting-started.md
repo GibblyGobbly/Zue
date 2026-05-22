@@ -78,6 +78,7 @@ the new seeds together with the change that needs them. See [architecture](archi
 | `zue check prog.zu` | Find every lexical, syntax, type and import error without building; prints nothing when there is none |
 | `zue explain [CODE]` | Describe an error code such as `E0201`, with an example and the fix; without a code, list them all |
 | `zue build -g prog.zu` | Add line tables so that gdb, valgrind and perf show Zue lines (`run` and `emit` take `-g` too) |
+| `zue build --release prog.zu` | Join the program and the runtime and optimize them together: about 2 seconds slower to build, 10 to 20 percent faster to run (`run` takes `--release` too; needs `llvm-link-18`) |
 | `zue --error-format=json check prog.zu` | Print each compile error as one JSON object per line, for editors |
 
 How errors look and how to read them is in [errors](errors.md).

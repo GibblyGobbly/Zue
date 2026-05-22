@@ -1020,6 +1020,33 @@ func _float_text(tmp, f, digits) {
     }
 }
 
+# Writes the decimal text of the int v so that it ends just before end, and returns where it starts.
+# The digits are taken as an unsigned number, so the smallest int needs no special case.
+func _int_text(v, end) {
+    let u = v
+    let neg = 0
+    if (v < 0) {
+        neg = 1
+        u = 0 - v
+    }
+    let p = end
+    if (u == 0) {
+        p -= 1
+        st8(p, 48)
+    }
+    while (u != 0) {
+        let q = udiv(u, 10)
+        p -= 1
+        st8(p, 48 + (u - q * 10))
+        u = q
+    }
+    if (neg != 0) {
+        p -= 1
+        st8(p, 45)
+    }
+    return p
+}
+
 func _buf_value(b, v) {
     let tmp = stack_buf(64)
     let t = _tag(v)
@@ -1032,8 +1059,8 @@ func _buf_value(b, v) {
             _buf_cstr(b, cstr("false"))
         }
     } else if (t == T_INT) {
-        snprintf(tmp, 64, cstr("%lld"), _val(v))
-        _buf_cstr(b, tmp)
+        let at = _int_text(_val(v), tmp + 40)
+        _buf_add(b, at, tmp + 40 - at)
     } else if (t == T_FLOAT) {
         _buf_float(b, _val(v))
     } else if (t == T_CHAR) {
@@ -1147,6 +1174,52 @@ func lv_interp(n_i, parts) {
         st8(at, 0)
         _set(o, T_STR, st)
         retp(o)
+    }
+    # Strings and ints (up to 8 parts, the usual "k{i}"): one exact-size allocation, no buffer to copy from.
+    if (n_i <= 8) {
+        let scratch = stack_buf(192)
+        let starts = stack_buf(64)
+        let sum = 0
+        let simple = 1
+        for (let i = 0; i < n_i; i++) {
+            let part = parts + 16 * i
+            if (_tag(part) == T_STR) {
+                sum += ld64(_val(part))
+            } else if (_tag(part) == T_INT) {
+                let at = _int_text(_val(part), scratch + 24 * i + 24)
+                st64(starts + 8 * i, at)
+                sum += scratch + 24 * i + 24 - at
+            } else {
+                simple = 0
+                break
+            }
+        }
+        if (simple != 0) {
+            if (ugt(sum, 70368744177664)) {
+                _die_oom()
+            }
+            let st = lv_alloc_atomic(S_DATA + sum + 1)
+            st64(st, sum)
+            let at = st + S_DATA
+            for (let i = 0; i < n_i; i++) {
+                let part = parts + 16 * i
+                if (_tag(part) == T_STR) {
+                    let m = ld64(_val(part))
+                    if (m != 0) {
+                        memcpy(at, _val(part) + S_DATA, m)
+                        at += m
+                    }
+                } else {
+                    let from = ld64(starts + 8 * i)
+                    let m = scratch + 24 * i + 24 - from
+                    memcpy(at, from, m)
+                    at += m
+                }
+            }
+            st8(at, 0)
+            _set(o, T_STR, st)
+            retp(o)
+        }
     }
     _buf_init(b)
     for (let i = 0; i < n_i; i++) {

@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# An unsafe buffer is a root of the collector, scanned in slices while the program runs. The only
+# reference to each object below is a slot of such a buffer, so a slot the collector skipped, or a
+# buffer freed before its scan reached it, would lose objects. Run with ZUE_RT_GC_STRESS=1 too.
+# CASE objects held only by a large buffer survive many cycles
+let bad = 0
+unsafe {
+    let n = 60000
+    let buf = alloc(n)
+    defer(buf)
+    for (let i = 0; i < n; i++) {
+        store(ptr_offset(buf, i), [i, "s{i}"])
+    }
+    let junk = 0
+    for (let k = 0; k < 400000; k++) {
+        let g = [k, k, k, k]
+        junk += len(g)
+    }
+    for (let i = 0; i < n; i++) {
+        let v = load(ptr_offset(buf, i))
+        if (v[0] != i or v[1] != "s{i}") {
+            bad += 1
+        }
+    }
+    print("junk {junk}")
+}
+print("bad {bad}")
+# CASE slots overwritten while the collector runs
+let bad = 0
+unsafe {
+    let n = 30000
+    let buf = alloc(n)
+    defer(buf)
+    for (let i = 0; i < n; i++) {
+        store(ptr_offset(buf, i), ["old", i])
+    }
+    for (let round = 0; round < 3; round++) {
+        for (let i = 0; i < n; i++) {
+            store(ptr_offset(buf, i), ["new{round}", i, "x{i}"])
+            let g = [i, i, i]
+        }
+    }
+    for (let i = 0; i < n; i++) {
+        let v = load(ptr_offset(buf, i))
+        if (v[0] != "new2" or v[1] != i or v[2] != "x{i}") {
+            bad += 1
+        }
+    }
+}
+print("bad {bad}")
+# CASE a value taken out of a buffer outlives the buffer
+let kept = []
+unsafe {
+    let n = 40000
+    let buf = alloc(n)
+    for (let i = 0; i < n; i++) {
+        store(ptr_offset(buf, i), ["kept", i, "t{i}"])
+    }
+    for (let i = 0; i < n; i = i + 997) {
+        append(kept, load(ptr_offset(buf, i)))
+    }
+    free(buf)
+}
+let junk = 0
+for (let k = 0; k < 300000; k++) {
+    let g = [k, k, k, k, k]
+    junk += len(g)
+}
+let bad = 0
+for (let j = 0; j < len(kept); j++) {
+    let v = kept[j]
+    if (v[0] != "kept" or v[2] != "t{v[1]}") {
+        bad += 1
+    }
+}
+print("kept {len(kept)} bad {bad} junk {junk}")
+# CASE several buffers, the first one freed while the others still hold objects
+let bad = 0
+unsafe {
+    let a = alloc(20000)
+    let b = alloc(20000)
+    let c = alloc(20000)
+    for (let i = 0; i < 20000; i++) {
+        store(ptr_offset(a, i), ["a", i])
+        store(ptr_offset(b, i), ["b", i, "b{i}"])
+        store(ptr_offset(c, i), ["c", i, "c{i}"])
+    }
+    free(a)
+    let junk = 0
+    for (let k = 0; k < 200000; k++) {
+        let g = [k, k, k, k]
+        junk += len(g)
+    }
+    for (let i = 0; i < 20000; i++) {
+        let vb = load(ptr_offset(b, i))
+        let vc = load(ptr_offset(c, i))
+        if (vb[2] != "b{i}" or vc[2] != "c{i}") {
+            bad += 1
+        }
+    }
+    free(b)
+    free(c)
+}
+print("bad {bad}")
+# CASE a buffer freed while its scan is partway, after a value was taken out of it
+func put(buf, at, j) {
+    unsafe {
+        store(ptr_offset(buf, at), ["last", j, "v{j}"])
+    }
+    return 0
+}
+func take(buf, at) {
+    unsafe {
+        return load(ptr_offset(buf, at))
+    }
+}
+let kept = []
+let bad = 0
+unsafe {
+    for (let j = 0; j < 60; j++) {
+        let buf = alloc(300000)
+        put(buf, 299990, j)
+        let churn = 0
+        for (let k = 0; k < j * 3; k++) {
+            let g = [k, k, k]
+            churn += len(g)
+        }
+        append(kept, take(buf, 299990))
+        free(buf)
+        for (let k = 0; k < 40; k++) {
+            let g = [k, k, k, k]
+            churn += len(g)
+        }
+    }
+}
+for (let j = 0; j < len(kept); j++) {
+    let v = kept[j]
+    if (v[0] != "last" or v[1] != j or v[2] != "v{j}") {
+        bad += 1
+    }
+}
+print("kept {len(kept)} bad {bad}")

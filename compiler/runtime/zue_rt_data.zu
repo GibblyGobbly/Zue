@@ -1827,7 +1827,7 @@ func lb_alloc(self_p, argc_i, argv_p) {
     if (mem == 0) {
         lv_error(E_RUNTIME, cstr("alloc() failed to reserve memory"), cstr("Try a smaller allocation."))
     }
-    lv_gc_root_add(mem, mem + 16 * cells)
+    lv_gc_root_add_fresh(mem, mem + 16 * cells)
     _register_alloc_meta(mem, cells)
     zue_mem_track_alloc(mem, cells * 16)
     let o = stack_buf(16)
@@ -1942,20 +1942,24 @@ func lb_ptr_offset(self_p, argc_i, argv_p) {
         lv_error(E_TYPE, cstr("ptr_add() expects a pointer and an integer offset"), cstr("Use ptr_add(buf, 1)."))
     }
     let owner = _find_owner(_val(argv_p))
+    # The table of records moves when it grows (_register_alias_meta), so what is needed of this record
+    # is read now, not after the call.
+    let owner_kind = ld32(owner + PM_KIND)
+    let owner_base = ld64(owner + PM_BASE)
     let result = stack_buf(8)
     st64(result, 0)
     let byte_offset = _val(argv_p + 16) * 16
-    if (ld32(owner + PM_KIND) == PTR_ALLOC) {
+    if (owner_kind == PTR_ALLOC) {
         # The rules know an allocation by its start, so an offset from a pointer made by ptr_add is
         # counted from the start of the allocation.
-        let root = ld64(owner + PM_BASE)
+        let root = owner_base
         _unsafe_check(zue_mem_ptr_add_ok(root, _val(argv_p) - root + byte_offset, result))
     } else {
         st64(result, _val(argv_p) + byte_offset)
     }
     _register_alias_meta(ld64(result), _find_owner(_val(argv_p)))
-    if (ld32(owner + PM_KIND) == PTR_ALLOC) {
-        zue_mem_track_alias(ld64(result), ld64(owner + PM_BASE))
+    if (owner_kind == PTR_ALLOC) {
+        zue_mem_track_alias(ld64(result), owner_base)
     }
     let o = stack_buf(16)
     _set(o, T_PTR, ld64(result))

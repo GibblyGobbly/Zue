@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Chunks of heap memory come ready from a helper thread. If one were handed out twice, or handed
+# out before it is usable, objects would share memory and the values below would not add up.
+# CASE many chunks, every value read back
+let rows = []
+let n = 1500000
+for (let i = 0; i < n; i++) {
+    append(rows, [i, i + 1, i + 2, i + 3, i + 4, i + 5])
+}
+let bad = 0
+let total = 0
+for (let i = 0; i < n; i++) {
+    let r = rows[i]
+    if (r[0] != i or r[5] != i + 5 or r[2] + r[3] != 2 * i + 5) {
+        bad += 1
+    }
+    total += r[0] + r[5]
+}
+print("bad {bad}")
+print("total {total}")
+# CASE garbage in between does not disturb live rows
+let keep = []
+let total = 0
+for (let i = 0; i < 600000; i++) {
+    let junk = [i, i, i, i, i, i, i, i]
+    if (i % 3 == 0) {
+        append(keep, [i, "s{i}"])
+    }
+    total += len(junk)
+}
+let bad = 0
+for (let j = 0; j < len(keep); j++) {
+    if (keep[j][1] != "s{keep[j][0]}") {
+        bad += 1
+    }
+}
+print("kept {len(keep)} bad {bad} total {total}")

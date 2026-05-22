@@ -253,25 +253,81 @@ func _init_small_page(pg, cls, atomic) {
     }
 }
 
+# Maps a 2 MB chunk aligned to 2 MB, asks for huge pages and touches it, so that the kernel has zeroed
+# and attached the memory when this returns. Returns 0 when the system has no memory left. The first
+# touch of a huge page can take milliseconds, which is why the helper thread does it ahead of time.
+func _chunk_make() {
+    let raw = mmap(0, CHUNK_SIZE * 2, 3, 34, -1, 0)    # read and write, private and anonymous
+    if (raw == -1 or raw == 0) {
+        return 0
+    }
+    let base = band(raw + CHUNK_SIZE - 1, bnot(CHUNK_SIZE - 1))
+    if (base > raw) {
+        munmap(raw, base - raw)
+    }
+    let tail = raw + CHUNK_SIZE * 2 - (base + CHUNK_SIZE)
+    if (tail > 0) {
+        munmap(base + CHUNK_SIZE, tail)
+    }
+    madvise(base, CHUNK_SIZE, 14)    # MADV_HUGEPAGE: a hint, ignored where unsupported
+    st8(base, 0)
+    return base
+}
+
+# The helper thread: keeps PRE_WANT chunks ready for the program thread. It sleeps on PRE_COND
+# and holds the mutex only to decide whether to sleep, never while it makes a chunk.
+func _pre_main(pre) {
+    pthread_mutex_lock(pre + PRE_MUTEX)
+    while (1 == 1) {
+        let tail = ld64a(pre + PRE_TAIL)
+        if (tail - ld64a(pre + PRE_HEAD) < ld64a(pre + PRE_WANT)) {
+            pthread_mutex_unlock(pre + PRE_MUTEX)
+            let base = _chunk_make()
+            if (base == 0) {
+                return 0    # out of memory: the program thread meets it on its own path
+            }
+            st64(pre + PRE_RING + (tail % PRE_SLOTS) * 8, base)
+            st64a(pre + PRE_TAIL, tail + 1)
+            pthread_mutex_lock(pre + PRE_MUTEX)
+        } else {
+            pthread_cond_wait(pre + PRE_COND, pre + PRE_MUTEX)
+        }
+    }
+    return 0
+}
+
 # A 64 KB page, zero filled and aligned to 64 KB. Pages are cut from 2 MB chunks of fresh anonymous
 # memory, which the kernel zeroes, and which may be backed by huge pages: far fewer page faults than
-# one allocation per page.
+# one allocation per page. A chunk comes ready from the helper thread when one is there.
 func _chunk_page() {
     let h = _heap()
     if (ld64(h + H_CHUNK_NEXT) == ld64(h + H_CHUNK_END)) {
-        let raw = mmap(0, CHUNK_SIZE * 2, 3, 34, -1, 0)    # read and write, private and anonymous
-        if (raw == -1 or raw == 0) {
-            _die_oom()
+        let base = 0
+        let pre = ld64(h + H_PRE)
+        if (pre != 0) {
+            let head = ld64a(pre + PRE_HEAD)
+            if (ld64a(pre + PRE_TAIL) != head) {
+                base = ld64(pre + PRE_RING + (head % PRE_SLOTS) * 8)
+                st64a(pre + PRE_HEAD, head + 1)
+                st64(pre + PRE_HITS, ld64(pre + PRE_HITS) + 1)
+            } else if (ld64a(pre + PRE_WANT) != 0) {
+                st64(pre + PRE_MISSES, ld64(pre + PRE_MISSES) + 1)
+                if (ld64a(pre + PRE_WANT) < PRE_SLOTS) {
+                    st64a(pre + PRE_WANT, ld64a(pre + PRE_WANT) * 2)    # the program outruns the helper: keep more ready
+                }
+            } else {
+                st64a(pre + PRE_WANT, 2)    # the second chunk has been asked for: from now on keep some ready
+            }
+            pthread_mutex_lock(pre + PRE_MUTEX)
+            pthread_cond_signal(pre + PRE_COND)
+            pthread_mutex_unlock(pre + PRE_MUTEX)
         }
-        let base = band(raw + CHUNK_SIZE - 1, bnot(CHUNK_SIZE - 1))
-        if (base > raw) {
-            munmap(raw, base - raw)
+        if (base == 0) {
+            base = _chunk_make()
+            if (base == 0) {
+                _die_oom()
+            }
         }
-        let tail = raw + CHUNK_SIZE * 2 - (base + CHUNK_SIZE)
-        if (tail > 0) {
-            munmap(base + CHUNK_SIZE, tail)
-        }
-        madvise(base, CHUNK_SIZE, 14)    # MADV_HUGEPAGE: a hint, ignored where unsupported
         st64(h + H_CHUNK_NEXT, base)
         st64(h + H_CHUNK_END, base + CHUNK_SIZE)
     }
@@ -814,7 +870,7 @@ func _drain() {
     }
 }
 
-func lv_gc_root_add(lo, hi) {
+func _root_register(lo, hi) {
     let h = _heap()
     if (ld64(h + H_ROOT_COUNT) == ld64(h + H_ROOT_CAP)) {
         if (ld64(h + H_ROOT_CAP) != 0) {
@@ -830,22 +886,59 @@ func lv_gc_root_add(lo, hi) {
     st64(ld64(h + H_ROOTS) + ld64(h + H_ROOT_COUNT) * 16, lo)
     st64(ld64(h + H_ROOTS) + ld64(h + H_ROOT_COUNT) * 16 + 8, hi)
     st64(h + H_ROOT_COUNT, ld64(h + H_ROOT_COUNT) + 1)
-    if (ld64(h + H_MARKING) != 0) {
-        _shade_range(lo, hi)    # a range added during a cycle holds what the program put there
+}
+
+# Adds a range that holds Zue values copied from elsewhere. During a cycle it holds what the program put
+# there, so it is shaded now, unless the stepwise scan of the roots is still to reach it.
+func lv_gc_root_add(lo, hi) {
+    let h = _heap()
+    _root_register(lo, hi)
+    if (ld64(h + H_MARKING) != 0 and ld64(h + H_RS_ON) == 0) {
+        _shade_range(lo, hi)
     }
+}
+
+# Adds a range that is zero filled, so that there is nothing to shade: an unsafe buffer from alloc(n).
+# A store into it shades the value it overwrites (the write barrier in _cp), like a store into any object.
+func lv_gc_root_add_fresh(lo, hi) {
+    _root_register(lo, hi)
+}
+
+# The rest of range j, which the stepwise scan has not reached yet, is shaded now (the range is about to
+# go away, or to change places with another).
+func _root_finish(j) {
+    let h = _heap()
+    if (ld64(h + H_RS_ON) == 0 or j < ld64(h + H_RS_I)) {
+        return 0
+    }
+    let e = ld64(h + H_ROOTS) + j * 16
+    let pos = ld64(e)
+    if (j == ld64(h + H_RS_I)) {
+        pos = ld64(h + H_RS_POS)
+    }
+    _shade_range(pos, ld64(e + 8))
 }
 
 func lv_gc_root_remove(lo) {
     let h = _heap()
     for (let i = 0; i < ld64(h + H_ROOT_COUNT); i++) {
         if (ld64(ld64(h + H_ROOTS) + i * 16) == lo) {
-            st64(h + H_ROOT_COUNT, ld64(h + H_ROOT_COUNT) - 1)
-            st64(ld64(h + H_ROOTS) + i * 16, ld64(ld64(h + H_ROOTS) + ld64(h + H_ROOT_COUNT) * 16))
-            st64(ld64(h + H_ROOTS) + i * 16 + 8, ld64(ld64(h + H_ROOTS) + ld64(h + H_ROOT_COUNT) * 16 + 8))
+            let last = ld64(h + H_ROOT_COUNT) - 1
+            _root_finish(i)
+            if (i != last and i < ld64(h + H_RS_I)) {
+                _root_finish(last)    # it moves into a slot the scan has passed
+            }
+            st64(h + H_ROOT_COUNT, last)
+            st64(ld64(h + H_ROOTS) + i * 16, ld64(ld64(h + H_ROOTS) + last * 16))
+            st64(ld64(h + H_ROOTS) + i * 16 + 8, ld64(ld64(h + H_ROOTS) + last * 16 + 8))
+            if (ld64(h + H_RS_ON) != 0 and i == ld64(h + H_RS_I) and i != last) {
+                st64(h + H_RS_POS, ld64(ld64(h + H_ROOTS) + i * 16))    # the range that moved in is scanned from its start
+            }
             return 0
         }
     }
 }
+
 
 func lv_gc_is_marked(p) {
     let h = _heap()
@@ -870,14 +963,56 @@ func _scan_stack() {
 }
 
 # Marks what the data segment and the registered root ranges point to, without following it.
-func _scan_roots() {
+func _scan_static() {
     let h = _heap()
     # lv_frames (2.4 MB of call positions and static names) never holds a heap pointer
     let frames = addr_of("lv_frames")
     _scan_range(addr_of("__data_start"), frames)
     _scan_range(frames + 2400072, addr_of("_end"))
+}
+
+# Everything at once, for the verifier. A cycle scans the root ranges in steps instead (_root_step).
+func _scan_roots() {
+    let h = _heap()
+    _scan_static()
     for (let i = 0; i < ld64(h + H_ROOT_COUNT); i++) {
         _scan_range(ld64(ld64(h + H_ROOTS) + i * 16), ld64(ld64(h + H_ROOTS) + i * 16 + 8))
+    }
+}
+
+# One step of the scan of the root ranges that unsafe code registered: a slice of ROOT_STEP_WORDS words,
+# so that a large buffer does not make one long pause. The program thread runs it between its own work.
+# A store into a range that is still to be scanned shades the value it overwrites, so nothing the
+# range held when the cycle began is lost. The cycle cannot end while this is on.
+func _root_step() {
+    let h = _heap()
+    if (ld64(h + H_RS_ON) == 0) {
+        return 0
+    }
+    let budget = ROOT_STEP_WORDS
+    while (ld64(h + H_RS_I) < ld64(h + H_ROOT_COUNT) and budget > 0) {
+        let e = ld64(h + H_ROOTS) + ld64(h + H_RS_I) * 16
+        let hi = ld64(e + 8)
+        let pos = ld64(h + H_RS_POS)
+        let end = hi
+        if (ult(pos + budget * 8, hi)) {
+            end = pos + budget * 8
+        }
+        _shade_range(pos, end)
+        if (ult(pos, end)) {
+            budget -= (end - pos) / 8
+        }
+        if (uge(end, hi)) {
+            st64(h + H_RS_I, ld64(h + H_RS_I) + 1)
+            if (ld64(h + H_RS_I) < ld64(h + H_ROOT_COUNT)) {
+                st64(h + H_RS_POS, ld64(ld64(h + H_ROOTS) + ld64(h + H_RS_I) * 16))
+            }
+        } else {
+            st64(h + H_RS_POS, end)
+        }
+    }
+    if (ld64(h + H_RS_I) >= ld64(h + H_ROOT_COUNT)) {
+        st64(h + H_RS_ON, 0)
     }
 }
 
@@ -1054,7 +1189,23 @@ const H_PAUSE_MAX_SLEEP = 21704  # of the longest pause, the nanoseconds that we
 const H_THROTTLE_MAX = 21712   # the longest single sleep
 const H_LAST_END = 21720      # when the last cycle ended
 const H_ALLOC_RATE = 21728     # the pacer's measure of the program: bytes allocated per millisecond
-const HEAP_SIZE = 21736
+const H_PRE = 21736            # the helper thread's block (calloc, so the collector never scans it); 0 when no helper runs
+const H_RS_ON = 21744           # 1 while the root ranges from unsafe code are being scanned in steps (program thread only)
+const H_RS_I = 21752           # the range being scanned
+const H_RS_POS = 21760         # where in that range the scan has reached
+const ROOT_STEP_WORDS = 32768  # words of root ranges scanned in one step of the collector (256 KB)
+const HEAP_SIZE = 21768
+# The block: the chunks the helper has made ready (mapped, hinted and touched), and what the two threads share.
+const PRE_SLOTS = 16
+const PRE_RING = 0             # PRE_SLOTS chunk addresses
+const PRE_HEAD = 128           # next slot the program thread takes (written by the program thread only)
+const PRE_TAIL = 136           # next slot the helper fills (written by the helper only)
+const PRE_WANT = 144           # how many ready chunks the helper keeps; 0 until the program has asked for a second chunk
+const PRE_MUTEX = 152          # pthread_mutex_t: only guards the helper's sleep
+const PRE_COND = 192           # pthread_cond_t: wakes the helper when the program thread took a chunk
+const PRE_HITS = 240           # chunks taken ready
+const PRE_MISSES = 248         # times the ring was empty and the program thread had to make the chunk itself
+const PRE_SIZE = 256
 space("_heap0", HEAP_SIZE)
 
 # The collector state in use. Zero filled until _gc_setup sets the fields that start non-zero.
@@ -1161,7 +1312,12 @@ func _gc_begin() {
     st64(h + H_COLLECTIONS, ld64(h + H_COLLECTIONS) + 1)
     st64(h + H_MTOP, 0)
     st64(h + H_MARKING, 1)
-    _scan_roots()
+    _scan_static()
+    if (ld64(h + H_ROOT_COUNT) != 0) {
+        st64(h + H_RS_I, 0)
+        st64(h + H_RS_POS, ld64(ld64(h + H_ROOTS)))
+        st64(h + H_RS_ON, 1)
+    }
     _scan_stack()
     # The roots are the snapshot. From here the GC thread owns the mark stack.
     st64(h + H_CYCLE_BYTES, ld64(h + H_BYTES_SINCE_GC))
@@ -1235,7 +1391,7 @@ func _cycle_poll() {
     _hand_over()
     let done = 0
     let slow = 0
-    if (ld64(h + H_GCT_STATE) == 2 and ld64(h + H_SHARED_N) == 0) {
+    if (ld64(h + H_GCT_STATE) == 2 and ld64(h + H_SHARED_N) == 0 and ld64(h + H_RS_ON) == 0) {
         st64(h + H_GCT_STATE, 0)    # the GC thread sleeps again, so the marks are the program thread's to use
         done = 1
     } else {
@@ -1304,6 +1460,9 @@ func _gc_work() {
             if (_now_ns() - t0 > ld64(h + H_BEGIN_MAX)) {
                 st64(h + H_BEGIN_MAX, _now_ns() - t0)
             }
+        }
+        if (ld64(h + H_MARKING) != 0) {
+            _root_step()
         }
         if (ld64(h + H_MARKING) != 0 and _cycle_poll() != 0) {
             let t1 = _now_ns()
@@ -1385,6 +1544,16 @@ func _gc_report() {
     let buf2 = stack_buf(256)
     let n2 = snprintf(buf2, 256, cstr("ZUE_RT_GC_THROTTLE,%llu steps slept,%llu total sleep ns,%llu longest sleep ns,%llu of the longest pause was sleep ns\n"), ld64(h + H_THROTTLE_N), ld64(h + H_THROTTLE_NS), ld64(h + H_THROTTLE_MAX), ld64(h + H_PAUSE_MAX_SLEEP))
     write(2, buf2, n2)
+    let buf3 = stack_buf(128)
+    let pre = ld64(h + H_PRE)
+    let hits = 0
+    let misses = 0
+    if (pre != 0) {
+        hits = ld64(pre + PRE_HITS)
+        misses = ld64(pre + PRE_MISSES)
+    }
+    let n3 = snprintf(buf3, 128, cstr("ZUE_RT_GC_CHUNKS,%llu taken ready,%llu made by the program thread\n"), hits, misses)
+    write(2, buf3, n3)
 }
 
 # Called once from the thread that runs the program.
@@ -1426,6 +1595,13 @@ func lv_gc_start() {
     if (pthread_create(th, 0, fn_addr("_gct_main"), 0) != 0) {
         write(2, cstr("Runtime Error: cannot start the garbage collector thread\n"), 57)
         exit(1)
+    }
+    let pth = stack_buf(16)
+    let pre = calloc(1, PRE_SIZE)
+    if (pre != 0) {
+        if (pthread_create(pth, 0, fn_addr("_pre_main"), pre) == 0) {
+            st64(h + H_PRE, pre)    # if the helper cannot start, chunks are made on the program thread as before
+        }
     }
     st64(h + H_GC_READY, 1)
     _set_limit()

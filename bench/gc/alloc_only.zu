@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# alloc_only.zu: like live_heap.zu, but the churn loop only allocates small lists. It builds no strings,
+# so the time is the allocator, the collector and the interpreter, not number formatting.
+#   alloc_only.zu <live MiB> <churn iterations>
+let a = args()
+let live_mb = to_int(a[0])
+let churn = to_int(a[1])
+let live = []
+let objects = floor_div(live_mb * 1048576, 200)
+for (let i = 0; i < objects; i++) {
+    let row = []
+    for (let j = 0; j < 8; j++) {
+        append(row, i + j)
+    }
+    append(live, row)
+}
+let n = len(live)
+let sum = 0
+let t1 = clock()
+for (let i = 0; i < churn; i++) {
+    let tmp = [i, i + 1, i + 2, i + 3]
+    let other = [tmp[1], tmp[2]]
+    sum += tmp[0] % 7 + len(other) + len(live[i % n])
+}
+let t2 = clock()
+print("churn_s {t2 - t1}")
+print("churn_per_s {float(churn) / (t2 - t1)}")
+print("check {sum}")
