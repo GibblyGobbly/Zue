@@ -255,8 +255,9 @@ func _init_small_page(pg, cls, atomic) {
 
 # Maps a 2 MB chunk aligned to 2 MB, asks for huge pages and touches it, so that the kernel has zeroed
 # and attached the memory when this returns. Returns 0 when the system has no memory left. The first
-# touch of a huge page can take milliseconds, which is why the helper thread does it ahead of time.
-func _chunk_make() {
+# touch of a huge page can take milliseconds, which is why the helper thread does it ahead of time. hint is
+# 0 once the helper has seen the hint cost spikes (see _pre_main).
+func _chunk_make(hint) {
     let raw = mmap(0, CHUNK_SIZE * 2, 3, 34, -1, 0)    # read and write, private and anonymous
     if (raw == -1 or raw == 0) {
         return 0
@@ -269,9 +270,32 @@ func _chunk_make() {
     if (tail > 0) {
         munmap(base + CHUNK_SIZE, tail)
     }
-    madvise(base, CHUNK_SIZE, 14)    # MADV_HUGEPAGE: a hint, ignored where unsupported
+    if (hint != 0) {
+        madvise(base, CHUNK_SIZE, 14)    # MADV_HUGEPAGE: a hint, ignored where unsupported
+    } else {
+        madvise(base, CHUNK_SIZE, 15)    # MADV_NOHUGEPAGE
+    }
     st8(base, 0)
     return base
+}
+
+# The hint costs speed when the kernel has to compact memory to find a huge page, and the cost shows as a
+# chunk that takes long to make. After HINT_SPIKES such chunks, new chunks stop asking for huge pages. There
+# is no size limit on this: the kernel docs tie these stalls to fragmentation of free memory, not to the size
+# of the heap. At 1 and 4 GiB no chunk took long and the hint stayed on; at 10 GiB it went off after about
+# 6,400 chunks.
+func _pre_judge(pre, dt) {
+    st64(pre + PRE_MADE, ld64(pre + PRE_MADE) + 1)
+    if (dt > ld64(pre + PRE_MAXNS)) {
+        st64(pre + PRE_MAXNS, dt)
+    }
+    if (dt > SPIKE_NS) {
+        st64(pre + PRE_SPIKES, ld64(pre + PRE_SPIKES) + 1)
+    }
+    if (ld64a(pre + PRE_HINT) != 0 and ld64(pre + PRE_SPIKES) >= HINT_SPIKES) {
+        st64(pre + PRE_OFF_AT, ld64(pre + PRE_MADE))
+        st64a(pre + PRE_HINT, 0)
+    }
 }
 
 # The helper thread: keeps PRE_WANT chunks ready for the program thread. It sleeps on PRE_COND
@@ -282,10 +306,12 @@ func _pre_main(pre) {
         let tail = ld64a(pre + PRE_TAIL)
         if (tail - ld64a(pre + PRE_HEAD) < ld64a(pre + PRE_WANT)) {
             pthread_mutex_unlock(pre + PRE_MUTEX)
-            let base = _chunk_make()
+            let t0 = _now_ns()
+            let base = _chunk_make(ld64a(pre + PRE_HINT))
             if (base == 0) {
                 return 0    # out of memory: the program thread meets it on its own path
             }
+            _pre_judge(pre, _now_ns() - t0)
             st64(pre + PRE_RING + (tail % PRE_SLOTS) * 8, base)
             st64a(pre + PRE_TAIL, tail + 1)
             pthread_mutex_lock(pre + PRE_MUTEX)
@@ -323,7 +349,11 @@ func _chunk_page() {
             pthread_mutex_unlock(pre + PRE_MUTEX)
         }
         if (base == 0) {
-            base = _chunk_make()
+            let hint = 1
+            if (pre != 0) {
+                hint = ld64a(pre + PRE_HINT)
+            }
+            base = _chunk_make(hint)
             if (base == 0) {
                 _die_oom()
             }
@@ -1205,7 +1235,14 @@ const PRE_MUTEX = 152          # pthread_mutex_t: only guards the helper's sleep
 const PRE_COND = 192           # pthread_cond_t: wakes the helper when the program thread took a chunk
 const PRE_HITS = 240           # chunks taken ready
 const PRE_MISSES = 248         # times the ring was empty and the program thread had to make the chunk itself
-const PRE_SIZE = 256
+const PRE_HINT = 256           # 1 while new chunks ask for huge pages; the helper turns it off (written by the helper only)
+const PRE_MADE = 264           # chunks the helper has made
+const PRE_SPIKES = 272         # of those, the ones that took more than SPIKE_NS
+const PRE_OFF_AT = 280         # PRE_MADE when the hint went off; 0 while it is on
+const PRE_MAXNS = 288          # the longest time the helper took to make a chunk
+const PRE_SIZE = 296
+const SPIKE_NS = 1000000       # a chunk that takes longer than this to make is a spike (the pause goal is below a millisecond)
+const HINT_SPIKES = 3          # this many spikes switch the huge page hint off for the chunks made after them
 space("_heap0", HEAP_SIZE)
 
 # The collector state in use. Zero filled until _gc_setup sets the fields that start non-zero.
@@ -1544,15 +1581,23 @@ func _gc_report() {
     let buf2 = stack_buf(256)
     let n2 = snprintf(buf2, 256, cstr("ZUE_RT_GC_THROTTLE,%llu steps slept,%llu total sleep ns,%llu longest sleep ns,%llu of the longest pause was sleep ns\n"), ld64(h + H_THROTTLE_N), ld64(h + H_THROTTLE_NS), ld64(h + H_THROTTLE_MAX), ld64(h + H_PAUSE_MAX_SLEEP))
     write(2, buf2, n2)
-    let buf3 = stack_buf(128)
+    let buf3 = stack_buf(256)
     let pre = ld64(h + H_PRE)
     let hits = 0
     let misses = 0
+    let made = 0
+    let spikes = 0
+    let maxns = 0
+    let off = 0
     if (pre != 0) {
         hits = ld64(pre + PRE_HITS)
         misses = ld64(pre + PRE_MISSES)
+        made = ld64a(pre + PRE_MADE)
+        spikes = ld64a(pre + PRE_SPIKES)
+        maxns = ld64a(pre + PRE_MAXNS)
+        off = ld64a(pre + PRE_OFF_AT)
     }
-    let n3 = snprintf(buf3, 128, cstr("ZUE_RT_GC_CHUNKS,%llu taken ready,%llu made by the program thread\n"), hits, misses)
+    let n3 = snprintf(buf3, 256, cstr("ZUE_RT_GC_CHUNKS,%llu taken ready,%llu made by the program thread,%llu made by the helper,%llu of them over a millisecond,%llu longest make ns,%llu chunks made when the hint went off (0: still on)\n"), hits, misses, made, spikes, maxns, off)
     write(2, buf3, n3)
 }
 
@@ -1599,6 +1644,7 @@ func lv_gc_start() {
     let pth = stack_buf(16)
     let pre = calloc(1, PRE_SIZE)
     if (pre != 0) {
+        st64(pre + PRE_HINT, 1)
         if (pthread_create(pth, 0, fn_addr("_pre_main"), pre) == 0) {
             st64(h + H_PRE, pre)    # if the helper cannot start, chunks are made on the program thread as before
         }

@@ -216,6 +216,25 @@ state is in its own `calloc` block, which the collector does not scan.
 | Hugepage hint removed (5 runs) | 0.35 to 1.0 ms | 0 to 1 |
 
 Removing the hint is as good for stalls but made a 1 GiB run 22 percent slower (7.13 s against 5.85 s), so the
-hint stays. Some stalls of 1 to 2 ms remain when the kernel compacts memory, which moves pages of the heap
-(the kernel counters showed up to 993 compaction stalls in a run). That cause is likely but not proven.
+hint stays on, and the helper turns it off by itself when it costs too much. It times every chunk it makes. A
+chunk that takes more than 1 ms is a spike (`SPIKE_NS`). After 3 spikes (`HINT_SPIKES`) the chunks made from then
+on ask for no huge pages (`MADV_NOHUGEPAGE`) and the program carries on. The rule has no size limit: the
+kernel documentation ties these stalls to fragmentation of free memory, not to the size of the heap, and
+a size limit of 8 GiB gave the same result as no limit in the runs below (the spikes only appeared past it).
+`ZUE_RT_GC_CHUNKS` shows how many chunks were spikes, the longest time to make one, and the chunk number at which
+the hint went off (0 when it never did).
 
+Measured with `bench/gc/stalls.zu`, 20 million iterations, 3 runs per row:
+
+| Request | Rule | Worst stall | Stalls over 1 ms | Chunks over 1 ms | Hint off at chunk |
+|---|---|---|---|---|---|
+| 1 GiB | hint always on | 0.19 to 0.28 ms | 0 | 0 | never |
+| 1 GiB | 3 spikes | 0.19 to 0.26 ms | 0 | 0 | never |
+| 4 GiB | hint always on | 0.12 to 0.58 ms | 0 | 0 | never |
+| 4 GiB | 3 spikes | 0.17 to 0.20 ms | 0 | 0 to 1 | never |
+| 10 GiB | hint always on | 1.19 to 22.15 ms | 1 to 3 | 214 to 354 | never |
+| 10 GiB | 3 spikes | 0.39 to 1.76 ms | 0 to 2 | 3 | about 6,400 |
+| 10 GiB | 3 spikes and a heap of 8 GiB or more | 0.36 to 0.63 ms | 0 | 3 | about 6,300 to 6,400 |
+
+Some stalls of 1 to 2 ms remain when the kernel compacts memory, which moves pages of the heap (the kernel
+counters showed up to 993 compaction stalls in a run). That cause is likely but not proven.
