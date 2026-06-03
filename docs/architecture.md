@@ -98,7 +98,7 @@ value in a stack slot and passes pointers to the runtime.
 | 3 | float | the bit pattern of a double |
 | 4 | char | the byte |
 | 5 | string | pointer to the string object (length and bytes) |
-| 6 | list | pointer to a list object (count and item cells) |
+| 6 | list | pointer to a list object: count, capacity and the pointer to the item cells. A list of up to 32 items keeps its cells in the same object, 32 bytes after its start; one that outgrows them moves its cells to an object of their own |
 | 7 | map | pointer to a map object |
 | 8 | function | pointer to a function object: code, name, captured cells; native builtins use the same kind |
 | 9 | file | pointer to a file object |
@@ -135,6 +135,11 @@ runtime, kept in git. They are the only way to build the first compiler without 
 to equal the first; `make seed` refreshes the seeds. See [zuec](architecture.md#bootstrap).
 
 ## The native dialect
+
+A function whose name starts with `_slow_` is compiled `noinline cold`. It is the rarely taken part of a hot
+function (for example `_slow_gc_alloc` behind `_gc_alloc`), and it stays a call so that the hot function does not
+carry its registers and stack frame. Without this, LLVM folded a function that has one call site back into its
+caller, and every allocation paid for a 264-byte frame and six saved registers.
 
 The runtime is written in Zue syntax with one type, the 64-bit word, and memory intrinsics.
 

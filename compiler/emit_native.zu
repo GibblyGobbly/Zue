@@ -1024,6 +1024,11 @@ func compile_func(n) {
     if (ST.ctx.spills == true) {
         attrs = " noinline"
     }
+    # A function named _slow_... is the rarely taken part of a hot function: it stays a call, so that the
+    # hot function does not carry its registers and frame.
+    if (starts_with(n.name, "_slow_")) {
+        attrs = " noinline cold"
+    }
     let lines = ["define {linkage}{rty} @{n.name}({commas(params)}){attrs} \{", "entry:"]
     for (let a in ST.ctx.allocas) {
         append(lines, a)

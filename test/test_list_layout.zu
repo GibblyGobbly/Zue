@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# A small list keeps its first items in the same object as its header. These cases grow lists past that
+# space while the collector runs, with the elements held only by the list. Run with ZUE_RT_GC_STRESS=1 too.
+# CASE a list grows past its inline space and keeps every item
+let bad = 0
+for (let n = 0; n < 70; n++) {
+    let l = []
+    for (let i = 0; i < n; i++) {
+        append(l, "item{i}")
+    }
+    if (len(l) != n) {
+        bad += 1
+    }
+    for (let i = 0; i < n; i++) {
+        if (l[i] != "item{i}") {
+            bad += 1
+        }
+    }
+}
+print("bad {bad}")
+# CASE literal lists, then growth, with garbage in between
+let keep = []
+for (let i = 0; i < 4000; i++) {
+    let row = ["a{i}", ["n", i], "b{i}"]
+    append(keep, row)
+}
+let junk = 0
+for (let k = 0; k < 200000; k++) {
+    let g = [k, k, k]
+    junk += len(g)
+}
+for (let i = 0; i < len(keep); i++) {
+    for (let j = 0; j < 12; j++) {
+        append(keep[i], "x{i}-{j}")
+    }
+}
+for (let k = 0; k < 200000; k++) {
+    let g = [k, k]
+    junk += len(g)
+}
+let bad = 0
+for (let i = 0; i < len(keep); i++) {
+    let r = keep[i]
+    if (len(r) != 15 or r[0] != "a{i}" or r[1][1] != i or r[2] != "b{i}" or r[14] != "x{i}-11") {
+        bad += 1
+    }
+}
+print("rows {len(keep)} bad {bad} junk {junk}")
+# CASE a list that outgrew its inline space is changed and shrunk
+let l = [1, 2, 3, 4]
+for (let i = 0; i < 40; i++) {
+    append(l, i * 10)
+}
+l[0] = 111
+l[43] = 222
+print(len(l))
+print(l[0])
+print(l[4])
+print(l[43])
+let total = 0
+for (let i = 5; i < 43; i++) {
+    total += l[i]
+}
+print(total)
+# CASE slices and copies of grown lists
+let big = []
+for (let i = 0; i < 30; i++) {
+    append(big, i)
+}
+let part = big[3:8]
+print(part)
+print(len(part))
+print(big[-1])

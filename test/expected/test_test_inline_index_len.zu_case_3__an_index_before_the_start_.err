@@ -1,0 +1,7 @@
+Index Error [E0401] in /tmp/zue_test_case.zu at line 5:
+  Index -4 is out of bounds for list of length 3
+
+   5 | print(xs[-4])
+     |       ^^^^^^ index -4, valid indexes are 0 to 2
+
+Hint: Ensure your index is between 0 and len-1

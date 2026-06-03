@@ -1,0 +1,7 @@
+Type Error [E0206] in /tmp/zue_test_case.zu at line 5:
+  list index must be an int, got string
+
+   5 | print(xs[pass("a")])
+     |       ^^^^^^^^^^^^^
+
+Hint: Use an int index

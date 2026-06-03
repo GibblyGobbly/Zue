@@ -1,0 +1,7 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  len() needs a string, list or map, got int
+
+   4 | print(len(pass(5)))
+     |       ^^^^^^^^^^^^
+
+Hint: len works on a string, a list, a map or a box

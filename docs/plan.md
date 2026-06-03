@@ -691,3 +691,34 @@ times with `--release`). Not done: a cheaper allocation path, an inlined barrier
 per-thread heaps. The pointer table bug was found by a new test; two more tests (`test_gc_chunks`,
 `test_gc_unsafe_roots`) were checked by breaking the code on purpose and seeing them fail.
 
+## Session result: where the time went and what was done about it (measured 2026-11-01)
+
+`callgrind` of the allocation-only loop (`bench/gc/alloc_only.zu`) showed that LLVM was not the limit. The same
+program compiled at `-O0` ran at 6.3 M/s, at `-O1` 7.0, at `-O3` 7.2. The time went into what each operation
+does: a 264-byte frame and six saved registers on every allocation, two allocations per list, a runtime call for
+every `x[i]` and `len(x)`, and a check of every list item that the compiler already knew was an int.
+
+| Change | Instructions per run | Allocation loop | String loop |
+|---|---|---|---|
+| Start of this step | 1.345 billion | 6.64 M/s | 7.95 M/s |
+| `_gc_alloc` split into a short fast path and `_slow_gc_alloc` | 1.238 | 7.31 | 7.9 |
+| A list with up to 32 items is one allocation | 1.149 | 8.4 | 9.0 |
+| In-line `x[i]` and `len(x)`; no item check for ints, floats, bools and literals | 0.792 | 10.85 | 12.4 |
+| `--release` on top | | 12.0 | 14.2 |
+
+Seen from the start of the session (allocation loop 6.96 M/s, string loop 5.43), the allocation loop is 1.6 times
+faster, 1.7 with `--release`, and the string loop 2.3 times, 2.6 with `--release`. The 2 times goal is met for
+the string loop and not for the allocation loop.
+
+A bug found on the way, present since before this work: `a + b` on strings called `_str_n` with the length
+`la + lb` on the bytes of `a` alone, so it read `lb` bytes past the end of `a`. Harmless inside a page, a crash when
+a large string ended where its mapping ended. It made `zue unparse` crash on `diag.zu` and `zue_rt_ops.zu` (and,
+after the list change moved the layout, on `zue_rt_math.zu`), which is how `make round-trip` had 3 failures. `+` now
+allocates once and copies each operand from its own bytes. `test_string_concat` fails with a crash on the base
+commit and passes now; `make round-trip` is 774 same, 0 different.
+
+Not done: concurrent sweep (the program thread still sweeps, 12 to 15 percent of its time at 1 to 4 GiB), an
+inlined barrier check, per-thread heaps. At 10 GiB the worst stall with all changes is 1.3 to 2.1 ms with one stall
+over 1 ms per run; the program allocates 1.5 times faster now, which puts more pressure on the kernel's memory
+compaction, and that cause is likely but not proven.
+

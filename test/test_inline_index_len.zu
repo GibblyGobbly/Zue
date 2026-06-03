@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# x[i] on a list with an in-range int index, and len() of a list or a string, are done in line. Every other
+# case (a negative index, an index out of range, a string or a map, a wrong type) must still reach the
+# runtime and give the same results and the same errors. Values pass through a function so that the
+# type checker does not decide the cases before they run.
+# CASE reads in range and from the end
+func pass(v) {
+    return [v, null][0]
+}
+let xs = pass([10, 20, 30, 40, 50])
+print(xs[0])
+print(xs[4])
+print(xs[-1])
+print(xs[-5])
+let total = 0
+for (let i = 0; i < len(xs); i++) {
+    total += xs[i]
+}
+print(total)
+# CASE an index past the end
+func pass(v) {
+    return [v, null][0]
+}
+let xs = pass([1, 2, 3])
+print(xs[3])
+# CASE an index before the start
+func pass(v) {
+    return [v, null][0]
+}
+let xs = pass([1, 2, 3])
+print(xs[-4])
+# CASE an index that is not an int
+func pass(v) {
+    return [v, null][0]
+}
+let xs = pass([1, 2, 3])
+print(xs[pass("a")])
+# CASE strings, maps and dense lists are indexed by the runtime
+func pass(v) {
+    return [v, null][0]
+}
+let s = pass("hello")
+print(s[1])
+print(s[-1])
+let m = pass({"k": 7})
+print(m["k"])
+let d = pass(dense_list(3, 1.5))
+print(len(d))
+# CASE len of every kind it takes
+func pass(v) {
+    return [v, null][0]
+}
+print(len(pass([1, 2, 3])))
+print(len(pass([])))
+print(len(pass("")))
+print(len(pass("héllo")))
+print(len(pass({"a": 1, "b": 2})))
+print(len(pass([[1], [2, 3]])))
+# CASE len of something that has no length
+func pass(v) {
+    return [v, null][0]
+}
+print(len(pass(5)))
+# CASE len with the wrong number of arguments
+func pass(v) {
+    return [v, null][0]
+}
+print(len(pass([1]), 2))
+# CASE nested index and len
+func pass(v) {
+    return [v, null][0]
+}
+let grid = pass([[1, 2, 3], [4, 5, 6]])
+print(grid[1][2])
+print(len(grid[0]))
+print(grid[-1][-1])

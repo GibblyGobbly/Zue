@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# a + b once read as many bytes past the end of a as b is long. Inside a page that does nothing; when a
+# large string ended where its mapping ended it crashed. These cases join strings at the sizes where
+# an object ends: the small-object limit, a whole 64 KB span, and sizes in between.
+# CASE joins at the edges of the size classes
+func make(n, c) {
+    let s = ""
+    let piece = repeat(c, 1000)
+    let left = n
+    while (left >= 1000) {
+        s = s + piece
+        left -= 1000
+    }
+    return s + repeat(c, left)
+}
+let bad = 0
+let sizes = [0, 1, 15, 16, 17, 4095, 32743, 32744, 32751, 32752, 32753, 65526, 65527, 65528, 65535, 65536, 65537, 131063, 131064]
+for (let i = 0; i < len(sizes); i++) {
+    for (let j = 0; j < len(sizes); j += 3) {
+        let a = make(sizes[i], "a")
+        let b = make(sizes[j], "b")
+        let c = a + b
+        if (len(c) != sizes[i] + sizes[j]) {
+            bad += 1
+        }
+        if (len(a) != sizes[i] or len(b) != sizes[j]) {
+            bad += 1
+        }
+        if (sizes[i] > 0 and to_string(c[0]) != "a") {
+            bad += 1
+        }
+        if (sizes[j] > 0 and to_string(c[len(c) - 1]) != "b") {
+            bad += 1
+        }
+        if (sizes[i] > 0 and sizes[j] > 0 and (to_string(c[sizes[i] - 1]) != "a" or to_string(c[sizes[i]]) != "b")) {
+            bad += 1
+        }
+    }
+}
+print("bad {bad}")
+# CASE a long string built one small piece at a time
+let s = ""
+for (let i = 0; i < 20000; i++) {
+    s = s + "line {i}\n"
+}
+print(len(s))
+let t = s + s
+print(len(t))
+print(t[len(t) - 2])
+# CASE the operands are unchanged by the join
+let a = "abc"
+let b = "defg"
+let c = a + b
+print(c)
+print(a)
+print(b)
+print(len(c))

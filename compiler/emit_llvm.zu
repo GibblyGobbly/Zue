@@ -253,6 +253,111 @@ func int_literal(n) {
     return ll_int(lit_int(n))
 }
 
+# True when n cannot be a pointer or a box: a string or char literal, or an expression computed raw (int,
+# float or bool). Such a value needs no check when it is stored in a list or a map.
+func holds_no_pointer(n) {
+    return n.k == "str" or n.k == "char" or skind(n) != null
+}
+
+# len(x): a list and a string both keep their length in the first word of the object the value points
+# to, so those two are read in line. Anything else, and every error, goes to the builtin.
+func ex_len(n) {
+    let argv = ex_list(n.args)
+    let v = argv[0]
+    let t = ll_slot()
+    ll_mark(n)    # a later runtime error that has no place of its own is drawn under this expression
+    let tag = ll_reg()
+    let is_list = ll_reg()
+    let is_str = ll_reg()
+    let ok = ll_reg()
+    ll("{tag} = load i64, ptr {v}")
+    ll("{is_list} = icmp eq i64 {tag}, 6")
+    ll("{is_str} = icmp eq i64 {tag}, 5")
+    ll("{ok} = or i1 {is_list}, {is_str}")
+    let fast = ll_new_label("lfast")
+    let slow = ll_new_label("lslow")
+    let done = ll_new_label("ldone")
+    ll_condbr(ok, fast, slow)
+    ll_label(fast)
+    let pp = ll_reg()
+    let p = ll_reg()
+    let q = ll_reg()
+    let count = ll_reg()
+    let out = ll_reg()
+    ll("{pp} = getelementptr inbounds i8, ptr {v}, i64 8")
+    ll("{p} = load i64, ptr {pp}")
+    ll("{q} = inttoptr i64 {p} to ptr")
+    ll("{count} = load i64, ptr {q}")
+    ll("{out} = getelementptr inbounds i8, ptr {t}, i64 8")
+    ll("store i64 2, ptr {t}")
+    ll("store i64 {count}, ptr {out}")
+    ll_br(done)
+    ll_label(slow)
+    let r = call_builtin("len", argv)
+    ll_copy(t, r)
+    ll_br(done)
+    ll_label(done)
+    return t
+}
+
+# target[index] on a list with an int index in range is read in line: two words are copied into a fresh
+# slot (a stack cell, so there is no write barrier). Every other case, and every error, is the call.
+func ex_index(n) {
+    let t = ex(n.target)
+    let i = ex(n.index)
+    let out = ll_slot()
+    ll_mark(n)    # a later runtime error that has no place of its own is drawn under this expression
+    let ttag = ll_reg()
+    let itag = ll_reg()
+    let is_list = ll_reg()
+    let is_int = ll_reg()
+    let both = ll_reg()
+    ll("{ttag} = load i64, ptr {t}")
+    ll("{itag} = load i64, ptr {i}")
+    ll("{is_list} = icmp eq i64 {ttag}, 6")
+    ll("{is_int} = icmp eq i64 {itag}, 2")
+    ll("{both} = and i1 {is_list}, {is_int}")
+    let check = ll_new_label("xcheck")
+    let fast = ll_new_label("xfast")
+    let slow = ll_new_label("xslow")
+    let done = ll_new_label("xdone")
+    ll_condbr(both, check, slow)
+    ll_label(check)
+    let lp = ll_reg()
+    let lraw = ll_reg()
+    let lptr = ll_reg()
+    let count = ll_reg()
+    let ip = ll_reg()
+    let idx = ll_reg()
+    let inside = ll_reg()
+    ll("{lp} = getelementptr inbounds i8, ptr {t}, i64 8")
+    ll("{lraw} = load i64, ptr {lp}")
+    ll("{lptr} = inttoptr i64 {lraw} to ptr")
+    ll("{count} = load i64, ptr {lptr}")
+    ll("{ip} = getelementptr inbounds i8, ptr {i}, i64 8")
+    ll("{idx} = load i64, ptr {ip}")
+    ll("{inside} = icmp ult i64 {idx}, {count}")
+    ll_condbr(inside, fast, slow)
+    ll_label(fast)
+    let itp = ll_reg()
+    let iraw = ll_reg()
+    let items = ll_reg()
+    let off = ll_reg()
+    let cell = ll_reg()
+    ll("{itp} = getelementptr inbounds i8, ptr {lptr}, i64 16")
+    ll("{iraw} = load i64, ptr {itp}")
+    ll("{items} = inttoptr i64 {iraw} to ptr")
+    ll("{off} = shl i64 {idx}, 4")
+    ll("{cell} = getelementptr inbounds i8, ptr {items}, i64 {off}")
+    ll_copy(out, cell)
+    ll_br(done)
+    ll_label(slow)
+    ll("call void @lvp_index(ptr {out}, ptr {t}, ptr {i})")
+    ll_br(done)
+    ll_label(done)
+    return out
+}
+
 func ex_list(nodes) {
     let res = []
     for (let n in nodes) {
@@ -322,9 +427,14 @@ func ex_call(n) {
         }
         if (callee.name == "append" and len(n.args) == 2 and resolve("append").kind == "builtin") {
             let argv = ex_list(n.args)
-            ll("call void @lvp_container_check(ptr {argv[1]})")
+            if (not holds_no_pointer(n.args[1])) {
+                ll("call void @lvp_container_check(ptr {argv[1]})")
+            }
             ll_mark(n)
             return call_builtin("append", argv)
+        }
+        if (callee.name == "len" and len(n.args) == 1 and resolve("len").kind == "builtin") {
+            return ex_len(n)
         }
         let r = resolve(callee.name)
         if (r.kind == "builtin") {
@@ -514,10 +624,7 @@ func ex(n) {
         return ex_call(n)
     }
     if (k == "index") {
-        let t = ex(n.target)
-        let i = ex(n.index)
-        ll_mark(n)
-        return ll_call_out("lvp_index", "ptr {t}, ptr {i}")
+        return ex_index(n)
     }
     if (k == "slice") {
         let t = ex(n.target)
@@ -542,8 +649,10 @@ func ex(n) {
         if (len(items) == 0) {
             return ll_call_lv("lv_list_new", "i64 0")
         }
-        for (let it in items) {
-            ll("call void @lvp_container_check(ptr {it})")
+        for (let j = 0; j < len(items); j++) {
+            if (not holds_no_pointer(n.items[j])) {
+                ll("call void @lvp_container_check(ptr {items[j]})")
+            }
         }
         let arr = ll_args_array(items)
         return ll_call_lv("lv_list_of", "i32 {len(items)}, ptr {arr}")
@@ -552,7 +661,9 @@ func ex(n) {
         let t = ll_call_lv("lv_map_new", "")
         for (let i = 0; i < len(n.keys); i++) {
             let v = ex(n.vals[i])
-            ll("call void @lvp_container_check(ptr {v})")
+            if (not holds_no_pointer(n.vals[i])) {
+                ll("call void @lvp_container_check(ptr {v})")
+            }
             ll("call void @lvp_map_put(ptr {t}, ptr {ll_kstr(n.keys[i])}, ptr {v})")
         }
         return t

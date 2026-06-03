@@ -184,9 +184,22 @@ func lvp_add(o, a, b) {
     if (ta == T_STR and tb == T_STR) {
         let la = ld64(_val(a))
         let lb = ld64(_val(b))
-        _str_n(o, _val(a) + S_DATA, la + lb)
-        memcpy(_val(o) + S_DATA + la, _val(b) + S_DATA, lb)
-        st8(_val(o) + S_DATA + la + lb, 0)
+        if (ugt(la + lb, 70368744177664)) {
+            _die_oom()
+        }
+        # One exact-size allocation, each part copied from its own bytes. (This once called _str_n with the
+        # length la + lb on the bytes of a alone, which read lb bytes past the end of a: harmless inside a
+        # page, a crash when a large string ended where its mapping ended.)
+        let st = lv_alloc_atomic(S_DATA + la + lb + 1)
+        st64(st, la + lb)
+        if (la != 0) {
+            memcpy(st + S_DATA, _val(a) + S_DATA, la)
+        }
+        if (lb != 0) {
+            memcpy(st + S_DATA + la, _val(b) + S_DATA, lb)
+        }
+        st8(st + S_DATA + la + lb, 0)
+        _set(o, T_STR, st)
         return 0
     }
     if (_is_listish(a) and _is_listish(b)) {

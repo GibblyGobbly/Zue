@@ -238,3 +238,15 @@ Measured with `bench/gc/stalls.zu`, 20 million iterations, 3 runs per row:
 
 Some stalls of 1 to 2 ms remain when the kernel compacts memory, which moves pages of the heap (the kernel
 counters showed up to 993 compaction stalls in a run). That cause is likely but not proven.
+
+## The allocation path
+
+`_gc_alloc` is the short path almost every allocation takes: a small object, no collector work due, a page of
+the size class with a free slot or room to bump. Everything else (setting up the collector, running a step,
+mapping a page, a large object) is `_slow_gc_alloc`, which is a call and not part of the fast path (see the native
+dialect in [architecture](architecture.md)). A list of up to 32 items is one object: the header and the cells
+together, so `[a, b, c, d]` costs one allocation. When such a list grows, its cells move to an object of their own
+(`_list_push` allocates and copies; it does not use `lv_realloc`, because the cells are not an object), the
+elements it held are shaded by the write barrier (`lv_wb_range`) and the old cells are cleared so that they do
+not keep elements alive. `test_list_layout` fails under `ZUE_RT_GC_STRESS=1` when that barrier is left out.
+

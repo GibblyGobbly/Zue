@@ -66,6 +66,7 @@ const L_COUNT = 0
 const L_CAP = 8
 const L_ITEMS = 16
 const L_SIZE = 24
+const LIST_INLINE_BYTES = 512    # a list whose items take no more than this shares its object with the header
 # LvMap { count, used, cap, entries, index, icap }; entry { key, val(16), live } is 32 bytes
 const M_COUNT = 0
 const M_USED = 8
@@ -715,14 +716,23 @@ func _list_new(o, cap) {
     if (ugt(cap, 4398046511104)) {
         _die_oom()
     }
-    let l = lv_alloc(L_SIZE)
     let c = cap
     if (c < 4) {
         c = 4
     }
+    # A small list keeps its first items in the same object as its header: one allocation, not two. The
+    # items pointer then points into the object (the collector follows interior pointers). When the list
+    # outgrows this space _list_push moves the items to an object of their own.
+    let l = 0
+    if (16 * c <= LIST_INLINE_BYTES) {
+        l = lv_alloc(L_SIZE + 16 * c)
+        st64(l + L_ITEMS, l + L_SIZE)
+    } else {
+        l = lv_alloc(L_SIZE)
+        st64(l + L_ITEMS, lv_alloc(16 * c))
+    }
     st64(l + L_COUNT, 0)
     st64(l + L_CAP, c)
-    st64(l + L_ITEMS, lv_alloc(16 * c))
     _set(o, T_LIST, l)
 }
 
@@ -752,8 +762,16 @@ func _list_push(list, v) {
     let l = _val(list)
     if (ld64(l + L_COUNT) == ld64(l + L_CAP)) {
         st64(l + L_CAP, ld64(l + L_CAP) * 2)
-        let grown = lv_realloc(ld64(l + L_ITEMS), 16 * ld64(l + L_CAP))
-        lv_wb_word(l + L_ITEMS)
+        # Not lv_realloc: the items may sit inside the header object, and then they are not an object.
+        let grown = lv_alloc(16 * ld64(l + L_CAP))
+        memcpy(grown, ld64(l + L_ITEMS), 16 * ld64(l + L_COUNT))
+        if (ld64(l + L_ITEMS) == l + L_SIZE) {
+            lv_wb_word(l + L_ITEMS)
+            lv_wb_range(l + L_SIZE, 16 * ld64(l + L_COUNT))    # the elements are still reachable from the new items
+            memset(l + L_SIZE, 0, 16 * ld64(l + L_COUNT))    # the old inline slots must not keep elements alive
+        } else {
+            lv_wb_word(l + L_ITEMS)
+        }
         st64(l + L_ITEMS, grown)
     }
     _cp(ld64(l + L_ITEMS) + 16 * ld64(l + L_COUNT), v)

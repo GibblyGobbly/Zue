@@ -1,0 +1,7 @@
+Argument Error [E0203] in /tmp/zue_test_case.zu at line 4:
+  len() expects 1 argument, but got 2
+
+   4 | print(len(pass([1]), 2))
+     |       ^^^^^^^^^^^^^^^^^
+
+Hint: Pass one value per parameter

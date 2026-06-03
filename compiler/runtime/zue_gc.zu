@@ -582,7 +582,48 @@ func _gc_check() {
     }
 }
 
+# The allocation that almost every call is: a small object, no collector work due, and a page of that size
+# class with a free slot or room to bump. It is kept short on purpose. _slow_gc_alloc is large (it can set
+# up the collector, run a step of it, map a page, allocate a large object), and when its code sat in this
+# function every call paid for it: six saved registers and a 264-byte frame before the first instruction.
 func _gc_alloc(size, atomic) {
+    let h = _heap()
+    let n = size + 1    # keeps a pointer just past the end inside the object
+    if (ld64(h + H_SETUP_DONE) != 0 and ule(n, MAX_SMALL) and ld64(h + H_BYTES_SINCE_GC) <= ld64(h + H_LIMIT)) {
+        let cls = ld8(addr_of("_class_of") + (n + 15) / 16)
+        let pg = ld64((h + H_CLASS_LIST) + atomic * 256 + cls * 8)
+        if (pg != 0) {
+            let osz = ld64(pg + PG_OBJ)
+            let free = ld32(pg + PG_FREE)
+            let idx = ld32(pg + PG_BUMP)
+            if (free != 0) {
+                idx = free - 1
+                let obj = ld64(pg + PG_BASE) + idx * osz
+                st32(pg + PG_FREE, ld32(obj))
+                st32(pg + PG_NFREE, ld32(pg + PG_NFREE) - 1)
+                memset(obj, 0, osz)    # a recycled object holds its old contents
+                st8(ld64(pg + PG_USED) + idx, 1)
+                if (ld64(h + H_MARKING) != 0) {
+                    st8a(ld64(pg + PG_MARK) + idx, 1)    # allocated during a cycle: survives it
+                }
+                st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + osz)
+                return obj
+            }
+            if (idx < ld32(pg + PG_NOBJS)) {
+                st32(pg + PG_BUMP, idx + 1)
+                st8(ld64(pg + PG_USED) + idx, 1)
+                if (ld64(h + H_MARKING) != 0) {
+                    st8a(ld64(pg + PG_MARK) + idx, 1)
+                }
+                st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + osz)
+                return ld64(pg + PG_BASE) + idx * osz
+            }
+        }
+    }
+    return _slow_gc_alloc(size, atomic)
+}
+
+func _slow_gc_alloc(size, atomic) {
     let h = _heap()
     if (ld64(h + H_SETUP_DONE) == 0) {
         _gc_setup()
