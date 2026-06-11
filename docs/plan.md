@@ -722,3 +722,37 @@ inlined barrier check, per-thread heaps. At 10 GiB the worst stall with all chan
 over 1 ms per run; the program allocates 1.5 times faster now, which puts more pressure on the kernel's memory
 compaction, and that cause is likely but not proven.
 
+## What limits the collector now, and what was tried (measured 2026-11-01)
+
+With the mutator faster (see above), the program thread spends about 39 percent of its churn time on the
+collector at a 1 GiB live heap (allocation loop, 20 million iterations): 383 ms is the throttle, where the
+program is held back because it allocates faster than the marker keeps up, and 290 ms is sweeping, which also runs
+on the program thread. Marking takes the collector thread 1.55 s over 13 cycles, 120 ms per cycle, about 87 percent
+of the run, so marking is saturated.
+
+Parallel marking was built and measured, then dropped. It had a context per marker, a shared pool for work, an idle
+count for termination, and splitting of large ranges when donating (without the split, one marker kept the whole
+live array and the others stayed idle: busy time summed to 0.92 of the wall time). With the split the markers worked
+at the same time (sum 3.95 times the wall time) and throttling fell from 3,552 steps to 431. Throughput still fell:
+
+| Marker threads | Allocation loop | String loop |
+|---|---|---|
+| 1 | 10.4 to 11.0 M/s | 11.5 to 12.4 |
+| 2 | 9.7 to 10.0 | 10.1 to 10.8 |
+| 3 | 9.1 to 9.2 | 9.5 to 10.0 |
+| 4 | 8.0 to 8.1 | 8.3 to 8.4 |
+
+The cycle got only 1.6 times shorter (390 to 238 ms) for four times the processor time (392 to 942 ms of marking
+per cycle). Marking reads the whole live heap, so it is limited by memory bandwidth, and more markers compete with
+each other and with the program for it. Keeping one marker is better on this workload. A write barrier that skips
+cells tagged with a scalar was also tried: safe, but no measurable gain, so it was not kept.
+
+What would help, in order of expected gain and of risk:
+
+| Idea | Why | Cost |
+|---|---|---|
+| Sweep on the collector thread | 16 percent of the program thread's time at 1 to 4 GiB | The sweeper rebuilds the allocator's class lists and page pools; a hand-off of swept pages to the program thread is needed |
+| Sweep by bitmap instead of by free list (as Go does) | Sweeping would flip mark bits per page and not touch every dead object | A new allocator fast path: find a free slot with a bit scan, zero on allocation |
+| Lists of scalars that the marker does not read | A row of 8 ints is 160 bytes the marker reads and finds nothing in; marking cost per cycle falls with it | The cells would have to live in an atomic object of their own, which gives up the one-object list; a list that gets a pointer item must switch |
+| A bigger heap goal | Fewer cycles, so less marking and no throttling | More memory; against the rule that memory comes first |
+
