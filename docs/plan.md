@@ -756,3 +756,37 @@ What would help, in order of expected gain and of risk:
 | Lists of scalars that the marker does not read | A row of 8 ints is 160 bytes the marker reads and finds nothing in; marking cost per cycle falls with it | The cells would have to live in an atomic object of their own, which gives up the one-object list; a list that gets a pointer item must switch |
 | A bigger heap goal | Fewer cycles, so less marking and no throttling | More memory; against the rule that memory comes first |
 
+## Sweep without touching dead objects, and two things found on the way (measured 2026-11-01)
+
+The sweep used to write a link into every dead object to build a free list, a cache miss per dead object, for memory the
+allocator was about to write anyway. The free slots of a page are now the zero bytes of its used map below `PG_BUMP`;
+`PG_FREE` is the place where the search for the next one starts and `PG_NFREE` counts them. A sweep only clears
+bytes of that map. At 1 GiB (allocation loop, 20 million iterations):
+
+| | Before | After |
+|---|---|---|
+| Sweep time on the program thread | 0.29 s | 0.09 to 0.12 s |
+| Collector time on the program thread | 692 ms | 450 to 480 ms |
+| Allocation loop | 11.1 M/s | 12.9 to 13.0 M/s |
+| String loop | 10.8 to 12.6 | 13.2 to 13.5 |
+| Worst pause | 0.2 to 0.3 ms | 0.25 to 0.35 ms |
+
+Found on the way:
+
+- Empty pages went back to the OS only inside the steps of a cycle (`_pool_trim`, 16 pages a step), so how much came
+  back depended on how many steps a sweep took. The slow sweep took thousands; the fast one took few, and
+  `test_gc_pages_returned` failed one run in two (300 MB resident against 47). Trimming now continues in small steps
+  while the pool holds cold pages (`_pool_pending`), cycle or not. 20 runs, 0 failures.
+- `ZUE_RT_GC_VERIFY=1` reported "an object can be reached but was not marked" in about a third of the runs of
+  `test_gc_span_reuse`, since the helper thread for heap chunks was added (0 of 30 before it). The word that
+  reached the object was in the collector's own state block: the address just past the current chunk
+  (`H_CHUNK_END`), which is the start of whatever is mapped next to it, here a dead large object. Chunks are now
+  kept as a start and a page count. 60 runs, 0 failures. Production runs were never affected (the word only kept
+  garbage alive one cycle longer), but the verifier is what shows real collector bugs, so a false alarm in it matters.
+- A mutation (the fast path no longer marks a recycled slot as used) is not caught by any program-level test I could
+  write, although the collector then reports half the live bytes; making that branch return null or skip clearing the
+  object does fail `test_gc_recycle`. The line is covered by reading and by the broad suites, not by a test of its own.
+
+What limits the allocation loop now: the throttle (about 320 to 350 ms of 1.54 s) and marking, 1.6 s of collector
+thread time for 13 cycles of a 1.5 GB live heap.
+

@@ -250,3 +250,11 @@ together, so `[a, b, c, d]` costs one allocation. When such a list grows, its ce
 elements it held are shaded by the write barrier (`lv_wb_range`) and the old cells are cleared so that they do
 not keep elements alive. `test_list_layout` fails under `ZUE_RT_GC_STRESS=1` when that barrier is left out.
 
+## Free slots and returning memory
+
+After a sweep the free slots of a small-object page are the zero bytes of its used map below `PG_BUMP`. The
+allocator searches that map from `PG_FREE`; `PG_NFREE` counts the free slots, so the search always ends. The sweep
+does not write into dead objects; the allocator clears an object when it hands it out. Empty pages go to a pool and are
+given back to the system a few at a time whenever the pool holds more than the collector keeps for reuse, also
+between cycles (`_pool_pending`).
+

@@ -52,8 +52,8 @@ const PG_BASE = 0
 const PG_OBJ = 8
 const PG_NOBJS = 16       # u32
 const PG_BUMP = 20        # u32, objects handed out at least once
-const PG_FREE = 24        # u32, 1-based index of the first recycled object, 0 if none
-const PG_NFREE = 28       # u32
+const PG_FREE = 24        # u32, where the search for a free slot starts: no slot below it is free
+const PG_NFREE = 28       # u32, free slots below PG_BUMP (objects freed by a sweep that were not handed out again)
 const PG_USED_COUNT = 32  # u32
 const PG_ATOMIC = 36      # u8
 const PG_LARGE = 37       # u8
@@ -121,8 +121,8 @@ const H_PAUSE_MAX = 232        # the longest single collection, in nanoseconds
 const H_MARK_TOTAL = 240       # nanoseconds spent marking
 const H_SWEEP_TOTAL = 248      # nanoseconds spent sweeping
 const H_STACK_LOW = 256        # lowest usable address of the program thread stack; 0 when unknown
-const H_CHUNK_NEXT = 264         # next unused page in the current chunk
-const H_CHUNK_END = 272
+const H_CHUNK_BASE = 264         # the start of the current chunk; 0 before the first
+const H_CHUNK_USED = 272         # pages of it cut so far (a count, not an address: see _chunk_page)
 const H_IDX = 280              # object index set by _page_of
 const H_MARKING = 288          # 1 from the start of an incremental cycle until its marks are final
 const H_VERIFY = 304           # 1: at the end of each incremental cycle check that no live object is unmarked
@@ -327,7 +327,7 @@ func _pre_main(pre) {
 # one allocation per page. A chunk comes ready from the helper thread when one is there.
 func _chunk_page() {
     let h = _heap()
-    if (ld64(h + H_CHUNK_NEXT) == ld64(h + H_CHUNK_END)) {
+    if (ld64(h + H_CHUNK_BASE) == 0 or ld64(h + H_CHUNK_USED) == CHUNK_SIZE / PAGE_SIZE) {
         let base = 0
         let pre = ld64(h + H_PRE)
         if (pre != 0) {
@@ -358,11 +358,14 @@ func _chunk_page() {
                 _die_oom()
             }
         }
-        st64(h + H_CHUNK_NEXT, base)
-        st64(h + H_CHUNK_END, base + CHUNK_SIZE)
+        st64(h + H_CHUNK_BASE, base)
+        st64(h + H_CHUNK_USED, 0)
     }
-    let page = ld64(h + H_CHUNK_NEXT)
-    st64(h + H_CHUNK_NEXT, ld64(h + H_CHUNK_NEXT) + (PAGE_SIZE))
+    # The state is the chunk's start and a count, never the address just past its end: the collector scans
+    # this block as a root, and an address one past the end is the start of whatever is mapped next to the
+    # chunk, often a large object. That kept a dead large object reachable, and made the verifier report it.
+    let page = ld64(h + H_CHUNK_BASE) + ld64(h + H_CHUNK_USED) * PAGE_SIZE
+    st64(h + H_CHUNK_USED, ld64(h + H_CHUNK_USED) + 1)
     return page
 }
 
@@ -560,7 +563,7 @@ func _set_limit() {
     st64(h + H_LIMIT, 4611686018427387904)
     if (ld64(h + H_GC_READY) != 0 and ld64(h + H_GC_BUSY) == 0) {
         st64(h + H_LIMIT, ld64(h + H_THRESHOLD))
-        if (ld64(h + H_MARKING) != 0 or ld64(h + H_SWEEPING) != 0) {
+        if (ld64(h + H_MARKING) != 0 or ld64(h + H_SWEEPING) != 0 or _pool_pending() != 0) {
             st64(h + H_LIMIT, ld64(h + H_BYTES_SINCE_GC) + STEP_BYTES)
         }
         if (ld64(h + H_STRESS_EVERY) != 0) {
@@ -578,6 +581,9 @@ func _gc_check() {
             _gc_work()
         } else if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_THRESHOLD) or (ld64(h + H_STRESS_EVERY) != 0 and ld64(h + H_ALLOC_COUNT) % ld64(h + H_STRESS_EVERY) == 0)) {
             _gc_work()
+        } else {
+            _pool_trim()    # pages the sweep emptied go back to the system a few at a time, cycle or no cycle
+            _set_limit()
         }
     }
 }
@@ -594,15 +600,21 @@ func _gc_alloc(size, atomic) {
         let pg = ld64((h + H_CLASS_LIST) + atomic * 256 + cls * 8)
         if (pg != 0) {
             let osz = ld64(pg + PG_OBJ)
-            let free = ld32(pg + PG_FREE)
+            let nfree = ld32(pg + PG_NFREE)
             let idx = ld32(pg + PG_BUMP)
-            if (free != 0) {
-                idx = free - 1
+            if (nfree != 0) {
+                # The free slots are the zero bytes of the page's used map below PG_BUMP; there are nfree of them,
+                # so the search ends. A sweep only clears bytes of that map: it does not touch the dead objects.
+                let used = ld64(pg + PG_USED)
+                idx = ld32(pg + PG_FREE)
+                while (ld8(used + idx) != 0) {
+                    idx++
+                }
+                st32(pg + PG_FREE, idx + 1)
+                st32(pg + PG_NFREE, nfree - 1)
                 let obj = ld64(pg + PG_BASE) + idx * osz
-                st32(pg + PG_FREE, ld32(obj))
-                st32(pg + PG_NFREE, ld32(pg + PG_NFREE) - 1)
                 memset(obj, 0, osz)    # a recycled object holds its old contents
-                st8(ld64(pg + PG_USED) + idx, 1)
+                st8(used + idx, 1)
                 if (ld64(h + H_MARKING) != 0) {
                     st8a(ld64(pg + PG_MARK) + idx, 1)    # allocated during a cycle: survives it
                 }
@@ -641,7 +653,7 @@ func _slow_gc_alloc(size, atomic) {
     let cls = ld8(addr_of("_class_of") + (n + 15) / 16)
     let head = (h + H_CLASS_LIST) + atomic * 256 + cls * 8
     let pg = ld64(head)
-    while (pg != 0 and ld32(pg + PG_FREE) == 0 and ld32(pg + PG_BUMP) >= ld32(pg + PG_NOBJS)) {
+    while (pg != 0 and ld32(pg + PG_NFREE) == 0 and ld32(pg + PG_BUMP) >= ld32(pg + PG_NOBJS)) {
         st8(pg + PG_IN_LIST, 0)
         pg = ld64(pg + PG_NEXT)
         st64(head, pg)
@@ -654,9 +666,13 @@ func _slow_gc_alloc(size, atomic) {
     }
     let osz = ld64(pg + PG_OBJ)
     let idx = 0
-    if (ld32(pg + PG_FREE) != 0) {
-        idx = ld32(pg + PG_FREE) - 1
-        st32(pg + PG_FREE, ld32(ld64(pg + PG_BASE) + idx * osz))
+    if (ld32(pg + PG_NFREE) != 0) {
+        let used = ld64(pg + PG_USED)
+        idx = ld32(pg + PG_FREE)
+        while (ld8(used + idx) != 0) {
+            idx++
+        }
+        st32(pg + PG_FREE, idx + 1)
         st32(pg + PG_NFREE, ld32(pg + PG_NFREE) - 1)
         memset(ld64(pg + PG_BASE) + idx * osz, 0, osz)    # a recycled object holds its old contents
     } else {
@@ -1144,8 +1160,10 @@ func _sweep_page(pg) {
     let base = ld64(pg + PG_BASE)
     let bump = ld32(pg + PG_BUMP)
     let live = 0
+    let nfree = 0
     for (let j = 0; j < bump; j++) {
         if (ld8(used + j) == 0) {
+            nfree++    # free since an earlier sweep and not handed out again
             continue
         }
         if (ld8(mark + j) != 0) {
@@ -1153,14 +1171,16 @@ func _sweep_page(pg) {
             live++
             continue
         }
+        # Dead: the slot is free once its byte in the used map is zero. The object itself is not touched here
+        # (the allocator clears it when it hands it out, and has to write it then anyway).
         st8(used + j, 0)
-        st32(base + j * osz, ld32(pg + PG_FREE))
+        nfree++
         if (ld64(h + H_VERIFY) != 0) {
-            memset(base + j * osz + 4, 221, osz - 4)    # a use after free then reads obvious garbage
+            memset(base + j * osz, 221, osz)    # a use after free then reads obvious garbage
         }
-        st32(pg + PG_FREE, j + 1)
-        st32(pg + PG_NFREE, ld32(pg + PG_NFREE) + 1)
     }
+    st32(pg + PG_FREE, 0)
+    st32(pg + PG_NFREE, nfree)
     st32(pg + PG_USED_COUNT, live)
     st64(h + H_LIVE_BYTES, ld64(h + H_LIVE_BYTES) + (live * osz))
     if (live == 0) {
@@ -1172,7 +1192,7 @@ func _sweep_page(pg) {
         st8(pg + PG_IN_LIST, 2)
         return 1
     }
-    if (ld32(pg + PG_FREE) != 0 or ld32(pg + PG_BUMP) < ld32(pg + PG_NOBJS)) {
+    if (nfree != 0 or ld32(pg + PG_BUMP) < ld32(pg + PG_NOBJS)) {
         let head = (h + H_CLASS_LIST) + ld8(pg + PG_ATOMIC) * 256 + ld32(pg + PG_CLS) * 8
         st64(pg + PG_NEXT, ld64(head))
         st64(head, pg)
@@ -1300,6 +1320,18 @@ func _now_ns() {
 # Gives the memory of the oldest empty pages back to the OS. The newest ones stay, as many as the
 # program can allocate before the next collection; a recycled page is cleared when it is reused.
 # At most TRIM_BATCH pages per call, so that a step of the collector stays short.
+# 1 when the pool holds empty pages beyond what is kept for reuse that have not been given back yet. Giving
+# them back used to happen only inside the steps of a cycle, so how much came back depended on how many steps
+# the sweep took; a sweep that does not touch dead objects takes few.
+func _pool_pending() {
+    let h = _heap()
+    let keep = ld64(h + H_THRESHOLD) / PAGE_SIZE
+    if (ld64(h + H_POOL_COUNT) > keep and ld64(h + H_POOL_COLD) < ld64(h + H_POOL_COUNT) - keep) {
+        return 1
+    }
+    return 0
+}
+
 func _pool_trim() {
     let h = _heap()
     let keep = ld64(h + H_THRESHOLD) / PAGE_SIZE

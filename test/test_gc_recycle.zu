@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# After a sweep, the free slots of a page are the zero bytes of its used map, and the allocator hands them out
+# again. An object put into such a slot must stay visible to the collector. These cases replace live objects
+# over many rounds, so that the objects that survive sit in recycled slots, and check every one at the end.
+# CASE objects in recycled slots survive later collections
+let live = []
+for (let i = 0; i < 20000; i++) {
+    append(live, ["a", i, "x{i}"])
+}
+let junk = 0
+for (let round = 0; round < 40; round++) {
+    for (let k = 0; k < 30000; k++) {
+        let g = [k, k, k, k]
+        junk += len(g)
+    }
+    for (let i = round % 7; i < 20000; i += 7) {
+        live[i] = ["a", i, "x{i}"]
+    }
+}
+let bad = 0
+for (let i = 0; i < 20000; i++) {
+    let r = live[i]
+    if (len(r) != 3 or r[0] != "a" or r[1] != i or r[2] != "x{i}") {
+        bad += 1
+    }
+}
+print("bad {bad} junk {junk}")
+# CASE strings and lists of different sizes share recycled pages
+let keep = []
+let total = 0
+for (let round = 0; round < 30; round++) {
+    for (let k = 0; k < 20000; k++) {
+        let s = "g{k}-{round}"
+        total += len(s)
+    }
+    for (let i = 0; i < 300; i++) {
+        append(keep, "keep{round}-{i}")
+        append(keep, [round, i, "n{i}"])
+    }
+}
+let bad = 0
+let at = 0
+for (let round = 0; round < 30; round++) {
+    for (let i = 0; i < 300; i++) {
+        if (keep[at] != "keep{round}-{i}") {
+            bad += 1
+        }
+        let r = keep[at + 1]
+        if (r[0] != round or r[1] != i or r[2] != "n{i}") {
+            bad += 1
+        }
+        at += 2
+    }
+}
+print("kept {len(keep)} bad {bad} total {total}")
