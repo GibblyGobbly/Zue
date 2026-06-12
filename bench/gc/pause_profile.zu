@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# pause_profile.zu: the delays the program itself sees, as a distribution. It builds a live set, then runs a
+# loop for a number of seconds and times every iteration with clock(). A normal iteration takes well under a
+# microsecond; a long one is a pause of any kind (collector step, throttle, page fault, scheduler). The
+# gaps go into a histogram, so p99, p99.9 and the maximum are measured, not guessed.
+#   pause_profile.zu <live MiB> <seconds> <mode>
+# modes:
+#   churn   allocate short-lived lists in the loop
+#   mutate  also store a fresh young list into an old row on every iteration (pointer writes into old objects)
+#   aged    like mutate, after the live set was rebuilt in rounds with objects of random sizes, so that
+#           the heap is fragmented
+let a = args()
+let live_mb = to_int(a[0])
+let seconds = to_int(a[1])
+let mode = a[2]
+
+let seed = 12345
+func next_rand() {
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    return seed
+}
+
+let live = []
+let objects = floor_div(live_mb * 1048576, 224)
+for (let i = 0; i < objects; i++) {
+    append(live, [i, i, i, [i]])
+}
+let n = len(live)
+print("live set: {n} rows")
+
+if (mode == "aged") {
+    for (let round = 0; round < 4; round++) {
+        for (let k = 0; k < floor_div(n, 3); k++) {
+            let idx = next_rand() % n
+            let kind = next_rand() % 3
+            if (kind == 0) {
+                let big = []
+                for (let j = 0; j < 4 + next_rand() % 40; j++) {
+                    append(big, j)
+                }
+                live[idx] = [idx, idx, idx, big]
+            } else if (kind == 1) {
+                live[idx] = [idx, idx, idx, "s{idx}-{round}-{next_rand() % 100000}"]
+            } else {
+                live[idx] = [idx, idx, idx, [idx]]
+            }
+        }
+    }
+    print("aged: 4 rounds of random replacement done")
+}
+
+let edges = [0.000001, 0.000002, 0.000005, 0.00001, 0.00002, 0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5]
+let counts = []
+for (let e = 0; e <= len(edges); e++) {
+    append(counts, 0)
+}
+let fast = 0
+let worst = 0.0
+let total = 0
+let sum = 0
+let start = clock()
+let prev = start
+let report_at = start + 30.0
+let interval_worst = 0.0
+let interval_over1ms = 0
+let mutate = mode != "churn"
+let i = 0
+while (true) {
+    let tmp = [i, i + 1, i + 2, i + 3]
+    sum += len(tmp)
+    if (mutate) {
+        let row = live[(i * 7919) % n]
+        row[3] = [i, i + 1]
+    }
+    let now = clock()
+    let gap = now - prev
+    prev = now
+    total += 1
+    if (gap < 0.000001) {
+        fast += 1
+    } else {
+        let b = 0
+        while (b < len(edges) and gap >= edges[b]) {
+            b += 1
+        }
+        counts[b] += 1
+        if (gap > worst) {
+            worst = gap
+        }
+        if (gap > interval_worst) {
+            interval_worst = gap
+        }
+        if (gap > 0.001) {
+            interval_over1ms += 1
+        }
+    }
+    if (now >= report_at) {
+        print("t={fixed(now - start, 0)}s iterations={total} interval_worst_ms={fixed(interval_worst * 1000.0, 2)} interval_over_1ms={interval_over1ms}")
+        interval_worst = 0.0
+        interval_over1ms = 0
+        report_at += 30.0
+    }
+    if (now - start >= float(seconds)) {
+        break
+    }
+    i += 1
+}
+print("iterations {total}, {fixed(float(total) / (prev - start) / 1000000.0, 2)} M/s")
+let targets = [0.5, 0.99, 0.999, 0.9999, 0.99999]
+let names = ["p50", "p99", "p99.9", "p99.99", "p99.999"]
+for (let t = 0; t < len(targets); t++) {
+    let need = float(total) * targets[t]
+    let cum = float(fast)
+    let label = "under 1 us"
+    if (cum < need) {
+        for (let b = 0; b <= len(edges); b++) {
+            cum += float(counts[b])
+            if (cum >= need) {
+                if (b < len(edges)) {
+                    label = "below {fixed(edges[b] * 1000000.0, 0)} us"
+                } else {
+                    label = "above 500000 us"
+                }
+                break
+            }
+        }
+    }
+    print("{names[t]}: {label}")
+}
+let over = 0
+for (let b = len(edges); b >= 0; b--) {
+    over += counts[b]
+    if (b > 0 and (edges[b - 1] == 0.0001 or edges[b - 1] == 0.001 or edges[b - 1] == 0.01 or edges[b - 1] == 0.1)) {
+        print("iterations over {fixed(edges[b - 1] * 1000.0, 1)} ms: {over}")
+    }
+}
+print("max {fixed(worst * 1000.0, 3)} ms")
+print("check {sum}")
