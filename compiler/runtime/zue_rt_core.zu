@@ -720,11 +720,13 @@ func _list_new(o, cap) {
     if (c < 4) {
         c = 4
     }
-    # A small list keeps its first items in the same object as its header: one allocation, not two. The
-    # items pointer then points into the object (the collector follows interior pointers). When the list
-    # outgrows this space _list_push moves the items to an object of their own.
+    # A small list whose size is known keeps its items in the same object as its header: one allocation, not
+    # two. The items pointer then points into the object (the collector follows interior pointers). When the
+    # list outgrows this space _list_push moves the items to an object of their own, and the space inside is
+    # dead weight. An empty list (cap 0) is one that will be filled by appending, and usually grows past the
+    # first items, so it keeps its items apart: a row of 8 appended items took 256 bytes inline against 176.
     let l = 0
-    if (16 * c <= LIST_INLINE_BYTES) {
+    if (cap != 0 and 16 * c <= LIST_INLINE_BYTES) {
         l = lv_alloc(L_SIZE + 16 * c)
         st64(l + L_ITEMS, l + L_SIZE)
     } else {

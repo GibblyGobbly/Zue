@@ -98,7 +98,7 @@ value in a stack slot and passes pointers to the runtime.
 | 3 | float | the bit pattern of a double |
 | 4 | char | the byte |
 | 5 | string | pointer to the string object (length and bytes) |
-| 6 | list | pointer to a list object: count, capacity and the pointer to the item cells. A list of up to 32 items keeps its cells in the same object, 32 bytes after its start; one that outgrows them moves its cells to an object of their own |
+| 6 | list | pointer to a list object: count, capacity and the pointer to the item cells. A list made with known contents (a literal, a slice) of up to 32 items keeps its cells in the same object, 32 bytes after its start; one that outgrows them moves its cells to an object of their own. An empty list that is filled by appending keeps its cells apart from the start |
 | 7 | map | pointer to a map object |
 | 8 | function | pointer to a function object: code, name, captured cells; native builtins use the same kind |
 | 9 | file | pointer to a file object |

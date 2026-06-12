@@ -790,3 +790,30 @@ Found on the way:
 What limits the allocation loop now: the throttle (about 320 to 350 ms of 1.54 s) and marking, 1.6 s of collector
 thread time for 13 cycles of a 1.5 GB live heap.
 
+## Sweep of heap sizes, 1 to 10 GiB (measured 2026-11-01, one run per row)
+
+The request is the argument of `bench/gc/live_heap.zu` and `alloc_only.zu` (200 bytes per row assumed; the real live data
+is about 1.2 times that). 20 million iterations, 23.7 GB machine with about 5 GB in use by other things. Old is the commit
+before this session's work (`4a389a9`), new is the build after the list change below.
+
+| Request | Loop | Old M/s | Old peak GB | New M/s | New peak GB | Speed-up | Worst GC pause |
+|---|---|---|---|---|---|---|---|
+| 1 GiB | allocation | 6.64 | 2.59 | 12.19 | 3.06 | 1.84x | 0.24 ms |
+| 1 GiB | string | 4.87 | 2.27 | 13.74 | 2.46 | 2.82x | 0.41 ms |
+| 2 GiB | allocation | 6.14 | 4.76 | 13.70 | 5.00 | 2.23x | 0.20 ms |
+| 2 GiB | string | 5.37 | 4.42 | 12.63 | 4.57 | 2.35x | 0.19 ms |
+| 4 GiB | allocation | 5.74 | 8.61 | 12.34 | 7.96 | 2.15x | 2.14 ms |
+| 4 GiB | string | 4.84 | 8.42 | 10.97 | 6.79 | 2.27x | 0.24 ms |
+| 6 GiB | allocation | 5.14 | 10.78 | 15.86 | 10.53 | 3.09x | 0.37 ms |
+| 6 GiB | string | 4.20 | 10.64 | 8.78 | 9.02 | 2.09x | 0.30 ms |
+| 8 GiB | allocation | 3.45 | 12.07 | 5.88 | 12.73 | 1.70x | 0.60 ms |
+| 8 GiB | string | 3.78 | 12.35 | 9.49 | 12.14 | 2.51x | 0.26 ms |
+| 10 GiB | allocation | 1.89 | 12.62 | 2.60 | 12.93 | 1.38x | 0.58 ms |
+| 10 GiB | string | 2.13 | 12.85 | 3.02 | 12.70 | 1.42x | 0.52 ms |
+
+The first sweep showed the new build slower than the old one at 10 GiB (0.86 against 1.89 M/s) with 2 GB more peak
+memory. The live data at the end was 15.3 GB against 12.4: the benchmark fills each row by appending 8 items, and a
+list that outgrows the room inside its own object leaves that room dead (256 bytes a row against 176). An empty list now
+keeps its items apart, as before; only lists made with known contents (literals, slices) share their object.
+Above about 8 GiB both builds are limited by the collector and by the memory of the machine (peak 12 to 13 GB of 23.7).
+
