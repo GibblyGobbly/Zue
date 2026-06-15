@@ -817,3 +817,58 @@ list that outgrows the room inside its own object leaves that room dead (256 byt
 keeps its items apart, as before; only lists made with known contents (literals, slices) share their object.
 Above about 8 GiB both builds are limited by the collector and by the memory of the machine (peak 12 to 13 GB of 23.7).
 
+## Pause distributions, adversarial workloads, cost against no collector, blue threads (measured 2026-11-01)
+
+Program `bench/gc/pause_profile.zu` times every iteration of a loop with `clock()` (a normal one takes under a
+microsecond) and keeps a histogram; `blue_contention.zu` does the same with many parked blue threads. One run each, on
+the 23.7 GB machine with about 5 GB used by other things. The longest run was 15 minutes. Hours were not tried.
+
+| Run | Live data | Loop | Throughput | p99.9 | Iterations over 1 ms | Longest delay | Collector's longest step | Peak memory (÷ live) |
+|---|---|---|---|---|---|---|---|---|
+| Churn, 5 min | 10.7 GB | short-lived lists | 2.76 M/s | below 200 us | 2 | 1.79 ms | 0.56 ms | 11.9 GB (1.12x) |
+| Pointer writes into old rows, 5 min | 9.9 GB | a fresh list stored into an old row each iteration | 0.99 M/s | below 200 us | 5 | 3.09 ms | 2.12 ms | 10.6 GB (1.07x) |
+| Aged heap, 6 min | 7.6 GB | rows rebuilt in 4 rounds with random sizes, then as above | 0.57 M/s | below 200 us | 0 | 0.74 ms | 0.73 ms | 11.7 GB (1.53x) |
+| Pointer writes, 15 min | 7.1 GB | as above | 3.95 M/s | below 2 us | 1 | 1.64 ms | 1.64 ms | 9.4 GB (1.33x) |
+
+What these show:
+
+- The worst case is not under a millisecond: 1.6 to 3.1 ms in three of four runs, 1 to 5 events in 170 million to
+  3.6 billion iterations. The cause of the 1 to 3 ms steps (the collector's own counter shows them) is not known yet.
+- The pauses that are common are the throttle. When the program allocates faster than the collector marks, each collector
+  step holds the program back for 100 us. In the three big-heap runs the program spent 66 to 73 percent of the run
+  in that throttle (217 of 307 s, 201 of 304 s, 261 of 358 s) and ran at 0.6 to 2.8 M/s where the same loop runs at 15
+  M/s on a small heap. Between 0.26 and 1.4 percent of iterations were over 100 us in the big runs (0.02 percent in
+  the 4 GiB run, which was throttled 8 percent of the time). That is the throughput that buys the small pauses.
+- Allocation faster than the collector is answered by throttling, never by a long pause or by letting memory run away.
+  Peak memory stayed within 1.07 to 1.53 times the live data.
+- No stop-the-world compaction exists: the collector does not move objects, so fragmentation costs memory, not pauses.
+  The aged heap needed 1.53 times the live data against 1.07 to 1.12 for the others, and its longest delay was the
+  smallest. Pages that are completely empty are given back; partly used ones are not.
+- Over the 15 minutes the worst delay of each 30 s interval did not climb: 0.63, 1.64, 0.54 ms for the three thirds of
+  the run (median interval 0.32 ms).
+
+Cost against a build that never collects (`alloc_only`, 20 million iterations):
+
+| Request | No collector | Collector | Throughput cost | Peak ÷ live data |
+|---|---|---|---|---|
+| 1 GiB | 28.10 M/s, 4.36 GB | 13.60 M/s, 2.89 GB (1.85 live) | 52% | 1.56x |
+| 2 GiB | 27.67 M/s, 6.09 GB | 12.05 M/s, 4.97 GB (3.38 live) | 56% | 1.47x |
+| 4 GiB | 28.35 M/s, 9.41 GB | 12.21 M/s, 7.30 GB (6.28 live) | 57% | 1.16x |
+
+The collector takes more than half of the time of this loop; the loop with no collector is about 2.2 times faster.
+
+Blue threads parked at depth 50 and woken in turn, 1 GiB live data, 40 s:
+
+| Threads | Longest delay | Iterations over 1 ms | Collector's cycle start |
+|---|---|---|---|
+| 50 (depth 20, 5 s) | 0.70 ms | 0 | 0.20 ms |
+| 1,000 | 4.7 ms | 63 | 4.7 ms |
+| 5,000 | 21.9 ms | 62 | 21.9 ms |
+| 20,000 | 80.1 ms | 58 | 80.0 ms |
+
+The stacks of the threads that are away are scanned in full at the start of every cycle, on the program thread, so the
+start grows with their number (about 4 us a thread at this depth). This breaks the sub-millisecond claim for a program
+with thousands of blue threads. The fix is the one used for the `unsafe` buffers: scan the parked stacks in slices,
+and scan a thread's stack at once when it is about to run before its turn has come. There are no safepoints to wait for:
+the program thread does its own collector steps, and the marker is a separate thread.
+

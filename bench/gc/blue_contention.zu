@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# blue_contention.zu: delays the main thread sees while many blue threads are parked in the middle of deep
+# calls and are woken in turn. The collector scans the stacks of the threads that are away at the start of
+# every cycle, so the cost grows with their number and their depth.
+#   blue_contention.zu <threads> <stack depth> <seconds> <live MiB>
+let a = args()
+let nthreads = to_int(a[0])
+let depth = to_int(a[1])
+let seconds = to_int(a[2])
+let live_mb = to_int(a[3])
+
+func park(n, ch) {
+    if (n > 0) {
+        return park(n - 1, ch) + 1
+    }
+    let got = 0
+    while (true) {
+        let v = recv(ch)
+        if (v < 0) {
+            return got
+        }
+        let tmp = [v, v, v, v]
+        got += len(tmp)
+    }
+    return got
+}
+
+let live = []
+for (let i = 0; i < floor_div(live_mb * 1048576, 224); i++) {
+    append(live, [i, i, i, [i]])
+}
+let chans = []
+let threads = []
+let t0 = clock()
+for (let k = 0; k < nthreads; k++) {
+    let ch = channel()
+    append(chans, ch)
+    append(threads, spawn(park, depth, ch))
+}
+yield()
+print("{nthreads} threads parked at depth {depth}, live set {len(live)} rows, spawn took {fixed(clock() - t0, 2)} s")
+
+let edges = [0.000001, 0.00001, 0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.05, 0.1]
+let counts = []
+for (let e = 0; e <= len(edges); e++) {
+    append(counts, 0)
+}
+let worst = 0.0
+let total = 0
+let sum = 0
+let start = clock()
+let prev = start
+let i = 0
+while (true) {
+    let tmp = [i, i + 1, i + 2, i + 3]
+    sum += len(tmp)
+    if (i % 2000 == 0) {
+        send(chans[(i / 2000) % nthreads], i)
+        yield()
+    }
+    let now = clock()
+    let gap = now - prev
+    prev = now
+    total += 1
+    let b = 0
+    while (b < len(edges) and gap >= edges[b]) {
+        b += 1
+    }
+    counts[b] += 1
+    if (gap > worst) {
+        worst = gap
+    }
+    if (now - start >= float(seconds)) {
+        break
+    }
+    i += 1
+}
+print("iterations {total}, {fixed(float(total) / (prev - start) / 1000000.0, 2)} M/s")
+let over = 0
+for (let b = len(edges); b >= 1; b--) {
+    over += counts[b]
+    print("iterations at or over {fixed(edges[b - 1] * 1000.0, 3)} ms: {over}")
+}
+print("max {fixed(worst * 1000.0, 3)} ms")
+for (let k = 0; k < nthreads; k++) {
+    send(chans[k], -1)
+}
+let finished = 0
+for (let k = 0; k < nthreads; k++) {
+    finished += wait(threads[k])
+}
+print("check {sum} {finished}")
