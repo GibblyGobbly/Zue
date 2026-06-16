@@ -866,9 +866,19 @@ Blue threads parked at depth 50 and woken in turn, 1 GiB live data, 40 s:
 | 5,000 | 21.9 ms | 62 | 21.9 ms |
 | 20,000 | 80.1 ms | 58 | 80.0 ms |
 
-The stacks of the threads that are away are scanned in full at the start of every cycle, on the program thread, so the
-start grows with their number (about 4 us a thread at this depth). This breaks the sub-millisecond claim for a program
-with thousands of blue threads. The fix is the one used for the `unsafe` buffers: scan the parked stacks in slices,
-and scan a thread's stack at once when it is about to run before its turn has come. There are no safepoints to wait for:
-the program thread does its own collector steps, and the marker is a separate thread.
+The stacks of the threads that are away were scanned in full at the start of every cycle, on the program thread, so the
+start grew with their number (about 4 us a thread at this depth). That is fixed: a cycle now scans the running
+thread's stack at its start and the stacks of the others in slices (`_blue_scan_step`, 256 KB a step, the same budget
+as the `unsafe` buffers). A thread that runs again before the slices reach it is scanned first (`_blue_scan_resumed`),
+because it is about to change its stack and the snapshot has to include what the stack holds now. The cycle cannot end
+while the slices are on. Same runs after the change (test case 18 fails 3 of 3 without the scan on resume):
+
+| Threads | Longest delay | Iterations over 1 ms | Collector's cycle start |
+|---|---|---|---|
+| 1,000 | 0.41 ms | 0 | 0.024 ms |
+| 5,000 | 0.53 ms | 0 | 0.026 ms |
+| 20,000 | 0.45 ms | 0 | 0.025 ms |
+
+There are no safepoints to wait for: the program thread does its own collector steps, and the marker is a separate
+thread.
 

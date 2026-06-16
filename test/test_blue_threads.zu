@@ -195,6 +195,54 @@ for (let id = 0; id < 20; id++) {
 }
 print(total)
 
+# CASE a thread that runs before the collector reached its stack hands on what only it held
+let shelf = []
+func deep(id, n) {
+    if (n == 0) {
+        let mine = [id, "only{id}"]
+        yield()
+        append(shelf, mine)
+        mine = [0, "gone"]
+        let junk = []
+        for (let i = 0; i < 20; i++) {
+            append(junk, "j{i}")
+        }
+        yield()
+        return id
+    }
+    let pad = n * 2
+    return deep(id, n - 1) + pad - pad
+}
+func start(id) {
+    return deep(id, 150)
+}
+let ds = []
+for (let id = 0; id < 400; id++) {
+    append(ds, spawn(start, id))
+}
+let waste = []
+for (let i = 0; i < 30000; i++) {
+    append(waste, [i, "w{i}"])
+    if (len(waste) > 200) {
+        waste = []
+    }
+    if (i % 3000 == 0) {
+        yield()
+    }
+}
+let sum = 0
+for (let id = 0; id < 400; id++) {
+    sum += wait(ds[id])
+}
+let ok = 0
+for (let i = 0; i < len(shelf); i++) {
+    let row = shelf[i]
+    if (row[1] == "only{row[0]}") {
+        ok += 1
+    }
+}
+print(sum, len(shelf), ok)
+
 # CASE blocking inside an unsafe block is an error
 func blocked() {
     yield()

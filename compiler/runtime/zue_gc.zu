@@ -1039,14 +1039,20 @@ func lv_gc_is_marked(p) {
 # Kept out of line, with every callee-saved register spilled into its frame, so that
 # values held only in registers are found by the stack scan.
 # Marks what the stack and the registers point to, without following it.
-func _scan_stack() {
+func _scan_stack_cur() {
     let h = _heap()
     spill_regs()
     let sp = stack_ptr()
     if (ult(sp, ld64(h + H_STACK_BASE))) {
         _scan_range(sp, ld64(h + H_STACK_BASE))
     }
-    _blue_scan_parked()    # the stacks of the blue threads that are away
+}
+
+# The verifier scans every stack at once. A cycle scans the stacks of the blue threads that are away in
+# steps (_blue_scan_step).
+func _scan_stack() {
+    _scan_stack_cur()
+    _blue_scan_parked()
 }
 
 # Marks what the data segment and the registered root ranges point to, without following it.
@@ -1285,7 +1291,9 @@ const H_RS_ON = 21744           # 1 while the root ranges from unsafe code are b
 const H_RS_I = 21752           # the range being scanned
 const H_RS_POS = 21760         # where in that range the scan has reached
 const ROOT_STEP_WORDS = 32768  # words of root ranges scanned in one step of the collector (256 KB)
-const HEAP_SIZE = 21768
+const H_BS_ON = 21768           # 1 while the stacks of the blue threads that are away are being scanned in steps (program thread only)
+const H_BS_CUR = 21776          # the next thread whose stack is to be scanned
+const HEAP_SIZE = 21784
 # The block: the chunks the helper has made ready (mapped, hinted and touched), and what the two threads share.
 const PRE_SLOTS = 16
 const PRE_RING = 0             # PRE_SLOTS chunk addresses
@@ -1428,7 +1436,8 @@ func _gc_begin() {
         st64(h + H_RS_POS, ld64(ld64(h + H_ROOTS)))
         st64(h + H_RS_ON, 1)
     }
-    _scan_stack()
+    _scan_stack_cur()
+    _blue_begin_scan()
     # The roots are the snapshot. From here the GC thread owns the mark stack.
     st64(h + H_CYCLE_BYTES, ld64(h + H_BYTES_SINCE_GC))
     st64(h + H_CYCLE_T0, _now_ns())
@@ -1501,7 +1510,7 @@ func _cycle_poll() {
     _hand_over()
     let done = 0
     let slow = 0
-    if (ld64(h + H_GCT_STATE) == 2 and ld64(h + H_SHARED_N) == 0 and ld64(h + H_RS_ON) == 0) {
+    if (ld64(h + H_GCT_STATE) == 2 and ld64(h + H_SHARED_N) == 0 and ld64(h + H_RS_ON) == 0 and ld64(h + H_BS_ON) == 0) {
         st64(h + H_GCT_STATE, 0)    # the GC thread sleeps again, so the marks are the program thread's to use
         done = 1
     } else {
@@ -1573,6 +1582,7 @@ func _gc_work() {
         }
         if (ld64(h + H_MARKING) != 0) {
             _root_step()
+            _blue_scan_step()
         }
         if (ld64(h + H_MARKING) != 0 and _cycle_poll() != 0) {
             let t1 = _now_ns()

@@ -39,7 +39,8 @@ const CO_JOINER = 160    # the thread that waits for this one to finish
 const CO_ANEXT = 168     # list of all threads that are not done
 const CO_APREV = 176
 const CO_WOKE = 184      # 1 when a wait ended because the channel was closed
-const CO_SIZE = 192
+const CO_SCANNED = 192   # the number of the collection in which the collector scanned this stack
+const CO_SIZE = 200
 
 const CO_NEW = 0
 const CO_READY = 1
@@ -151,6 +152,7 @@ func _blue_save(co) {
 }
 
 func _blue_load(co) {
+    _blue_scan_resumed(co)
     let depth = ld64(co + CO_DEPTH)
     st32(addr_of("lv_depth"), depth)
     st64(addr_of("lv_pos"), ld64(co + CO_POS))
@@ -218,6 +220,9 @@ func _blue_main() {
     if (n != 0) {
         _pw(n + CO_APREV, p)
     }
+    if (ld64(addr_of("_heap0") + H_BS_CUR) == co) {
+        st64(addr_of("_heap0") + H_BS_CUR, n)    # the stepwise scan has not reached it, and never will
+    }
     _pw(co + CO_NEXT, g_blue_zombie)
     g_blue_zombie = co
     g_blue_count -= 1
@@ -236,6 +241,64 @@ func _blue_scan_parked() {
         }
         co = ld64(co + CO_ANEXT)
     }
+}
+
+# Shades what the stack of a thread that is away points to, and the registers it saved, once per
+# collection. Returns the words looked at.
+func _blue_shade_stack(co) {
+    let h = addr_of("_heap0")
+    let epoch = ld64(h + H_COLLECTIONS)
+    if (co == g_blue_cur or ld64(co + CO_SP) == 0 or ld64(co + CO_STATE) == CO_DONE or ld64(co + CO_SCANNED) == epoch) {
+        return 0
+    }
+    st64(co + CO_SCANNED, epoch)
+    let lo = ld64(co + CO_SP)
+    let hi = ld64(co + CO_HI)
+    _shade_range(lo, hi)
+    _shade_range(ld64(co + CO_UC), ld64(co + CO_UC) + UC_SIZE)
+    return (hi - lo) / 8 + UC_SIZE / 8
+}
+
+# At the start of a cycle: the running thread's stack has just been scanned; the others come in steps.
+func _blue_begin_scan() {
+    let h = addr_of("_heap0")
+    if (g_blue_cur != 0) {
+        st64(g_blue_cur + CO_SCANNED, ld64(h + H_COLLECTIONS))
+    }
+    st64(h + H_BS_CUR, g_blue_all)
+    if (g_blue_all != 0) {
+        st64(h + H_BS_ON, 1)
+    }
+}
+
+# One step: a bounded number of words of the stacks of the threads that are away. The cycle cannot end
+# while this is on.
+func _blue_scan_step() {
+    let h = addr_of("_heap0")
+    if (ld64(h + H_BS_ON) == 0) {
+        return 0
+    }
+    let budget = ROOT_STEP_WORDS
+    let co = ld64(h + H_BS_CUR)
+    while (co != 0 and budget > 0) {
+        budget -= _blue_shade_stack(co) + 1
+        co = ld64(co + CO_ANEXT)
+        st64(h + H_BS_CUR, co)
+    }
+    if (co == 0) {
+        st64(h + H_BS_ON, 0)
+    }
+    return 0
+}
+
+# A thread that runs again before the step has reached it is scanned first: it is about to change its
+# stack, and the cycle's snapshot has to include what the stack holds now.
+func _blue_scan_resumed(co) {
+    let h = addr_of("_heap0")
+    if (ld64(h + H_BS_ON) != 0) {
+        _blue_shade_stack(co)
+    }
+    return 0
 }
 
 func _arg_thread(self_p, argv, i) {
