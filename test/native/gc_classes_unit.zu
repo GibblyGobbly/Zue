@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Unit test for the small-object size classes of the collector (compiler/runtime/zue_gc.zu), compiled
+# by test/native/run.sh. Every allocation asks for one byte more than the caller wants, so that a
+# pointer just past the end stays inside the object. A request of exactly 16 * 2^k bytes (the item
+# array of a list) must not be pushed into a class far above it.
+
+extern("printf", "i32", "ptr,...")
+
+space("lv_frames", 2400072)    # the collector skips this area when it scans the data segment
+
+let failures = 0
+let checks = 0
+
+func expect(label, got, want) {
+    checks += 1
+    if (got != want) {
+        failures += 1
+        printf(cstr("[FAIL] %s: got %ld, want %ld\n"), label, got, want)
+    }
+}
+
+# The collector calls into the data and blue thread runtimes; this test links only the collector, so these are
+# stand-ins for a program without those parts.
+func lv_data_gc_hook() {
+    return 0
+}
+
+func _blue_scan_parked() {
+    return 0
+}
+
+func _blue_begin_scan() {
+    return 0
+}
+
+func _blue_scan_step() {
+    return 0
+}
+
+func slot_size(n) {
+    lv_gc_start()
+    let p = lv_alloc(n)
+    let idx = stack_buf(8)
+    let pg = _page_find(p, idx)
+    return ld64(pg + PG_OBJ)
+}
+
+func main() {
+    expect("24 bytes (a list header)", slot_size(24), 32)
+    expect("63 bytes", slot_size(63), 64)
+    expect("64 bytes", slot_size(64), 80)
+    expect("128 bytes (8 list items)", slot_size(128), 144)
+    expect("256 bytes (16 list items)", slot_size(256), 272)
+    expect("512 bytes", slot_size(512), 528)
+    expect("1024 bytes", slot_size(1024), 1040)
+    expect("2048 bytes", slot_size(2048), 2064)
+    expect("4096 bytes", slot_size(4096), 4112)
+    expect("8192 bytes", slot_size(8192), 8208)
+    expect("3000 bytes", slot_size(3000), 3072)
+    expect("32751 bytes", slot_size(32751), 32752)
+    if (failures != 0) {
+        printf(cstr("%ld of %ld checks failed\n"), failures, checks)
+        return 1
+    }
+    printf(cstr("[OK] %ld size class checks passed\n"), checks)
+    return 0
+}

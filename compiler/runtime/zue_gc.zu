@@ -75,7 +75,7 @@ const PAGE_SIZE = 65536
 const MAX_SMALL = 32752
 const MIN_THRESHOLD = 16777216
 const CHUNK_SIZE = 2097152    # small-object pages are cut from chunks of this size (32 pages)
-const NCLASSES = 31
+const NCLASSES = 38
 const SPAN_CACHE_SLOTS = 512
 const TRIM_BATCH = 16         # empty pages given back to the OS per collector step
 const CHUNK_BYTES = 4096      # a larger object is scanned in pieces of this size
@@ -83,7 +83,7 @@ const STEP_BYTES = 8192       # bytes the program allocates between two steps
 const SWEEP_STEP_NS = 50000   # time an incremental sweep step may take
 const TRIM_BYTES = 1048576    # cached large-object memory given back per call of _cache_trim
 
-table("_class_sizes", "i32", 16, 32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768, 1024, 1280, 1536, 2048, 3072, 4096, 6144, 8192, 10920, 13104, 16368, 21840, 32752)
+table("_class_sizes", "i32", 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 192, 224, 256, 272, 320, 384, 448, 512, 528, 640, 768, 1024, 1040, 1280, 1536, 2048, 2064, 3072, 4096, 4112, 6144, 8192, 8208, 10920, 13104, 16368, 21840, 32752)
 space("_class_of", 2056)       # u8[MAX_SMALL / 16 + 1]
 
 # State of the collector: one block of 64-bit fields (and two tables) that the functions reach
@@ -597,7 +597,7 @@ func _gc_alloc(size, atomic) {
     let n = size + 1    # keeps a pointer just past the end inside the object
     if (ld64(h + H_SETUP_DONE) != 0 and ule(n, MAX_SMALL) and ld64(h + H_BYTES_SINCE_GC) <= ld64(h + H_LIMIT)) {
         let cls = ld8(addr_of("_class_of") + (n + 15) / 16)
-        let pg = ld64((h + H_CLASS_LIST) + atomic * 256 + cls * 8)
+        let pg = ld64((h + H_CLASS_LIST) + atomic * 320 + cls * 8)
         if (pg != 0) {
             let osz = ld64(pg + PG_OBJ)
             let nfree = ld32(pg + PG_NFREE)
@@ -651,7 +651,7 @@ func _slow_gc_alloc(size, atomic) {
         return _alloc_large(n, atomic)
     }
     let cls = ld8(addr_of("_class_of") + (n + 15) / 16)
-    let head = (h + H_CLASS_LIST) + atomic * 256 + cls * 8
+    let head = (h + H_CLASS_LIST) + atomic * 320 + cls * 8
     let pg = ld64(head)
     while (pg != 0 and ld32(pg + PG_NFREE) == 0 and ld32(pg + PG_BUMP) >= ld32(pg + PG_NOBJS)) {
         st8(pg + PG_IN_LIST, 0)
@@ -1135,7 +1135,7 @@ func _pool_push(pg) {
 func _sweep_begin() {
     let h = _heap()
     st64(h + H_LIVE_BYTES, 0)
-    memset((h + H_CLASS_LIST), 0, 512)
+    memset((h + H_CLASS_LIST), 0, 640)
     st64(h + H_SWEEP_EPOCH, ld64(h + H_SWEEP_EPOCH) + 1)
     st64(h + H_SWEEP_I, 0)
     st64(h + H_SWEEP_KEEP, 0)
@@ -1199,7 +1199,7 @@ func _sweep_page(pg) {
         return 1
     }
     if (nfree != 0 or ld32(pg + PG_BUMP) < ld32(pg + PG_NOBJS)) {
-        let head = (h + H_CLASS_LIST) + ld8(pg + PG_ATOMIC) * 256 + ld32(pg + PG_CLS) * 8
+        let head = (h + H_CLASS_LIST) + ld8(pg + PG_ATOMIC) * 320 + ld32(pg + PG_CLS) * 8
         st64(pg + PG_NEXT, ld64(head))
         st64(head, pg)
         st8(pg + PG_IN_LIST, 1)
@@ -1241,10 +1241,61 @@ func _sweep_some(budget_ns, max_pages) {
     return 0
 }
 
+# ZUE_RT_GC_STATS=3: after each sweep, where the heap's bytes are: per size class the pages, the slots
+# in use and the slots free, and the totals for large objects and pooled empty pages.
+func _census() {
+    let h = _heap()
+    let acc = calloc(NCLASSES * 2 + 8, 8)
+    if (acc == 0) {
+        return 0
+    }
+    let large_n = 0
+    let large_b = 0
+    let pooled = 0
+    for (let i = 0; i < ld64(h + H_ALL_COUNT); i++) {
+        let pg = ld64(ld64(h + H_ALL_PAGES) + i * 8)
+        if (ld8(pg + PG_LARGE) != 0) {
+            large_n++
+            large_b += ld64(pg + PG_SPAN)
+            continue
+        }
+        if (ld8(pg + PG_IN_LIST) == 2) {
+            pooled++
+            continue
+        }
+        let c = ld32(pg + PG_CLS)
+        st64(acc + c * 16, ld64(acc + c * 16) + 1)
+        st64(acc + c * 16 + 8, ld64(acc + c * 16 + 8) + ld32(pg + PG_USED_COUNT))
+    }
+    let buf = stack_buf(200)
+    let total_pages = 0
+    let total_live = 0
+    for (let c = 0; c < NCLASSES; c++) {
+        let np = ld64(acc + c * 16)
+        if (np == 0) {
+            continue
+        }
+        let used = ld64(acc + c * 16 + 8)
+        let sz = _class_size(c)
+        let slots = np * (PAGE_SIZE / sz)
+        let n = snprintf(buf, 200, cstr("ZUE_RT_GC_CENSUS,class %d,size %d,%llu pages,%llu slots in use,%llu slots free,%llu%% of the page bytes in use\n"), c, sz, np, used, slots - used, used * sz * 100 / (np * PAGE_SIZE))
+        write(2, buf, n)
+        total_pages += np
+        total_live += used * sz
+    }
+    let n2 = snprintf(buf, 200, cstr("ZUE_RT_GC_CENSUS,small pages %llu (%llu MiB), live in them %llu MiB, large objects %llu (%llu MiB), pooled empty pages %llu\n"), total_pages, total_pages * PAGE_SIZE / 1048576, total_live / 1048576, large_n, large_b / 1048576, pooled)
+    write(2, buf, n2)
+    free(acc)
+    return 0
+}
+
 func _sweep_end() {
     let h = _heap()
     st64(h + H_ALL_COUNT, ld64(h + H_SWEEP_KEEP))
     st64(h + H_SWEEPING, 0)
+    if (ld64(h + H_STATS) == 3) {
+        _census()
+    }
 }
 
 func _cpu_ns() {
@@ -1255,45 +1306,45 @@ func _cpu_ns() {
 
 const H_MSTACK_GROW = 424      # how often the mark stack was enlarged
 const H_STATS = 432            # 1 when ZUE_RT_GC_STATS is set
-const H_CLASS_LIST = 440    # Page*[2][32]: pages with room, per [atomic][class]
-const H_SPAN_CACHE = 952    # SpanSlot[512] { base, span, stamp, touched }: freed large spans kept for reuse
+const H_CLASS_LIST = 440    # Page*[2][40]: pages with room, per [atomic][class]
+const H_SPAN_CACHE = 1080    # SpanSlot[512] { base, span, stamp, touched }: freed large spans kept for reuse
 # The GC thread. Everything below is guarded by H_MUTEX except H_LOCAL_BUF and H_LOCAL_N,
 # which only the program thread touches, and H_IDX_GC, which only the thread that marks uses.
-const H_GCT_STATE = 17336      # 0: no cycle (the GC thread sleeps), 1: marking, 2: its mark stack is empty and it waits
-const H_IDX_GC = 17352         # object index set by _page_find for the marking thread
-const H_SHARED_N = 17360       # items the program thread has handed over and the GC thread has not taken yet
-const H_SHARED_CAP = 17368
-const H_SHARED_BUF = 17376     # MarkItem { p, n }
-const H_LOCAL_N = 17384        # items waiting in H_LOCAL_BUF
-const H_CYCLE_BYTES = 17392    # H_BYTES_SINCE_GC when the cycle began
-const H_SLOW_US = 17400        # ZUE_RT_GC_SLOW: microseconds the GC thread sleeps after each piece of marking (to widen races in tests)
-const H_GCT_NS = 17408         # nanoseconds the GC thread spent marking
-const H_MUTEX = 17416          # pthread_mutex_t, 40 bytes, valid when zero filled
-const H_COND_GC = 17456        # pthread_cond_t, 48 bytes: wakes the GC thread
-const H_COND_DONE = 17504      # pthread_cond_t: the GC thread has run out of work
-const H_LOCAL_BUF = 17552      # MarkItem[LOCAL_CAP]
+const H_GCT_STATE = 17464      # 0: no cycle (the GC thread sleeps), 1: marking, 2: its mark stack is empty and it waits
+const H_IDX_GC = 17480         # object index set by _page_find for the marking thread
+const H_SHARED_N = 17488       # items the program thread has handed over and the GC thread has not taken yet
+const H_SHARED_CAP = 17496
+const H_SHARED_BUF = 17504     # MarkItem { p, n }
+const H_LOCAL_N = 17512        # items waiting in H_LOCAL_BUF
+const H_CYCLE_BYTES = 17520    # H_BYTES_SINCE_GC when the cycle began
+const H_SLOW_US = 17528        # ZUE_RT_GC_SLOW: microseconds the GC thread sleeps after each piece of marking (to widen races in tests)
+const H_GCT_NS = 17536         # nanoseconds the GC thread spent marking
+const H_MUTEX = 17544          # pthread_mutex_t, 40 bytes, valid when zero filled
+const H_COND_GC = 17584        # pthread_cond_t, 48 bytes: wakes the GC thread
+const H_COND_DONE = 17632      # pthread_cond_t: the GC thread has run out of work
+const H_LOCAL_BUF = 17680      # MarkItem[LOCAL_CAP]
 const LOCAL_CAP = 256
 const GCT_BATCH = 16384        # words the GC thread marks before it looks at what the program thread handed over
 const THROTTLE_NS_STEP = 100000  # time a collector step of a program that allocates too fast is held back
-const H_CYCLE_T0 = 21648       # when the running cycle began
-const H_CYCLE_MAX = 21656      # the longest cycle from its start to final marks, in nanoseconds
-const H_CYCLE_GCT0 = 21664     # H_GCT_NS when the running cycle began
-const H_CYCLE_COST = 21672     # the pacer's measure of a cycle: nanoseconds from its start to the end of its sweep, per MiB of live data
-const H_THROTTLE_CALL = 21680  # nanoseconds the running collector step has slept to slow the program down
-const H_THROTTLE_NS = 21688    # nanoseconds slept in all steps
-const H_THROTTLE_N = 21696     # steps that slept
-const H_PAUSE_MAX_SLEEP = 21704  # of the longest pause, the nanoseconds that were the throttle's sleep
-const H_THROTTLE_MAX = 21712   # the longest single sleep
-const H_LAST_END = 21720      # when the last cycle ended
-const H_ALLOC_RATE = 21728     # the pacer's measure of the program: bytes allocated per millisecond
-const H_PRE = 21736            # the helper thread's block (calloc, so the collector never scans it); 0 when no helper runs
-const H_RS_ON = 21744           # 1 while the root ranges from unsafe code are being scanned in steps (program thread only)
-const H_RS_I = 21752           # the range being scanned
-const H_RS_POS = 21760         # where in that range the scan has reached
+const H_CYCLE_T0 = 21776       # when the running cycle began
+const H_CYCLE_MAX = 21784      # the longest cycle from its start to final marks, in nanoseconds
+const H_CYCLE_GCT0 = 21792     # H_GCT_NS when the running cycle began
+const H_CYCLE_COST = 21800     # the pacer's measure of a cycle: nanoseconds from its start to the end of its sweep, per MiB of live data
+const H_THROTTLE_CALL = 21808  # nanoseconds the running collector step has slept to slow the program down
+const H_THROTTLE_NS = 21816    # nanoseconds slept in all steps
+const H_THROTTLE_N = 21824     # steps that slept
+const H_PAUSE_MAX_SLEEP = 21832  # of the longest pause, the nanoseconds that were the throttle's sleep
+const H_THROTTLE_MAX = 21840   # the longest single sleep
+const H_LAST_END = 21848      # when the last cycle ended
+const H_ALLOC_RATE = 21856     # the pacer's measure of the program: bytes allocated per millisecond
+const H_PRE = 21864            # the helper thread's block (calloc, so the collector never scans it); 0 when no helper runs
+const H_RS_ON = 21872           # 1 while the root ranges from unsafe code are being scanned in steps (program thread only)
+const H_RS_I = 21880           # the range being scanned
+const H_RS_POS = 21888         # where in that range the scan has reached
 const ROOT_STEP_WORDS = 32768  # words of root ranges scanned in one step of the collector (256 KB)
-const H_BS_ON = 21768           # 1 while the stacks of the blue threads that are away are being scanned in steps (program thread only)
-const H_BS_CUR = 21776          # the next thread whose stack is to be scanned
-const HEAP_SIZE = 21784
+const H_BS_ON = 21896           # 1 while the stacks of the blue threads that are away are being scanned in steps (program thread only)
+const H_BS_CUR = 21904          # the next thread whose stack is to be scanned
+const HEAP_SIZE = 21912
 # The block: the chunks the helper has made ready (mapped, hinted and touched), and what the two threads share.
 const PRE_SLOTS = 16
 const PRE_RING = 0             # PRE_SLOTS chunk addresses
@@ -1712,6 +1763,9 @@ func lv_gc_start() {
         st64(h + H_STATS, 1)
         if (ld8(getenv(cstr("ZUE_RT_GC_STATS"))) == 50) {
             st64(h + H_STATS, 2)    # "2": also one line per cycle
+        }
+        if (ld8(getenv(cstr("ZUE_RT_GC_STATS"))) == 51) {
+            st64(h + H_STATS, 3)    # "3": also a census of the heap after each sweep
         }
         atexit(fn_addr("_gc_report"))
     }
