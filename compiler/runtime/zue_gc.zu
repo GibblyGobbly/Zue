@@ -77,7 +77,8 @@ const MIN_THRESHOLD = 16777216
 const CHUNK_SIZE = 2097152    # small-object pages are cut from chunks of this size (32 pages)
 const NCLASSES = 38
 const SPAN_CACHE_SLOTS = 512
-const TRIM_BATCH = 16         # empty pages given back to the OS per collector step
+const TRIM_BATCH = 16         # empty pages given back to the OS per collector step, at most
+const TRIM_STEP_NS = 20000    # time a step spends giving pages back before it stops (at least one page is given back)
 const CHUNK_BYTES = 4096      # a larger object is scanned in pieces of this size
 const STEP_BYTES = 8192       # bytes the program allocates between two steps
 const SWEEP_STEP_NS = 50000   # time an incremental sweep step may take
@@ -1378,7 +1379,7 @@ func _now_ns() {
 
 # Gives the memory of the oldest empty pages back to the OS. The newest ones stay, as many as the
 # program can allocate before the next collection; a recycled page is cleared when it is reused.
-# At most TRIM_BATCH pages per call, so that a step of the collector stays short.
+# At most TRIM_BATCH pages per call, and it stops after TRIM_STEP_NS, so that a step of the collector stays short.
 # 1 when the pool holds empty pages beyond what is kept for reuse that have not been given back yet. Giving
 # them back used to happen only inside the steps of a cycle, so how much came back depended on how many steps
 # the sweep took; a sweep that does not touch dead objects takes few.
@@ -1399,9 +1400,13 @@ func _pool_trim() {
         if (cold > ld64(h + H_POOL_COLD) + TRIM_BATCH) {
             cold = ld64(h + H_POOL_COLD) + TRIM_BATCH
         }
+        let t_end = _now_ns() + TRIM_STEP_NS
         while (ld64(h + H_POOL_COLD) < cold) {
             madvise(ld64(ld64(ld64(h + H_POOL) + ld64(h + H_POOL_COLD) * 8) + PG_BASE), PAGE_SIZE, 4)    # MADV_DONTNEED
             st64(h + H_POOL_COLD, ld64(h + H_POOL_COLD) + 1)
+            if (_now_ns() >= t_end) {
+                break    # a call on a huge page splits it and can take a long time
+            }
         }
     }
 }
