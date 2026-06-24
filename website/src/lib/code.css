@@ -1,0 +1,10 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Copyright (c) 2026 GibblyGobbly */
+.t-kw { color: var(--tok-kw); font-weight: 700; }
+.t-str { color: var(--tok-str); }
+.t-num { color: var(--tok-num); }
+.t-com { color: var(--tok-com); font-style: italic; }
+.t-fn { color: var(--tok-fn); }
+.t-bi { color: var(--tok-fn); font-weight: 700; }
+.t-ty { color: var(--tok-ty); }
+.t-brace { color: var(--tok-kw); font-weight: 700; }

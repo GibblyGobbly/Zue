@@ -1,0 +1,7 @@
+let ch = channel(3)
+send(ch, "a")
+send(ch, "b")
+channel_close(ch)
+print(recv(ch))
+print(recv(ch))
+print("values stored before the close can still be received")

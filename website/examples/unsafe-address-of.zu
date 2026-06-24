@@ -1,0 +1,9 @@
+let score = 5
+
+unsafe {
+    let p = address_of(score)
+    let current = load(p)
+    store(p, current + 10)
+}
+
+print(score)

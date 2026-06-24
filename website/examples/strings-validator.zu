@@ -1,0 +1,26 @@
+func validate_username(username) {
+    let clean = trim(username)
+    if (is_empty(clean)) {
+        print("Error: username cannot be empty")
+        return false
+    }
+    let n = len(clean)
+    if (n < 3) {
+        print("Error: username too short (min 3 characters)")
+        return false
+    }
+    if (n > 20) {
+        print("Error: username too long (max 20 characters)")
+        return false
+    }
+    if (is_digit(char_at(clean, 0))) {
+        print("Error: username cannot start with a number")
+        return false
+    }
+    print("username valid: {clean}")
+    return true
+}
+
+validate_username("  john123  ")
+validate_username("a")
+validate_username("9gamer")

@@ -1,0 +1,5 @@
+let n = 0
+export func bump() {
+    n += 1
+    return n
+}

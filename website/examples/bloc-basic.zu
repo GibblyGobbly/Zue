@@ -1,0 +1,13 @@
+bloc Vec2 { x, y }
+let a = Vec2{1, 2}
+let b = Vec2{1.5, 2.5}
+print(a == Vec2{1, 2})
+print(a.x, b.y)
+
+bloc Rect { min, max }
+let r = Rect{Vec2{0, 0}, Vec2{10, 10}}
+print(r.max.x)
+
+bloc Color { r: int, g: int, b: int, a: int }
+let red = Color{255, 0, 0, 255}
+print(red.r, shape(red))

@@ -1,0 +1,5 @@
+let t0 = clock()
+let t1 = clock()
+print(t1 >= t0)
+print(system("echo from the shell"))
+print(len(args()))

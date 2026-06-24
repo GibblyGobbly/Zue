@@ -1,0 +1,3 @@
+template Player { name, hp }
+let hero = Player("Astra", 100)
+print(hero.z)

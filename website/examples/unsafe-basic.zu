@@ -1,0 +1,12 @@
+unsafe {
+    let buf = alloc(3)
+    defer(buf)
+
+    store(buf, 10)
+    store(ptr_offset(buf, 1), 20)
+    store(ptr_offset(buf, 2), 30)
+
+    print(load(buf))
+    print(load(ptr_offset(buf, 1)))
+    print(load(ptr_offset(buf, 2)))
+}

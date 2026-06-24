@@ -1,0 +1,3 @@
+let ch = channel(1)
+channel_close(ch)
+recv(ch)

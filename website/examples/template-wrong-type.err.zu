@@ -1,0 +1,3 @@
+template Player { name: string, hp: int }
+func pass(v) { return [v, null][0] }
+let hero = Player("Astra", pass("lots"))

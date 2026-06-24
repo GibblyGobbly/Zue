@@ -1,0 +1,6 @@
+data Vec2 { x, y }
+let p = Vec2(3, 4)
+p.x = 9
+print(p.x, p.y)
+print(shape(p))
+print(type(p))

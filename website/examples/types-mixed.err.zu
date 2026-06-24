@@ -1,0 +1,3 @@
+let n = 16
+print(sqrt(16))
+print(sqrt(n))

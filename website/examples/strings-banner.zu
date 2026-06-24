@@ -1,0 +1,15 @@
+func format_title(text) {
+    let upper = to_upper(text)
+    let border = repeat("=", len(upper) + 4)
+    print(border)
+    print("| " + upper + " |")
+    print(border)
+}
+
+func censor_text(text, bad_word) {
+    return replace(text, bad_word, repeat("*", len(bad_word)))
+}
+
+format_title("welcome to zue")
+print(join(["apples", "bread", "milk"], ", "))
+print(censor_text("This is a darn good example", "darn"))

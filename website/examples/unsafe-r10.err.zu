@@ -1,0 +1,4 @@
+unsafe {
+    let buf = alloc(4)
+    store(buf, 1)
+}

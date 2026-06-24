@@ -1,0 +1,21 @@
+let nums = [5, 2, 9, 1, 7]
+sort(nums)
+print(nums)
+let words = ["pear", "apple", "fig"]
+sort(words)
+print(words)
+print(reverse(nums))
+
+let stalin = [1, 3, 2, 5, 4, 8]
+ssort(stalin)
+print(stalin)
+
+srand(1)
+let deck = range(1, 11)
+shuffle(deck)
+print(len(deck))
+sort(deck)
+print(deck)
+let secure = range(1, 6)
+tshuffle(secure)
+print(len(secure))

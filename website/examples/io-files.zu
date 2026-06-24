@@ -1,0 +1,30 @@
+let path = "app.cfg"
+
+let cfg = open(path, "w")
+if (cfg == null) {
+    print("cannot create {path}")
+    exit(1)
+}
+write(cfg, "mode=production\n")
+write(cfg, "threads=8\n")
+flush(cfg)
+close(cfg)
+
+let reader = open(path, "r")
+let count = 0
+let line = read_line(reader)
+while (line != null) {
+    let parts = split(line, "=")
+    print("{parts[0]} -> {parts[1]}")
+    count += 1
+    line = read_line(reader)
+}
+close(reader)
+print("loaded {count} entries")
+
+let again = open(path, "r")
+defer(close(again))
+print(len(read(again)))
+print(file_exists(path))
+remove_file(path)
+print(file_exists(path))

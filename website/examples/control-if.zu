@@ -1,0 +1,9 @@
+let hp = 42
+if (hp <= 0) {
+    print("down")
+} else if (hp < 50) {
+    print("low")
+} else {
+    print("ok")
+}
+print(not (hp == 42) or hp > 40 and hp < 50)

@@ -1,0 +1,5 @@
+func make() {
+    let b = box[4]
+    return b
+}
+make()

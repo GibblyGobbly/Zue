@@ -1,0 +1,5 @@
+unsafe {
+    let buf = alloc(1)
+    free(buf)
+    load(buf)
+}

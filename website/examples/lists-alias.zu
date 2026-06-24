@@ -1,0 +1,5 @@
+let l = []
+list_append(l, 1)
+append(l, 2)
+print(l)
+print(vec_add([1, 2], [10, 20]))

@@ -1,0 +1,20 @@
+unsafe {
+    let width = 3
+    let height = 3
+    let grid = alloc(width * height)
+    defer(grid)
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            store(ptr_offset(grid, y * width + x), x + y)
+        }
+    }
+
+    for (let y = 0; y < height; y++) {
+        let row = []
+        for (let x = 0; x < width; x++) {
+            append(row, load(ptr_offset(grid, y * width + x)))
+        }
+        print(row)
+    }
+}

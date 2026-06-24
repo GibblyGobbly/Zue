@@ -1,0 +1,8 @@
+unsafe {
+    let buf = alloc(2)
+    defer(buf)
+    store(buf, 7)
+    store(ptr_add(buf, 1), 8)
+    print(deref(buf))
+    print(deref(ptr_add(buf, 1)))
+}

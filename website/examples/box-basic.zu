@@ -1,0 +1,7 @@
+let buf = box[16]
+buf[0] = 200
+buf[-1] = 7
+print(buf[0], buf.len)
+print(buf[15])
+free(buf)
+print("freed")

@@ -1,0 +1,14 @@
+template Player { name, hp, pos }
+let hero = Player("Astra", 100, [0, 0])
+hero.hp = 80
+print(hero.hp)
+print(shape(hero), type(hero))
+
+let alias = hero
+alias.hp = 10
+print(hero.hp)
+
+template Typed { name: string, hp: int }
+let t = Typed("Nova", 7)
+t.hp = 8
+print(t.name, t.hp)

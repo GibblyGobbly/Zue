@@ -1,0 +1,4 @@
+func area(w, h) {
+    return w * h
+}
+print(area(2))

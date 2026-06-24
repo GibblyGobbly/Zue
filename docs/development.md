@@ -161,6 +161,22 @@ git tag v0.0.4              # the tag must match VERSION or the workflow stops
 git push origin main v0.0.4
 ```
 
+## The website
+
+`website/` is a SvelteKit site (Svelte 5, static output) with the tutorial, the internals pages, the reference and a
+playground. It needs `bin/zue`, so run `make` first.
+
+| Command (in `website/`) | Effect |
+|---|---|
+| `npm install` | Install the packages |
+| `npm run record` | Run every program in `website/examples/` with the real compiler and store the code with its true output. A file named `name.err.zu` must fail, any other must exit 0. `name.in` is the standard input and `name.env` holds `KEY=value` lines. A folder with a `main.zu` is a multi-file example |
+| `npm run reference` | Build the reference tables from `docs/builtins.md`, `docs/unsafe.md`, `docs/errors.md`, `docs/getting-started.md` and `docs/gc.md` |
+| `npm run check` | Fail when a builtin of `compiler/shared.zu` is missing from the reference or from every example |
+| `npm run dev`, `npm run build`, `npm run preview` | Develop, build to `website/build/`, and serve the build. `build` runs `record` and `reference` first |
+
+The Run button shows the recorded output of an unchanged program. Changed code needs a run server, which is not
+built yet: set `VITE_RUN_URL` to its address and the page will POST `{files, stdin}` to it and show the answer.
+
 ## Sources
 
 Ideas used, with the pages they came from:

@@ -1,0 +1,8 @@
+print(contains("Team", "ea"))
+print(index_of("banana", "nan"))
+print(index_of("banana", "an", 2))
+print(index_of_any("a, b", ", "))
+print(skip_chars("  x", " "))
+print(last_index_of("banana", "a"))
+print(starts_with("file.txt", "file"))
+print(ends_with("file.txt", ".txt"))

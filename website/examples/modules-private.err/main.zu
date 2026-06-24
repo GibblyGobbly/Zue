@@ -1,0 +1,4 @@
+use "geometry.zu"
+
+print(area(2, 5))
+print(secret())

@@ -1,0 +1,3 @@
+let total = 10
+let name = "Zue"
+print(total + name)

@@ -1,0 +1,10 @@
+let names = ["Astra", "Nova", "Kit"]
+
+func greet(name) {
+    return "Hello, {name}!"
+}
+
+for (let n in names) {
+    print(greet(n))
+}
+print("{len(names)} people greeted")

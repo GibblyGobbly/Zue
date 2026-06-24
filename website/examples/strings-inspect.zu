@@ -1,0 +1,7 @@
+print(len("héllo"))
+print(str_len("abc"), is_empty(""), is_empty("x"))
+print(is_digit("123"), is_digit("1a"))
+print(is_alpha("abc"), is_alnum("a1"), is_space("  "))
+print(char_at("ABC", 1))
+print(substring("Hello", 0, 2))
+print(slice("Hello", 1, 3))

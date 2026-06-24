@@ -1,0 +1,3 @@
+let a = args()
+print("arguments: {len(a)}")
+print(a)

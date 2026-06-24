@@ -1,0 +1,12 @@
+func tiny(n) {
+    return n * 2
+}
+let handles = []
+for (let i = 0; i < 20000; i++) {
+    append(handles, spawn(tiny, i))
+}
+let total = 0
+for (let h in handles) {
+    total += wait(h)
+}
+print("20000 threads, total {total}")

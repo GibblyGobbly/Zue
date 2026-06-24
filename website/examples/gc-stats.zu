@@ -1,0 +1,10 @@
+let live = []
+for (let i = 0; i < 400000; i++) {
+    append(live, [i, i + 1, "row {i}"])
+}
+let churn = 0
+for (let i = 0; i < 4000000; i++) {
+    let tmp = [i, i + 1, i + 2, i + 3]
+    churn += len(tmp)
+}
+print("live rows {len(live)}, churn {churn}")

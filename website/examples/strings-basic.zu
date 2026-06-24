@@ -1,0 +1,10 @@
+let hp = 125
+print("next hp = {hp + 1}")
+print("slot = {[3, 7, 9][1]}")
+print("length of abc = {len("abc")}")
+print("tab:\there, quote: \", brace: \{")
+print("Zue"[0])
+print("Zue"[-1])
+print(type("Zue"[0]))
+print("multi
+line")

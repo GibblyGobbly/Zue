@@ -1,0 +1,5 @@
+print(later(2))
+
+func later(x) {
+    return x * 2
+}

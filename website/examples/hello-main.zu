@@ -1,0 +1,7 @@
+print("top level runs first")
+
+func main() {
+    for (let i in range(3)) {
+        print("tick {i}")
+    }
+}

@@ -1,0 +1,6 @@
+use "geometry.zu"
+use { bump } from "counter.zu"
+
+print(area(3, 4))
+print(PI_ISH)
+print(bump(), bump(), bump())

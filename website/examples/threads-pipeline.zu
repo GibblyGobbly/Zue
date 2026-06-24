@@ -1,0 +1,25 @@
+func producer(out) {
+    for (let i = 1; i <= 5; i++) {
+        send(out, i)
+    }
+}
+
+func squarer(inp, out) {
+    for (let i = 0; i < 5; i++) {
+        let v = recv(inp)
+        send(out, v * v)
+    }
+}
+
+let raw = channel(2)
+let squared = channel(2)
+spawn(producer, raw)
+spawn(squarer, raw, squared)
+
+let total = 0
+for (let i = 0; i < 5; i++) {
+    let v = recv(squared)
+    print("got {v}")
+    total += v
+}
+print("sum of squares = {total}")

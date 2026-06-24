@@ -1,0 +1,5 @@
+unsafe {
+    let buf = alloc(1)
+    defer(buf)
+    let bad = address_of(buf)
+}

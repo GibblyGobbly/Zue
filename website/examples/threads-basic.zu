@@ -1,0 +1,12 @@
+func worker(id, results) {
+    send(results, id * id)
+}
+let results = channel(4)
+for (let i = 1; i <= 4; i++) {
+    spawn(worker, i, results)
+}
+let sum = 0
+for (let i = 0; i < 4; i++) {
+    sum += recv(results)
+}
+print(sum)

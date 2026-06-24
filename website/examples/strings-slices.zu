@@ -1,0 +1,10 @@
+let s = "bug"
+print(s[0:2])
+print(s[1:2])
+print(s[:1])
+print(s[1:])
+print(s[:])
+print([10, 20, 30, 40][1:2])
+let l = [1, 2, 3, 4, 5]
+print(l[len(l) - 2:])
+print(reverse(s))

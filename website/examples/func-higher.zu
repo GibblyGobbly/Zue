@@ -1,0 +1,13 @@
+let doubled = map([1, 2, 3], func(x) { return x * 2 })
+print(doubled)
+let evens = filter(range(10), func(x) { return x % 2 == 0 })
+print(evens)
+let total = reduce(doubled, func(acc, x) { return acc + x }, 0)
+print(total)
+let ops = [func(x) { return x + 1 }, func(x) { return x * 10 }]
+print(ops[0](5), ops[1](5))
+
+func apply_twice(f, v) {
+    return f(f(v))
+}
+print(apply_twice(ops[0], 5))

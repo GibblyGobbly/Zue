@@ -1,0 +1,11 @@
+func chatter(name, times) {
+    for (let i = 0; i < times; i++) {
+        print("{name} {i}")
+        yield()
+    }
+}
+let a = spawn(chatter, "red", 3)
+let b = spawn(chatter, "blue", 3)
+wait(a)
+wait(b)
+print("both done")

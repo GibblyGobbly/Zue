@@ -1,0 +1,14 @@
+func make_cycle() {
+    let a = [1, "a"]
+    let b = [2, "b"]
+    append(a, b)
+    append(b, a)
+    return len(a) + len(b)
+}
+
+let total = 0
+for (let i = 0; i < 2000000; i++) {
+    total += make_cycle()
+}
+print("made 2000000 cycles, total {total}")
+print("still running: cycles are collected")

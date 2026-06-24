@@ -1,0 +1,7 @@
+print(floor(5.9), ceil(5.1), trunc(5.9), trunc(-5.9))
+print(round(5.5), round(-5.5))
+print(round(3.14159, 3))
+print(fract(-5.9))
+print(-7 % 3, mod(-7, 3))
+print(floor_div(-7, 3), divmod(-7, 3))
+print(mod(5.5, 2.0))

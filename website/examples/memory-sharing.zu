@@ -1,0 +1,13 @@
+let a = [1, 2]
+let b = a
+append(b, 3)
+print(a)
+let n = 5
+let m = n
+m += 1
+print(n, m)
+template Box1 { v }
+let t = Box1(1)
+let u = t
+u.v = 2
+print(t.v)

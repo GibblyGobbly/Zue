@@ -1,0 +1,4 @@
+let buf = box[4]
+buf[0] = 1
+free(buf)
+print(buf[0])

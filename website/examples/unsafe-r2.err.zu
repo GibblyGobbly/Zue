@@ -1,0 +1,9 @@
+func f() {
+    let outer = null
+    unsafe {
+        let buf = alloc(1)
+        defer(buf)
+        outer = buf
+    }
+}
+f()

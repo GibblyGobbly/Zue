@@ -1,0 +1,11 @@
+let xs: list<float> = [1, 2]
+print(xs)
+
+func total(v: list<int>, n: int = 0) {
+    return sum(v) + n
+}
+print(total([1, 2, 3], 10))
+
+template Bag { items: list<int> }
+let b = Bag([4, 5])
+print(b.items)

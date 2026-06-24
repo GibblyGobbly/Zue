@@ -1,0 +1,11 @@
+func name_of(choice) {
+    switch (choice) {
+        case 1:
+            return "one"
+        case 2:
+            return "two"
+        default:
+            return "other"
+    }
+}
+print(name_of(1), name_of(2), name_of(9))

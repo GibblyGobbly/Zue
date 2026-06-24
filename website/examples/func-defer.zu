@@ -1,0 +1,7 @@
+func report() {
+    defer(print("closing C"))
+    defer(print("closing B"))
+    print("working")
+    return 1
+}
+print(report())

@@ -1,0 +1,11 @@
+func greet(name, greeting = "Hello") {
+    return "{greeting}, {name}"
+}
+print(greet("Astra"))
+print(greet("Astra", "Hi"))
+
+let inc = func(x) { return x + 1 }
+print(inc(41))
+
+func nothing() { }
+print(nothing())

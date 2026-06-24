@@ -1,0 +1,8 @@
+template Player { name: string, hp: int }
+
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    defer(p)
+    p.hp = p.hp - 20
+    print(p.hp)
+}

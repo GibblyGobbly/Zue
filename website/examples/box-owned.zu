@@ -1,0 +1,10 @@
+template Packet { bytes }
+
+func make_packet() {
+    let b = box[4]
+    b[0] = 9
+    return Packet(b)
+}
+
+let p = make_packet()
+print(p.bytes[0])

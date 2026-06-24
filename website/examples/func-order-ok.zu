@@ -1,0 +1,9 @@
+func first() {
+    return second() + 1
+}
+
+func second() {
+    return 41
+}
+
+print(first())

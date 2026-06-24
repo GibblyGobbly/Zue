@@ -1,0 +1,26 @@
+{
+  "name": "zue-website",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "npm run record && npm run reference && vite build",
+    "preview": "vite preview",
+    "record": "node scripts/record-outputs.mjs",
+    "reference": "node scripts/build-reference.mjs",
+    "check": "node scripts/check-coverage.mjs",
+    "browser-check": "node scripts/browser-check.mjs"
+  },
+  "devDependencies": {
+    "@fontsource-variable/archivo": "^5.1.0",
+    "@fontsource/jetbrains-mono": "^5.1.0",
+    "@sveltejs/adapter-static": "^3.0.8",
+    "@sveltejs/kit": "^2.15.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "playwright-core": "^1.49.0",
+    "svelte": "^5.16.0",
+    "vite": "^6.0.0"
+  }
+}

@@ -1,0 +1,26 @@
+let i = 0
+while (i < 3) {
+    i += 1
+}
+print("i = {i}")
+
+for (let k = 0; k < 3; k++) {
+    print("k = {k}")
+}
+
+for (let item in [10, 20, 30]) {
+    if (item == 20) {
+        continue
+    }
+    print(item)
+}
+
+for (let ch in "abc") {
+    print(ch)
+}
+
+let fns = []
+for (let n = 0; n < 3; n++) {
+    append(fns, func() { return n })
+}
+print(fns[0](), fns[1](), fns[2]())

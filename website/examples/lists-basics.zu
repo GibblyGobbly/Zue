@@ -1,0 +1,13 @@
+let l = [1, 2, 3]
+l[-1] = 99
+append(l, 4)
+print(l, len(l))
+print(remove(l, 0), l)
+print(find(l, 99), find(l, 1000))
+print(slice(l, 0, 1))
+print(contains(l, 4))
+
+let a = [1, 2]
+let b = a
+append(b, 3)
+print(a)

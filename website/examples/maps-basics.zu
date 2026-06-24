@@ -1,0 +1,13 @@
+let player = {"name": "Astra", "hp": 100}
+print(player["name"], player.hp)
+map_set(player, "hp", 125)
+player.level = 3
+print(map_get(player, "hp"), map_get(player, "nope"))
+print(map_has(player, "level"), map_has(player, "gold"))
+print(map_keys(player))
+print(map_values(player))
+for (let pair in map_items(player)) {
+    print("{pair[0]} -> {pair[1]}")
+}
+print(map_delete(player, "level"), map_delete(player, "level"))
+print(len(player))

@@ -1,0 +1,7 @@
+export const PI_ISH = 3.14
+export func area(w, h) {
+    return w * h
+}
+func secret() {
+    return 42
+}

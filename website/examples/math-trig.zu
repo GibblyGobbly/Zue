@@ -1,0 +1,7 @@
+print(sin(0.0), cos(0.0), tan(0.0))
+print(atan2(10, 10))
+print(deg_to_rad(180))
+print(rad_to_deg(3.14159265358979))
+print(lerp(0, 100, 0.5))
+print(sinh(0.0), cosh(0.0), tanh(0.0))
+print(asin(1.0), acos(1.0), atan(1.0))

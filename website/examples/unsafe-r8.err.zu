@@ -1,0 +1,7 @@
+unsafe {
+    let left = alloc(1)
+    let right = alloc(1)
+    defer(left)
+    defer(right)
+    let bad = left < right
+}

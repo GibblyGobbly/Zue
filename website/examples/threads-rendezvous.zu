@@ -1,0 +1,11 @@
+let ch = channel()
+
+func ping(c) {
+    send(c, "ping")
+    print("ping handed over")
+}
+
+spawn(ping, ch)
+print("waiting")
+print(recv(ch))
+yield()
