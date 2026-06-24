@@ -1422,6 +1422,15 @@ func _after_sweep() {
     let now = _now_ns()
     let live = ld64(h + H_LIVE_BYTES)
     let since = ld64(h + H_BYTES_SINCE_GC)
+    # What was allocated while the cycle ran survives it, so it is counted as live. The goal is a multiple of
+    # what the program really holds, not of that: with it the goal grew with the garbage it was meant to bound.
+    let during = since - ld64(h + H_CYCLE_BYTES)
+    if (during > 0) {
+        live = live - during
+        if (live < ld64(h + H_LIVE_BYTES) / 2) {
+            live = ld64(h + H_LIVE_BYTES) / 2
+        }
+    }
     let elapsed = now - ld64(h + H_LAST_END)
     if (ld64(h + H_LAST_END) != 0 and elapsed > 0) {
         let rate = since * 1000000 / elapsed
