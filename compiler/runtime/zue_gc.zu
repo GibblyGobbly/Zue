@@ -46,6 +46,7 @@ extern("pthread_cond_signal", "i32", "ptr")
 extern("pthread_cond_broadcast", "i32", "ptr")
 extern("usleep", "i32", "i32")
 extern("sysconf", "i64", "i32")
+extern("getrlimit", "i32", "i32,ptr")
 
 # struct Page
 const PG_BASE = 0
@@ -1451,22 +1452,32 @@ func _after_sweep() {
     st64(h + H_CYCLE_COST, cost)
     let cycle_ms = mib * cost / 1000000
     let a = ld64(h + H_ALLOC_RATE) * cycle_ms
-    let goal = 2 * a
-    let top = live
+    let goal = 4 * a
+    let top = 2 * live
     if (top < 2 * MIN_THRESHOLD) {
         top = 2 * MIN_THRESHOLD
     }
-    # Three quarters of the physical memory minus what the program holds. The free pages of the machine
-    # are no measure: they shrink as this heap grows, and the goal fell to a few hundred MiB at 10 GiB.
-    let free = sysconf(85) * sysconf(30) / 4 * 3 - live    # _SC_PHYS_PAGES * page size
-    if (free < 0) {
-        free = 0
+    # The heap may grow until the free memory of the machine is nearly used up, not further: past that the
+    # kernel reclaims and compacts inside a page fault of the program (one run stalled 12 ms). The free
+    # pages shrink as this heap grows, so what the heap holds now is added back.
+    let room = (sysconf(86) * sysconf(30) + ld64(h + H_ALL_COUNT) * PAGE_SIZE) / 100 * 85 - live    # _SC_AVPHYS_PAGES
+    # A limit on the address space (ulimit -v) bounds the heap too. Stacks, the GC thread, freed memory not
+    # yet given back and the program itself take the rest, so the heap may use 70 percent of it.
+    let rl = stack_buf(16)
+    if (getrlimit(9, rl) == 0 and ld64(rl) > 0) {    # RLIMIT_AS; the unlimited value is all ones, which reads as -1
+        let as_room = ld64(rl) / 100 * 70 - live
+        if (as_room < room) {
+            room = as_room
+        }
+    }
+    if (room < 0) {
+        room = 0
     }
     if (goal > top) {
         goal = top
     }
-    if (goal > free) {
-        goal = free
+    if (goal > room) {
+        goal = room
     }
     if (goal < 2 * MIN_THRESHOLD) {
         goal = 2 * MIN_THRESHOLD
