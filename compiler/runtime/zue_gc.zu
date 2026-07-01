@@ -1456,7 +1456,12 @@ func _after_sweep() {
     if (top < 2 * MIN_THRESHOLD) {
         top = 2 * MIN_THRESHOLD
     }
-    let free = sysconf(86) * sysconf(30) / 2    # _SC_AVPHYS_PAGES * page size, half of it
+    # Three quarters of the physical memory minus what the program holds. The free pages of the machine
+    # are no measure: they shrink as this heap grows, and the goal fell to a few hundred MiB at 10 GiB.
+    let free = sysconf(85) * sysconf(30) / 4 * 3 - live    # _SC_PHYS_PAGES * page size
+    if (free < 0) {
+        free = 0
+    }
     if (goal > top) {
         goal = top
     }
