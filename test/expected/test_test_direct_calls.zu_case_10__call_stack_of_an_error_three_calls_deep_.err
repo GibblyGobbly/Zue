@@ -1,0 +1,11 @@
+Runtime Error [E0410] in /tmp/zue_test_case.zu at line 1:
+  integer overflow in '*'
+
+   1 | func inner(n) { return n * 4611686018427387904 }
+     |                        - ^ -------------------
+
+Hint: The result does not fit in a 64-bit int. Use floats for very large numbers.
+Call stack, innermost call first:
+  in inner(), called at line 2: func mid(n) { return inner(n) + 1 }
+  in mid(), called at line 3: func outer(n) { return mid(n) + 2 }
+  in outer(), called at line 5: print(outer(3))

@@ -1,0 +1,10 @@
+Syntax Error [E0113] in /tmp/zue_test_case.zu at line 3:
+  'f' is already declared in this scope
+
+   1 | func f(x) { return x + 1 }
+     |      - first declared here
+   2 | print(f(1))
+   3 | func f(x) { return x + 2 }
+     |      ^ declared again here
+
+Hint: Use another name, or assign to the existing variable without 'let'

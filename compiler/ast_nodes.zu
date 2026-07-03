@@ -11,7 +11,7 @@
 # in after the node is built; a node made by the compiler itself keeps col 0, which means "no place
 # known beyond the line". A template keeps its fields at fixed places, so a node costs less memory
 # than a map and is built in one call. A field a kind does not use is not declared; a field it may
-# leave empty holds null. The checker adds sty to let and for-in nodes, and the emitter caches the raw kind of a binary node in kc. NODE_FIELDS lists the fields of
+# leave empty holds null. The checker adds sty to let and for-in nodes (and stys, the same per signature of the function that holds them) and spec to call nodes (the signature of a direct call, see check.zu), and the emitter caches the raw kind of a binary node in kc. NODE_FIELDS lists the fields of
 # each kind after k and line, in the order of the template; ast_dump.zu and the tree walkers read it. Fields that end in span hold a Span from diag.zu, or null: they say where a name, an
 # operator, a type or an argument list is, so the checker can point at exactly that text.
 
@@ -22,17 +22,17 @@ export template NList { k, line, items, col, eline, ecol }
 export template NMap { k, line, keys, vals, col, eline, ecol }
 export template NFunc { k, line, name, params, defaults, ptypes, body, exported, col, eline, ecol, nspan, pspans, tspans }
 export template NBox { k, line, size, col, eline, ecol }
-export template NCall { k, line, callee, args, col, eline, ecol, aspan }
+export template NCall { k, line, callee, args, spec, col, eline, ecol, aspan }
 export template NIndex { k, line, target, index, col, eline, ecol }
 export template NSlice { k, line, target, lo, hi, col, eline, ecol }
 export template NField { k, line, target, field, col, eline, ecol, fspan }
 export template NIncdec { k, line, name, op, prefix, col, eline, ecol, nspan }
 export template NBin { k, line, op, l, r, unary, kc, col, eline, ecol, ospan }
 export template NNot { k, line, e, col, eline, ecol }
-export template NLet { k, line, name, init, exported, const_decl, type, sty, col, eline, ecol, nspan, tspan }
+export template NLet { k, line, name, init, exported, const_decl, type, sty, stys, col, eline, ecol, nspan, tspan }
 export template NGroup { k, line, items, col, eline, ecol }
 export template NIf { k, line, cond, then, els, col, eline, ecol }
-export template NForIn { k, line, name, iter, body, sty, col, eline, ecol, nspan }
+export template NForIn { k, line, name, iter, body, sty, stys, col, eline, ecol, nspan }
 export template NFor { k, line, init, cond, incr, body, col, eline, ecol }
 export template NWhile { k, line, cond, body, col, eline, ecol }
 export template NSwitch { k, line, e, cases, dflt, col, eline, ecol }
@@ -52,17 +52,17 @@ export const NODE_FIELDS = {
     "map": ["keys", "vals"],
     "func": ["name", "params", "defaults", "ptypes", "body", "exported"],
     "box": ["size"],
-    "call": ["callee", "args"],
+    "call": ["callee", "args", "spec"],
     "index": ["target", "index"],
     "slice": ["target", "lo", "hi"],
     "field": ["target", "field"],
     "incdec": ["name", "op", "prefix"],
     "bin": ["op", "l", "r", "unary", "kc"],
     "not": ["e"],
-    "let": ["name", "init", "exported", "const_decl", "type", "sty"],
+    "let": ["name", "init", "exported", "const_decl", "type", "sty", "stys"],
     "group": ["items"],
     "if": ["cond", "then", "els"],
-    "forin": ["name", "iter", "body", "sty"],
+    "forin": ["name", "iter", "body", "sty", "stys"],
     "for": ["init", "cond", "incr", "body"],
     "while": ["cond", "body"],
     "switch": ["e", "cases", "dflt"],
@@ -76,7 +76,7 @@ export const NODE_FIELDS = {
 }
 
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
-export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty"]
+export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec"]
 
 # The constructors take st and en, the first and the last token of the node (a node can stand for
 # either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and
@@ -119,7 +119,7 @@ export func mk_box(st, en, size) {
 
 # aspan is the argument list with its brackets.
 export func mk_call(st, en, callee, args, aspan) {
-    return NCall("call", st.line, callee, args, st.col, en.eline, en.ecol, aspan)
+    return NCall("call", st.line, callee, args, null, st.col, en.eline, en.ecol, aspan)
 }
 
 export func mk_index(st, en, target, index) {
@@ -154,7 +154,7 @@ export func mk_not(st, en, e) {
 }
 
 export func mk_let(st, en, name, init, exported, const_decl, type, nspan, tspan) {
-    return NLet("let", st.line, name, init, exported, const_decl, type, null, st.col, en.eline, en.ecol, nspan, tspan)
+    return NLet("let", st.line, name, init, exported, const_decl, type, null, null, st.col, en.eline, en.ecol, nspan, tspan)
 }
 
 export func mk_group(st, en, items) {
@@ -166,7 +166,7 @@ export func mk_if(st, en, cond, then, els) {
 }
 
 export func mk_forin(st, en, name, iter, body, nspan) {
-    return NForIn("forin", st.line, name, iter, body, null, st.col, en.eline, en.ecol, nspan)
+    return NForIn("forin", st.line, name, iter, body, null, null, st.col, en.eline, en.ecol, nspan)
 }
 
 export func mk_for(st, en, init, cond, incr, body) {

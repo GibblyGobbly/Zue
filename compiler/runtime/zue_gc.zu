@@ -1366,6 +1366,7 @@ const PRE_SIZE = 296
 const SPIKE_NS = 1000000       # a chunk that takes longer than this to make is a spike (the pause goal is below a millisecond)
 const HINT_SPIKES = 3          # this many spikes switch the huge page hint off for the chunks made after them
 space("_heap0", HEAP_SIZE)
+space("lv_stack_low", 8)    # a copy of H_STACK_LOW for generated code, which does the stack test of a direct call itself
 
 # The collector state in use. Zero filled until _gc_setup sets the fields that start non-zero.
 func _heap() {
@@ -1778,6 +1779,7 @@ func lv_gc_start() {
         pthread_attr_destroy(attr)
         st64(h + H_STACK_BASE, ld64(out) + ld64(out + 8))
         st64(h + H_STACK_LOW, ld64(out) + 262144)    # keep 256 KiB for the runtime itself
+        st64(addr_of("lv_stack_low"), ld64(out) + 262144)
     } else {
         st64(h + H_STACK_BASE, frame_addr() + 4096)
     }

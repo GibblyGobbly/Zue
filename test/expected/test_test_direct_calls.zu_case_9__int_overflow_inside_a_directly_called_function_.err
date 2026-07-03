@@ -1,0 +1,9 @@
+Runtime Error [E0410] in /tmp/zue_test_case.zu at line 1:
+  integer overflow in '*'
+
+   1 | func sq(n) { return n * n }
+     |                     - ^ -
+
+Hint: The result does not fit in a 64-bit int. Use floats for very large numbers.
+Call stack, innermost call first:
+  in sq(), called at line 3: print(sq(4000000000))

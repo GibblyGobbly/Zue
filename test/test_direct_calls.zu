@@ -1,0 +1,199 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Calls made directly on raw int, float and bool values (ll_spec.zu): each case must give the output it gives
+# when the call goes through the closure. compile with --no-spec to compare.
+# CASE recursive int function called directly
+func fib(n) {
+    if (n < 2) { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+print(fib(20))
+let x = fib(10) + 1
+print(x)
+# CASE a call before the definition is still an error
+print(f(1))
+func f(x) { return x + 1 }
+# CASE a call before the definition from another function is still an error
+func g() { return f(1) }
+print(g())
+func f(x) { return x + 1 }
+# CASE a name given another function calls the other function
+func a(x) { return x + 1 }
+func b(x) { return x + 100 }
+print(a(1))
+a = b
+print(a(1))
+# CASE a function name reassigned from inside a function
+func f(x) { return x + 1 }
+func g(x) { return x * 10 }
+func swap() { f = g }
+print(f(2))
+swap()
+print(f(2))
+# CASE a function defined twice uses the second one
+func f(x) { return x + 1 }
+print(f(1))
+func f(x) { return x + 2 }
+print(f(1))
+# CASE a parameter with the name of a function
+func f(x) { return x + 1 }
+func h(f) { return f + 5 }
+print(h(3))
+print(f(3))
+# CASE a local variable with the name of a function
+func f(x) { return x + 1 }
+func h(n) {
+    let f = n * 2
+    return f + 1
+}
+print(h(4))
+print(f(4))
+# CASE int overflow inside a directly called function
+func sq(n) { return n * n }
+print(sq(3))
+print(sq(4000000000))
+# CASE call stack of an error three calls deep
+func inner(n) { return n * 4611686018427387904 }
+func mid(n) { return inner(n) + 1 }
+func outer(n) { return mid(n) + 2 }
+print(outer(1))
+print(outer(3))
+# CASE division by zero inside a directly called function
+func d(a, b) { return a / b }
+print(d(6, 3))
+print(d(1, 0))
+# CASE float function
+func half(x) { return x * 0.5 }
+print(half(3.0))
+print(half(0.25) + half(8.0))
+# CASE float parameter with a whole number literal argument
+func sq2(x: float) { return x * x }
+print(sq2(3))
+print(sq2(1.5))
+# CASE bool function
+func even(n) { return n % 2 == 0 }
+print(even(4))
+print(even(7))
+let b = even(2) and even(4)
+print(b)
+# CASE a function used as a value
+func fib(n) {
+    if (n < 2) { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+let g = fib
+print(g(15))
+func apply(f, v) { return f(v) }
+print(apply(fib, 12))
+# CASE deep recursion inside the limit
+func f(n) {
+    if (n == 0) { return 0 }
+    return 1 + f(n - 1)
+}
+print(f(90000))
+# CASE recursion deeper than the limit
+func f(n) {
+    if (n == 0) { return 0 }
+    return 1 + f(n - 1)
+}
+print(f(100000))
+# CASE recursion that uses up the stack of a thread
+func f(n) {
+    if (n < 0) { return 0 }
+    return 1 + f(n + 1)
+}
+func work() { return f(1) }
+let t = spawn(work)
+print(wait(t))
+# CASE five parameters
+func add5(a, b, c, d, e) { return a + b * 2 + c * 3 + d * 4 + e * 5 }
+print(add5(1, 2, 3, 4, 5))
+let k = 7
+print(add5(k, k + 1, k - 1, k * 2, 0))
+# CASE locals, loops and early returns
+func tri(n) {
+    let s = 0
+    for (let i = 1; i <= n; i++) {
+        s += i
+    }
+    return s
+}
+func clamp(n) {
+    if (n < 0) { return 0 }
+    if (n > 100) { return 100 }
+    return n
+}
+print(tri(100))
+print(clamp(-5) + clamp(50) + clamp(500))
+# CASE default values
+func f(a, b = 2) { return a + b }
+print(f(1))
+print(f(1, 5))
+# CASE expression arguments and a call as an argument
+func f(a, b) { return a * 10 + b }
+let x = 3
+let y = 4
+print(f(x + 1, y * 2))
+print(f(f(1, 2), 3))
+# CASE float recursion
+func pw(x, n) {
+    if (n == 0) { return 1.0 }
+    return x * pw(x, n - 1)
+}
+print(pw(2.0, 10))
+# CASE a parameter captured by a closure
+func f(n) {
+    let g = func() { return n }
+    return g() + 1
+}
+print(f(4))
+print(f(5))
+# CASE a recursion whose result type is not the one assumed
+func f(n) {
+    if (n < 1) { return 0 }
+    return f(n - 1) + "a"
+}
+print(f(1))
+# CASE side effects in order
+func f(n) {
+    print("f {n}")
+    return n + 1
+}
+print(f(1) + f(2))
+# CASE error position inside an expression
+func f(n) { return n * 4611686018427387904 }
+let x = 1 + f(3)
+print(x)
+# CASE mutual recursion
+func even(n) {
+    if (n == 0) { return true }
+    return odd(n - 1)
+}
+func odd(n) {
+    if (n == 0) { return false }
+    return even(n - 1)
+}
+print(even(10))
+print(odd(7))
+# CASE allocation inside a directly called function
+func f(n) {
+    let l = [n, n + 1]
+    let s = "k{n}"
+    return len(l) + len(s) + n
+}
+let total = 0
+for (let i = 0; i < 20000; i++) {
+    total += f(i)
+}
+print(total)
+# CASE calls in a loop before the definition
+let i = 0
+while (i < 2) {
+    print(g(i))
+    i += 1
+}
+func g(x) { return x + 1 }
+# CASE a variable and no function
+let f = 5
+print(f)

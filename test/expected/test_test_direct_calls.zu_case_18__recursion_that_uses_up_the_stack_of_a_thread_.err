@@ -1,0 +1,18 @@
+Runtime Error [E0440] in /tmp/zue_test_case.zu at line 3:
+  stack overflow: recursion is too deep
+
+   3 |     return 1 + f(n + 1)
+     |                ^^^^^^^^
+
+Hint: The program ran out of stack. Check for a recursion that never stops.
+Call stack, innermost call first:
+  in f(), called at line 3: return 1 + f(n + 1)
+  in f(), called at line 3: return 1 + f(n + 1)
+  in f(), called at line 3: return 1 + f(n + 1)
+  in f(), called at line 3: return 1 + f(n + 1)
+  in f(), called at line 3: return 1 + f(n + 1)
+  in f(), called at line 3: return 1 + f(n + 1)
+  ... 8141 more calls ...
+  in f(), called at line 3: return 1 + f(n + 1)
+  in f(), called at line 5: func work() { return f(1) }
+  in work(), called at line 0

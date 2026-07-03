@@ -162,10 +162,18 @@ export func ll_use_native(name) {
     }
 }
 
-template Ctx { out, allocas, scopes, defers, nested, capmap, is_main, line, loops, dead, unsafe_marks, no_unbox, lv, spills, dbg, dbg_locs }
+template Ctx { out, allocas, scopes, defers, nested, capmap, is_main, line, loops, dead, unsafe_marks, no_unbox, lv, spills, dbg, dbg_locs, spec }
+
+# Functions that calls can reach directly, by "<module id>:<name>": {"node": the func node, "sigs": the
+# signatures calls were found for, "sym": the name part of the LLVM symbols}. Filled by ll_spec.zu.
+export const SPECS = {}
+
+# Functions the raw-expression code (ll_typed.zu) needs from the statement emitter (emit_llvm.zu), which
+# imports it: ex(n) emits an expression and returns the slot of its value.
+export const HOOKS = {"generic_call": null, "ex": null}
 
 export func ll_new_ctx(is_main) {
-    return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, null, null, 0, {})
+    return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, null, null, 0, {}, null)
 }
 
 # Debug information, for zue build -g: a line table, so that gdb, valgrind and perf name the Zue

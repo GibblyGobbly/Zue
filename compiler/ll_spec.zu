@@ -1,0 +1,213 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# ll_spec.zu: functions that are called directly, on raw int, float and bool values.
+#
+# The checker puts on a call node the signatures it proved ("int,int>int": argument types and result type,
+# see check.zu). Before a module is compiled, spec_prescan finds the functions of the module that such
+# calls name. Each gets, besides its ordinary closure, one function per signature that takes and returns
+# raw values (fn_spec in emit_llvm.zu). A call site uses it only after a check at run time that the name
+# still holds the very closure the specialized functions were made for (see tex_spec_call in ll_typed.zu).
+
+use { node_children } from "ast_nodes.zu"
+use { LL_GLOBALS, SPECS } from "ll_state.zu"
+use { ST } from "state.zu"
+
+# zue build --no-spec turns the direct calls off, to compare a program with and without them.
+export const SPEC_ON = [true]
+
+# The key under which the function name of the current module is registered.
+export func spec_key_of(name) {
+    return "{ST.mod.id}:{name}"
+}
+
+# What generated code must know of the runtime to do the bookkeeping of a call itself (see tex_spec_call in
+# ll_typed.zu): MAX_DEPTH is the value in zue_rt_ops.zu and FRAME_SIZE the one in zue_rt_core.zu.
+export const SPEC_MAX_DEPTH = 100000
+export const SPEC_FRAME_SIZE = 24
+
+# The machine type of a kind.
+export func machine_type(kind) {
+    if (kind == "float") {
+        return "double"
+    }
+    if (kind == "bool") {
+        return "i1"
+    }
+    return "i64"
+}
+
+# "int,float>bool" as {"args": ["int", "float"], "res": "bool"}, or null when it is not a signature of
+# scalar kinds with the number of arguments given.
+export func parse_sig(key, nargs) {
+    let parts = split(key, ">")
+    if (len(parts) != 2) {
+        return null
+    }
+    let kinds = split(parts[0], ",")
+    if (len(kinds) != nargs) {
+        return null
+    }
+    for (let k in kinds) {
+        if (k != "int" and k != "float" and k != "bool") {
+            return null
+        }
+    }
+    if (parts[1] != "int" and parts[1] != "float" and parts[1] != "bool") {
+        return null
+    }
+    return {"args": kinds, "res": parts[1]}
+}
+
+# The symbol of the function for one signature.
+export func spec_symbol(entry, key) {
+    return "@sp_{entry.sym}_{replace(replace(key, ",", "_"), ">", "_to_")}"
+}
+
+# The global that holds the closure the specialized functions belong to.
+export func spec_closure_global(entry) {
+    return "@spc_{entry.sym}"
+}
+
+# Whether x contains a call node.
+export func has_call(x) {
+    if (type(x) == "list") {
+        for (let y in x) {
+            if (has_call(y)) {
+                return true
+            }
+        }
+        return false
+    }
+    let t = type(x)
+    if (t != "template" and t != "map") {
+        return false
+    }
+    if (x.k == "call") {
+        return true
+    }
+    for (let y in node_children(x)) {
+        if (has_call(y)) {
+            return true
+        }
+    }
+    return false
+}
+
+# Forgets the raw kinds cached on the binary nodes under x. A function body is compiled once for the
+# ordinary function and once for each signature; what is raw differs between them.
+export func clear_kc(x) {
+    if (type(x) == "list") {
+        for (let y in x) {
+            clear_kc(y)
+        }
+        return null
+    }
+    let t = type(x)
+    if (t != "template" and t != "map") {
+        return null
+    }
+    if (x.k == "bin") {
+        x.kc = null
+    }
+    for (let y in node_children(x)) {
+        clear_kc(y)
+    }
+    return null
+}
+
+# Collects, for every call node under x that names a candidate and carries signatures, the signatures.
+func collect_sigs(x, found) {
+    if (type(x) == "list") {
+        for (let y in x) {
+            collect_sigs(y, found)
+        }
+        return null
+    }
+    let t = type(x)
+    if (t != "template" and t != "map") {
+        return null
+    }
+    if (x.k == "call" and x.spec != null and x.callee.k == "id" and found[x.callee.name] != null) {
+        for (let key in split(x.spec, ";")) {
+            found[x.callee.name][key] = true
+        }
+    }
+    for (let y in node_children(x)) {
+        collect_sigs(y, found)
+    }
+    return null
+}
+
+# Registers the specializable functions of the module whose statements are stmts. A function qualifies when
+# it is the only top-level statement that declares its name and has no default values. Its call sites
+# are looked for in the whole module.
+export func spec_prescan(stmts) {
+    if (not SPEC_ON[0]) {
+        return null
+    }
+    let declared = {}
+    let defs = {}
+    for (let s in stmts) {
+        let name = null
+        if (s.k == "func" and s.name != null) {
+            name = s.name
+        } else if (s.k == "let" or s.k == "typedef") {
+            name = s.name
+        } else if (s.k == "use") {
+            for (let nm in s.names) {
+                declared[nm] = 2
+            }
+        } else if (s.k == "group") {
+            for (let item in s.items) {
+                declared[item.name] = 2
+            }
+        }
+        if (name != null) {
+            if (declared[name] == null) {
+                declared[name] = 1
+            } else {
+                declared[name] = 2
+            }
+            if (s.k == "func") {
+                defs[name] = s
+            } else {
+                declared[name] = 2
+            }
+        }
+    }
+    let found = {}
+    for (let name in map_keys(defs)) {
+        if (declared[name] == 1) {
+            let plain = true
+            for (let d in defs[name].defaults) {
+                if (d != null) {
+                    plain = false
+                }
+            }
+            if (plain) {
+                found[name] = {}
+            }
+        }
+    }
+    if (len(map_keys(found)) == 0) {
+        return null
+    }
+    collect_sigs(stmts, found)
+    for (let name in map_keys(found)) {
+        let node = defs[name]
+        let sigs = {}
+        let count = 0
+        for (let key in map_keys(found[name])) {
+            if (parse_sig(key, len(node.params)) != null) {
+                sigs[key] = true
+                count += 1
+            }
+        }
+        if (count > 0) {
+            let entry = {"node": node, "sigs": sigs, "sym": "{ST.mod.prefix}{name}"}
+            SPECS[spec_key_of(name)] = entry
+            append(LL_GLOBALS, "{spec_closure_global(entry)} = internal global i64 0")
+        }
+    }
+}

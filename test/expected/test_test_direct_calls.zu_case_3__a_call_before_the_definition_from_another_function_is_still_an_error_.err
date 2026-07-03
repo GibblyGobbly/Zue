@@ -1,0 +1,9 @@
+Name Error [E0301] in /tmp/zue_test_case.zu at line 1:
+  Variable 'f' is not defined
+
+   1 | func g() { return f(1) }
+     |                   ^
+
+Hint: Declare variables with 'let' before using them
+Call stack, innermost call first:
+  in g(), called at line 2: print(g())

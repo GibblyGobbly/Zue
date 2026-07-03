@@ -881,6 +881,46 @@ func lvp_gget(o, g, name) {
 
 # Calls
 
+# The record of a call that starts at this depth: where it was made, in which module, and the name of the
+# function, for the call stack of an error; and the two ways the nesting can be too deep.
+func _call_frame(depth, pos, mod, name_p) {
+    if (depth > MAX_DEPTH) {
+        lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
+                 cstr("Zue allows 100000 nested calls. Check for a recursion that never stops."))
+    }
+    let fr = addr_of("lv_frames") + depth * FRAME_SIZE
+    st64(fr, pos)
+    st64(fr + 8, mod)
+    st64(fr + 16, name_p)
+    let stack_low = ld64(addr_of("_heap0") + H_STACK_LOW)
+    if (stack_low != 0 and ult(stack_ptr(), stack_low)) {
+        lvp_out_of_stack()
+    }
+}
+
+# The error of a call that finds the stack of the running thread used up. Generated code makes this call
+# itself for a direct call, after its own test of the stack.
+func lvp_out_of_stack() {
+    lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
+             cstr("The program ran out of stack. Check for a recursion that never stops."))
+}
+
+# A direct call of a function the compiler specialized: the same bookkeeping as lvp_call, in two steps
+# around the call. lvp_leave reads back from the record what lvp_enter wrote.
+func lvp_enter(name_p) {
+    let depth = ld32(addr_of("lv_depth")) + 1
+    st32(addr_of("lv_depth"), depth)
+    _call_frame(depth, ld64(addr_of("lv_pos")), ld64(addr_of("lv_pos_mod")), name_p)
+}
+
+func lvp_leave() {
+    let depth = ld32(addr_of("lv_depth"))
+    let fr = addr_of("lv_frames") + depth * FRAME_SIZE
+    st32(addr_of("lv_depth"), depth - 1)
+    st64(addr_of("lv_pos_mod"), ld64(fr + 8))
+    st64(addr_of("lv_pos"), ld64(fr))
+}
+
 func lvp_call(o, f, argc_i, argv) {
     let tf = _tag(f)
     if (tf == T_DTYPE or tf == T_BLOC_TYPE) {
@@ -896,19 +936,7 @@ func lvp_call(o, f, argc_i, argv) {
     let fn = _val(f)
     let depth = ld32(addr_of("lv_depth")) + 1
     st32(addr_of("lv_depth"), depth)
-    if (depth > MAX_DEPTH) {
-        lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
-                 cstr("Zue allows 100000 nested calls. Check for a recursion that never stops."))
-    }
-    let fr = addr_of("lv_frames") + depth * FRAME_SIZE
-    st64(fr, pos)
-    st64(fr + 8, mod)
-    st64(fr + 16, ld64(fn + F_NAME))
-    let stack_low = ld64(addr_of("_heap0") + H_STACK_LOW)
-    if (stack_low != 0 and ult(stack_ptr(), stack_low)) {
-        lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
-                 cstr("The program ran out of stack. Check for a recursion that never stops."))
-    }
+    _call_frame(depth, pos, mod, ld64(fn + F_NAME))
     callv(o, ld64(fn + F_FN), fn, argc_i, argv)
     st32(addr_of("lv_depth"), depth - 1)
     st64(addr_of("lv_pos_mod"), mod)

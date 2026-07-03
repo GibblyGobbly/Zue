@@ -37,6 +37,19 @@ let INPROG = {}
 let CALLS = []
 let RETS = []
 
+# Recursion. The result type of a function that calls itself is unknown while its body is checked, so
+# the first pass takes it as any. When the other returns agree on one scalar type, the body is checked
+# once more with that type assumed for the recursive calls (ASSUME). If every return then has that type
+# the assumption holds, because a recursion that ends does so in a return that does not recurse.
+# The second pass reports nothing (QUIET counts the errors it would have reported) and keeps a log of
+# what it changed (MARKLOG, MEMOLOG), so that a rejected assumption leaves no trace.
+let RECURSIVE = {}
+let ASSUME = {}
+let QUIET = 0
+let QUIET_HITS = 0
+let MARKLOG = null
+let MEMOLOG = null
+
 # Builtin signatures: name -> alternatives of [parameter types, result]. T stands for a number
 # type (int or float) that must be the same everywhere it appears.
 let SIGS = {}
@@ -455,6 +468,10 @@ func span_or(sp, n) {
 # has one. Checking goes on after an error; the expression that failed is given the type any, which
 # raises no further errors.
 func fail_at(span, msg, kind = "Type Error") {
+    if (QUIET > 0) {
+        QUIET_HITS += 1
+        return null
+    }
     let key = "{span.line}:{span.col}"
     if (span.col == 0) {
         key = "{span.line}:{msg}"
@@ -1113,18 +1130,90 @@ func ck_user_call(name, fn, idx, argtypes, call) {
     let sep = ","
     let mkey = "{name}({join(types, sep)})"
     if (MEMO[mkey] != null) {
+        spec_site(call, fn, idx, types, MEMO[mkey])
         return MEMO[mkey]
     }
     if (INPROG[mkey] != null) {
+        RECURSIVE[mkey] = true
+        if (ASSUME[mkey] != null) {
+            spec_site(call, fn, idx, types, ASSUME[mkey])
+            return ASSUME[mkey]
+        }
         return "any"
     }
     INPROG[mkey] = true
+    let rets1 = check_body(name, fn, idx, types, line)
+    let result = join_returns(rets1)
+    if (RECURSIVE[mkey] == true and not is_scalar(result)) {
+        result = try_assume(name, fn, idx, types, line, mkey, rets1, result)
+    }
+    MEMO[mkey] = result
+    if (MEMOLOG != null) {
+        append(MEMOLOG, mkey)
+    }
+    INPROG[mkey] = null
+    spec_site(call, fn, idx, types, result)
+    return result
+}
+
+# Whether every way through stmts ends in a return.
+func always_returns(stmts) {
+    if (len(stmts) == 0) {
+        return false
+    }
+    let last = stmts[len(stmts) - 1]
+    if (last.k == "return") {
+        return true
+    }
+    if (last.k == "if") {
+        return len(last.els) > 0 and always_returns(last.then) and always_returns(last.els)
+    }
+    if (last.k == "block") {
+        return always_returns(last.body)
+    }
+    return false
+}
+
+# Marks a call of a user function that can be made directly: the function is defined at the top of its
+# module, takes no default values, its parameters and its result are int, float or bool, and every
+# way through its body returns. The emitter decides the rest (see emit_llvm.zu).
+func spec_site(call, fn, idx, types, result) {
+    if (call == null or call.k != "call") {
+        return null
+    }
+    let ok = idx == 0 and is_scalar(result) and len(call.args) == len(fn.params) and len(types) == len(fn.params)
+    if (ok) {
+        for (let d in fn.defaults) {
+            if (d != null) {
+                ok = false
+            }
+        }
+        for (let t in types) {
+            if (not is_scalar(t)) {
+                ok = false
+            }
+        }
+        if (not always_returns(fn.body)) {
+            ok = false
+        }
+    }
+    if (ok) {
+        mark_spec(call, "{join(types, ",")}>{result}")
+    }
+}
+
+func is_scalar(t) {
+    return t == "int" or t == "float" or t == "bool"
+}
+
+# Checks the body of fn with its parameters bound to types, and returns the types of its return statements.
+func check_body(name, fn, idx, types, line) {
     let saved = SCOPES
     let saved_origins = ORIGINS
     SCOPES = cut(saved, 0, idx + 1)
     ORIGINS = cut(saved_origins, 0, idx + 1)
     push_scope()
-    for (let i = 0; i < np; i++) {
+    for (let i = 0; i < len(fn.params); i++) {
         declare(fn.params[i], types[i], param_span(fn, i))
     }
     append(CALLS, {"name": name, "types": types, "line": line})
@@ -1134,10 +1223,67 @@ func ck_user_call(name, fn, idx, argtypes, call) {
     remove(CALLS, len(CALLS) - 1)
     SCOPES = saved
     ORIGINS = saved_origins
-    let result = join_returns(rets)
-    MEMO[mkey] = result
-    INPROG[mkey] = null
-    return result
+    return rets
+}
+
+# The scalar type all the returns that do not depend on the recursion agree on, or null.
+func common_scalar(rets) {
+    let t = null
+    for (let r in rets) {
+        if (r == "any") {
+            continue
+        }
+        if (not is_scalar(r)) {
+            return null
+        }
+        if (t == null) {
+            t = r
+        } else if (t != r) {
+            return null
+        }
+    }
+    return t
+}
+
+# The second pass of a recursive function: checks the body again with the recursive calls typed as the
+# type its other returns have. Returns that type if every return has it, else first (the first pass).
+func try_assume(name, fn, idx, types, line, mkey, rets1, first) {
+    let cand = common_scalar(rets1)
+    if (cand == null) {
+        return first
+    }
+    let saved_log = MARKLOG
+    let saved_memo = MEMOLOG
+    MARKLOG = []
+    MEMOLOG = []
+    ASSUME[mkey] = cand
+    QUIET += 1
+    let hits = QUIET_HITS
+    let rets = check_body(name, fn, idx, types, line)
+    QUIET -= 1
+    ASSUME[mkey] = null
+    if (QUIET_HITS == hits and join_returns(rets) == cand) {
+        if (saved_log != null) {
+            for (let e in MARKLOG) {
+                append(saved_log, e)
+            }
+        }
+        if (saved_memo != null) {
+            for (let k in MEMOLOG) {
+                append(saved_memo, k)
+            }
+        }
+        MARKLOG = saved_log
+        MEMOLOG = saved_memo
+        return cand
+    }
+    undo_marks(MARKLOG)
+    for (let k in MEMOLOG) {
+        MEMO[k] = null
+    }
+    MARKLOG = saved_log
+    MEMOLOG = saved_memo
+    return first
 }
 
 func ck_func(n) {
@@ -1596,10 +1742,63 @@ func mark_sty(n, t) {
     if (t != "int" and t != "float" and t != "bool") {
         t = "any"
     }
+    let old = n.sty
     if (n.sty == null) {
         n.sty = t
     } else if (n.sty != t) {
         n.sty = "any"
+    }
+    if (MARKLOG != null and n.sty != old) {
+        append(MARKLOG, [n, "sty", old])
+    }
+    # The same per signature of the function being checked: its specialized version knows its arguments,
+    # so a variable it computes from them can be raw there even where it is not in the ordinary version.
+    if (len(CALLS) > 0) {
+        let key = join(CALLS[len(CALLS) - 1].types, ",")
+        if (n.stys == null) {
+            n.stys = {}
+        }
+        let before = n.stys[key]
+        if (before == null) {
+            n.stys[key] = t
+        } else if (before != t) {
+            n.stys[key] = "any"
+        }
+        if (MARKLOG != null and n.stys[key] != before) {
+            append(MARKLOG, [n, "stys", before, key])
+        }
+    }
+}
+
+# Records on a call node a signature the call can be made with directly: the scalar types of the
+# arguments and of the result, for example "int,int>int". A call node can be checked several times, with
+# different argument types, so the node keeps every signature, separated by ";". The emitter picks the
+# one whose argument types it has as raw values.
+func mark_spec(n, key) {
+    let old = n.spec
+    if (n.spec == null) {
+        n.spec = key
+    } else if (not contains(";{n.spec};", ";{key};")) {
+        n.spec = "{n.spec};{key}"
+    }
+    if (MARKLOG != null and n.spec != old) {
+        append(MARKLOG, [n, "spec", old])
+    }
+}
+
+# Puts back what a rejected pass changed, the last change first.
+func undo_marks(log) {
+    let i = len(log) - 1
+    while (i >= 0) {
+        let e = log[i]
+        if (e[1] == "sty") {
+            e[0].sty = e[2]
+        } else if (e[1] == "stys") {
+            e[0].stys[e[3]] = e[2]
+        } else {
+            e[0].spec = e[2]
+        }
+        i -= 1
     }
 }
 

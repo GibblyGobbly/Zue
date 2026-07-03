@@ -1,0 +1,7 @@
+Name Error [E0301] in /tmp/zue_test_case.zu at line 1:
+  Variable 'f' is not defined
+
+   1 | print(f(1))
+     |       ^
+
+Hint: Declare variables with 'let' before using them

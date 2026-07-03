@@ -1,0 +1,11 @@
+Type Error [E0201] in /tmp/zue_test_case.zu at line 3:
+  cannot use '+' on int and string
+
+   3 |     return f(n - 1) + "a"
+     |            -------- ^ --- string
+     |            |
+     |            int
+
+Hint: Both sides must be numbers, or both strings. Build text with "{x}" or to_string(x).
+Call stack, innermost call first:
+  in f(), called at line 5: print(f(1))

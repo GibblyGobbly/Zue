@@ -10,9 +10,11 @@
 # call, which reports the error.
 
 use { diag_exit_if_errors, diag_hint, diag_new, node_span } from "diag.zu"
-use { ll, ll_alloca, ll_br, ll_condbr, ll_float_text, ll_label, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
+use { HOOKS, SPECS, ll, ll_alloca, ll_args_array, ll_br, ll_call_out, ll_slot, ll_condbr, ll_cstr, ll_float_text, ll_gname, ll_label, ll_mark, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
 use { find_local, resolve } from "ll_scope.zu"
-use { ty_load } from "ll_unbox.zu"
+use { box_raw, ty_load, unbox_checked } from "ll_unbox.zu"
+use { SPEC_FRAME_SIZE, SPEC_MAX_DEPTH, machine_type, parse_sig, spec_closure_global, spec_key_of, spec_symbol } from "ll_spec.zu"
+use { ST } from "state.zu"
 use { cut } from "ranges.zu"
 
 let T_VALUE_CALL = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod"}
@@ -82,10 +84,50 @@ export func skind(n) {
         }
         return r
     }
-    if (k == "call" and is_float_of_int(n)) {
-        return "float"
+    if (k == "call") {
+        if (is_float_of_int(n)) {
+            return "float"
+        }
+        let sp = call_spec(n)
+        if (sp != null) {
+            return sp.sig.res
+        }
     }
     return null
+}
+
+# The direct call n can be made with, or null: the checker proved a signature for it (n.spec), the callee
+# is a function of this module that has specialized functions for it, the name is not shadowed here, and
+# every argument is available as a raw value of the kind the signature wants.
+export func call_spec(n) {
+    if (n.spec == null or n.callee.k != "id") {
+        return null
+    }
+    let name = n.callee.name
+    let entry = SPECS[spec_key_of(name)]
+    if (entry == null or find_local(name) != null or len(n.args) != len(entry.node.params)) {
+        return null
+    }
+    for (let key in split(n.spec, ";")) {
+        if (entry.sigs[key] != null) {
+            let sig = parse_sig(key, len(n.args))
+            if (sig != null and args_fit(n.args, sig.args)) {
+                return {"key": key, "entry": entry, "sig": sig, "name": name}
+            }
+        }
+    }
+    return null
+}
+
+func args_fit(args, kinds) {
+    for (let i = 0; i < len(args); i++) {
+        let a = args[i]
+        let k = skind(a)
+        if (k != kinds[i] and not (kinds[i] == "float" and a.k == "num")) {
+            return false
+        }
+    }
+    return true
 }
 
 # float(x) where x is computed raw as an int and float is the builtin: a plain conversion that
@@ -176,12 +218,143 @@ export func tex(n) {
         return r
     }
     if (k == "call") {
-        let raw = tex(n.args[0])
-        let r = ll_reg()
-        ll("{r} = sitofp i64 {raw} to double")
-        return r
+        if (is_float_of_int(n)) {
+            let raw = tex(n.args[0])
+            let r = ll_reg()
+            ll("{r} = sitofp i64 {raw} to double")
+            return r
+        }
+        return tex_spec_call(n)
     }
     return tex_bin(n)
+}
+
+# A call that skind accepted through call_spec. It follows the order of the ordinary call: the callee is
+# read first (an undefined name is the same error, before any argument is computed), then the arguments
+# are computed once, as raw values, then the call is made. If the name holds the closure the specialized
+# functions were made for, the call goes straight to the one for the signature, with the same bookkeeping
+# as lvp_call. If not (the name was given another value), the arguments are boxed and it is the ordinary
+# call, and its result is unboxed with the check of a tag.
+func tex_spec_call(n) {
+    let sp = call_spec(n)
+    let rt = machine_type(sp.sig.res)
+    let out = ll_alloca(rt)
+    let g = ll_gname(sp.name)
+    let tag = ll_reg()
+    ll("{tag} = load i64, ptr {g}")
+    let undefined = ll_reg()
+    ll("{undefined} = icmp eq i64 {tag}, 17")
+    let l_undef = ll_new_label("sundef")
+    let l_def = ll_new_label("sdef")
+    ll_condbr(undefined, l_undef, l_def)
+    ll_label(l_undef)
+    HOOKS.ex(n.callee)
+    ll("unreachable")
+    ll_label(l_def)
+    let payload_p = ll_reg()
+    ll("{payload_p} = getelementptr inbounds i8, ptr {g}, i64 8")
+    let held = ll_reg()
+    ll("{held} = load i64, ptr {payload_p}")
+    let made = ll_reg()
+    ll("{made} = load i64, ptr {spec_closure_global(sp.entry)}")
+    let is_func = ll_reg()
+    ll("{is_func} = icmp eq i64 {tag}, 8")
+    let same = ll_reg()
+    ll("{same} = icmp eq i64 {held}, {made}")
+    let ok = ll_reg()
+    ll("{ok} = and i1 {is_func}, {same}")
+    let raws = []
+    for (let i = 0; i < len(n.args); i++) {
+        let a = n.args[i]
+        if (sp.sig.args[i] == "float" and a.k == "num") {
+            append(raws, ll_float_text(a.v))
+        } else {
+            append(raws, tex(a))
+        }
+    }
+    ll_mark(n)
+    let pos = ll_pos(n)
+    let name = ll_cstr(sp.name)
+    let fast = ll_new_label("sfast")
+    let slow = ll_new_label("sslow")
+    let done = ll_new_label("sdone")
+    ll_condbr(ok, fast, slow)
+    ll_label(fast)
+    let args = []
+    for (let i = 0; i < len(raws); i++) {
+        append(args, "{machine_type(sp.sig.args[i])} {raws[i]}")
+    }
+    # What lvp_call does around a call, done here: the depth, the record of the call, the test of the
+    # stack. Inside the code of a module the current module is always that module, so it is a constant.
+    let d0 = ll_reg()
+    ll("{d0} = load i32, ptr @lv_depth")
+    let d1 = ll_reg()
+    ll("{d1} = add i32 {d0}, 1")
+    let deep = ll_reg()
+    ll("{deep} = icmp sgt i32 {d1}, {SPEC_MAX_DEPTH}")
+    let l_deep = ll_new_label("sdeep")
+    let l_in = ll_new_label("sin")
+    ll_condbr(deep, l_deep, l_in)
+    ll_label(l_deep)
+    ll("call void @lvp_enter(ptr {name})")
+    ll("unreachable")
+    ll_label(l_in)
+    ll("store i32 {d1}, ptr @lv_depth")
+    let d64 = ll_reg()
+    ll("{d64} = zext i32 {d1} to i64")
+    let off = ll_reg()
+    ll("{off} = mul i64 {d64}, {SPEC_FRAME_SIZE}")
+    let fr = ll_reg()
+    ll("{fr} = getelementptr inbounds i8, ptr @lv_frames, i64 {off}")
+    ll("store i64 {pos}, ptr {fr}")
+    let fr_mod = ll_reg()
+    ll("{fr_mod} = getelementptr inbounds i8, ptr {fr}, i64 8")
+    ll("store i64 ptrtoint (ptr @mod_{ST.mod.id} to i64), ptr {fr_mod}")
+    let fr_name = ll_reg()
+    ll("{fr_name} = getelementptr inbounds i8, ptr {fr}, i64 16")
+    ll("store i64 ptrtoint (ptr {name} to i64), ptr {fr_name}")
+    let low = ll_reg()
+    ll("{low} = load i64, ptr @lv_stack_low")
+    let here = ll_reg()
+    ll("{here} = ptrtoint ptr {out} to i64")
+    let known = ll_reg()
+    ll("{known} = icmp ne i64 {low}, 0")
+    let under = ll_reg()
+    ll("{under} = icmp ult i64 {here}, {low}")
+    let spent = ll_reg()
+    ll("{spent} = and i1 {known}, {under}")
+    let l_stack = ll_new_label("sstack")
+    let l_go = ll_new_label("sgo")
+    ll_condbr(spent, l_stack, l_go)
+    ll_label(l_stack)
+    ll("call void @lvp_out_of_stack()")
+    ll("unreachable")
+    ll_label(l_go)
+    let r = ll_reg()
+    ll("{r} = call {rt} {spec_symbol(sp.entry, sp.key)}({join(args, ", ")})")
+    ll("store i32 {d0}, ptr @lv_depth")
+    ll("store i64 {pos}, ptr @lv_pos")
+    ll("store {rt} {r}, ptr {out}")
+    ll_br(done)
+    ll_label(slow)
+    let callee = ll_slot()
+    ll("store i64 {tag}, ptr {callee}")
+    let callee_p = ll_reg()
+    ll("{callee_p} = getelementptr inbounds i8, ptr {callee}, i64 8")
+    ll("store i64 {held}, ptr {callee_p}")
+    let argv = []
+    for (let i = 0; i < len(raws); i++) {
+        append(argv, box_raw(sp.sig.args[i], raws[i]))
+    }
+    let arr = ll_args_array(argv)
+    let slot = ll_call_out("lvp_call", "ptr {callee}, i32 {len(argv)}, ptr {arr}")
+    let u = unbox_checked(slot, sp.sig.res, sp.name)
+    ll("store {rt} {u}, ptr {out}")
+    ll_br(done)
+    ll_label(done)
+    let res = ll_reg()
+    ll("{res} = load {rt}, ptr {out}")
+    return res
 }
 
 # n computed as kind want; a whole-number literal becomes a double when a float is wanted.

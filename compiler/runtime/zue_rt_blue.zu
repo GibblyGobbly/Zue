@@ -163,6 +163,7 @@ func _blue_load(co) {
     let h = addr_of("_heap0")
     st64(h + H_STACK_BASE, ld64(co + CO_HI))
     st64(h + H_STACK_LOW, ld64(co + CO_LOW))
+    st64(addr_of("lv_stack_low"), ld64(co + CO_LOW))
     st64(co + CO_STATE, CO_RUNNING)
     g_blue_cur = co
 }
