@@ -26,3 +26,9 @@ system("ZUE_ERROR_FORMAT=json bin/zue run test/fixtures/error_runtime.zu 2>&1")
 system("bin/zue run test/fixtures/error_crash.zu 2>&1; echo status $?")
 # CASE build -g keeps the line table
 system("bin/zue build -g examples/hello.zu -o C/hello_g > /dev/null && objdump --dwarf=decodedline C/hello_g | grep -c hello.zu")
+# CASE --gc=lowmem builds and runs a program
+system("bin/zue run --gc=lowmem examples/hello.zu")
+# CASE --gc=lowmem keeps the peak memory below the default
+system("A=$(bin/zue run test/fixtures/peak_memory.zu); B=$(bin/zue run --gc=lowmem test/fixtures/peak_memory.zu); if [ $B -lt $A ]; then echo smaller; else echo not smaller $A $B; fi")
+# CASE an unknown --gc value is an error that names the one value
+system("bin/zue build --gc=fast examples/hello.zu -o C/gc_unknown 2>&1; echo status $?")

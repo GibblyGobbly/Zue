@@ -1,0 +1,2 @@
+unknown collector setting 'fast': the only value is --gc=lowmem (without the flag the collector favors speed)
+status 1

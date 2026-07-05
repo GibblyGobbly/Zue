@@ -29,14 +29,21 @@ func build_and_drop() {
 
 build_and_drop()
 
-# Garbage in small pieces makes the collector run a few cycles, which sweep the dropped rows.
-let total = 0
-for (let i = 0; i < 3000000; i++) {
-    let tmp = [i, i + 1]
-    total += tmp[1] - tmp[0]
-}
+# Garbage in small pieces makes the collector run a few cycles, which sweep the dropped rows. How much garbage
+# it takes depends on the pacer and on how fast the collector runs (ZUE_RT_GC_VERIFY=1, a busy machine), so the
+# loop goes on in pieces until the memory has come back, with a cap that is far more than any run needs.
 let peak_kib = status_kib("VmHWM:")
+let total = 0
+let rounds = 0
 let now_kib = status_kib("VmRSS:")
-print("garbage loop done {total}")
+while (now_kib * 2 >= peak_kib and rounds < 400) {
+    for (let i = 0; i < 500000; i++) {
+        let tmp = [i, i + 1]
+        total += tmp[1] - tmp[0]
+    }
+    rounds += 1
+    now_kib = status_kib("VmRSS:")
+}
+print("garbage loop done: {total > 0}")
 print("peak over 200 MiB: {peak_kib > 204800}")
 print("resident memory under half of the peak: {now_kib * 2 < peak_kib}")

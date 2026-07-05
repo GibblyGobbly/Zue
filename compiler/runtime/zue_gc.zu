@@ -1346,7 +1346,8 @@ const H_RS_POS = 21888         # where in that range the scan has reached
 const ROOT_STEP_WORDS = 32768  # words of root ranges scanned in one step of the collector (256 KB)
 const H_BS_ON = 21896           # 1 while the stacks of the blue threads that are away are being scanned in steps (program thread only)
 const H_BS_CUR = 21904          # the next thread whose stack is to be scanned
-const HEAP_SIZE = 21912
+const H_LOWMEM = 21912            # 1 for a program built with --gc=lowmem: the pacer allows far less garbage
+const HEAP_SIZE = 21920
 # The block: the chunks the helper has made ready (mapped, hinted and touched), and what the two threads share.
 const PRE_SLOTS = 16
 const PRE_RING = 0             # PRE_SLOTS chunk addresses
@@ -1455,6 +1456,9 @@ func _after_sweep() {
     let a = ld64(h + H_ALLOC_RATE) * cycle_ms
     let goal = 4 * a
     let top = 2 * live
+    if (ld64(h + H_LOWMEM) != 0) {
+        top = live / 8    # --gc=lowmem: memory first, so the goal is a small part of the live size and cycles come more often
+    }
     if (top < 2 * MIN_THRESHOLD) {
         top = 2 * MIN_THRESHOLD
     }
@@ -1767,6 +1771,11 @@ func _gc_report() {
 }
 
 # Called once from the thread that runs the program.
+# Called first thing in main of a program built with --gc=lowmem.
+func lv_gc_set_lowmem() {
+    st64(_heap() + H_LOWMEM, 1)
+}
+
 func lv_gc_start() {
     let h = _heap()
     if (ld64(h + H_SETUP_DONE) == 0) {

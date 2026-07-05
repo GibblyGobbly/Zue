@@ -1,0 +1,18 @@
+# Prints the peak resident memory of this process in kB, after building a live heap and churning it.
+let live = []
+for (let i = 0; i < 1000000; i++) {
+    append(live, [i, i + 1, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7])
+}
+let sum = 0
+for (let i = 0; i < 4000000; i++) {
+    let tmp = [i, i + 1, i + 2, i + 3]
+    sum += tmp[0] % 7 + len(live[i % 1000000])
+}
+let f = open("/proc/self/status", "r")
+let status = read(f)
+close(f)
+for (let line in split(status, "\n")) {
+    if (starts_with(line, "VmHWM:")) {
+        print(to_int(trim(replace(replace(line, "VmHWM:", ""), "kB", ""))))
+    }
+}

@@ -26,7 +26,7 @@ use { compile_native } from "emit_native.zu"
 use { ST } from "state.zu"
 use { dump_program } from "ast_dump.zu"
 use { unparse_program } from "ast_unparse.zu"
-use { dbg_enable } from "ll_state.zu"
+use { GC_LOWMEM, dbg_enable } from "ll_state.zu"
 use { SPEC_ON } from "ll_spec.zu"
 use { diag_set_format } from "diag.zu"
 use { ERROR_CODES } from "error_codes.zu"
@@ -69,9 +69,9 @@ func build_command(code_path, out_path) {
 }
 
 func usage() {
-    print("usage: zue build [-g] [--release] prog.zu -o program [-S]")
-    print("       zue run [-g] [--release] prog.zu [args...]")
-    print("       zue emit [-g] prog.zu [-o out.ll]")
+    print("usage: zue build [-g] [--release] [--gc=lowmem] [--no-spec] prog.zu -o program [-S]")
+    print("       zue run [-g] [--release] [--gc=lowmem] [--no-spec] prog.zu [args...]")
+    print("       zue emit [-g] [--gc=lowmem] [--no-spec] prog.zu [-o out.ll]")
     print("       zue ast prog.zu")
     print("       zue unparse prog.zu")
     print("")
@@ -84,6 +84,8 @@ func usage() {
     print("  unparse  print the parsed program as source again")
     print("  -o     where to write the program or the IR")
     print("  -g     with build, run and emit: add line tables so that gdb, valgrind and perf name the Zue line")
+    print("  --gc=lowmem  with build, run and emit: the collector keeps memory close to the live size and accepts a much lower speed")
+    print("  --no-spec  with build, run and emit: call functions through their closures only, without the direct calls on raw values (to compare the two)")
     print("  --release  with build and run: join the program and the runtime and optimize them together (slower to build, faster to run)")
     print("  --error-format=json  before the file: print each compile error as one JSON object per line")
     print("  -S     with build: write C/<name>.ll and do not build")
@@ -322,6 +324,13 @@ func main() {
             rest = cut(rest, 1, len(rest))
         } else if (rest[0] == "--release" and (cmd == "run" or cmd == "build")) {
             RELEASE[0] = true
+            rest = cut(rest, 1, len(rest))
+        } else if (starts_with(rest[0], "--gc=") and (cmd == "run" or cmd == "build" or cmd == "emit")) {
+            if (cut(rest[0], 5, len(rest[0])) != "lowmem") {
+                print("unknown collector setting '{cut(rest[0], 5, len(rest[0]))}': the only value is --gc=lowmem (without the flag the collector favors speed)")
+                exit(1)
+            }
+            GC_LOWMEM[0] = true
             rest = cut(rest, 1, len(rest))
         } else if (rest[0] == "--no-spec" and (cmd == "run" or cmd == "build" or cmd == "emit")) {
             SPEC_ON[0] = false
