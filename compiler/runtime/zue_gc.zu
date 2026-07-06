@@ -27,6 +27,7 @@ extern("munmap", "i32", "ptr,i64")
 extern("madvise", "i32", "ptr,i64,i32")
 extern("memset", "ptr", "ptr,i32,i64")
 extern("memcpy", "ptr", "ptr,ptr,i64")
+extern("memmove", "ptr", "ptr,ptr,i64")
 extern("write", "i64", "i32,ptr,i64")
 extern("exit", "void", "i32")
 extern("getenv", "ptr", "ptr")
@@ -80,6 +81,7 @@ const NCLASSES = 38
 const SPAN_CACHE_SLOTS = 512
 const TRIM_BATCH = 16         # empty pages given back to the OS per collector step, at most
 const TRIM_STEP_NS = 20000    # time a step spends giving pages back before it stops (at least one page is given back)
+const RETIRE_BATCH = 64       # pooled pages given up completely per collector step, at most
 const CHUNK_BYTES = 4096      # a larger object is scanned in pieces of this size
 const STEP_BYTES = 8192       # bytes the program allocates between two steps
 const SWEEP_STEP_NS = 50000   # time an incremental sweep step may take
@@ -1147,6 +1149,10 @@ func _sweep_begin() {
 # Sweeps one page. Returns 0 when the page was a dead large object and is gone.
 func _sweep_page(pg) {
     let h = _heap()
+    if (ld8(pg + PG_IN_LIST) == 3) {
+        free(pg)    # a page that _pool_retire gave up: only the descriptor is left
+        return 0
+    }
     st32(pg + PG_EPOCH, ld64(h + H_SWEEP_EPOCH))
     if (ld8(pg + PG_IN_LIST) == 2) {
         return 1
@@ -1259,6 +1265,9 @@ func _census() {
         if (ld8(pg + PG_LARGE) != 0) {
             large_n++
             large_b += ld64(pg + PG_SPAN)
+            continue
+        }
+        if (ld8(pg + PG_IN_LIST) == 3) {
             continue
         }
         if (ld8(pg + PG_IN_LIST) == 2) {
@@ -1392,10 +1401,60 @@ func _pool_pending() {
     if (ld64(h + H_POOL_COUNT) > keep and ld64(h + H_POOL_COLD) < ld64(h + H_POOL_COUNT) - keep) {
         return 1
     }
+    if (ld64(h + H_MARKING) == 0 and ld64(h + H_POOL_COLD) > keep / 4) {
+        return 1
+    }
+    return 0
+}
+
+# A page in the pool whose memory has been given back (a cold one) still costs its descriptor, its two maps,
+# and its place in the page table and in the address space. The allocator does not take pooled pages while a
+# cycle marks (the GC thread may read them), so a program that allocates much during cycles makes new pages
+# while the pool fills with cold ones, and without this they pile up for as long as the program runs: a heap
+# of constant size grew by about 1.5 GiB over 600 million allocations. This gives the oldest cold pages beyond
+# a quarter of the pages kept ready up completely. It is done only when no cycle is marking, because only
+# then nothing reads the page table or the maps but the program thread. The descriptor stays in the list of
+# all pages, marked 3, and the next sweep drops it (see _sweep_page).
+func _pool_retire() {
+    let h = _heap()
+    if (ld64(h + H_MARKING) != 0) {
+        return 0
+    }
+    let cold_keep = ld64(h + H_THRESHOLD) / PAGE_SIZE / 4
+    let cold = ld64(h + H_POOL_COLD)
+    if (cold <= cold_keep) {
+        return 0
+    }
+    let n = cold - cold_keep
+    if (n > RETIRE_BATCH) {
+        n = RETIRE_BATCH
+    }
+    let pool = ld64(h + H_POOL)
+    let t_end = _now_ns() + TRIM_STEP_NS
+    let i = 0
+    while (i < n) {
+        let pg = ld64(pool + i * 8)
+        let base = ld64(pg + PG_BASE)
+        _table_insert(shr(base, PAGE_SHIFT), 0)
+        free(ld64(pg + PG_USED))
+        free(ld64(pg + PG_MARK))
+        st64(pg + PG_USED, 0)
+        st64(pg + PG_MARK, 0)
+        munmap(base, PAGE_SIZE)
+        st8(pg + PG_IN_LIST, 3)
+        i++
+        if (_now_ns() >= t_end) {
+            break
+        }
+    }
+    memmove(pool, pool + i * 8, (ld64(h + H_POOL_COUNT) - i) * 8)
+    st64(h + H_POOL_COUNT, ld64(h + H_POOL_COUNT) - i)
+    st64(h + H_POOL_COLD, ld64(h + H_POOL_COLD) - i)
     return 0
 }
 
 func _pool_trim() {
+    _pool_retire()
     let h = _heap()
     let keep = ld64(h + H_THRESHOLD) / PAGE_SIZE
     if (ld64(h + H_POOL_COUNT) > keep) {

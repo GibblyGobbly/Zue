@@ -55,3 +55,34 @@ for (let round = 0; round < 30; round++) {
     }
 }
 print("kept {len(keep)} bad {bad} total {total}")
+# CASE a heap of constant size does not grow while the program keeps allocating
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+func churn(n) {
+    let sum = 0
+    for (let i = 0; i < n; i++) {
+        let tmp = [i, i + 1, i + 2, i + 3]
+        let s = "k{i}"
+        sum += tmp[0] % 7 + len(s)
+    }
+    return sum
+}
+let live = []
+for (let i = 0; i < 80000; i++) {
+    append(live, [i, i + 1, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7])
+}
+churn(16000000)
+let early = peak_kib()
+churn(48000000)
+let late = peak_kib()
+print("peak grew by more than a third: {late > early * 4 / 3 + 10240}")
+print("live data intact: {len(live[79999])}")
