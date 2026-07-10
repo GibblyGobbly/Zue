@@ -1672,6 +1672,24 @@ func _check_leaks(first) {
     }
 }
 
+# The records of pointers (g_ptrs, the index of them, and the flag array of each allocation) are kept while
+# unsafe code runs, because a pointer is checked against them. No pointer can outlive its block (R2) and every
+# alloc() is freed by then (R10), so when the outermost block ends nothing refers to them any more. Without this
+# every alloc() left about 130 bytes behind for the life of the program.
+func _drop_pointer_records() {
+    for (let i = 0; i < g_ptr_count; i++) {
+        let m = g_ptrs + i * PM_SIZE
+        if (ld32(m + PM_KIND) == PTR_ALLOC and ld32(m + PM_OWNS) != 0) {
+            free(ld64(m + PM_FLAGS))    # an alias shares the flags of its owner and does not free them
+        }
+    }
+    g_ptr_count = 0
+    _rl_hm_clear(addr_of("g_ptr_map"))
+    free(g_ptrs)
+    g_ptrs = 0
+    g_ptr_cap = 0
+}
+
 func lv_unsafe_end() {
     if (g_block_depth == 0) {
         return 0
@@ -1681,6 +1699,9 @@ func lv_unsafe_end() {
     zue_mem_end()
     _process_deferred_frees(ld64(marks))
     _check_leaks(ld64(marks + 8))
+    if (g_block_depth == 0) {
+        _drop_pointer_records()
+    }
 }
 
 # R2: a pointer may not leave the block it was made in. Generated code calls this when a value is

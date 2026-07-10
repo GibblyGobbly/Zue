@@ -1,0 +1,311 @@
+# The runtime keeps its own records for everything it hands out: pages, maps, boxes, ranges of unsafe memory,
+# thread stacks, large objects. Each case below uses one of them over and over with constant live data and
+# checks that the peak resident memory does not keep growing. A leak of a few bytes per use shows up as growth
+# between an early and a late measurement. (The collector's page records leaked this way once, see
+# test_gc_recycle.zu.)
+# CASE strings of many sizes do not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+func make_string(n) {
+    let s = "x"
+    while (len(s) < n) {
+        s = s + s
+    }
+    return substring(s, 0, n)
+}
+let ring = []
+for (let i = 0; i < 400; i++) {
+    append(ring, "")
+}
+func churn_strings(rounds) {
+    for (let r = 0; r < rounds; r++) {
+        for (let i = 0; i < 400; i++) {
+            ring[i] = make_string(1 + (r * 31 + i * 17) % 3000)
+        }
+    }
+}
+churn_strings(40)
+let early = peak_kib()
+churn_strings(160)
+print("grew: {grew(early, peak_kib())}")
+# CASE maps filled and emptied again and again do not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+func churn_maps(rounds) {
+    for (let r = 0; r < rounds; r++) {
+        let m = {}
+        for (let i = 0; i < 4000; i++) {
+            m["key{i}"] = [i]
+        }
+        for (let i = 0; i < 4000; i++) {
+            map_delete(m, "key{i}")
+        }
+    }
+}
+churn_maps(40)
+let early = peak_kib()
+churn_maps(160)
+print("grew: {grew(early, peak_kib())}")
+# CASE large objects made and dropped do not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+let big = []
+for (let i = 0; i < 8; i++) {
+    append(big, [0])
+}
+func churn_large(rounds) {
+    for (let r = 0; r < rounds; r++) {
+        let l = []
+        let size = 60000 + (r * 7919) % 200000
+        for (let j = 0; j < size; j++) {
+            append(l, j)
+        }
+        big[r % 8] = l
+    }
+}
+churn_large(60)
+let early = peak_kib()
+churn_large(240)
+print("grew: {grew(early, peak_kib())}")
+# CASE boxes made and freed with their scope do not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+func use_box(i) {
+    let b = box[64]
+    b[0] = i % 200
+    return b[0]
+}
+func churn_boxes(n) {
+    let sum = 0
+    for (let i = 0; i < n; i++) {
+        sum += use_box(i)
+    }
+    return sum
+}
+churn_boxes(300000)
+let early = peak_kib()
+churn_boxes(1200000)
+print("grew: {grew(early, peak_kib())}")
+# CASE unsafe memory allocated and freed does not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+func churn_unsafe(n) {
+    for (let i = 0; i < n; i++) {
+        unsafe {
+            let p = alloc(64)
+            store(p, i)
+            free(p)
+        }
+    }
+}
+churn_unsafe(200000)
+let early = peak_kib()
+churn_unsafe(800000)
+print("grew: {grew(early, peak_kib())}")
+# CASE threads made and finished do not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+func work(n) {
+    return n + 1
+}
+func churn_threads(n) {
+    let total = 0
+    for (let i = 0; i < n; i++) {
+        total += wait(spawn(work, i))
+    }
+    return total
+}
+churn_threads(30000)
+let early = peak_kib()
+churn_threads(120000)
+print("grew: {grew(early, peak_kib())}")
+# CASE channels made, used and closed do not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+func churn_channels(n) {
+    let total = 0
+    for (let i = 0; i < n; i++) {
+        let ch = channel(2)
+        send(ch, i)
+        send(ch, i + 1)
+        total += recv(ch) + recv(ch)
+        channel_close(ch)
+    }
+    return total
+}
+churn_channels(50000)
+let early = peak_kib()
+churn_channels(200000)
+print("grew: {grew(early, peak_kib())}")
+# CASE closures and the cells they share do not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+func make_counter(start) {
+    let n = start
+    return func() {
+        n += 1
+        return n
+    }
+}
+func churn_closures(count) {
+    let sum = 0
+    for (let i = 0; i < count; i++) {
+        let c = make_counter(i)
+        sum += c() + c()
+    }
+    return sum
+}
+churn_closures(400000)
+let early = peak_kib()
+churn_closures(1600000)
+print("grew: {grew(early, peak_kib())}")
+# CASE dense lists made and dropped do not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+func churn_dense(rounds) {
+    let sum = 0.0
+    for (let r = 0; r < rounds; r++) {
+        let d = dense_list(50000, 1.5)
+        sum += d[r % 50000]
+    }
+    return sum
+}
+churn_dense(200)
+let early = peak_kib()
+churn_dense(800)
+print("grew: {grew(early, peak_kib())}")

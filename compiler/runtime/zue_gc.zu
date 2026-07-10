@@ -1150,6 +1150,10 @@ func _sweep_begin() {
 func _sweep_page(pg) {
     let h = _heap()
     if (ld8(pg + PG_IN_LIST) == 3) {
+        # The address range may have been handed out again by now, so the entry may belong to a newer page; it must not be this one.
+        if (ld64(h + H_VERIFY) != 0 and _table_find(shr(ld64(pg + PG_BASE), PAGE_SHIFT)) == pg) {
+            _invariant_fail(cstr("a page that was given up is still in the page table"))
+        }
         free(pg)    # a page that _pool_retire gave up: only the descriptor is left
         return 0
     }
@@ -1433,6 +1437,9 @@ func _pool_retire() {
     let t_end = _now_ns() + TRIM_STEP_NS
     let i = 0
     while (i < n) {
+        if (ld64(h + H_VERIFY) != 0 and ld64(h + H_MARKING) != 0) {
+            _invariant_fail(cstr("a pooled page was given up while a cycle marks"))
+        }
         let pg = ld64(pool + i * 8)
         let base = ld64(pg + PG_BASE)
         _table_insert(shr(base, PAGE_SHIFT), 0)
@@ -1554,6 +1561,9 @@ func _after_sweep() {
     st64(h + H_THRESHOLD, next)
     st64(h + H_BYTES_SINCE_GC, 0)
     _pool_trim()
+    if (ld64(h + H_VERIFY) != 0) {
+        _check_pool()
+    }
 }
 
 func _count_pause(dt) {
@@ -1658,6 +1668,9 @@ func _cycle_poll() {
     if (ld64(h + H_GCT_STATE) == 2 and ld64(h + H_SHARED_N) == 0 and ld64(h + H_RS_ON) == 0 and ld64(h + H_BS_ON) == 0) {
         st64(h + H_GCT_STATE, 0)    # the GC thread sleeps again, so the marks are the program thread's to use
         done = 1
+        if (ld64(h + H_VERIFY) != 0) {
+            _check_marking_done()
+        }
     } else {
         if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_EXTRA)) {
             slow = 1
@@ -1752,6 +1765,52 @@ func _gc_work() {
 # It walks the heap again, with a second bit in the mark byte as the visited flag. A word on the stack
 # that points at an unmarked object is skipped: a stale word left in an unused stack slot can point at
 # an object that died before the cycle began, and the program cannot reach it through that word.
+
+# ZUE_RT_GC_VERIFY=1 also checks what the collector must hold true between its steps. A broken invariant ends the
+# program with this message, so a test that runs in verify mode fails where a wrong result might otherwise go unseen.
+func _invariant_fail(what) {
+    let buf = stack_buf(200)
+    let n = snprintf(buf, 200, cstr("Runtime Error: GC invariant broken: %s\n"), what)
+    write(2, buf, n)
+    exit(1)
+}
+
+# When the marks are final nothing may be left to scan: not on the GC thread's stack, not in the shared batch,
+# not in the program thread's batch.
+func _check_marking_done() {
+    let h = _heap()
+    if (ld64(h + H_MTOP) != 0) {
+        _invariant_fail(cstr("a cycle ended with objects still on the mark stack"))
+    }
+    if (ld64(h + H_SHARED_N) != 0) {
+        _invariant_fail(cstr("a cycle ended with objects still in the shared batch"))
+    }
+    if (ld64(h + H_LOCAL_N) != 0) {
+        _invariant_fail(cstr("a cycle ended with objects still in the program thread's batch"))
+    }
+}
+
+# The pool of empty pages: every entry is marked as pooled, the counts agree, and no entry is a page that was
+# given up (_pool_retire).
+func _check_pool() {
+    let h = _heap()
+    let count = ld64(h + H_POOL_COUNT)
+    if (ld64(h + H_POOL_COLD) > count) {
+        _invariant_fail(cstr("more cold pages in the pool than pages"))
+    }
+    if (count > ld64(h + H_ALL_COUNT) + RETIRE_BATCH) {
+        _invariant_fail(cstr("more pages in the pool than pages tracked"))
+    }
+    for (let i = 0; i < count; i++) {
+        let pg = ld64(ld64(h + H_POOL) + i * 8)
+        if (ld8(pg + PG_IN_LIST) != 2) {
+            _invariant_fail(cstr("a page in the pool is not marked as pooled"))
+        }
+        if (ld64(pg + PG_USED) == 0 or ld64(pg + PG_MARK) == 0) {
+            _invariant_fail(cstr("a page in the pool has lost its maps"))
+        }
+    }
+}
 
 func _verify_fail(pg, idx) {
     let obj = ld64(pg + PG_BASE)
