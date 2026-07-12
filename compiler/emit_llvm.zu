@@ -20,7 +20,7 @@ use { ll_float_text, ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } fro
 use { at_top, cap_cell, declare, find_local_index, pop_scope, push_scope, resolve, run_defers } from "ll_scope.zu"
 use { declare_typed, var_get, var_set } from "ll_scope.zu"
 use { box_raw, ty_load, ty_store, unbox_checked, uses_address } from "ll_unbox.zu"
-use { call_spec, lit_int, skind, tex, tex_step } from "ll_typed.zu"
+use { call_spec, lit_int, math_spec, skind, tex, tex_step } from "ll_typed.zu"
 use { clear_kc, machine_type, parse_sig, spec_closure_global, spec_key_of, spec_prescan, spec_symbol } from "ll_spec.zu"
 use { check_program } from "check.zu"
 use { ST } from "state.zu"
@@ -422,6 +422,10 @@ func ex_call(n) {
     if (sp != null) {
         return box_raw(sp.sig.res, tex(n))
     }
+    let ms = math_spec(n)
+    if (ms != null) {
+        return box_raw(ms.res, tex(n))
+    }
     let callee = n.callee
     if (callee.k == "id") {
         if (callee.name == "defer" and len(n.args) == 1 and n.args[0].k == "call") {
@@ -461,6 +465,7 @@ func generic_call(n) {
 }
 
 HOOKS.generic_call = generic_call
+HOOKS.builtin = call_builtin
 
 # address_of(name): a pointer to the variable's own storage.
 func ex_address_of(n) {
@@ -1638,6 +1643,10 @@ func declarations() {
     append(d, "declare void @lvp_iter_at(ptr, ptr, i64)")
     append(d, "declare void @lvp_call(ptr, ptr, i32, ptr)")
     append(d, "declare void @lv_gc_set_lowmem()")
+    for (let f in split("llvm.sqrt.f64 llvm.floor.f64 llvm.ceil.f64 llvm.round.f64 llvm.trunc.f64 exp log log10 sin cos tan asin acos atan sinh cosh tanh", " ")) {
+        append(d, "declare double @{f}(double)")
+    }
+    append(d, "declare double @pow(double, double)")
     append(d, "declare void @lvp_enter(ptr)")
     append(d, "declare void @lvp_leave()")
     append(d, "declare void @lvp_out_of_stack()")

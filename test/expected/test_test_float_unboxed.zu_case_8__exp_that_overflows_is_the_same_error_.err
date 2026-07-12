@@ -1,0 +1,7 @@
+Runtime Error [E0411] in /tmp/zue_test_case.zu at line 2:
+  float overflow in exp()
+
+   2 | print(exp(x))
+     |       ^^^^^^
+
+Hint: Zue has no infinity: the result must fit in a 64-bit float.

@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 2:
+  sqrt() argument must not be negative
+
+   2 | print(sqrt(x))
+     |       ^^^^^^^
+
+Hint: Check the argument before calling.

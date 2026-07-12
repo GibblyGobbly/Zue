@@ -39,3 +39,31 @@ func main() {
     print(r)
 }
 main()
+# CASE math builtins on raw floats give the same values
+let x = 2.0
+let y = 10.5
+print(sqrt(x), floor(y), ceil(y), round(y), abs(0.0 - y))
+print(pow(x, 10.0), sin(x) + cos(x) + tan(x), ln(y) + log10(y) + exp(x))
+print(asin(0.5) + acos(0.5) + atan(x), sinh(x) + cosh(x) + tanh(x))
+let t = 0.0
+for (let i = 1; i <= 100; i++) {
+    let v = float(i)
+    t += sqrt(v) + float(floor(v / 3.0)) + pow(v, 2.0) / 1000.0
+}
+print(t)
+# CASE sqrt of a negative raw float is the same domain error
+let x = 0.0 - 4.0
+print(sqrt(x))
+# CASE ln of zero is the same domain error
+let x = 0.0
+print(ln(x))
+# CASE exp that overflows is the same error
+let x = 1000.0
+print(exp(x))
+# CASE pow of zero to a negative power is the same error
+let x = 0.0
+let y = 0.0 - 1.0
+print(pow(x, y))
+# CASE floor of a float that does not fit in an int is the same error
+let x = 1e30
+print(floor(x))

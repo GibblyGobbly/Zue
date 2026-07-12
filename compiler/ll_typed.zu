@@ -92,6 +92,10 @@ export func skind(n) {
         if (sp != null) {
             return sp.sig.res
         }
+        let ms = math_spec(n)
+        if (ms != null) {
+            return ms.res
+        }
     }
     return null
 }
@@ -224,9 +228,204 @@ export func tex(n) {
             ll("{r} = sitofp i64 {raw} to double")
             return r
         }
-        return tex_spec_call(n)
+        if (call_spec(n) != null) {
+            return tex_spec_call(n)
+        }
+        return tex_math_call(n)
     }
     return tex_bin(n)
+}
+
+# Math builtins called on raw floats. The runtime does the same work: a test of the argument, the libm function,
+# a test that the result is a finite number. Here the tests are inline, and when one of them fails the ordinary
+# builtin is called on the boxed arguments, so that it reports the exact error it always did.
+# Each entry: the function to call and the test of the argument (none, ge0: not negative, gt0: positive,
+# unit: from -1 to 1).
+let MATH_UNARY = {
+    "sqrt": ["llvm.sqrt.f64", "ge0"], "exp": ["exp", "none"], "ln": ["log", "gt0"], "log10": ["log10", "gt0"],
+    "sin": ["sin", "none"], "cos": ["cos", "none"], "tan": ["tan", "none"], "asin": ["asin", "unit"],
+    "acos": ["acos", "unit"], "atan": ["atan", "none"], "sinh": ["sinh", "none"], "cosh": ["cosh", "none"],
+    "tanh": ["tanh", "none"]
+}
+let MATH_ROUND = {"floor": "llvm.floor.f64", "ceil": "llvm.ceil.f64", "round": "llvm.round.f64"}
+
+# {"name", "kind", "res"} when n is a call of a math builtin whose arguments are raw floats (or whole number
+# literals, which the runtime also takes as numbers), else null. abs takes a raw int too.
+export func math_spec(n) {
+    if (n.callee.k != "id") {
+        return null
+    }
+    let name = n.callee.name
+    let kind = null
+    if (MATH_UNARY[name] != null and len(n.args) == 1) {
+        kind = "unary"
+    } else if (MATH_ROUND[name] != null and len(n.args) == 1) {
+        kind = "round"
+    } else if (name == "pow" and len(n.args) == 2) {
+        kind = "pow"
+    } else if (name == "abs" and len(n.args) == 1) {
+        kind = "abs"
+    }
+    if (kind == null or resolve(name).kind != "builtin") {
+        return null
+    }
+    for (let a in n.args) {
+        let k = skind(a)
+        if (k != "float" and not (a.k == "num" and kind != "abs") and not (kind == "abs" and k == "int")) {
+            return null
+        }
+    }
+    # pow of two ints is an exact int power in the runtime: at least one argument must be a float
+    if (kind == "pow" and skind(n.args[0]) != "float" and skind(n.args[1]) != "float") {
+        return null
+    }
+    let res = "float"
+    if (kind == "round") {
+        res = "int"
+    } else if (kind == "abs") {
+        res = skind(n.args[0])
+    }
+    return {"name": name, "kind": kind, "res": res}
+}
+
+# The result r of a libm call is used when it is finite (not NaN, not infinite); otherwise the slow path runs.
+func math_finite_or_slow(r, good, slow) {
+    let a = ll_reg()
+    ll("{a} = call double @llvm.fabs.f64(double {r})")
+    let fin = ll_reg()
+    ll("{fin} = fcmp olt double {a}, 0x7FF0000000000000")
+    ll_condbr(fin, good, slow)
+}
+
+func tex_math_call(n) {
+    let ms = math_spec(n)
+    let rt = machine_type(ms.res)
+    let out = ll_alloca(rt)
+    let raws = []
+    let kinds = []
+    for (let a in n.args) {
+        if (a.k == "num" and ms.kind != "abs") {
+            append(raws, ll_float_text(a.v))
+            append(kinds, "float")
+        } else {
+            append(raws, tex(a))
+            append(kinds, skind(a))
+        }
+    }
+    let slow = ll_new_label("mslow")
+    let done = ll_new_label("mdone")
+    let needs_slow = true
+    let x = raws[0]
+    if (ms.kind == "abs" and ms.res == "float") {
+        let r = ll_reg()
+        ll("{r} = call double @llvm.fabs.f64(double {x})")
+        ll("store double {r}, ptr {out}")
+        needs_slow = false
+        ll_br(done)
+    } else if (ms.kind == "abs") {
+        let c = ll_reg()
+        ll("{c} = icmp eq i64 {x}, -9223372036854775808")
+        let comp = ll_new_label("mcomp")
+        ll_condbr(c, slow, comp)
+        ll_label(comp)
+        let neg = ll_reg()
+        ll("{neg} = sub i64 0, {x}")
+        let isneg = ll_reg()
+        ll("{isneg} = icmp slt i64 {x}, 0")
+        let r = ll_reg()
+        ll("{r} = select i1 {isneg}, i64 {neg}, i64 {x}")
+        ll("store i64 {r}, ptr {out}")
+        ll_br(done)
+    } else if (ms.kind == "unary") {
+        let info = MATH_UNARY[ms.name]
+        let comp = ll_new_label("mcomp")
+        let test = info[1]
+        if (test == "none") {
+            ll_br(comp)
+        } else {
+            let c = ll_reg()
+            if (test == "ge0") {
+                ll("{c} = fcmp oge double {x}, 0.0")
+            } else if (test == "gt0") {
+                ll("{c} = fcmp ogt double {x}, 0.0")
+            } else {
+                let lo = ll_reg()
+                let hi = ll_reg()
+                ll("{lo} = fcmp oge double {x}, -1.0")
+                ll("{hi} = fcmp ole double {x}, 1.0")
+                ll("{c} = and i1 {lo}, {hi}")
+            }
+            ll_condbr(c, comp, slow)
+        }
+        ll_label(comp)
+        let r = ll_reg()
+        ll("{r} = call double @{info[0]}(double {x})")
+        let good = ll_new_label("mgood")
+        math_finite_or_slow(r, good, slow)
+        ll_label(good)
+        ll("store double {r}, ptr {out}")
+        ll_br(done)
+    } else if (ms.kind == "round") {
+        let r = ll_reg()
+        ll("{r} = call double @{MATH_ROUND[ms.name]}(double {x})")
+        let lo = ll_reg()
+        let hi = ll_reg()
+        let c = ll_reg()
+        ll("{lo} = fcmp oge double {r}, 0xC3E0000000000000")
+        ll("{hi} = fcmp olt double {r}, 0x43E0000000000000")
+        ll("{c} = and i1 {lo}, {hi}")
+        let good = ll_new_label("mgood")
+        ll_condbr(c, good, slow)
+        ll_label(good)
+        let i = ll_reg()
+        ll("{i} = fptosi double {r} to i64")
+        ll("store i64 {i}, ptr {out}")
+        ll_br(done)
+    } else {
+        let y = raws[1]
+        let zero = ll_reg()
+        let neg_exp = ll_reg()
+        let bad1 = ll_reg()
+        ll("{zero} = fcmp oeq double {x}, 0.0")
+        ll("{neg_exp} = fcmp olt double {y}, 0.0")
+        ll("{bad1} = and i1 {zero}, {neg_exp}")
+        let neg_base = ll_reg()
+        let whole = ll_reg()
+        let frac = ll_reg()
+        let bad2 = ll_reg()
+        ll("{neg_base} = fcmp olt double {x}, 0.0")
+        ll("{whole} = call double @llvm.trunc.f64(double {y})")
+        ll("{frac} = fcmp one double {y}, {whole}")
+        ll("{bad2} = and i1 {neg_base}, {frac}")
+        let bad = ll_reg()
+        ll("{bad} = or i1 {bad1}, {bad2}")
+        let comp = ll_new_label("mcomp")
+        ll_condbr(bad, slow, comp)
+        ll_label(comp)
+        let r = ll_reg()
+        ll("{r} = call double @pow(double {x}, double {y})")
+        let good = ll_new_label("mgood")
+        math_finite_or_slow(r, good, slow)
+        ll_label(good)
+        ll("store double {r}, ptr {out}")
+        ll_br(done)
+    }
+    if (needs_slow) {
+        ll_label(slow)
+        ll_mark(n)
+        let argv = []
+        for (let i = 0; i < len(raws); i++) {
+            append(argv, box_raw(kinds[i], raws[i]))
+        }
+        let slot = HOOKS.builtin(ms.name, argv)
+        let u = unbox_checked(slot, ms.res, ms.name)
+        ll("store {rt} {u}, ptr {out}")
+        ll_br(done)
+    }
+    ll_label(done)
+    let res = ll_reg()
+    ll("{res} = load {rt}, ptr {out}")
+    return res
 }
 
 # A call that skind accepted through call_spec. It follows the order of the ordinary call: the callee is

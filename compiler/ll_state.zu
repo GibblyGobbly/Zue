@@ -172,8 +172,9 @@ export const GC_LOWMEM = [false]
 export const SPECS = {}
 
 # Functions the raw-expression code (ll_typed.zu) needs from the statement emitter (emit_llvm.zu), which
-# imports it: ex(n) emits an expression and returns the slot of its value.
-export const HOOKS = {"generic_call": null, "ex": null}
+# imports it: ex(n) emits an expression and returns the slot of its value; builtin(name, slots) calls a builtin on
+# boxed arguments and returns the slot of the result.
+export const HOOKS = {"generic_call": null, "ex": null, "builtin": null}
 
 export func ll_new_ctx(is_main) {
     return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, null, null, 0, {}, null)

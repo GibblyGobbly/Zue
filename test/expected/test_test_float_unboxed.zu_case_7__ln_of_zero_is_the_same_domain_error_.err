@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 2:
+  ln() argument must be greater than 0
+
+   2 | print(ln(x))
+     |       ^^^^^
+
+Hint: Check the argument before calling.
