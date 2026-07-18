@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 5:
+  pointers cannot be stored inside GC-managed values
+
+   5 |     let t = T(b)
+     |             ^^^^
+
+Hint: Pointers cannot go into lists, maps, templates, blocs or data values, because the collector manages those.

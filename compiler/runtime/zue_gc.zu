@@ -696,6 +696,20 @@ func lv_alloc(n) {
     return _gc_alloc(n, 0)
 }
 
+# Memory outside the heap whose life the collector decides: the bytes of a box that a template owns,
+# freed after the cycle that finds the template dead. They count like an allocation, so that a program
+# that makes many such boxes starts cycles (a template and its 64 KiB box add only about 100 heap bytes).
+func lv_gc_note_external(n) {
+    let h = _heap()
+    if (ld64(h + H_SETUP_DONE) == 0) {
+        return 0
+    }
+    st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
+    if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_LIMIT)) {
+        _gc_check()
+    }
+}
+
 func lv_alloc_atomic(n) {
     return _gc_alloc(n, 1)
 }

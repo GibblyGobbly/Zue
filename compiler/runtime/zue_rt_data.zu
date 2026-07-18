@@ -54,17 +54,6 @@ const BS_BYTES = 32
 const BS_INDEX = 40
 const BS_NEXT = 44
 const BS_SIZE = 48
-# PointerMeta { ptr, base, cells, int kind, int owns_allocation, int freed, init_flags }
-const PM_PTR = 0
-const PM_BASE = 8
-const PM_CELLS = 16
-const PM_KIND = 24
-const PM_OWNS = 28
-const PM_FREED = 32
-const PM_FLAGS = 40
-const PM_LINE = 48
-const PM_OBJ = 52
-const PM_SIZE = 56
 
 const BLOC_MAX_BYTES = 64
 
@@ -93,8 +82,6 @@ const BK_PRIM = 6
 # more boxes are made. Freed slots are reused through a free list.
 const BOX_CHUNK = 4096
 const BOX_CHUNKS_MAX = 4096
-const PTR_ALLOC = 0
-const PTR_ADDR = 1
 
 space("_box_chunks", 32768)
 let g_bloc_registry = 0
@@ -110,13 +97,7 @@ let g_scope_counter = 0
 let g_owners = 0
 let g_owner_count = 0
 let g_owner_cap = 0
-let g_ptrs = 0
-let g_ptr_count = 0
-let g_ptr_cap = 0
 let g_block_depth = 0
-let g_defer_ptrs = 0
-let g_defer_count = 0
-let g_defer_cap = 0
 
 # Declared field types
 
@@ -579,6 +560,7 @@ func _bloc_validate(d, argc, argv, msg) {
 }
 
 func _bloc_construct(o, type, argc, argv) {
+    _ptr_args_check(argc, argv)
     let msg = stack_buf(256)
     let d = _val(type)
     let codes = ld64(d + BD_FTYPES)
@@ -750,7 +732,15 @@ func lv_define_data_typed(name, n_i, fields, is_template_i, ftypes) {
     retp(o)
 }
 
+# R2: a pointer may not go into a template, bloc or data value, which the collector manages.
+func _ptr_args_check(argc, argv) {
+    for (let i = 0; i < argc; i++) {
+        _ptr_store_check(argv + 16 * i)
+    }
+}
+
 func _data_construct(o, type, argc, argv) {
+    _ptr_args_check(argc, argv)
     let t = _val(type)
     if (argc != ld32(t + DT_NFIELDS)) {
         _errf4(E_ARGUMENT, cstr("Pass one value for each declared data field"),
@@ -1042,6 +1032,11 @@ func _box_promote(bx) {
 
 # Weak table of (template, box): when a template is collected, its boxes go too.
 func _box_promote_owned(bx, owner) {
+    let s = _box_slot(_val(bx))
+    if (s != 0 and ld32(s + BS_OWNED) != 0) {
+        lv_error(E_RUNTIME, cstr("this box already belongs to a template; a box has one owner"),
+                 cstr("Make a new box for the second template, or copy the bytes into one."))
+    }
     _box_promote(bx)
     if (g_owner_count == g_owner_cap) {
         if (g_owner_cap != 0) {
@@ -1057,6 +1052,9 @@ func _box_promote_owned(bx, owner) {
     st64(g_owners + g_owner_count * 16, owner)
     st64(g_owners + g_owner_count * 16 + 8, _val(bx))
     g_owner_count += 1
+    if (s != 0) {
+        lv_gc_note_external(ld64(s + BS_LEN))
+    }
 }
 
 # Runs after marking: boxes whose template is unreachable are freed.
@@ -1134,12 +1132,12 @@ let g_box_index = 0
 func _data_index(t, idx, out) {
     let tt = _tag(t)
     if (tt == T_PTR and _tag(idx) == T_STR) {
-        let m = _object_meta(_val(t))
+        let m = _object_entry(_val(t))
         if (m == 0) {
             return 0
         }
-        let obj = _val(t)
-        if (ld32(m + PM_OBJ) == 1) {
+        let obj = ld64(m + AE_BASE)
+        if (ld64(m + AE_KIND) == AK_TEMPLATE) {
             let i = _tpl_find(obj, _val(idx) + S_DATA)
             if (i < 0) {
                 _errf(E_NAME, cstr("Access only declared fields for this template"), cstr("Template field '%s' does not exist"), _val(idx) + S_DATA, 0, 0)
@@ -1207,17 +1205,20 @@ func _data_field(t, key, out) {
 func _data_index_set(t, idx, val) {
     let tt = _tag(t)
     if (tt == T_PTR and _tag(idx) == T_STR) {
-        let m = _object_meta(_val(t))
+        let m = _object_entry(_val(t))
         if (m == 0) {
             return 0
         }
-        if (ld32(m + PM_OBJ) == 2) {
+        if (ld64(m + AE_KIND) == AK_BLOC) {
             lv_error(E_TYPE, cstr("bloc values are immutable"), cstr("Build a new bloc, or use a template for data that changes"))
         }
         if (_tag(val) == T_BOX) {
             lv_error(E_TYPE, cstr("a box cannot be stored in an object made with alloc()"), cstr("Keep boxes in objects under the garbage collector."))
         }
-        let obj = _val(t)
+        if (_is_pointer(val) != 0) {
+            _slow_report_unsafe(19)
+        }
+        let obj = ld64(m + AE_BASE)
         let i = _tpl_find(obj, _val(idx) + S_DATA)
         if (i < 0) {
             _errf(E_NAME, cstr("Assign only to declared template fields"),
@@ -1340,7 +1341,7 @@ func _data_tostring(b, v) {
         }
         _buf_str(b, tmp)
     } else if (t == T_PTR) {
-        snprintf(tmp, 96, cstr("ptr(0x%llx)"), _val(v))
+        snprintf(tmp, 96, cstr("ptr(0x%llx)"), _ptr_address(v))
         _buf_str(b, tmp)
     }
 }
@@ -1408,140 +1409,13 @@ func _data_len(v, out) {
     return 1
 }
 
-# Unsafe blocks and pointers (port of src/unsafe_runtime.c)
+# Unsafe blocks and pointers
+#
+# The allocation table and the pointer rules are in zue_rt_rules.zu. A pointer value names an entry of the
+# table and a slot in it (zue_mem_new); this file makes the memory, gives it back and moves the values.
 
 func _unsafe_depth() {
     return g_block_depth
-}
-
-func _ptrs_reserve() {
-    if (g_ptr_count < g_ptr_cap) {
-        return 0
-    }
-    let next = 16
-    if (g_ptr_cap != 0) {
-        next = g_ptr_cap * 2
-    }
-    let grown = realloc(g_ptrs, PM_SIZE * next)
-    if (grown == 0) {
-        return 0
-    }
-    g_ptrs = grown
-    g_ptr_cap = next
-}
-
-# A hash from a pointer to the number (index + 1) of its newest record, so that a lookup does not
-# scan every allocation ever made.
-space("g_ptr_map", 32)
-
-func _ptr_index_put(p, index) {
-    _rl_hm_put(addr_of("g_ptr_map"), p, index + 1)
-}
-
-# The newest record of a pointer: a freed address can be handed out again, and then the newest
-# record is the live one.
-func _find_exact(p) {
-    let found = _rl_hm_get(addr_of("g_ptr_map"), p)
-    if (found == 0) {
-        return 0
-    }
-    return g_ptrs + (found - 1) * PM_SIZE
-}
-
-# The record of the allocation that holds p. A pointer that was registered (every base pointer and
-# every result of ptr_add) is found by the hash; the scan is for any other address.
-func _find_owner(p) {
-    let exact = _find_exact(p)
-    if (exact != 0) {
-        return exact
-    }
-    let i = g_ptr_count - 1
-    while (i >= 0) {
-        let m = g_ptrs + i * PM_SIZE
-        let end = ld64(m + PM_BASE) + ld64(m + PM_CELLS) * 16
-        if (uge(p, ld64(m + PM_BASE)) and ult(p, end)) {
-            return m
-        }
-        i -= 1
-    }
-    return 0
-}
-
-func _resolve_alloc_meta(m) {
-    if (m == 0 or ld32(m + PM_KIND) != PTR_ALLOC) {
-        return m
-    }
-    let owner = _find_exact(ld64(m + PM_BASE))
-    if (owner != 0) {
-        return owner
-    }
-    return m
-}
-
-func _register_alloc_meta(p, cells) {
-    _ptrs_reserve()
-    if (g_ptr_count >= g_ptr_cap) {
-        return 0
-    }
-    let m = g_ptrs + g_ptr_count * PM_SIZE
-    g_ptr_count += 1
-    _ptr_index_put(p, g_ptr_count - 1)
-    st64(m + PM_PTR, p)
-    st64(m + PM_BASE, p)
-    st64(m + PM_CELLS, cells)
-    st32(m + PM_KIND, PTR_ALLOC)
-    st32(m + PM_OWNS, 1)
-    st32(m + PM_FREED, 0)
-    st64(m + PM_FLAGS, calloc(cells, 1))
-    st32(m + PM_LINE, band(ld64(addr_of("lv_pos")), 4194303))
-    st32(m + PM_OBJ, 0)
-}
-
-func _register_addr_meta(p) {
-    if (_find_exact(p) != 0) {
-        return 0
-    }
-    _ptrs_reserve()
-    if (g_ptr_count >= g_ptr_cap) {
-        return 0
-    }
-    let m = g_ptrs + g_ptr_count * PM_SIZE
-    g_ptr_count += 1
-    _ptr_index_put(p, g_ptr_count - 1)
-    st64(m + PM_PTR, p)
-    st64(m + PM_BASE, p)
-    st64(m + PM_CELLS, 1)
-    st32(m + PM_KIND, PTR_ADDR)
-    st32(m + PM_OWNS, 0)
-    st32(m + PM_FREED, 0)
-    st64(m + PM_FLAGS, 0)
-    st32(m + PM_LINE, 0)
-    st32(m + PM_OBJ, 0)
-}
-
-func _register_alias_meta(p, owner) {
-    if (_find_exact(p) != 0) {
-        return 0
-    }
-    # The reserve may move the table, so the owner is kept as an index into it.
-    let owner_index = (owner - g_ptrs) / PM_SIZE
-    _ptrs_reserve()
-    if (g_ptr_count >= g_ptr_cap) {
-        return 0
-    }
-    owner = g_ptrs + owner_index * PM_SIZE
-    let m = g_ptrs + g_ptr_count * PM_SIZE
-    g_ptr_count += 1
-    _ptr_index_put(p, g_ptr_count - 1)
-    st64(m + PM_PTR, p)
-    st64(m + PM_BASE, ld64(owner + PM_BASE))
-    st64(m + PM_CELLS, ld64(owner + PM_CELLS))
-    st32(m + PM_KIND, ld32(owner + PM_KIND))
-    st32(m + PM_OWNS, 0)
-    st32(m + PM_FREED, ld32(owner + PM_FREED))
-    st64(m + PM_FLAGS, ld64(owner + PM_FLAGS))
-    st32(m + PM_LINE, 0)
-    st32(m + PM_OBJ, 0)
 }
 
 func _unsafe_hint(code) {
@@ -1561,7 +1435,7 @@ func _unsafe_hint(code) {
         return cstr("address_of() needs a variable name such as address_of(x), not a temporary expression.")
     }
     if (code == 7) {
-        return cstr("Pointers cannot go into lists or maps because those values are GC-managed.")
+        return cstr("Pointers cannot go into lists, maps, templates, blocs or data values, because the collector manages those.")
     }
     if (code == 8) {
         return cstr("alloc() needs a positive whole-number slot count, for example alloc(4).")
@@ -1578,10 +1452,31 @@ func _unsafe_hint(code) {
     if (code == 13) {
         return cstr("Use a pointer returned by alloc(), address_of(), or ptr_add().")
     }
+    if (code == 14) {
+        return cstr("Read or write a field instead, for example p.name or p.name = value.")
+    }
+    if (code == 15) {
+        return cstr("Keep the pointer from alloc() and free that one.")
+    }
+    if (code == 16) {
+        return cstr("A variable named by address_of() is not freed; only free what alloc() returned.")
+    }
+    if (code == 17) {
+        return cstr("Use either defer(ptr) or free(ptr) for an allocation, and only once.")
+    }
+    if (code == 18) {
+        return cstr("Split the data into smaller allocations.")
+    }
+    if (code == 19) {
+        return cstr("Store the value the pointer points at, or keep the pointer in a local variable.")
+    }
+    if (code == 20) {
+        return cstr("store() a value in the slot before you load() it.")
+    }
     return cstr("Check the unsafe memory rule and the pointer lifetime in this block.")
 }
 
-func _report_unsafe(code) {
+func _slow_report_unsafe(code) {
     let msg = stack_buf(256)
     zue_mem_error_message(code, msg, 256)
     lv_error(E_RUNTIME, msg, _unsafe_hint(code))
@@ -1589,132 +1484,118 @@ func _report_unsafe(code) {
 
 func _unsafe_check(code) {
     if (code != 0) {
-        _report_unsafe(code)
+        _slow_report_unsafe(code)
     }
 }
 
+# A pointer value that names an entry of the allocation table.
 func _is_pointer(v) {
-    return _tag(v) == T_PTR and _find_owner(_val(v)) != 0
+    return _tag(v) == T_PTR and zue_mem_entry(_val(v)) != 0
 }
 
-func _defer_push(p) {
-    if (g_defer_count >= g_defer_cap) {
-        let next = 16
-        if (g_defer_cap != 0) {
-            next = g_defer_cap * 2
-        }
-        let grown = realloc(g_defer_ptrs, 8 * next)
-        if (grown == 0) {
-            return 0
-        }
-        g_defer_ptrs = grown
-        g_defer_cap = next
+func _alloc_line() {
+    return band(ld64(addr_of("lv_pos")), 4194303)
+}
+
+# Drops the freed entries of the allocation table that no word of the running stack names (see
+# zue_mem_compact). Kept out of line with the callee-saved registers spilled into its frame, so that a
+# pointer held only in a register is seen too.
+func _slow_compact_pointers() {
+    spill_regs()
+    let w = band(stack_ptr(), -8)
+    let hi = ld64(addr_of("_heap0") + H_STACK_BASE)
+    while (ult(w, hi)) {
+        zue_mem_note_ref(ld64(w))
+        w += 8
     }
-    st64(g_defer_ptrs + g_defer_count * 8, p)
-    g_defer_count += 1
+    zue_mem_compact()
 }
 
-func _free_alloc_meta(m) {
-    if (m == 0 or ld32(m + PM_KIND) != PTR_ALLOC or ld32(m + PM_OWNS) == 0 or ld32(m + PM_FREED) != 0) {
-        return 0
+# A new entry for memory at mem; the pointer value goes to o.
+func _new_entry(o, mem, cells, kind, depth) {
+    if (zue_mem_compact_wanted()) {
+        _slow_compact_pointers()
     }
-    lv_gc_root_remove(ld64(m + PM_BASE))
-    free(ld64(m + PM_BASE))
-    st32(m + PM_FREED, 1)
+    let p = zue_mem_new(mem, cells, kind, _alloc_line(), depth)
+    if (p == 0) {
+        lv_error(E_RUNTIME, cstr("unsafe error: the allocation table cannot grow"), cstr("Free memory, or make fewer pointers in one block."))
+    }
+    _set(o, T_PTR, p)
+    return zue_mem_entry(p)
 }
 
-# Frees the pointers deferred since the block began; mark is how many were pending then.
-func _process_deferred_frees(mark) {
-    while (g_defer_count > mark) {
-        g_defer_count -= 1
-        let p = ld64(g_defer_ptrs + g_defer_count * 8)
-        let m = _find_exact(p)
-        if (m != 0 and ld32(m + PM_KIND) == PTR_ALLOC and ld32(m + PM_OWNS) != 0) {
-            _free_alloc_meta(m)
-        }
+# Gives back the memory of an allocation that free() or a deferred free released.
+func _release_entry(e) {
+    lv_gc_root_remove(ld64(e + AE_BASE))
+    free(ld64(e + AE_BASE))
+    if (ld64(e + AE_FLAGS) != 0) {
+        free(ld64(e + AE_FLAGS))
+        st64(e + AE_FLAGS, 0)
     }
 }
 
-# Per open unsafe block: the number of pending deferred frees and of registered pointers when it
-# began, so that nested blocks clean up only their own work.
 const BLK_MAX = 64
-space("g_blk_marks", 1024)
 
 func lv_unsafe_begin() {
     if (g_block_depth >= BLK_MAX) {
         lv_error(E_RUNTIME, cstr("unsafe blocks are nested more than 64 deep"), cstr("Flatten the nesting."))
     }
     _unsafe_check(zue_mem_begin())
-    let marks = addr_of("g_blk_marks") + g_block_depth * 16
-    st64(marks, g_defer_count)
-    st64(marks + 8, g_ptr_count)
     g_block_depth += 1
 }
 
-# R10: memory from alloc() that is still live when its block ends is a leak.
-func _check_leaks(first) {
-    let leaks = 0
-    let line = 0
-    for (let i = first; i < g_ptr_count; i++) {
-        let m = g_ptrs + i * PM_SIZE
-        if (ld32(m + PM_KIND) == PTR_ALLOC and ld32(m + PM_OWNS) != 0 and ld32(m + PM_FREED) == 0) {
-            if (leaks == 0) {
-                line = ld32(m + PM_LINE)
-            }
-            leaks += 1
-        }
-    }
-    if (leaks != 0) {
-        st64(addr_of("lv_pos"), line)
-        let msg = stack_buf(256)
-        snprintf(msg, 256, cstr("%d alloc() call(s) in this unsafe block were never freed; the first is at line %d"), leaks, line)
-        lv_error(E_RUNTIME, msg, _unsafe_hint(12))
-    }
-}
-
-# The records of pointers (g_ptrs, the index of them, and the flag array of each allocation) are kept while
-# unsafe code runs, because a pointer is checked against them. No pointer can outlive its block (R2) and every
-# alloc() is freed by then (R10), so when the outermost block ends nothing refers to them any more. Without this
-# every alloc() left about 130 bytes behind for the life of the program.
-func _drop_pointer_records() {
-    for (let i = 0; i < g_ptr_count; i++) {
-        let m = g_ptrs + i * PM_SIZE
-        if (ld32(m + PM_KIND) == PTR_ALLOC and ld32(m + PM_OWNS) != 0) {
-            free(ld64(m + PM_FLAGS))    # an alias shares the flags of its owner and does not free them
-        }
-    }
-    g_ptr_count = 0
-    _rl_hm_clear(addr_of("g_ptr_map"))
-    free(g_ptrs)
-    g_ptrs = 0
-    g_ptr_cap = 0
-}
-
+# The deferred frees of the block run, newest first; then R10: memory from alloc() that is still live
+# when its block ends is a leak.
 func lv_unsafe_end() {
     if (g_block_depth == 0) {
         return 0
     }
     g_block_depth -= 1
-    let marks = addr_of("g_blk_marks") + g_block_depth * 16
+    let e = zue_mem_pop_defer()
+    while (e != 0) {
+        _release_entry(e)
+        e = zue_mem_pop_defer()
+    }
+    let line_p = stack_buf(8)
+    st64(line_p, 0)
+    let leaks = zue_mem_leaks(line_p)
+    if (leaks != 0) {
+        let line = ld64(line_p)
+        st64(addr_of("lv_pos"), line)
+        let msg = stack_buf(256)
+        snprintf(msg, 256, cstr("%d alloc() call(s) in this unsafe block were never freed; the first is at line %d"), leaks, line)
+        lv_error(E_RUNTIME, msg, _unsafe_hint(12))
+    }
     zue_mem_end()
-    _process_deferred_frees(ld64(marks))
-    _check_leaks(ld64(marks + 8))
     if (g_block_depth == 0) {
-        _drop_pointer_records()
+        _drop_kept_cells()
     }
 }
 
 # R2: a pointer may not leave the block it was made in. Generated code calls this when a value is
-# assigned to a variable declared outside the block, or returned from inside it.
+# assigned to a variable declared outside the block, to a captured variable, or returned from inside it.
 func lvp_ptr_escape_check(v) {
-    if (g_block_depth > 0 and _tag(v) == T_PTR and _is_pointer(v) != 0) {
+    if (g_block_depth > 0 and _is_pointer(v) != 0) {
         _unsafe_check(zue_mem_escape_ok(_val(v)))
+    }
+}
+
+# A function returns a box or a pointer (generated code calls this only for tags 15 and 16). A scoped box may
+# not leave its function. R2: a pointer to a local variable of the returning function would point at a
+# stack slot that is gone.
+func lvv_return_check(t, p, where_p) {
+    let v = stack_buf(16)
+    _set(v, t, p)
+    if (t == T_BOX) {
+        lvp_box_escape_check(v, where_p)
+    } else if (g_block_depth > 0 and _is_pointer(v) != 0) {
+        _unsafe_check(zue_mem_return_ok(p, ld32(addr_of("lv_depth"))))
     }
 }
 
 # R2: a pointer may not be stored in a GC-managed value.
 func _ptr_store_check(v) {
-    if (g_block_depth == 0 or _tag(v) != T_PTR or _is_pointer(v) == 0) {
+    if (g_block_depth == 0 or _is_pointer(v) == 0) {
         return 0
     }
     _unsafe_check(zue_mem_gc_store_ok(_val(v)))
@@ -1729,7 +1610,7 @@ func lvp_container_check(v) {
 # Assignment to a global: R2 for pointers inside unsafe, and boxes may not escape a
 # function through a global.
 func lvp_global_store_check(v, in_function_i) {
-    if (g_block_depth > 0 and _tag(v) == T_PTR and _is_pointer(v) != 0) {
+    if (g_block_depth > 0 and _is_pointer(v) != 0) {
         _unsafe_check(zue_mem_escape_ok(_val(v)))
     }
     if (in_function_i != 0) {
@@ -1739,7 +1620,7 @@ func lvp_global_store_check(v, in_function_i) {
 
 # R8: ordered comparison of pointers needs one allocation. op: 0 ==, 1 !=, 2 <, 3 >, 4 <=, 5 >=.
 func _ptr_compare_check(a, b, op) {
-    if (_is_pointer(a) == 0 or _is_pointer(b) == 0) {
+    if (_tag(a) != T_PTR or _tag(b) != T_PTR) {
         return 0
     }
     _unsafe_check(zue_mem_cmp_ok(_val(a), _val(b), op))
@@ -1751,6 +1632,15 @@ func _ptr_cast_check(v, target) {
         return 0
     }
     _unsafe_check(zue_mem_cast_ok(_val(v), target))
+}
+
+# The address a pointer value points at, for int(ptr) and printing; the value itself when it names no entry.
+func _ptr_address(v) {
+    let a = zue_mem_address(_val(v))
+    if (a == 0) {
+        return _val(v)
+    }
+    return a
 }
 
 func _need_unsafe(fn) {
@@ -1798,31 +1688,32 @@ func _alloc_object(o, src_v) {
     }
     memcpy(mem, src, bytes)
     lv_gc_root_add(mem, mem + 16 * cells)
-    _register_alloc_meta(mem, cells)
-    let m = g_ptrs + (g_ptr_count - 1) * PM_SIZE
+    let kind = AK_BLOC
     if (is_template) {
-        st32(m + PM_OBJ, 1)
-    } else {
-        st32(m + PM_OBJ, 2)
+        kind = AK_TEMPLATE
     }
-    zue_mem_track_alloc(mem, cells * 16)
-    _set(o, T_PTR, mem)
+    _new_entry(o, mem, cells, kind, -1)
 }
 
-# The metadata of a pointer to a manually allocated object, or 0. A freed object is an error.
-func _object_meta(p) {
-    let m = _find_exact(p)
-    if (m == 0 or ld32(m + PM_OBJ) == 0) {
+# The entry of a pointer to an object made with alloc(object), or 0 for any other value. A freed object
+# is an error.
+func _object_entry(p) {
+    let e = zue_mem_entry(p)
+    if (e == 0) {
+        return 0
+    }
+    let k = ld64(e + AE_KIND)
+    if (k != AK_TEMPLATE and k != AK_BLOC) {
         return 0
     }
     _unsafe_check(zue_mem_deref_ok(p))
-    return m
+    return e
 }
 
 # load and store work on slots; an object made with alloc(template) is read and written by field.
 func _refuse_whole_object(ptr_v, fn) {
-    let m = _find_exact(_val(ptr_v))
-    if (m != 0 and ld32(m + PM_OBJ) != 0) {
+    let k = zue_mem_kind(_val(ptr_v))
+    if (k == AK_TEMPLATE or k == AK_BLOC) {
         _errf(E_TYPE, cstr("Read or write a field instead, for example p.name or p.name = value"),
               cstr("%s() cannot be used on a whole object"), fn, 0, 0)
     }
@@ -1833,10 +1724,10 @@ func lb_alloc(self_p, argc_i, argv_p) {
     if (argc_i != 1) {
         lv_error(E_ARGUMENT, cstr("alloc() expects exactly 1 argument"), cstr("Use alloc(slotCount), or alloc(object) for a template or bloc"))
     }
+    let o = stack_buf(16)
     if (_tag(argv_p) == T_TEMPLATE or _tag(argv_p) == T_BLOC) {
-        let obj = stack_buf(16)
-        _alloc_object(obj, argv_p)
-        retp(obj)
+        _alloc_object(o, argv_p)
+        retp(o)
     }
     let is_int = _tag(argv_p) == T_INT
     let cells = 0
@@ -1845,14 +1736,20 @@ func lb_alloc(self_p, argc_i, argv_p) {
     }
     _unsafe_check(zue_mem_alloc_size_ok(cells, is_int))
     let mem = calloc(cells, 16)
+    let flags = 0
+    if (mem != 0) {
+        flags = calloc(cells, 1)
+        if (flags == 0) {
+            free(mem)
+            mem = 0
+        }
+    }
     if (mem == 0) {
         lv_error(E_RUNTIME, cstr("alloc() failed to reserve memory"), cstr("Try a smaller allocation."))
     }
     lv_gc_root_add_fresh(mem, mem + 16 * cells)
-    _register_alloc_meta(mem, cells)
-    zue_mem_track_alloc(mem, cells * 16)
-    let o = stack_buf(16)
-    _set(o, T_PTR, mem)
+    let e = _new_entry(o, mem, cells, AK_ALLOC, -1)
+    st64(e + AE_FLAGS, flags)
     retp(o)
 }
 
@@ -1878,17 +1775,23 @@ func lb_free(self_p, argc_i, argv_p) {
         retp(o)
     }
     _need_unsafe(cstr("free"))
-    if (_is_pointer(argv_p) == 0) {
+    if (_tag(argv_p) != T_PTR) {
         lv_error(E_TYPE, cstr("free() expects a pointer value"),
                  cstr("Pass a pointer returned by alloc(), address_of(), or ptr_add()."))
     }
-    let m = _find_exact(_val(argv_p))
-    if (m == 0 or ld32(m + PM_KIND) != PTR_ALLOC or ld32(m + PM_OWNS) == 0) {
-        _report_unsafe(13)
-    }
     _unsafe_check(zue_mem_free_ok(_val(argv_p)))
-    _free_alloc_meta(m)
+    _release_entry(zue_mem_entry(_val(argv_p)))
     retp(o)
+}
+
+# The entry of a pointer that load or store may use; any other value is an error.
+func _slot_entry(v, fn) {
+    if (_tag(v) != T_PTR) {
+        _slow_report_unsafe(13)
+    }
+    _unsafe_check(zue_mem_deref_ok(_val(v)))
+    _refuse_whole_object(v, fn)
+    return zue_mem_entry(_val(v))
 }
 
 func lb_load(self_p, argc_i, argv_p) {
@@ -1896,27 +1799,13 @@ func lb_load(self_p, argc_i, argv_p) {
     if (argc_i != 1) {
         lv_error(E_ARGUMENT, cstr("load() expects exactly 1 pointer argument"), cstr("Use load(ptr)"))
     }
-    if (_is_pointer(argv_p) == 0) {
-        _report_unsafe(13)
-    }
-    _refuse_whole_object(argv_p, cstr("load"))
-    let p = _val(argv_p)
-    let m = _find_owner(p)
-    let am = _resolve_alloc_meta(m)
-    if (ld32(m + PM_KIND) == PTR_ALLOC) {
-        _unsafe_check(zue_mem_deref_ok(p))
+    let e = _slot_entry(argv_p, cstr("load"))
+    let slot = zue_mem_slot(_val(argv_p))
+    if (ld64(e + AE_KIND) == AK_ALLOC and ld8(ld64(e + AE_FLAGS) + slot) == 0) {
+        _slow_report_unsafe(20)
     }
     let o = stack_buf(16)
-    if (ld32(m + PM_KIND) == PTR_ALLOC) {
-        let idx = udiv(p - ld64(am + PM_BASE), 16)
-        if (ld64(am + PM_FLAGS) != 0 and ld8(ld64(am + PM_FLAGS) + idx) != 0) {
-            _cp(o, p)
-        } else {
-            _null(o)
-        }
-        retp(o)
-    }
-    _cp(o, p)
+    _cp(o, ld64(e + AE_BASE) + slot * 16)
     retp(o)
 }
 
@@ -1931,23 +1820,26 @@ func lb_store(self_p, argc_i, argv_p) {
     if (argc_i != 2) {
         lv_error(E_ARGUMENT, cstr("store() expects exactly 2 arguments"), cstr("Use store(ptr, value)"))
     }
-    if (_is_pointer(argv_p) == 0) {
-        _report_unsafe(13)
-    }
-    _refuse_whole_object(argv_p, cstr("store"))
-    let p = _val(argv_p)
-    let m = _find_owner(p)
-    let am = _resolve_alloc_meta(m)
-    if (ld32(m + PM_KIND) == PTR_ALLOC) {
-        _unsafe_check(zue_mem_store_ok(p))
-    }
-    _ptr_store_check(argv_p + 16)
-    _cp(p, argv_p + 16)
-    if (ld32(m + PM_KIND) == PTR_ALLOC) {
-        let idx = udiv(p - ld64(am + PM_BASE), 16)
-        if (ld64(am + PM_FLAGS) != 0) {
-            st8(ld64(am + PM_FLAGS) + idx, 1)
+    let e = _slot_entry(argv_p, cstr("store"))
+    let slot = zue_mem_slot(_val(argv_p))
+    let cell = ld64(e + AE_BASE) + slot * 16
+    let v = argv_p + 16
+    if (ld64(e + AE_KIND) == AK_ALLOC) {
+        if (_is_pointer(v) != 0) {
+            _slow_report_unsafe(19)
         }
+        _cp(cell, v)
+        st8(ld64(e + AE_FLAGS) + slot, 1)
+    } else {
+        # A variable named by address_of(): R2, and the variable keeps its type.
+        if (_is_pointer(v) != 0) {
+            _slow_report_unsafe(2)
+        }
+        if (_tag(cell) != T_NULL and _tag(cell) != _tag(v)) {
+            _errf(E_TYPE, cstr("A variable keeps the type of its first value; store a value of the same type."),
+                  cstr("store() cannot change a %s variable to %s"), _type_name(cell), _type_name(v), 0)
+        }
+        _cp(cell, v)
     }
     let o = stack_buf(16)
     _null(o)
@@ -1959,29 +1851,11 @@ func lb_ptr_offset(self_p, argc_i, argv_p) {
     if (argc_i != 2) {
         lv_error(E_ARGUMENT, cstr("ptr_offset() expects exactly 2 arguments"), cstr("Use ptr_offset(ptr, offset)"))
     }
-    if (_is_pointer(argv_p) == 0 or _tag(argv_p + 16) != T_INT) {
+    if (_tag(argv_p) != T_PTR or _tag(argv_p + 16) != T_INT) {
         lv_error(E_TYPE, cstr("ptr_add() expects a pointer and an integer offset"), cstr("Use ptr_add(buf, 1)."))
     }
-    let owner = _find_owner(_val(argv_p))
-    # The table of records moves when it grows (_register_alias_meta), so what is needed of this record
-    # is read now, not after the call.
-    let owner_kind = ld32(owner + PM_KIND)
-    let owner_base = ld64(owner + PM_BASE)
     let result = stack_buf(8)
-    st64(result, 0)
-    let byte_offset = _val(argv_p + 16) * 16
-    if (owner_kind == PTR_ALLOC) {
-        # The rules know an allocation by its start, so an offset from a pointer made by ptr_add is
-        # counted from the start of the allocation.
-        let root = owner_base
-        _unsafe_check(zue_mem_ptr_add_ok(root, _val(argv_p) - root + byte_offset, result))
-    } else {
-        st64(result, _val(argv_p) + byte_offset)
-    }
-    _register_alias_meta(ld64(result), _find_owner(_val(argv_p)))
-    if (owner_kind == PTR_ALLOC) {
-        zue_mem_track_alias(ld64(result), owner_base)
-    }
+    _unsafe_check(zue_mem_ptr_add_ok(_val(argv_p), _val(argv_p + 16), result))
     let o = stack_buf(16)
     _set(o, T_PTR, ld64(result))
     retp(o)
@@ -1998,9 +1872,8 @@ func lb_defer(self_p, argc_i, argv_p) {
         lv_error(E_ARGUMENT, cstr("defer() expects exactly 1 argument"),
                  cstr("Use defer(close(file)) for general cleanup, or defer(ptr) inside unsafe"))
     }
-    if (g_block_depth > 0 and _is_pointer(argv_p) != 0) {
-        zue_mem_defer(_val(argv_p))
-        _defer_push(_val(argv_p))
+    if (g_block_depth > 0 and _tag(argv_p) == T_PTR) {
+        _unsafe_check(zue_mem_defer(_val(argv_p)))
         let o = stack_buf(16)
         _null(o)
         retp(o)
@@ -2009,16 +1882,68 @@ func lb_defer(self_p, argc_i, argv_p) {
              cstr("Use defer(close(file)) or another function call to schedule cleanup"))
 }
 
-# address_of(name): a pointer to the named variable's storage.
-func lv_addr(slot_p) {
-    let target = slot_p
-    if (_is_pointer(slot_p) != 0) {
-        target = _val(slot_p)
+# Cells of captured variables named by address_of(). A pointer value does not hold the address, so the
+# collector would not see that the cell is still in use; this array is a root range until the outermost
+# block ends.
+let g_keep = 0
+let g_keep_n = 0
+let g_keep_cap = 0
+
+func _keep_cell(cell) {
+    if (g_keep_n == g_keep_cap) {
+        let cap = 16
+        if (g_keep_cap != 0) {
+            cap = g_keep_cap * 2
+        }
+        let grown = calloc(cap, 8)
+        if (grown == 0) {
+            lv_error(E_RUNTIME, cstr("out of memory"), cstr("Free memory, or make fewer pointers in one block."))
+        }
+        lv_gc_root_add(grown, grown + cap * 8)
+        if (g_keep != 0) {
+            memcpy(grown, g_keep, g_keep_n * 8)
+            lv_gc_root_remove(g_keep)
+            free(g_keep)
+        }
+        g_keep = grown
+        g_keep_cap = cap
     }
-    _unsafe_check(zue_mem_addr_ok(target, 1))
-    _register_addr_meta(slot_p)
+    st64(g_keep + g_keep_n * 8, cell)
+    g_keep_n += 1
+}
+
+func _drop_kept_cells() {
+    if (g_keep != 0) {
+        lv_gc_root_remove(g_keep)
+        free(g_keep)
+    }
+    g_keep = 0
+    g_keep_n = 0
+    g_keep_cap = 0
+}
+
+# address_of(name): a pointer to the named variable's storage. where_i is 0 for a global, 1 for a local
+# variable in the stack frame of the running function (its pointer may not be returned from it), and 2 for
+# a variable in a heap cell (captured by a closure).
+func lv_addr(slot_p, where_i) {
+    _need_unsafe(cstr("address_of"))
+    _unsafe_check(zue_mem_addr_ok(_is_pointer(slot_p), 1))
+    let depth = -1
+    if (where_i == 1) {
+        depth = ld32(addr_of("lv_depth"))
+    }
     let o = stack_buf(16)
-    _set(o, T_PTR, slot_p)
+    let p = zue_mem_find_addr(slot_p)
+    if (p != 0) {
+        st64(zue_mem_entry(p) + AE_DEPTH, depth)
+        _set(o, T_PTR, p)
+        retp(o)
+    }
+    if (where_i == 2) {
+        _keep_cell(slot_p)
+    }
+    _new_entry(o, slot_p, 1, AK_ADDR, depth)
+    zue_mem_remember_addr(slot_p, _val(o))
     retp(o)
 }
 
@@ -2041,3 +1966,4 @@ func lv_data_init() {
     zue_data_init()
     zue_mem_init()
 }
+

@@ -8,14 +8,14 @@ if (file_exists(filename)) {
 
 let f = open(filename, "w")
 assert(f)
-assert(write(f, "Hello Zue\nSecond Line\n"))
+write(f, "Hello Zue\nSecond Line\n")
 close(f)
 
 func write_with_defer(path, text) {
     let handle = open(path, "w")
     assert(handle)
     defer(close(handle))
-    assert(write(handle, text))
+    write(handle, text)
 }
 
 write_with_defer(filename, "Deferred Hello\n")

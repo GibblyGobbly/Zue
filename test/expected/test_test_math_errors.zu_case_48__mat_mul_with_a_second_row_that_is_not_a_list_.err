@@ -1,0 +1,7 @@
+Argument Error [E0420] in /tmp/zue_test_case.zu at line 4:
+  mat_mul() dimension mismatch (argument 2: row 2 has type int, not list)
+
+   4 | print(mat_mul([[1.0, 2.0]], [[1.0], pass(7)]))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Each row of a matrix is a list or a dense list of numbers.

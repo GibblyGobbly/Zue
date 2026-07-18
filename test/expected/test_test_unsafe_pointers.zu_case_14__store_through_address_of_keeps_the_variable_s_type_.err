@@ -1,0 +1,7 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 5:
+  store() cannot change a float variable to int
+
+   5 |     store(address_of(z), 3)
+     |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: A variable keeps the type of its first value; store a value of the same type.

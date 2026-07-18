@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// A file operation that the system refuses is an error with the system's reason, never a silent false or an
+// empty result.
+
+# CASE flush on a full disk
+let f = open("/dev/full", "w")
+write(f, "abc")
+flush(f)
+print("not reached")
+# CASE close on a full disk
+let f = open("/dev/full", "w")
+write(f, "abc")
+close(f)
+print("not reached")
+# CASE write to a file opened for reading
+let f = open("test/util.zu", "r")
+write(f, "x")
+# CASE write needs a string
+func pass(v) {
+    return [v, null][0]
+}
+let f = open("/dev/null", "w")
+write(f, pass(42))
+# CASE read from a file opened for writing
+let f = open("/dev/null", "w")
+print(read(f))
+# CASE read_line from a file opened for writing
+let f = open("/dev/null", "w")
+print(read_line(f))
+# CASE a directory does not open
+print(open("test", "r"))
+print(open("test", "w"))
+# CASE a NUL byte in a path
+print(file_exists("test/util.zu"))
+print(file_exists("test/util.zu" + to_string('\0') + "x"))
+# CASE a NUL byte in a command
+system("true" + to_string('\0') + "; echo INJECT")
+# CASE exit with a status above 255
+print("before")
+exit(256)
+# CASE exit with a negative status
+exit(-1)
+# CASE exit with a status
+print("seven")
+exit(7)

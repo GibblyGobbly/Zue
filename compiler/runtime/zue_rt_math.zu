@@ -36,6 +36,9 @@ extern("getline", "i64", "ptr,ptr,ptr")
 extern("getrandom", "i64", "ptr,i64,i32")
 extern("__errno_location", "ptr", "")
 extern("strerror", "ptr", "i32")
+extern("ferror", "i32", "ptr")
+extern("fileno", "i32", "ptr")
+extern("fstat", "i32", "i32,ptr")
 
 # Math
 
@@ -684,9 +687,16 @@ func _arg_file(self_p, argv, i) {
     return f
 }
 
+# An error for a file operation that the system refused, with its reason (errno).
+func _io_fail(self_p) {
+    let e = ld32(__errno_location())
+    _errf(E_RUNTIME, cstr("The system reported this error. Check the disk, the path and the mode the file was opened with."),
+          cstr("%s() failed: %s"), _fname(self_p), strerror(e), 0)
+}
+
 func lb_open(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
-    let path = _arg_str(self_p, argv_p, 0)
+    let path = _arg_path(self_p, argv_p, 0)
     let mode = _arg_str(self_p, argv_p, 1)
     let m = mode + S_DATA
     if (strcmp(m, cstr("r")) != 0 and strcmp(m, cstr("w")) != 0 and strcmp(m, cstr("a")) != 0) {
@@ -695,6 +705,13 @@ func lb_open(self_p, argc_i, argv_p) {
     let o = stack_buf(16)
     let fp = fopen(path + S_DATA, m)
     if (fp == 0) {
+        _null(o)
+        retp(o)
+    }
+    # fopen opens a directory for reading; reading it would fail, so it is refused like a missing file.
+    let st = stack_buf(144)
+    if (fstat(fileno(fp), st) == 0 and band(ld32(st + 24), 61440) == 16384) {
+        fclose(fp)
         _null(o)
         retp(o)
     }
@@ -708,8 +725,10 @@ func lb_open(self_p, argc_i, argv_p) {
 func lb_close(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let f = _arg_file(self_p, argv_p, 0)
-    fclose(ld64(f + FI_FP))
     st32(f + FI_CLOSED, 1)
+    if (fclose(ld64(f + FI_FP)) != 0) {
+        _io_fail(self_p)
+    }
     let o = stack_buf(16)
     _null(o)
     retp(o)
@@ -727,6 +746,9 @@ func lb_read(self_p, argc_i, argv_p) {
         _buf_add(b, chunk, n)
         n = fread(chunk, 1, 65536, ld64(f + FI_FP))
     }
+    if (ferror(ld64(f + FI_FP)) != 0) {
+        _io_fail(self_p)
+    }
     _buf_done(o, b)
     retp(o)
 }
@@ -742,6 +764,9 @@ func lb_read_line(self_p, argc_i, argv_p) {
     let line = ld64(cell)
     if (n < 0) {
         free(line)
+        if (ferror(ld64(f + FI_FP)) != 0) {
+            _io_fail(self_p)
+        }
         _null(o)
         retp(o)
     }
@@ -756,31 +781,35 @@ func lb_read_line(self_p, argc_i, argv_p) {
 func lb_write(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let f = _arg_file(self_p, argv_p, 0)
-    let s = stack_buf(16)
-    _to_string(s, argv_p + 16)
-    let w = fwrite(_val(s) + S_DATA, 1, ld64(_val(s)), ld64(f + FI_FP))
+    let s = _arg_str(self_p, argv_p, 1)
+    let w = fwrite(s + S_DATA, 1, ld64(s), ld64(f + FI_FP))
+    if (w != ld64(s)) {
+        _io_fail(self_p)
+    }
     let o = stack_buf(16)
-    _bool(o, w == ld64(_val(s)))
+    _null(o)
     retp(o)
 }
 
 func lb_file_exists(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let o = stack_buf(16)
-    _bool(o, access(_arg_str(self_p, argv_p, 0) + S_DATA, 0) == 0)
+    _bool(o, access(_arg_path(self_p, argv_p, 0) + S_DATA, 0) == 0)
     retp(o)
 }
 
 func lb_remove_file(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let o = stack_buf(16)
-    _bool(o, remove(_arg_str(self_p, argv_p, 0) + S_DATA) == 0)
+    _bool(o, remove(_arg_path(self_p, argv_p, 0) + S_DATA) == 0)
     retp(o)
 }
 
 func lb_flush(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
-    fflush(ld64(_arg_file(self_p, argv_p, 0) + FI_FP))
+    if (fflush(ld64(_arg_file(self_p, argv_p, 0) + FI_FP)) != 0) {
+        _io_fail(self_p)
+    }
     let o = stack_buf(16)
     _null(o)
     retp(o)
@@ -882,6 +911,40 @@ func _row_at(r, j) {
     return _elem(ld64(_val(r) + L_ITEMS) + 16 * j)
 }
 
+# The column count of a matrix argument (a list of rows, or one dense row). Every row must be a list or a
+# dense list of that many items, and at least one.
+func _mat_cols(m, argn) {
+    if (_tag(m) == T_DENSE) {
+        if (ld64(_val(m) + D_COUNT) == 0) {
+            _errf(E_ARGUMENT, cstr("A matrix needs at least one row and one column."),
+                  cstr("mat_mul() dimension mismatch (argument %d has no columns)"), argn, 0, 0)
+        }
+        return ld64(_val(m) + D_COUNT)
+    }
+    let n = ld64(_val(m) + L_COUNT)
+    let items = ld64(_val(m) + L_ITEMS)
+    let cols = 0
+    for (let i = 0; i < n; i++) {
+        let row = items + 16 * i
+        if (_is_listish(row) == 0) {
+            _errf4(E_ARGUMENT, cstr("Each row of a matrix is a list or a dense list of numbers."),
+                   cstr("mat_mul() dimension mismatch (argument %d: row %d has type %s, not list)"), argn, i + 1, _type_name(row), 0)
+        }
+        let len = _row_len(row)
+        if (i == 0) {
+            cols = len
+            if (cols == 0) {
+                _errf(E_ARGUMENT, cstr("A matrix needs at least one row and one column."),
+                      cstr("mat_mul() dimension mismatch (argument %d has no columns)"), argn, 0, 0)
+            }
+        } else if (len != cols) {
+            _errf4(E_ARGUMENT, cstr("Every row of a matrix has the same number of items."),
+                   cstr("mat_mul() dimension mismatch (argument %d: row %d has length %d, row 1 has length %d)"), argn, i + 1, len, cols)
+        }
+    }
+    return cols
+}
+
 func lb_mat_mul(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let o = stack_buf(16)
@@ -902,20 +965,12 @@ func lb_mat_mul(self_p, argc_i, argv_p) {
         rows_b = ld64(_val(b) + L_COUNT)
     }
     if (rows_a == 0 or rows_b == 0) {
-        _list_new(o, 0)
-        retp(o)
+        _errf(E_ARGUMENT, cstr("A matrix needs at least one row and one column."),
+              cstr("mat_mul() dimension mismatch (argument %d has no rows)"), 1 + (rows_a != 0), 0, 0)
     }
-    let first_a = a
-    let first_b = b
-    if (_tag(a) == T_LIST and ld64(_val(a) + L_COUNT) > 0) {
-        first_a = ld64(_val(a) + L_ITEMS)
-    }
-    if (_tag(b) == T_LIST and ld64(_val(b) + L_COUNT) > 0) {
-        first_b = ld64(_val(b) + L_ITEMS)
-    }
-    let cols_a = _row_len(first_a)
-    let cols_b = _row_len(first_b)
-    if (cols_a != rows_b or cols_a == 0) {
+    let cols_a = _mat_cols(a, 1)
+    let cols_b = _mat_cols(b, 2)
+    if (cols_a != rows_b) {
         _errf(E_ARGUMENT, cstr("The first matrix needs as many columns as the second has rows."),
               cstr("mat_mul() dimension mismatch (%d columns vs %d rows)"), cols_a, rows_b, 0)
     }
@@ -947,9 +1002,13 @@ func lb_mat_mul(self_p, argc_i, argv_p) {
         for (let k = 0; k < cols_a; k++) {
             let av = fa[i * cols_a + k]
             for (let j = 0; j < cols_b; j++) {
-                let r = fadd(fc[i * cols_b + j], fmul(av, fb[k * cols_b + j]))
-                if (_is_finite(r) == 0) {
+                let prod = fmul(av, fb[k * cols_b + j])
+                if (_is_finite(prod) == 0) {
                     _float_overflow(cstr("*"))
+                }
+                let r = fadd(fc[i * cols_b + j], prod)
+                if (_is_finite(r) == 0) {
+                    _float_overflow(cstr("+"))
                 }
                 fc[i * cols_b + j] = r
             }

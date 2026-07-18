@@ -323,6 +323,10 @@ func lb_spawn(self_p, argc_i, argv_p) {
     if (_tag(argv_p) != T_FUNC) {
         _arg_fail(self_p, argv_p, 0, cstr("function"))
     }
+    # R2: a pointer may not leave its unsafe block, and the new thread can run after the block ends.
+    for (let i = 1; i < argc_i; i++) {
+        lvp_ptr_escape_check(argv_p + i * 16)
+    }
     if (g_blue_cur == 0) {
         _blue_init()
     }
@@ -452,6 +456,8 @@ func lb_send(self_p, argc_i, argv_p) {
     if (ld64(ch + CH_CLOSED) != 0) {
         _blue_fail(cstr("send on a closed channel"), cstr("Do not close a channel that is still being sent to."))
     }
+    # R2: the value can be received after the block ends.
+    lvp_ptr_escape_check(argv_p + 16)
     let r = _blue_q_pop(ch, CH_RECVQ, CH_RECVT)
     if (r != 0) {
         _cp(r + CO_VAL, argv_p + 16)

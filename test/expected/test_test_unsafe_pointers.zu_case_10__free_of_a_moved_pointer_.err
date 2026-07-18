@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 4:
+  free() needs the pointer that alloc() returned, not one moved with ptr_add()
+
+   4 |     free(d)
+     |     ^^^^^^^
+
+Hint: Keep the pointer from alloc() and free that one.

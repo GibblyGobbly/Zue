@@ -1,0 +1,7 @@
+Argument Error [E0420] in /tmp/zue_test_case.zu at line 3:
+  mat_mul() dimension mismatch (argument 1: row 2 has length 1, row 1 has length 2)
+
+   3 | print(mat_mul([[1.0, 2.0], r], [[1.0], [1.0]]))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Every row of a matrix has the same number of items.

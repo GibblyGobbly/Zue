@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 1:
+  system() argument 1 contains a NUL byte
+
+   1 | system("true" + to_string('\0') + "; echo INJECT")
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: A path or command cannot hold the character '\0'.

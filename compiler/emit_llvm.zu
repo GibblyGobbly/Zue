@@ -473,20 +473,21 @@ func ex_address_of(n) {
         let name = n.args[0].name
         let r = resolve(name)
         ll_mark(n)
+        # The second argument says where the variable lives: 0 global, 1 stack frame, 2 heap cell.
         if (r.kind == "local") {
             if (r.v.cell) {
                 let cell = ll_reg()
                 ll("{cell} = load ptr, ptr {r.v.c}")
-                return ll_call_lv("lv_addr", "ptr {cell}")
+                return ll_call_lv("lv_addr", "ptr {cell}, i32 2")
             }
-            return ll_call_lv("lv_addr", "ptr {r.v.c}")
+            return ll_call_lv("lv_addr", "ptr {r.v.c}, i32 1")
         }
         if (r.kind == "cap") {
-            return ll_call_lv("lv_addr", "ptr {cap_cell(r.i)}")
+            return ll_call_lv("lv_addr", "ptr {cap_cell(r.i)}, i32 2")
         }
         if (r.kind == "global") {
             ll_reg_global(name)
-            return ll_call_lv("lv_addr", "ptr {ll_gname(name)}")
+            return ll_call_lv("lv_addr", "ptr {ll_gname(name)}, i32 0")
         }
     }
     ll_mark(n)
@@ -887,6 +888,22 @@ func global_store_check(value, in_function) {
     ll_label(done)
 }
 
+# R2: a pointer may not go into a captured variable, which belongs to a closure that can outlive the block.
+# Only a value with the pointer tag (16) needs the call.
+func capture_store_check(value) {
+    let tag = ll_reg()
+    let is_ptr = ll_reg()
+    ll("{tag} = load i64, ptr {value}")
+    ll("{is_ptr} = icmp eq i64 {tag}, 16")
+    let check = ll_new_label("pcap")
+    let done = ll_new_label("pcapped")
+    ll_condbr(is_ptr, check, done)
+    ll_label(check)
+    ll("call void @lvp_ptr_escape_check(ptr {value})")
+    ll_br(done)
+    ll_label(done)
+}
+
 func store_name(name, value) {
     let r = resolve(name)
     if (r.kind == "local") {
@@ -895,6 +912,7 @@ func store_name(name, value) {
         }
         var_set(r.v, value)
     } else if (r.kind == "cap") {
+        capture_store_check(value)
         ll_copy_heap(cap_cell(r.i), value)
     } else {
         ll_reg_global(name)
@@ -1314,11 +1332,14 @@ func st_return(n) {
             ll("call void @lvp_ptr_escape_check(ptr {v})")
         }
         let where_text = ll_cstr("returned from a function")
-        # Only a box (tag 15) can be wrong here; the check takes the value by value.
+        # A box (tag 15) or a pointer (tag 16) needs a check: a scoped box may not leave its function, and a
+        # pointer to a local variable may not outlive its stack frame.
         let ret_tag = ll_reg()
+        let tag_off = ll_reg()
         let is_box = ll_reg()
         ll("{ret_tag} = load i64, ptr {v}")
-        ll("{is_box} = icmp eq i64 {ret_tag}, 15")
+        ll("{tag_off} = sub i64 {ret_tag}, 15")
+        ll("{is_box} = icmp ult i64 {tag_off}, 2")
         let box_check = ll_new_label("rbox")
         let box_done = ll_new_label("rchecked")
         ll_condbr(is_box, box_check, box_done)
@@ -1327,7 +1348,7 @@ func st_return(n) {
         let ret_val = ll_reg()
         ll("{ret_ptr} = getelementptr inbounds i8, ptr {v}, i64 8")
         ll("{ret_val} = load i64, ptr {ret_ptr}")
-        ll("call void @lvv_box_escape_check(i64 {ret_tag}, i64 {ret_val}, ptr {where_text})")
+        ll("call void @lvv_return_check(i64 {ret_tag}, i64 {ret_val}, ptr {where_text})")
         ll_br(box_done)
         ll_label(box_done)
         run_defers(0)
@@ -1669,7 +1690,8 @@ func declarations() {
     append(d, "declare void @lv_unsafe_begin()")
     append(d, "declare void @lv_unsafe_end()")
     append(d, "declare void @lvp_ptr_escape_check(ptr)")
-    append(d, "declare %LV @lv_addr(ptr)")
+    append(d, "declare %LV @lv_addr(ptr, i32)")
+    append(d, "declare void @lvv_return_check(i64, i64, ptr)")
     append(d, "declare %LV @lv_addr_invalid(i32)")
     append(d, "declare void @lv_arity(ptr, i32, i32, i32)")
     append(d, "declare void @lvv_unbox_fail(ptr, i64, i64, i64)")

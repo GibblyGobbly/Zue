@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 4:
+  pointer was already given to defer() and is freed when the block ends
+
+   4 |     defer(b)
+     |     ^^^^^^^^
+
+Hint: Use either defer(ptr) or free(ptr) for an allocation, and only once.

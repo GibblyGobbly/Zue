@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 5:
+  ptr_add() cannot move a pointer to an object made with alloc()
+
+   5 |     store(ptr_offset(p, 1), 6)
+     |           ^^^^^^^^^^^^^^^^
+
+Hint: Read or write a field instead, for example p.name or p.name = value.

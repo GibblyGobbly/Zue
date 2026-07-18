@@ -1,0 +1,9 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 3:
+  pointer cannot escape the current unsafe block
+
+   3 |     return address_of(x)
+     |            ^^^^^^^^^^^^^
+
+Hint: Pointers must stay inside the current unsafe block. Copy the pointed-to value out instead.
+Call stack, innermost call first:
+  in h(), called at line 6: let q = h()

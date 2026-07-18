@@ -1,0 +1,9 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 5:
+  this box already belongs to a template; a box has one owner
+
+   5 |     let u = Owner(b)
+     |             ^^^^^^^^
+
+Hint: Make a new box for the second template, or copy the bytes into one.
+Call stack, innermost call first:
+  in mk(), called at line 8: let u = mk()

@@ -233,7 +233,7 @@ fix: Pass exactly the arguments that the function takes.
 
 == E0204
 title: A value of the wrong type is stored
-match: cannot assign | cannot store | cannot append | must be a bool, got | variable '
+match: cannot assign | cannot store | cannot append | must be a bool, got | variable ' | store() cannot change
 text: A variable keeps the type of its first value, and a list or typed field holds one type.
 example:
     let n = 1
@@ -364,7 +364,7 @@ fix: Check the range of the input before calling.
 
 == E0412
 title: A function was given a value it cannot work with
-match: must not be negative | must not be 0 | argument must be greater than | argument must be between | is greater than the upper | needs a list with at least one | digits must be between | decimals must be between | exponent of an int | mode '
+match: must not be negative | must not be 0 | argument must be greater than | argument must be between | is greater than the upper | needs a list with at least one | digits must be between | decimals must be between | exponent of an int | mode ' | contains a NUL byte | status must be from
 text: The type is right but the value is not allowed, such as a negative size or an empty list.
 example:
     print(range(0, 10, 0))
@@ -397,8 +397,9 @@ fix: Give the recursion a base case, or work on smaller data.
 
 == E0450
 title: A file operation failed
-match: on a closed file | cannot open | cannot read file | No such file
-text: The file was closed, does not exist, or cannot be opened with that mode.
+match: on a closed file | cannot open | cannot read file | No such file | () failed:
+text: The file was closed, does not exist, or cannot be opened with that mode, or the system
+    reported an error while reading, writing, flushing or closing it (a full disk, for example).
 example:
     let f = open("out.txt", "w")
     close(f)

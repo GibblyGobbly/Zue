@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 3:
+  only memory from alloc() can be freed: this pointer comes from address_of()
+
+   3 |     free(address_of(x))
+     |     ^^^^^^^^^^^^^^^^^^^
+
+Hint: A variable named by address_of() is not freed; only free what alloc() returned.

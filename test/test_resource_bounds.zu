@@ -309,3 +309,72 @@ churn_dense(200)
 let early = peak_kib()
 churn_dense(800)
 print("grew: {grew(early, peak_kib())}")
+# CASE boxes owned by templates do not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+# The box bytes are outside the heap; they count toward the next cycle, or the template and its box (about
+# 100 heap bytes) would never start one (1.3 GB peak at 160,000 boxes before).
+template Holder { name, buf }
+let holders = []
+for (let i = 0; i < 64; i++) {
+    append(holders, null)
+}
+func churn_holders(n) {
+    for (let i = 0; i < n; i++) {
+        holders[i % 64] = Holder("h", box[65536])
+    }
+}
+churn_holders(8000)
+let early = peak_kib()
+churn_holders(64000)
+print("grew: {grew(early, peak_kib())}")
+# CASE unsafe memory of varying sizes in one long block does not grow the peak
+func peak_kib() {
+    let f = open("/proc/self/status", "r")
+    let text = read(f)
+    close(f)
+    for (let line in split(text, "\n")) {
+        if (starts_with(line, "VmHWM:")) {
+            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+        }
+    }
+    return 0
+}
+
+# The peak may grow by a third and 16 MiB between the early and the late measurement.
+func grew(early, late) {
+    return late > early * 4 / 3 + 16384
+}
+
+# Sizes vary so that malloc hands out addresses again in a different order; ptr_add makes interior pointers.
+func churn_sizes(n) {
+    unsafe {
+        for (let i = 0; i < n; i++) {
+            let a = alloc(4 + (i * 7919) % 500)
+            let b = alloc(4 + (i * 104729) % 700)
+            store(ptr_add(b, 3), i)
+            store(a, load(ptr_add(b, 3)))
+            free(a)
+            free(b)
+        }
+    }
+}
+churn_sizes(50000)
+let early = peak_kib()
+churn_sizes(400000)
+print("grew: {grew(early, peak_kib())}")

@@ -32,14 +32,14 @@ print(index_of("hello", "z"))
 print(index_of("hello", ""))
 print(last_index_of("hello", "h"))
 print(last_index_of("hello", "l"))
-# CASE write returns whether it worked
-let f = open("test/util.zu", "r")
-print(write(f, "x"))
-close(f)
+# CASE write returns null
 let g = open("test_hardening_tmp.txt", "w")
 print(write(g, "abc"))
 close(g)
 print(remove_file("test_hardening_tmp.txt"))
+# CASE write to a file opened for reading is an error
+let f = open("test/util.zu", "r")
+write(f, "x")
 # CASE a box owned by a template cannot be freed
 template Holder { bytes }
 let h = Holder(box[4])

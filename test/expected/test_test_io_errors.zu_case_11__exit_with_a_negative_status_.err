@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 1:
+  exit() status must be from 0 to 255, got -1
+
+   1 | exit(-1)
+     | ^^^^^^^^
+
+Hint: An exit status is a number from 0 (success) to 255.

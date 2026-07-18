@@ -1,0 +1,9 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 3:
+  address_of() may only be used inside unsafe blocks
+
+   3 |     let p = address_of(n)
+     |             ^^^^^^^^^^^^^
+
+Hint: Wrap pointer operations in unsafe { ... }
+Call stack, innermost call first:
+  in f(), called at line 5: f()

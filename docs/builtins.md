@@ -28,8 +28,8 @@ as `sqrt() argument 1 must be a number, got string`.
 | `len(v)` | Length of a string, list, dense list, map or box; anything else is a `Type Error` |
 | `clock()` | Monotonic time in seconds, as a float. The zero point is arbitrary: subtract two readings |
 | `args()` | The command-line arguments after the program name, as a list of strings |
-| `exit(code)` | Flushes standard output and ends the program with that status (default 0) |
-| `system(cmd)` | Runs `cmd` with the shell and returns its exit status as an int |
+| `exit(code)` | Flushes standard output and ends the program with that status (default 0). The status must be from 0 to 255 (`Argument Error` otherwise). If standard output cannot be written (a full disk, a closed pipe), the status is 1 and the reason goes to standard error |
+| `system(cmd)` | Runs `cmd` with the shell and returns its exit status as an int. A NUL byte in `cmd` is an `Argument Error` |
 
 Floats are printed with up to six significant digits and always show a point or an exponent (`print(1.0)` prints `1.0`).
 
@@ -403,8 +403,10 @@ print(vec_mul([1, 2], [3, 4]))                      # d[3.0, 8.0]
 print(mat_mul([[1, 2], [3, 4]], [[5, 6], [7, 8]]))  # [d[19.0, 22.0], d[43.0, 50.0]]
 ```
 
-`mat_mul` is a plain triple loop that runs on one thread. If the column count of `a` does not
-equal the row count of `b`, it is an `Argument Error` (`mat_mul() dimension mismatch`).
+`mat_mul` is a plain triple loop that runs on one thread. Every row of a matrix must be a list or a
+dense list, all rows of one matrix must have the same length, and neither matrix may be empty. If one
+of these does not hold, or the column count of `a` does not equal the row count of `b`, it is an
+`Argument Error` (`mat_mul() dimension mismatch`).
 
 ### Example: distance between two points
 
@@ -458,14 +460,14 @@ directory of the running program, not to the source file.
 
 | Function | Description |
 |---|---|
-| `open(path, mode)` | Opens a file in mode `"r"`, `"w"` or `"a"`. Returns a file handle, or `null` if it cannot be opened. Any other mode is an `Argument Error` |
-| `close(handle)` | Flushes and closes the file. Closing twice is a runtime error |
-| `write(handle, text)` | Writes a string to the file |
-| `read(handle)` | Reads the rest of the file into one string |
-| `read_line(handle)` | Reads the next line without its newline; `null` at end of file |
-| `file_exists(path)` | `true` if the path exists |
+| `open(path, mode)` | Opens a file in mode `"r"`, `"w"` or `"a"`. Returns a file handle, or `null` if it cannot be opened (a directory cannot be opened). Any other mode is an `Argument Error` |
+| `close(handle)` | Flushes and closes the file. Closing twice is a runtime error, and so is a failed flush (`close() failed: No space left on device`) |
+| `write(handle, text)` | Writes a string to the file and returns `null`. `text` must be a string. A failed write is an error with the system's reason (`write() failed: Bad file descriptor` for a file opened with `"r"`) |
+| `read(handle)` | Reads the rest of the file into one string. A read error is an error (`read() failed: ...`), not an empty string |
+| `read_line(handle)` | Reads the next line without its newline; `null` at end of file. A read error is an error |
+| `file_exists(path)` | `true` if the path exists. In every path, a NUL byte is an `Argument Error` |
 | `remove_file(path)` | Deletes the file; `true` on success, `false` on failure |
-| `flush(handle)` | Writes buffered data out without closing the file |
+| `flush(handle)` | Writes buffered data out without closing the file. A failed flush is an error |
 
 A file handle has `type()` `"file"`. Using a handle after `close` is a runtime error
 (`write() on a closed file`, `close() on a closed file`). Handles are not closed

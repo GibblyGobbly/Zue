@@ -102,6 +102,17 @@ func _arg_str(self_p, argv, i) {
     return _val(argv + 16 * i)
 }
 
+# A string argument that is passed to the system as a C string (a path or a command): a NUL byte in it
+# would silently cut it short.
+func _arg_path(self_p, argv, i) {
+    let s = _arg_str(self_p, argv, i)
+    if (strlen(s + S_DATA) != ld64(s)) {
+        _errf(E_ARGUMENT, cstr("A path or command cannot hold the character '\\0'."),
+              cstr("%s() argument %d contains a NUL byte"), _fname(self_p), i + 1, 0)
+    }
+    return s
+}
+
 func _arg_int(self_p, argv, i) {
     if (_tag(argv + 16 * i) != T_INT) {
         _arg_fail(self_p, argv, i, cstr("int"))
@@ -326,7 +337,7 @@ func lb_int(self_p, argc_i, argv_p) {
     let o = stack_buf(16)
     let t = _tag(argv_p)
     if (t == T_PTR and _is_pointer(argv_p) != 0) {
-        _int(o, _val(argv_p))
+        _int(o, _ptr_address(argv_p))
     } else if (t == T_INT) {
         _cp(o, argv_p)
     } else if (t == T_FLOAT) {
@@ -623,8 +634,11 @@ func lb_exit(self_p, argc_i, argv_p) {
     if (argc_i == 1) {
         code = _arg_int(self_p, argv_p, 0)
     }
-    fflush(_stdout())
-    exit(code)
+    if (code < 0 or code > 255) {
+        _errf(E_ARGUMENT, cstr("An exit status is a number from 0 (success) to 255."),
+              cstr("exit() status must be from 0 to 255, got %lld"), code, 0, 0)
+    }
+    exit(lv_flush_stdout_at_exit(code))
     let o = stack_buf(16)
     _null(o)
     retp(o)
@@ -632,7 +646,7 @@ func lb_exit(self_p, argc_i, argv_p) {
 
 func lb_system(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
-    let cmd = _arg_str(self_p, argv_p, 0)
+    let cmd = _arg_path(self_p, argv_p, 0)
     let o = stack_buf(16)
     fflush(_stdout())
     let rc = system(cmd + S_DATA)

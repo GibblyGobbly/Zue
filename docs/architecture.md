@@ -107,7 +107,7 @@ value in a stack slot and passes pointers to the runtime.
 | 12 | bloc | pointer to a bloc object |
 | 14 | template | pointer to a template object |
 | 15 | box | a handle with a slot index and a generation |
-| 16 | pointer | a raw pointer, only inside `unsafe` |
+| 16 | pointer | only inside `unsafe`: the number of an entry of the allocation table (high 32 bits) and a slot in it (low 32 bits); see `zue_rt_rules.zu` |
 | 18 | thread | pointer to a blue thread object (`zue_rt_blue.zu`) |
 | 19 | channel | pointer to a channel object |
 

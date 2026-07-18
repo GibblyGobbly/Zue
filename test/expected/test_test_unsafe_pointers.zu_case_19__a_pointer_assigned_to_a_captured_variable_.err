@@ -1,0 +1,9 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 3:
+  pointer cannot escape the current unsafe block
+
+   3 |     keep = v
+     |            ^
+
+Hint: Pointers must stay inside the current unsafe block. Copy the pointed-to value out instead.
+Call stack, innermost call first:
+  in <anonymous>(), called at line 8: set(b)

@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 11:
+  pointer was freed or freed twice
+
+  11 |     print(load(q))
+     |           ^^^^^^^
+
+Hint: That pointer is no longer valid. Prefer defer(ptr) so cleanup happens once at block exit.

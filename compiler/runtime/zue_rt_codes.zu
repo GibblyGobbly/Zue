@@ -208,6 +208,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("variable '")) != 0) {
         return cstr("E0204")
     }
+    if (strstr(msg, cstr("store() cannot change")) != 0) {
+        return cstr("E0204")
+    }
     if (strstr(msg, cstr("needs a bool")) != 0) {
         return cstr("E0205")
     }
@@ -334,6 +337,12 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("mode '")) != 0) {
         return cstr("E0412")
     }
+    if (strstr(msg, cstr("contains a NUL byte")) != 0) {
+        return cstr("E0412")
+    }
+    if (strstr(msg, cstr("status must be from")) != 0) {
+        return cstr("E0412")
+    }
     if (strstr(msg, cstr("cannot read")) != 0) {
         return cstr("E0413")
     }
@@ -377,6 +386,9 @@ func lv_code_for(msg) {
         return cstr("E0450")
     }
     if (strstr(msg, cstr("No such file")) != 0) {
+        return cstr("E0450")
+    }
+    if (strstr(msg, cstr("() failed:")) != 0) {
         return cstr("E0450")
     }
     if (strstr(msg, cstr("cannot read system entropy")) != 0) {

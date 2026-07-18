@@ -15,7 +15,10 @@ print(f())
 # CASE address of fn
 func f() {
     let n = 5
-    let p = address_of(n)
+    unsafe {
+        let p = address_of(n)
+        store(p, 6)
+    }
     n = n + 1
     print(n)
 }

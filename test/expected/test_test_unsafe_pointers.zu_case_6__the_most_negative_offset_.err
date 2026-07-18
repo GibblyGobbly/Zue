@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 4:
+  ptr_add() moved outside the allocation bounds
+
+   4 |     print(ptr_offset(ptr_offset(buf, 1), -9223372036854775807 - 1))
+     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: That pointer step moved past the allocated buffer. Keep ptr_add() within the allocated slot range.

@@ -1,0 +1,7 @@
+Runtime Error [E0450] in /tmp/zue_test_case.zu at line 3:
+  flush() failed: No space left on device
+
+   3 | flush(f)
+     | ^^^^^^^^
+
+Hint: The system reported this error. Check the disk, the path and the mode the file was opened with.

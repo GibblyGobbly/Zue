@@ -3,4 +3,4 @@ Runtime Error [E0460] in /tmp/zue_test_case.zu at line 4:
 
    4 |     let l = [a]
 
-Hint: Pointers cannot go into lists or maps because those values are GC-managed.
+Hint: Pointers cannot go into lists, maps, templates, blocs or data values, because the collector manages those.

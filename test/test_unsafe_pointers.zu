@@ -1,0 +1,239 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// A pointer names its allocation and a slot in it, so a freed allocation stays freed when malloc hands its
+// address out again, every offset is checked against the slot count, and a pointer cannot outlive the
+// variable or block it points into.
+
+# CASE a pointer into new memory at an old address is valid
+func step(i) {
+    unsafe {
+        let a = alloc(4 + (i * 7919) % 500)
+        let b = alloc(4 + (i * 104729) % 700)
+        let q = ptr_add(b, 3)
+        store(q, i)
+        free(a)
+        free(b)
+    }
+}
+for (let i = 0; i < 2000; i++) {
+    step(i)
+}
+print("2000 steps")
+# CASE an old pointer stays freed when its address is reused
+unsafe {
+    for (let i = 0; i < 10; i++) {
+        free(alloc(2))
+    }
+    let a = alloc(2)
+    let q = ptr_offset(a, 1)
+    free(a)
+    let b = alloc(2)
+    defer(b)
+    store(ptr_offset(b, 1), 99)
+    print(load(q))
+}
+# CASE ptr_offset on an object made with alloc
+bloc V { x: int, y: int }
+unsafe {
+    let p = alloc(V{1, 2})
+    defer(p)
+    store(ptr_offset(p, 1), 6)
+}
+# CASE ptr_offset on an address_of pointer
+let a = 1
+unsafe {
+    let p = address_of(a)
+    print(load(ptr_offset(p, 0)))
+    print(load(ptr_offset(p, 1)))
+}
+# CASE an offset that would wrap around in bytes
+unsafe {
+    let buf = alloc(2)
+    defer(buf)
+    store(buf, 1)
+    print(load(ptr_offset(buf, 1152921504606846977)))
+}
+# CASE the most negative offset
+unsafe {
+    let buf = alloc(2)
+    defer(buf)
+    print(ptr_offset(ptr_offset(buf, 1), -9223372036854775807 - 1))
+}
+# CASE defer twice
+unsafe {
+    let b = alloc(1)
+    defer(b)
+    defer(b)
+}
+# CASE free after defer
+unsafe {
+    let b = alloc(1)
+    defer(b)
+    free(b)
+}
+# CASE defer after free
+unsafe {
+    let b = alloc(1)
+    free(b)
+    defer(b)
+}
+# CASE free of a moved pointer
+unsafe {
+    let c = alloc(2)
+    let d = ptr_offset(c, 1)
+    free(d)
+}
+# CASE free of an address_of pointer
+let x = 1
+unsafe {
+    free(address_of(x))
+}
+# CASE load of a slot never written
+unsafe {
+    let b = alloc(2)
+    defer(b)
+    store(b, 1)
+    print(load(b))
+    print(load(ptr_offset(b, 1)))
+}
+# CASE a pointer stored in memory from alloc
+unsafe {
+    let c = alloc(2)
+    defer(c)
+    store(c, ptr_offset(c, 1))
+}
+# CASE store through address_of keeps the variable's type
+let z = 2.5
+unsafe {
+    store(address_of(z), 3.5)
+    print(z)
+    store(address_of(z), 3)
+}
+# CASE address_of outside unsafe
+func f() {
+    let n = 5
+    let p = address_of(n)
+}
+f()
+# CASE a function returns a pointer to its own local
+func h() {
+    let x = 41
+    return address_of(x)
+}
+unsafe {
+    let q = h()
+    print(load(q))
+}
+# CASE pointers passed through functions
+func id(p) {
+    return p
+}
+let g = 5
+func gaddr() {
+    return address_of(g)
+}
+unsafe {
+    let x = 1
+    let p = id(address_of(x))
+    store(p, 2)
+    store(gaddr(), 6)
+    let b = alloc(1)
+    defer(b)
+    store(id(b), 7)
+    print(x, g, load(b))
+    print(address_of(x) == p, ptr_offset(b, 0) == b)
+}
+# CASE a captured variable named by address_of stays alive
+func make() {
+    let c = 1
+    return func() {
+        return address_of(c)
+    }
+}
+func grab() {
+    let f = make()
+    return f()
+}
+func churn(n) {
+    let junk = []
+    for (let i = 0; i < n; i++) {
+        junk = [i, "x{i}", [i, i]]
+    }
+    return len(junk)
+}
+unsafe {
+    let p = grab()
+    churn(10)
+    churn(300000)
+    let other = []
+    for (let i = 0; i < 1000; i++) {
+        let c = i
+        append(other, func() { return c })
+    }
+    store(p, 5)
+    print(load(p))
+    print(other[1]())
+}
+# CASE a pointer assigned to a captured variable
+let keep = null
+let set = func(v) {
+    keep = v
+}
+unsafe {
+    let b = alloc(1)
+    defer(b)
+    set(b)
+}
+# CASE a pointer given to spawn
+func worker(p) {
+    return p
+}
+unsafe {
+    let b = alloc(1)
+    defer(b)
+    let t = spawn(worker, b)
+}
+# CASE a pointer sent on a channel
+let ch = channel(1)
+unsafe {
+    let b = alloc(1)
+    defer(b)
+    send(ch, b)
+}
+# CASE a pointer given to a template constructor
+template T { v }
+unsafe {
+    let b = alloc(1)
+    defer(b)
+    let t = T(b)
+}
+# CASE a pointer given to a bloc constructor
+bloc B { v }
+unsafe {
+    let b = alloc(1)
+    defer(b)
+    let t = B(b)
+}
+# CASE a box given to two templates
+template Owner { b }
+func mk() {
+    let b = box[8]
+    let t = Owner(b)
+    let u = Owner(b)
+    return u
+}
+let u = mk()
+# CASE a freed pointer is still freed after the table is compacted
+unsafe {
+    let keep = alloc(2)
+    store(keep, 1)
+    let gone = alloc(2)
+    free(gone)
+    for (let i = 0; i < 20000; i++) {
+        free(alloc(1 + i % 7))
+    }
+    print(load(keep))
+    free(keep)
+    print(load(gone))
+}

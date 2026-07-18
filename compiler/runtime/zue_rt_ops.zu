@@ -1055,8 +1055,24 @@ func lv_main(argc_i, argv_p, entry_p) {
     } else {
         pthread_join(ld64(th), 0)
     }
-    fflush(_stdout())
-    return 0
+    return lv_flush_stdout_at_exit(0)
+}
+
+# The program ends with status code, or 1 when what it printed could not all be written (a full disk, a
+# closed pipe): a failure is never reported as success.
+func lv_flush_stdout_at_exit(code) {
+    let rc = fflush(_stdout())
+    let e = ld32(__errno_location())
+    if (rc != 0) {
+        fprintf(_stderr(), cstr("Runtime Error [E0450]: print() failed: %s\n"), strerror(e))
+        return 1
+    }
+    # An earlier write failed when the buffer filled; its reason (errno) is gone by now.
+    if (ferror(_stdout()) != 0) {
+        fprintf(_stderr(), cstr("Runtime Error [E0450]: print() failed: the output could not be written\n"))
+        return 1
+    }
+    return code
 }
 
 # By-value entry points for generated code. The operands arrive as tag and payload words and the

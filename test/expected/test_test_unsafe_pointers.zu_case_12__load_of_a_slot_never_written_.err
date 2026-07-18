@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 6:
+  load() of a pointer slot that was never written
+
+   6 |     print(load(ptr_offset(b, 1)))
+     |           ^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: store() a value in the slot before you load() it.

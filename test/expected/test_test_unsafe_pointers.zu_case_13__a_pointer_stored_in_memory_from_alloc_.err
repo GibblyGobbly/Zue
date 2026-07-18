@@ -1,0 +1,7 @@
+Runtime Error [E0460] in /tmp/zue_test_case.zu at line 4:
+  pointers cannot be stored in memory from alloc()
+
+   4 |     store(c, ptr_offset(c, 1))
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Store the value the pointer points at, or keep the pointer in a local variable.

@@ -21,9 +21,9 @@ Available only inside `unsafe { }`:
 | `alloc(n)` | Allocate `n` value slots; returns a pointer |
 | `free(ptr)` | Free an allocation |
 | `defer(ptr)` | Free `ptr` when the block exits |
-| `load(ptr)` | Read the value at `ptr` |
+| `load(ptr)` | Read the value at `ptr`; a slot of `alloc` memory that was never written is an error |
 | `store(ptr, value)` | Write `value` at `ptr` |
-| `ptr_offset(ptr, n)` | Pointer `n` slots past `ptr`, bounds-checked |
+| `ptr_offset(ptr, n)` | Pointer `n` slots past `ptr`, bounds-checked. A pointer from `address_of` has one slot; a pointer to an object made with `alloc(object)` cannot be moved |
 | `address_of(name)` | Pointer to a named variable |
 | `int(ptr)` | The only allowed pointer cast |
 
@@ -170,9 +170,9 @@ unsafe {
 | Rule | Meaning |
 |---|---|
 | `R1` | No pointer-to-pointer through `address_of()` |
-| `R2` | A pointer stays inside the `unsafe` block that made it: it cannot be assigned to a variable declared outside the block, returned from it, or stored in a global, list or map |
+| `R2` | A pointer stays inside the `unsafe` block that made it: it cannot be assigned to a variable declared outside the block or to a captured variable, returned from the block, stored in a global, list, map, template, bloc, data value or memory from `alloc`, passed to `spawn` or sent on a channel. A function may not return `address_of` of its own local variable |
 | `R3` | `ptr_offset()` cannot go out of bounds |
-| `R4` | No use-after-free and no double free |
+| `R4` | No use-after-free and no double free. Each allocation is freed once: with `free`, or with one `defer`; `free` takes the pointer `alloc` returned, not a moved one. A freed allocation stays freed even when the system hands its address out again |
 | `R5` | `address_of()` only works on named values, and only inside `unsafe` |
 | `R6` | `unsafe` blocks cannot be nested in the source: the outer block already allows everything. This is a compile-time error. A function that has its own `unsafe` block can still be called from inside another one |
 | `R7` | `alloc()` size must be a positive integer |
@@ -187,6 +187,13 @@ Together the rules say three things. A pointer never outlives its block (R1, R2,
 access stays inside a live allocation (R3, R4, R7, R8). And nothing turns a pointer into another
 kind of value, except its address as an int (R9). R10 makes sure memory is given back. R6 keeps the
 idea of "the block" simple: there is one block at a time in the source.
+
+How the runtime knows: a pointer value is the number of an entry in the allocation table and a slot in
+it, not a raw address. Numbers are never given out twice while a block runs, so a pointer to freed memory
+is caught even when `malloc` reuses the address, and a bounds check is a comparison of slot numbers. When
+the table fills up and half of it is freed, the runtime looks at the running stack for pointers to freed
+entries and drops the others, so a long block that allocates and frees keeps its memory flat.
+`store` through `address_of` keeps the variable's type: storing an int in a float variable is a Type Error.
 
 `free` may appear anywhere, including inside a condition or a loop. Calling your own functions is
 allowed, with pointers as arguments or results, as long as R2 holds. A function that returns a

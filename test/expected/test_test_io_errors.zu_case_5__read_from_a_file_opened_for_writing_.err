@@ -1,0 +1,7 @@
+Runtime Error [E0450] in /tmp/zue_test_case.zu at line 2:
+  read() failed: Bad file descriptor
+
+   2 | print(read(f))
+     |       ^^^^^^^
+
+Hint: The system reported this error. Check the disk, the path and the mode the file was opened with.

@@ -105,3 +105,29 @@ print(float("1e999"))
 print(float(" -2.5e2 "))
 # CASE type of a large int
 print(type(3000000000))
+# CASE mat_mul reads only the items a row has
+let r = [3.0, 99.0]
+remove(r, 1)
+print(mat_mul([[1.0, 2.0], r], [[1.0], [1.0]]))
+# CASE mat_mul with a row that is not a list
+func pass(v) {
+    return [v, null][0]
+}
+print(mat_mul(pass([[1.0], 5]), [[1.0]]))
+# CASE mat_mul with a second row that is not a list
+func pass(v) {
+    return [v, null][0]
+}
+print(mat_mul([[1.0, 2.0]], [[1.0], pass(7)]))
+# CASE mat_mul with a longer row
+print(mat_mul([[1.0, 2.0], [1.0, 2.0, 3.0]], [[1.0], [1.0]]))
+# CASE mat_mul with an empty second matrix
+print(mat_mul([[1.0]], []))
+# CASE mat_mul with an empty row
+print(mat_mul([[]], [[1.0]]))
+# CASE mat_mul overflow in the sum
+print(mat_mul([[1e308, 1e308]], [[1.0], [1.0]]))
+# CASE mat_mul overflow in the product
+print(mat_mul([[1e308]], [[10.0]]))
+# CASE mat_mul of one dense row
+print(mat_mul(dense_list(2, 1.5), [[2.0], [4.0]]))

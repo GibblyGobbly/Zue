@@ -1,0 +1,7 @@
+Argument Error [E0420] in /tmp/zue_test_case.zu at line 1:
+  mat_mul() dimension mismatch (argument 1 has no columns)
+
+   1 | print(mat_mul([[]], [[1.0]]))
+     |       ^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: A matrix needs at least one row and one column.

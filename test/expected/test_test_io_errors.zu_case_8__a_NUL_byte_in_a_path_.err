@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 2:
+  file_exists() argument 1 contains a NUL byte
+
+   2 | print(file_exists("test/util.zu" + to_string('\0') + "x"))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: A path or command cannot hold the character '\0'.
