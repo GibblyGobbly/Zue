@@ -344,9 +344,14 @@ a `Type Error` with the line, and the program is not built.
 - A variable has the type of its first value and keeps it: after `let x = 10`, `x = "a"` and
   `x = 2.5` are errors. A variable that starts as `null` or has no value (`let x`) takes the type
   of the first value assigned to it.
-- A number written in the source adapts to the type it is used as: `sqrt(16)` and `2.5 * 2` are
-  fine. A variable never converts: with `let n = 16`, `sqrt(n)` and `n + 1.5` are errors. Write
-  `sqrt(float(n))` to convert on purpose.
+- A number written in the source adapts to the type it is used as: `sqrt(16)`, `2.5 * 2`, `min(1, 2.5)`
+  and `mod(5.5, 2)` are fine (a builtin form the arguments fit as they are wins: `round(5, 2)` is the int
+  form). A whole number adapts to a float only when the float is exact: `floor(9007199254740993)` is an
+  error, since the nearest float is 9007199254740992. A variable never converts: with `let n = 16`,
+  `sqrt(n)` and `n + 1.5` are errors. Write `sqrt(float(n))` to convert on purpose.
+- In a function checked with several argument types, a number adapts per call: with
+  `func f(v) { let x = v; x = 1; return x }`, `f(1.5)` gives `1.0` and `f(2)` gives `1`.
+- A variable declared `int`, `float` or `bool` cannot start as `null` (`let x: int = null` is an error).
 - Operators need operands of the same type. `"a" + 1`, `"a" * 2`, `-"a"`, `1 == "a"` and
   `3 == 3.0` for a variable are errors, and so is dividing by a zero written in the source.
 - `if`, `while`, `for`, `not`, `and` and `or` need a `bool`.
@@ -356,7 +361,12 @@ a `Type Error` with the line, and the program is not built.
   `area(2, "a")` is an error at the call when the body does `w * h`, and the message names the
   call (`in area(int, string), called at line 3`). A call with a number written in the source gives
   that parameter the plain type (`16` is an int, `16.0` a float). The type of a call is the type
-  its `return` statements give; a recursive call needs a base case that returns first.
+  its `return` statements give, with `null` added when the body can end without a return; a recursive
+  call needs a base case that returns first. A name that is assigned anywhere (`g = h`) or hidden by a
+  parameter or local of the same name is not checked against the function's body.
+- The checker is not flow-sensitive: a variable gets one type for the whole program, so
+  `let x` followed by `if (c) { x = 1 } else { x = "a" }` is an error, and the body of a function is
+  checked where it is defined, even if it is never called.
 - A list or map literal whose items all have one type has that element type: `[1, 2, 3]` is a
   `list<int>` and `{"a": 1.5}` is a `map<float>`. Reading an item gives the element type, and storing
   or appending another type is an error: after `let xs = [1, 2]`, `xs[0] = "a"` and `append(xs, "a")`

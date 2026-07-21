@@ -1,0 +1,130 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// The checker checks a function once per signature (the argument types of a call) and the code generator
+// makes direct calls from what it proves. A literal adapted for one signature must not change another, a
+// name that is a parameter or a reassigned function must not be checked against a top-level body, and a
+// function that can end without a return gives null.
+
+# CASE a function that can end without a return gives null
+func f(c) {
+    if (c) {
+        return 1
+    }
+}
+let y = f(false)
+print(y)
+y = "s"
+print(y)
+# CASE a literal adapted for a float signature stays an int for an int one
+func f(v) {
+    let x = v
+    x = 1
+    return x
+}
+print(f(1.5))
+print(f(2))
+print(f(2) + 1)
+# CASE a literal appended or stored per signature
+func g(v) {
+    let xs = [v]
+    append(xs, 3)
+    xs[0] = 4
+    return xs
+}
+print(g(1.5))
+print(g(2))
+# CASE a literal argument of a builtin per signature
+func f(v) {
+    return min(v, 1)
+}
+print(f(0.5))
+print(f(5))
+# CASE a parameter named like a function
+func f() {
+    return 1
+}
+func g(f) {
+    return f() + "x"
+}
+print(g(func() { return "s" }))
+# CASE a local named like a function
+func f() {
+    return 1
+}
+func h() {
+    let f = func() { return "t" }
+    return f() + "y"
+}
+print(h())
+# CASE a reassigned function name
+func g(n) {
+    return n + 1
+}
+func h(n) {
+    return "x"
+}
+g = h
+let a = g(1)
+print(a)
+# CASE a direct call of a function whose callee is reassigned later
+func g(n) {
+    return n + 1
+}
+func f(n) {
+    return g(n)
+}
+func h(n) {
+    return "s{n}"
+}
+print(f(1))
+g = h
+print(f(1))
+# CASE a direct call of a float function whose callee is reassigned later
+func g(n) {
+    return n + 1.5
+}
+func f(n) {
+    let a = g(n)
+    return a
+}
+func h(n) {
+    return 7
+}
+print(f(1.0))
+g = h
+print(f(1.0))
+# CASE specialized functions with names that once collided
+func f(a, b) {
+    return a + b
+}
+func f_int(a) {
+    return a * 10
+}
+print(f(1, 2) + 0)
+print(f_int(3) + 0)
+# CASE floor ceil round and trunc of whole-number literals
+print(floor(9007199254740992))
+print(ceil(-9007199254740992))
+print(round(3))
+print(trunc(5))
+print(round(5, 2))
+print(floor(4611686018427387904))
+# CASE a whole-number literal with no exact float is an error where a float is wanted
+print(floor(9007199254740993))
+# CASE the largest int has no exact float
+print(floor(9223372036854775807))
+# CASE literal arguments adapt to the float form of a builtin
+print(min(1, 2.5))
+print(max(2.5, 1))
+print(clamp(5, 0, 2.5))
+print(pow(2, 0.5))
+print(mod(7, 2.0))
+let a = 2.5
+print(min(a, 1))
+print(sqrt(16))
+# CASE a variable declared int cannot be null
+let x: int = null
+# CASE a variable declared string can be null
+let s: string = null
+print(s)

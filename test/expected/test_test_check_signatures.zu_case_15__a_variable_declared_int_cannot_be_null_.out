@@ -1,0 +1,9 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 1:
+  cannot assign null to 'x', which is int
+
+   1 | let x: int = null
+     |        ---   ^^^^ this is null
+     |        |
+     |        'x' is declared int
+
+Hint: Give the variable a value of its type, or declare it without a type

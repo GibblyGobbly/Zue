@@ -43,10 +43,19 @@ export func lit_int(n) {
     return n.v
 }
 
+# Whether a whole-number literal is a float in the specialized version being emitted: the checker found it
+# wanted as a float for this signature (n.ads, see adapt_to in check.zu).
+export func spec_float_lit(n) {
+    return n.k == "num" and n.ads != null and ST.ctx.spec != null and n.ads[ST.ctx.spec.argkey] == "float"
+}
+
 # The kind (int, float or bool) n has when computed raw, or null when it cannot be.
 export func skind(n) {
     let k = n.k
     if (k == "num") {
+        if (spec_float_lit(n)) {
+            return "float"
+        }
         return "int"
     }
     if (k == "float") {
@@ -204,6 +213,9 @@ func bin_kind(n) {
 export func tex(n) {
     let k = n.k
     if (k == "num") {
+        if (spec_float_lit(n)) {
+            return ll_float_text("{n.v}.0")
+        }
         return lit_int(n)
     }
     if (k == "float") {
@@ -269,9 +281,11 @@ export func math_spec(n) {
     if (kind == null or resolve(name).kind != "builtin") {
         return null
     }
+    # A whole-number literal adapts to a float argument, except for floor, ceil, round and trunc: they return
+    # an int argument unchanged (floor(9223372036854775807) is that int, which has no exact float).
     for (let a in n.args) {
         let k = skind(a)
-        if (k != "float" and not (a.k == "num" and kind != "abs") and not (kind == "abs" and k == "int")) {
+        if (k != "float" and not (a.k == "num" and kind != "abs" and kind != "round") and not (kind == "abs" and k == "int")) {
             return null
         }
     }

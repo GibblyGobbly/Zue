@@ -1,0 +1,9 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 2:
+  fixed() argument 1 must be a float, got int
+
+   2 | print(fixed(n, 2))
+     |       ----- ^ expected float, found int
+     |       |
+     |       argument 1 of fixed()
+
+Hint: An int never becomes a float by itself: convert it with float(x)

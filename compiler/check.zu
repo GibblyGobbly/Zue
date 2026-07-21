@@ -16,6 +16,7 @@ use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
 use { diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, span_at, span_line, node_span, suggest } from "diag.zu"
 use { cut } from "ranges.zu"
+use { node_children } from "ast_nodes.zu"
 
 let SCOPES = []
 
@@ -213,12 +214,29 @@ func fits_slot(t, target) {
 
 # Whole numbers written in the source become floats where a float is wanted, so a float variable,
 # field or list never holds an int. Only + - * keep their value when both sides turn into floats.
+#
+# The body of a function is checked once per signature (the argument types of a call), and a literal can
+# be wanted as a float for one signature and as an int for another (x = 1 where x came from a parameter).
+# So inside such a check the literal is not changed: lit_record keeps, per signature, what it is wanted as
+# (n.ads), and settle_literals decides once everything is checked: a float for every signature makes it a
+# float literal; a float for some only makes it "dyn", and the generated code then turns it into a float at
+# run time when the value it goes into is one. A specialized version of the function reads n.ads itself.
 func adapt_to(n, want) {
     if (want == "float") {
         if (n.k == "num") {
-            n.k = "float"
-            if (index_of(n.v, ".") < 0) {
-                n.v = "{n.v}.0"
+            if (not exact_float(to_int(n.v))) {
+                let d = fail_node(n, "the number literal {n.v} has no exact float value")
+                diag_text(d, "a float is wanted here")
+                diag_hint(d, "A float holds whole numbers exactly only up to 9007199254740992. Write a float literal, or keep the value an int")
+                return null
+            }
+            if (len(CALLS) > 0) {
+                lit_record(n, "float")
+            } else {
+                n.k = "float"
+                if (index_of(n.v, ".") < 0) {
+                    n.v = "{n.v}.0"
+                }
             }
         } else if (n.k == "bin" and (n.op == "+" or n.op == "-" or n.op == "*") and is_int_tree(n)) {
             adapt_to(n.l, want)
@@ -240,6 +258,100 @@ func adapt_to(n, want) {
         }
     }
     return null
+}
+
+# Every name that some statement of the program assigns (name = value, name += value, name++), at any depth.
+let ASSIGNED = {}
+
+func collect_assigned(x) {
+    let t = type(x)
+    if (t == "list") {
+        for (let y in x) {
+            collect_assigned(y)
+        }
+        return null
+    }
+    if (t != "template") {
+        return null
+    }
+    if (x.k == "assign" or x.k == "incdec") {
+        ASSIGNED[x.name] = true
+    }
+    for (let y in node_children(x)) {
+        collect_assigned(y)
+    }
+    return null
+}
+
+# The signature of the function being checked, as the key of n.ads and n.stys.
+func call_key() {
+    return join(CALLS[len(CALLS) - 1].types, ",")
+}
+
+# The whole-number literals adapted inside a per-signature check, and for each function body (by place)
+# the signatures it was checked with.
+let LITERALS = []
+let BODY_SIGS = {}
+
+# Records that a whole-number literal is wanted as a float for the signature being checked. n.ad holds the
+# place of the function body until settle_literals.
+func lit_record(n, what) {
+    let key = call_key()
+    if (n.ads == null) {
+        n.ads = {}
+        append(LITERALS, n)
+    }
+    n.ad = CALLS[len(CALLS) - 1].body
+    let before = n.ads[key]
+    if (before == what) {
+        return null
+    }
+    n.ads[key] = what
+    if (MARKLOG != null) {
+        append(MARKLOG, [n, "ads", before, key])
+    }
+}
+
+# After the whole program is checked: what each recorded literal is in the ordinary version of its function.
+func settle_literals() {
+    for (let n in LITERALS) {
+        let sigs = BODY_SIGS[n.ad]
+        let floats = 0
+        let all = sigs != null
+        if (sigs != null) {
+            for (let key in sigs) {
+                if (n.ads[key] == "float") {
+                    floats += 1
+                } else {
+                    all = false
+                }
+            }
+        }
+        n.ad = null
+        if (floats > 0 and all) {
+            n.k = "float"
+            if (index_of(n.v, ".") < 0) {
+                n.v = "{n.v}.0"
+            }
+        } else if (floats > 0) {
+            n.ad = "dyn"
+        }
+    }
+}
+
+# Whether the int v becomes a float with no change of value.
+func exact_float(v) {
+    if (v == -9223372036854775807 - 1) {
+        return true
+    }
+    let a = abs(v)
+    while (a > 9007199254740992) {
+        if (a % 2 != 0) {
+            return false
+        }
+        a = a / 2
+    }
+    return true
 }
 
 # Whether n is made only of whole-number literals joined by + - *.
@@ -703,6 +815,31 @@ func match_alt(alt, argtypes) {
     return null
 }
 
+# A whole-number literal given where the matched form of a builtin takes a float becomes a float, so the
+# runtime gets two floats: min(1, 2.5) is min(1.0, 2.5), sqrt(16) is sqrt(16.0). A T parameter takes the type
+# the arguments agree on.
+func adapt_builtin_args(n, alt, argtypes) {
+    let bound = alt_result([alt[0], "T"], argtypes)
+    for (let i = 0; i < len(alt[0]); i++) {
+        let p = alt[0][i]
+        if (p == "T") {
+            p = bound
+        }
+        if (p == "float" and argtypes[i] == "int~") {
+            argtypes[i] = adapt_expr(n.args[i], argtypes[i], "float")
+        }
+    }
+}
+
+func fits_without_adapting(alt, argtypes) {
+    for (let i = 0; i < len(alt[0]); i++) {
+        if (alt[0][i] != "T" and not fits_slot(argtypes[i], alt[0][i])) {
+            return false
+        }
+    }
+    return true
+}
+
 func alt_result(alt, argtypes) {
     let r = alt[1]
     if (r != "T") {
@@ -770,10 +907,19 @@ func ck_builtin_call(n, name, alts, argtypes) {
         diag_hint(d, "Usage: {join(forms, or_sep)}")
         return "any"
     }
+    # A form the arguments fit as they are wins over one that needs a literal made a float: round(5, 2) is the
+    # int form, mod(5.5, 2) the float one.
+    for (let alt in same_count) {
+        if (match_alt(alt, argtypes) == null and fits_without_adapting(alt, argtypes)) {
+            adapt_builtin_args(n, alt, argtypes)
+            return alt_result(alt, argtypes)
+        }
+    }
     let first_miss = null
     for (let alt in same_count) {
         let miss = match_alt(alt, argtypes)
         if (miss == null) {
+            adapt_builtin_args(n, alt, argtypes)
             return alt_result(alt, argtypes)
         }
         if (first_miss == null) {
@@ -958,10 +1104,12 @@ func ck_call(n) {
     if (name == "input" and known == null) {
         return "string"
     }
-    if (known == "function") {
+    # The body of a function is trusted only for the declaration the name stands for here (a parameter or a
+    # local of the same name hides it) and only when the name is never assigned: after g = h a call of g runs h.
+    if (known == "function" and ASSIGNED[name] != true) {
         let fkey = "fn:{name}"
         let fidx = scope_index(fkey)
-        if (fidx >= 0) {
+        if (fidx >= 0 and fidx == scope_index(name)) {
             return ck_user_call(name, SCOPES[fidx][fkey], fidx, argtypes, n)
         }
     }
@@ -1216,10 +1364,22 @@ func check_body(name, fn, idx, types, line) {
     for (let i = 0; i < len(fn.params); i++) {
         declare(fn.params[i], types[i], param_span(fn, i))
     }
-    append(CALLS, {"name": name, "types": types, "line": line})
+    let body = "{fn.line}:{fn.col}:{name}"
+    let key = join(types, ",")
+    if (BODY_SIGS[body] == null) {
+        BODY_SIGS[body] = []
+    }
+    if (not contains(BODY_SIGS[body], key)) {
+        append(BODY_SIGS[body], key)
+    }
+    append(CALLS, {"name": name, "types": types, "line": line, "body": body})
     append(RETS, [])
     ck_block(fn.body)
     let rets = remove(RETS, len(RETS) - 1)
+    # A way through the body that does not end in a return gives null.
+    if (not always_returns(fn.body)) {
+        append(rets, "null")
+    }
     remove(CALLS, len(CALLS) - 1)
     SCOPES = saved
     ORIGINS = saved_origins
@@ -1319,6 +1479,9 @@ func ck_func(n) {
 func ck_expr(n) {
     let k = n.k
     if (k == "num") {
+        if (len(CALLS) > 0 and n.ads != null and n.ads[call_key()] == "float") {
+            return "float"
+        }
         return "int~"
     }
     if (k == "float") {
@@ -1530,7 +1693,13 @@ func ck_typed_let(n) {
     let at = annot(n.type, span_or(n.tspan, n), true)
     if (n.init != null) {
         let et = adapt_expr(n.init, ck_expr(n.init), at)
-        if (et != "null" and not fits_slot(et, at)) {
+        # A variable declared int, float or bool holds a raw machine value, which null is not.
+        if (et == "null" and is_scalar(at)) {
+            let d = fail_node(n.init, "cannot assign null to '{n.name}', which is {at}")
+            diag_text(d, "this is null")
+            diag_label(d, n.tspan, "'{n.name}' is declared {at}")
+            diag_hint(d, "Give the variable a value of its type, or declare it without a type")
+        } else if (et != "null" and not fits_slot(et, at)) {
             let hint = ""
             if (at == "float" and et == "int~") {
                 hint = ". Write the number with a decimal point, for example 2.0"
@@ -1795,6 +1964,8 @@ func undo_marks(log) {
             e[0].sty = e[2]
         } else if (e[1] == "stys") {
             e[0].stys[e[3]] = e[2]
+        } else if (e[1] == "ads") {
+            e[0].ads[e[3]] = e[2]
         } else {
             e[0].spec = e[2]
         }
@@ -1846,9 +2017,14 @@ export func check_program(stmts) {
     ORIGINS = []
     PENDING = []
     OPEN_IMPORT = false
+    LITERALS = []
+    BODY_SIGS = {}
+    ASSIGNED = {}
+    collect_assigned(stmts)
     push_scope()
     ck_block(stmts)
     pop_scope()
     report_undefined()
     diag_exit_if_errors()
+    settle_literals()
 }

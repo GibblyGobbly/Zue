@@ -11,11 +11,11 @@
 # in after the node is built; a node made by the compiler itself keeps col 0, which means "no place
 # known beyond the line". A template keeps its fields at fixed places, so a node costs less memory
 # than a map and is built in one call. A field a kind does not use is not declared; a field it may
-# leave empty holds null. The checker adds sty to let and for-in nodes (and stys, the same per signature of the function that holds them) and spec to call nodes (the signature of a direct call, see check.zu), and the emitter caches the raw kind of a binary node in kc. NODE_FIELDS lists the fields of
+# leave empty holds null. The checker adds sty to let and for-in nodes (and stys, the same per signature of the function that holds them) and spec to call nodes (the signature of a direct call, see check.zu), and ads and ad to whole-number literals (what the literal becomes per signature, see adapt_to in check.zu), and the emitter caches the raw kind of a binary node in kc. NODE_FIELDS lists the fields of
 # each kind after k and line, in the order of the template; ast_dump.zu and the tree walkers read it. Fields that end in span hold a Span from diag.zu, or null: they say where a name, an
 # operator, a type or an argument list is, so the checker can point at exactly that text.
 
-export template NLit { k, line, v, col, eline, ecol }
+export template NLit { k, line, v, ads, ad, col, eline, ecol }
 export template NId { k, line, name, col, eline, ecol }
 export template NTmpl { k, line, parts, col, eline, ecol }
 export template NList { k, line, items, col, eline, ecol }
@@ -45,7 +45,7 @@ export template NReturn { k, line, e, col, eline, ecol }
 export template NJump { k, line, col, eline, ecol }
 
 export const NODE_FIELDS = {
-    "num": ["v"], "float": ["v"], "str": ["v"], "char": ["v"], "bool": ["v"],
+    "num": ["v", "ads", "ad"], "float": ["v"], "str": ["v"], "char": ["v"], "bool": ["v"],
     "id": ["name"],
     "tmpl": ["parts"],
     "list": ["items"],
@@ -76,7 +76,7 @@ export const NODE_FIELDS = {
 }
 
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
-export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec"]
+export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad"]
 
 # The constructors take st and en, the first and the last token of the node (a node can stand for
 # either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and
@@ -84,7 +84,7 @@ export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "
 # Evaluate the children before reading the parser's last token for en: arguments are read in order.
 
 export func mk_lit(k, st, en, v) {
-    return NLit(k, st.line, v, st.col, en.eline, en.ecol)
+    return NLit(k, st.line, v, null, null, st.col, en.eline, en.ecol)
 }
 
 export func mk_id(st, en, name) {

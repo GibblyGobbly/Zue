@@ -1277,6 +1277,24 @@ func lvv_unbox_fail(name, want_i, t, p) {
           cstr("variable '%s' must be %s, got %s"), name, want, _type_name(a))
 }
 
+# A whole-number literal that the checker found wanted as a float for some signatures of its function only
+# (see adapt_to in check.zu): it becomes a float when like, the value it goes into, is a float, a dense list
+# or a list whose first item is a float.
+func lvp_num_like(o, v, like) {
+    _cp(o, v)
+    if (_tag(v) != T_INT) {
+        return 0
+    }
+    let t = _tag(like)
+    let float_like = t == T_FLOAT or t == T_DENSE
+    if (t == T_LIST and ld64(_val(like) + L_COUNT) > 0) {
+        float_like = _tag(ld64(_val(like) + L_ITEMS)) == T_FLOAT
+    }
+    if (float_like) {
+        _set(o, T_FLOAT, i2f(_val(v)))
+    }
+}
+
 func lvv_global_store_check(t, p, in_function_i) {
     let a = stack_buf(16)
     _set(a, t, p)

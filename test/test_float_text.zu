@@ -41,5 +41,8 @@ print(to_string(1.5, pass(18)))
 # CASE to_string digits needs a float
 func pass(v) { return [v, null][0] }
 print(to_string(pass(5), 3))
-# CASE fixed with an int is a compile error
+# CASE fixed with a whole-number literal adapts it
 print(fixed(5, 2))
+# CASE fixed with an int variable is a compile error
+let n = 5
+print(fixed(n, 2))

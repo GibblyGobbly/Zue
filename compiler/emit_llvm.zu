@@ -11,6 +11,7 @@
 use { die, path_dir, path_join, path_norm, split_lines } from "util.zu"
 use { parse_source } from "parser.zu"
 use { MODULES, MOD_LIST, uid } from "shared.zu"
+use { mk_id_line } from "ast_nodes.zu"
 use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analysis.zu"
 use { GC_LOWMEM, HOOKS, LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS, SPECS } from "ll_state.zu"
 use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.zu"
@@ -20,7 +21,7 @@ use { ll_float_text, ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } fro
 use { at_top, cap_cell, declare, find_local_index, pop_scope, push_scope, resolve, run_defers } from "ll_scope.zu"
 use { declare_typed, var_get, var_set } from "ll_scope.zu"
 use { box_raw, ty_load, ty_store, unbox_checked, uses_address } from "ll_unbox.zu"
-use { call_spec, lit_int, math_spec, skind, tex, tex_step } from "ll_typed.zu"
+use { call_spec, lit_int, math_spec, skind, spec_float_lit, tex, tex_step } from "ll_typed.zu"
 use { clear_kc, machine_type, parse_sig, spec_closure_global, spec_key_of, spec_prescan, spec_symbol } from "ll_spec.zu"
 use { check_program } from "check.zu"
 use { ST } from "state.zu"
@@ -388,6 +389,33 @@ func global_get(name) {
     return t
 }
 
+# A whole-number literal, or + - * of them, that the checker found wanted as a float for some signatures of
+# its function only (ad "dyn", see adapt_to in check.zu). The ordinary version of the function computes it as
+# an int and makes it a float at run time when like, the value it goes into, is a float or a list of floats.
+func dyn_literal(e) {
+    if (e.k == "num") {
+        return e.ad == "dyn"
+    }
+    if (e.k == "bin" and e.unary == null and (e.op == "+" or e.op == "-" or e.op == "*")) {
+        return int_tree(e) and (dyn_literal(e.l) or dyn_literal(e.r))
+    }
+    return false
+}
+
+func int_tree(e) {
+    if (e.k == "num") {
+        return true
+    }
+    return e.k == "bin" and e.unary == null and (e.op == "+" or e.op == "-" or e.op == "*") and int_tree(e.l) and int_tree(e.r)
+}
+
+func adapt_dyn(e, v, like) {
+    if (ST.ctx.spec != null or not dyn_literal(e)) {
+        return v
+    }
+    return ll_call_out("lvp_num_like", "ptr {v}, ptr {like}")
+}
+
 func ex_id(n) {
     let r = resolve(n.name)
     if (r.kind == "local") {
@@ -436,6 +464,7 @@ func ex_call(n) {
         }
         if (callee.name == "append" and len(n.args) == 2 and resolve("append").kind == "builtin") {
             let argv = ex_list(n.args)
+            argv[1] = adapt_dyn(n.args[1], argv[1], argv[0])
             if (not holds_no_pointer(n.args[1])) {
                 ll("call void @lvp_container_check(ptr {argv[1]})")
             }
@@ -448,6 +477,18 @@ func ex_call(n) {
         let r = resolve(callee.name)
         if (r.kind == "builtin") {
             let argv = ex_list(n.args)
+            # A literal argument the checker adapted for some signatures only takes its type from another
+            # numeric argument at run time.
+            for (let i = 0; i < len(argv); i++) {
+                if (dyn_literal(n.args[i])) {
+                    for (let j = 0; j < len(argv); j++) {
+                        if (j != i and not int_tree(n.args[j]) and n.args[j].k != "float") {
+                            argv[i] = adapt_dyn(n.args[i], argv[i], argv[j])
+                            break
+                        }
+                    }
+                }
+            }
             ll_mark(n)
             return call_builtin(callee.name, argv)
         }
@@ -604,6 +645,9 @@ func ex_tmpl(n) {
 func ex(n) {
     let k = n.k
     if (k == "num") {
+        if (spec_float_lit(n)) {
+            return ll_float("{n.v}.0")
+        }
         return int_literal(n)
     }
     if (k == "float") {
@@ -1068,6 +1112,9 @@ func st_setidx(n) {
     let t = ex(n.target)
     let i = ex(n.index)
     let v = ex(n.e)
+    if (n.op == null) {
+        v = adapt_dyn(n.e, v, t)
+    }
     ll_mark_pos(ll_pos_range(n.target, n.index, 1))
     if (n.op != null) {
         let cur = ll_call_out("lvp_index", "ptr {t}, ptr {i}")
@@ -1376,6 +1423,9 @@ func st(n) {
             ty_store(r.v, tex(n.e))
         } else {
             let v = copy_if_box(n.e, ex(n.e))
+            if (dyn_literal(n.e)) {
+                v = adapt_dyn(n.e, v, ex_id(mk_id_line(n.line, n.name)))
+            }
             ll_mark(n.e)
             store_name(n.name, v)
         }
@@ -1691,6 +1741,7 @@ func declarations() {
     append(d, "declare void @lv_unsafe_end()")
     append(d, "declare void @lvp_ptr_escape_check(ptr)")
     append(d, "declare %LV @lv_addr(ptr, i32)")
+    append(d, "declare void @lvp_num_like(ptr, ptr, ptr)")
     append(d, "declare void @lvv_return_check(i64, i64, ptr)")
     append(d, "declare %LV @lv_addr_invalid(i32)")
     append(d, "declare void @lv_arity(ptr, i32, i32, i32)")

@@ -59,9 +59,11 @@ export func parse_sig(key, nargs) {
     return {"args": kinds, "res": parts[1]}
 }
 
-# The symbol of the function for one signature.
+# The symbol of the function for one signature. The key goes in unchanged (a quoted LLVM name may hold
+# "," and ">"), so no two signatures or functions share a symbol: f with int,int>int and f_int with int>int
+# once both became sp_g_f_int_int_to_int.
 export func spec_symbol(entry, key) {
-    return "@sp_{entry.sym}_{replace(replace(key, ",", "_"), ">", "_to_")}"
+    return "@\"sp.{entry.sym}.{key}\""
 }
 
 # The global that holds the closure the specialized functions belong to.

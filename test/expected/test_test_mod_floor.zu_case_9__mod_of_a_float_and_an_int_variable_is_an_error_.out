@@ -1,0 +1,8 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 2:
+  mod() cannot be called with (float, int); use (int, int) or (float, float)
+
+   2 | print(mod(5.5, n))
+     |       ---^^^^^^^^ no form takes (float, int)
+     |       |
+     |       mod
+

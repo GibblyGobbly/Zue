@@ -37,8 +37,11 @@ for (let a = -20; a <= 20; a++) {
 print(ok)
 # CASE a result converted on purpose
 print(float(mod(7, 3)))
-# CASE mod of int and float is an error
+# CASE mod of a float and a whole-number literal adapts it
 print(mod(5.5, 2))
+# CASE mod of a float and an int variable is an error
+let n = 2
+print(mod(5.5, n))
 # CASE mod by zero
 print(mod(5, 0))
 # CASE mod of floats by zero

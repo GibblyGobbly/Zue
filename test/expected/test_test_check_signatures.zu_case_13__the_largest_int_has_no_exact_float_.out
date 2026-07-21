@@ -1,0 +1,7 @@
+Type Error [E0104] in /tmp/zue_test_case.zu at line 1:
+  the number literal 9223372036854775807 has no exact float value
+
+   1 | print(floor(9223372036854775807))
+     |             ^^^^^^^^^^^^^^^^^^^ a float is wanted here
+
+Hint: A float holds whole numbers exactly only up to 9007199254740992. Write a float literal, or keep the value an int
