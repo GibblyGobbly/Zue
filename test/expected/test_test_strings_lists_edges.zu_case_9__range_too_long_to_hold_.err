@@ -1,0 +1,7 @@
+Argument Error [E0440] in /tmp/zue_test_case.zu at line 1:
+  range() would make 9223372036854775807 items, too many to hold in memory
+
+   1 | print(range(0, 9223372036854775807))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Use a larger step or a smaller span, or loop with for (let i = start; i < end; i += step).

@@ -4,4 +4,4 @@ Type Error [E0211] in /tmp/zue_test_case.zu at line 4:
    4 | let s = pass(1) < "a"
      |         ------- ^ ---
 
-Hint: Ordering works on two numbers, two strings or two chars.
+Hint: Ordering works on two ints, two floats, two strings or two chars.

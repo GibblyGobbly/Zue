@@ -1,0 +1,7 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 5:
+  cannot store a string in a dense list
+
+   5 | d[0] = pass("s")
+     | ^^^^
+
+Hint: A dense list holds only numbers.

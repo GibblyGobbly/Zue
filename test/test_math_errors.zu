@@ -91,6 +91,23 @@ print(dense_list(-1, 0.0))
 # CASE storing a string in a dense list
 let d = dense_list(2, 0.0)
 d[0] = "s"
+# CASE storing a string in a dense list at run time
+func pass(v) {
+    return [v, null][0]
+}
+let d = dense_list(2, 0.0)
+d[0] = pass("s")
+# CASE storing an int in a dense list
+func pass(v) {
+    return [v, null][0]
+}
+let d = dense_list(2, 0.0)
+d[0] = pass(1)
+# CASE a literal stored in a dense list becomes a float
+let d = dense_list(2, 0.0)
+d[0] = 1
+d[1] += 2
+print(d)
 # CASE float of nan text
 print(float("nan"))
 # CASE float of inf text

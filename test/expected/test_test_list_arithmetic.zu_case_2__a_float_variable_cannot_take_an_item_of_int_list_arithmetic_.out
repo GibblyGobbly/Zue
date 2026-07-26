@@ -1,0 +1,9 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 2:
+  cannot assign int to 'x', which is float
+
+   2 | let x: float = s[0]
+     |        -----   ^^^^ this is int
+     |        |
+     |        'x' is declared float
+
+Hint: An int never becomes a float by itself: convert it with float(x)

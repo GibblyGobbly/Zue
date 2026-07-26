@@ -40,6 +40,8 @@ let LL_VALUE_CALL = {
     "<<": "shl", ">>": "shr"
 }
 let LL_FLOAT_ARITH = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}
+# The operator codes of lvv_binop_lit.
+let LL_LIT_OPS = {"+": 0, "-": 1, "*": 2, "/": 3, "%": 4, "<": 5, "<=": 6, ">": 7, ">=": 8, "==": 9, "!=": 10}
 let LL_FLOAT_COMPARE = {"==": "oeq", "!=": "une", "<": "olt", "<=": "ole", ">": "ogt", ">=": "oge"}
 let LL_INT_BITWISE = {"&": "and", "|": "or", "^": "xor"}
 
@@ -50,7 +52,9 @@ let LL_INT_COMPARE = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt
 # Integer operations are done in line when both operands are ints (tag 2) and an arithmetic
 # result does not overflow. Everything else, including the errors, goes to the runtime call.
 # Constant operands are folded by LLVM because their tags are known.
-func ll_binop(op, a, b, pos) {
+# alit or blit is the float constant of a whole-number literal operand that the checker could not decide
+# (ad "dyn", see adapt_to in check.zu): next to a float it is that float, next to anything else the int.
+func ll_binop(op, a, b, pos, alit = null, blit = null) {
     let arith = LL_INT_ARITH[op]
     let compare = LL_INT_COMPARE[op]
     let divide = LL_INT_DIVIDE[op]
@@ -142,7 +146,21 @@ func ll_binop(op, a, b, pos) {
         ll("{fa} = icmp eq i64 {ta}, 3")
         ll("{fb} = icmp eq i64 {tb}, 3")
         let fboth = ll_reg()
-        ll("{fboth} = and i1 {fa}, {fb}")
+        if (blit != null) {
+            ll("{fboth} = and i1 {fa}, true")
+        } else if (alit != null) {
+            ll("{fboth} = and i1 {fb}, true")
+        } else {
+            ll("{fboth} = and i1 {fa}, {fb}")
+        }
+        let fa_src = a
+        let fb_src = b
+        if (alit != null) {
+            fa_src = alit
+        }
+        if (blit != null) {
+            fb_src = blit
+        }
         let ffast = ll_new_label("ffast")
         ll_condbr(fboth, ffast, slow)
         ll_label(ffast)
@@ -153,8 +171,8 @@ func ll_binop(op, a, b, pos) {
         let xa = ll_reg()
         let xb = ll_reg()
         let fout = ll_reg()
-        ll("{fpa_ptr} = getelementptr inbounds i8, ptr {a}, i64 8")
-        ll("{fpb_ptr} = getelementptr inbounds i8, ptr {b}, i64 8")
+        ll("{fpa_ptr} = getelementptr inbounds i8, ptr {fa_src}, i64 8")
+        ll("{fpb_ptr} = getelementptr inbounds i8, ptr {fb_src}, i64 8")
         ll("{fpa} = load i64, ptr {fpa_ptr}")
         ll("{fpb} = load i64, ptr {fpb_ptr}")
         ll("{xa} = bitcast i64 {fpa} to double")
@@ -197,7 +215,8 @@ func ll_binop(op, a, b, pos) {
     ll_label(slow)
     # The place is recorded only here, where an error can be raised, so the in-line path stays free of it.
     ll_store_pos(pos)
-    # The slow path passes the operands by value, so no operand slot has its address taken.
+    # The slow path passes the operands by value, so no operand slot has its address taken. An undecided
+    # literal is the float when the other operand is one, so an error names the real operation.
     let sa = ll_reg()
     let sb = ll_reg()
     let sa_ptr = ll_reg()
@@ -210,7 +229,15 @@ func ll_binop(op, a, b, pos) {
     let res_tag = ll_reg()
     let res_val = ll_reg()
     let res_ptr = ll_reg()
-    ll("{sres} = call %LV @lvv_{LL_VALUE_CALL[op]}(i64 {ta}, i64 {sa}, i64 {tb}, i64 {sb})")
+    if (alit != null or blit != null) {
+        let side = 2
+        if (alit != null) {
+            side = 1
+        }
+        ll("{sres} = call %LV @lvv_binop_lit(i64 {LL_LIT_OPS[op]}, i64 {side}, i64 {ta}, i64 {sa}, i64 {tb}, i64 {sb})")
+    } else {
+        ll("{sres} = call %LV @lvv_{LL_VALUE_CALL[op]}(i64 {ta}, i64 {sa}, i64 {tb}, i64 {sb})")
+    }
     ll("{res_tag} = extractvalue %LV {sres}, 0")
     ll("{res_val} = extractvalue %LV {sres}, 1")
     ll("store i64 {res_tag}, ptr {t}")
@@ -410,10 +437,57 @@ func int_tree(e) {
 }
 
 func adapt_dyn(e, v, like) {
-    if (ST.ctx.spec != null or not dyn_literal(e)) {
+    if (not dyn_literal(e) or decided_in_spec(e)) {
         return v
     }
     return ll_call_out("lvp_num_like", "ptr {v}, ptr {like}")
+}
+
+# adapt_dyn where like is a single value (an operand, a variable, another argument): a literal with an exact
+# float is picked inline, one of two constants by the tag of like, with no call and no slot.
+func adapt_dyn_scalar(e, v, like) {
+    if (not dyn_literal(e) or decided_in_spec(e)) {
+        return v
+    }
+    if (e.k != "num" or not small_whole(e.v)) {
+        return ll_call_out("lvp_num_like", "ptr {v}, ptr {like}")
+    }
+    let tag = ll_reg()
+    let is_float = ll_reg()
+    let r = ll_reg()
+    ll("{tag} = load i64, ptr {like}")
+    ll("{is_float} = icmp eq i64 {tag}, 3")
+    ll("{r} = select i1 {is_float}, ptr {ll_float("{e.v}.0")}, ptr {v}")
+    return r
+}
+
+# The float constant of an undecided whole-number literal operand for ll_binop, or null. A literal with no
+# exact float, or + - * of literals, takes the general path (adapt_dyn_scalar) before the operator instead.
+func dyn_float_const(e) {
+    if (e.k != "num" or not dyn_literal(e) or decided_in_spec(e) or not small_whole(e.v)) {
+        return null
+    }
+    return ll_float("{e.v}.0")
+}
+
+# Whether the decimal text of a whole number is at most 2^53 in size, so that its float is exact.
+func small_whole(text) {
+    let digits = text
+    if (starts_with(digits, "-")) {
+        digits = cut(digits, 1, len(digits))
+    }
+    return len(digits) < 16 or (len(digits) == 16 and digits <= "9007199254740992")
+}
+
+# Whether a specialized version knows what the literal is for its signature (spec_float_lit).
+func decided_in_spec(e) {
+    if (ST.ctx.spec == null) {
+        return false
+    }
+    if (e.k == "num") {
+        return e.ads != null and e.ads[ST.ctx.spec.argkey] != null
+    }
+    return e.k == "bin" and (decided_in_spec(e.l) or decided_in_spec(e.r))
 }
 
 func ex_id(n) {
@@ -483,7 +557,7 @@ func ex_call(n) {
                 if (dyn_literal(n.args[i])) {
                     for (let j = 0; j < len(argv); j++) {
                         if (j != i and not int_tree(n.args[j]) and n.args[j].k != "float") {
-                            argv[i] = adapt_dyn(n.args[i], argv[i], argv[j])
+                            argv[i] = adapt_dyn_scalar(n.args[i], argv[i], argv[j])
                             break
                         }
                     }
@@ -581,10 +655,20 @@ func ex_bin(n) {
     let a = ex(n.l)
     let b = ex(n.r)
     if (n.op == "**") {
+        a = adapt_dyn_scalar(n.l, a, b)
+        b = adapt_dyn_scalar(n.r, b, a)
         ll_mark(n)
         return call_builtin("pow", [a, b])
     }
-    let r = ll_binop(n.op, a, b, ll_pos(n))
+    let alit = dyn_float_const(n.l)
+    let blit = dyn_float_const(n.r)
+    if (alit == null) {
+        a = adapt_dyn_scalar(n.l, a, b)
+    }
+    if (blit == null) {
+        b = adapt_dyn_scalar(n.r, b, a)
+    }
+    let r = ll_binop(n.op, a, b, ll_pos(n), alit, blit)
     ST.ctx.line = -1
     return r
 }
@@ -1118,6 +1202,7 @@ func st_setidx(n) {
     ll_mark_pos(ll_pos_range(n.target, n.index, 1))
     if (n.op != null) {
         let cur = ll_call_out("lvp_index", "ptr {t}, ptr {i}")
+        v = adapt_dyn_scalar(n.e, v, cur)
         v = ll_binop(n.op, cur, v, ll_pos(n))
         ST.ctx.line = -1
     }
@@ -1424,7 +1509,7 @@ func st(n) {
         } else {
             let v = copy_if_box(n.e, ex(n.e))
             if (dyn_literal(n.e)) {
-                v = adapt_dyn(n.e, v, ex_id(mk_id_line(n.line, n.name)))
+                v = adapt_dyn_scalar(n.e, v, ex_id(mk_id_line(n.line, n.name)))
             }
             ll_mark(n.e)
             store_name(n.name, v)
@@ -1741,6 +1826,7 @@ func declarations() {
     append(d, "declare void @lv_unsafe_end()")
     append(d, "declare void @lvp_ptr_escape_check(ptr)")
     append(d, "declare %LV @lv_addr(ptr, i32)")
+    append(d, "declare %LV @lvv_binop_lit(i64, i64, i64, i64, i64, i64)")
     append(d, "declare void @lvp_num_like(ptr, ptr, ptr)")
     append(d, "declare void @lvv_return_check(i64, i64, ptr)")
     append(d, "declare %LV @lv_addr_invalid(i32)")

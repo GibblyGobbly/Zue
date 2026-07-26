@@ -39,6 +39,7 @@ extern("strerror", "ptr", "i32")
 extern("ferror", "i32", "ptr")
 extern("fileno", "i32", "ptr")
 extern("fstat", "i32", "i32,ptr")
+extern("nextafter", "double", "double,double")
 
 # Math
 
@@ -134,15 +135,15 @@ func lb_max(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-# Neumaier's compensated sum of the list items as floats: the rounding error of every addition is
-# collected in a second variable and added at the end.
-func _float_list_sum(argv_p, n) {
+# Neumaier's compensated sum of the list items as floats, each multiplied by scale: the rounding error of
+# every addition is collected in a second variable and added at the end.
+func _float_list_sum(argv_p, n, scale) {
     let item = stack_buf(16)
     let s = 0.0
     let c = 0.0
     for (let i = 0; i < n; i++) {
         lvp_iter_at(item, argv_p, i)
-        let x = _num(item)
+        let x = fmul(_num(item), scale)
         let t = fadd(s, x)
         if (fge(fabs(s), fabs(x))) {
             c = fadd(c, fadd(fsub(s, t), x))
@@ -172,7 +173,13 @@ func lb_sum(self_p, argc_i, argv_p) {
         _int(o, total)
         retp(o)
     }
-    _flt_checked(o, _float_list_sum(argv_p, n), cstr("sum"))
+    let r = _float_list_sum(argv_p, n, 1.0)
+    if (_is_finite(r) == 0) {
+        # A partial sum overflowed (sum([1e308, 1e308, -1e308])). With every item scaled by 2^-64 no partial sum
+        # of fewer than 2^63 items can; scaling back by 2^64 is exact unless the sum itself is too large.
+        r = fmul(_float_list_sum(argv_p, n, 0.0000000000000000000542101086242752217003726400434970855712890625), 18446744073709551616.0)
+    }
+    _flt_checked(o, r, cstr("sum"))
     retp(o)
 }
 
@@ -180,7 +187,11 @@ func lb_mean(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let n = _number_list(self_p, argv_p)
     let o = stack_buf(16)
-    _flt_checked(o, fdiv(_float_list_sum(argv_p, n), i2f(n)), cstr("mean"))
+    let r = fdiv(_float_list_sum(argv_p, n, 1.0), i2f(n))
+    if (_is_finite(r) == 0) {
+        r = fmul(fdiv(_float_list_sum(argv_p, n, 0.0000000000000000000542101086242752217003726400434970855712890625), i2f(n)), 18446744073709551616.0)
+    }
+    _flt_checked(o, r, cstr("mean"))
     retp(o)
 }
 
@@ -189,6 +200,11 @@ func lb_clamp(self_p, argc_i, argv_p) {
     _arg_num(self_p, argv_p, 0)
     _arg_num(self_p, argv_p, 1)
     _arg_num(self_p, argv_p, 2)
+    if (_tag(argv_p) != _tag(argv_p + 16) or _tag(argv_p) != _tag(argv_p + 32)) {
+        _errf(E_TYPE, cstr("Convert the arguments with int() or float() so that all have the same type."),
+              cstr("clamp() arguments must all be int or all be float, got %s, %s and %s"),
+              _type_name(argv_p), _type_name(argv_p + 16), _type_name(argv_p + 32))
+    }
     if (_sort_cmp(argv_p + 16, argv_p + 32) > 0) {
         lv_error(E_ARGUMENT, cstr("clamp() lower bound is greater than the upper bound"),
                  cstr("Write clamp(value, low, high) with low <= high."))
@@ -235,7 +251,7 @@ func _math_overflow(self_p) {
 # One-argument math: which picks the function.
 func _math1(self_p, argc_i, argv_p, which, o) {
     lv_arity(self_p, argc_i, 1, 1)
-    let x = _arg_num(self_p, argv_p, 0)
+    let x = _arg_flt(self_p, argv_p, 0)
     let r = 0
     if (which == 0 and flt(x, 0.0)) {
         _domain(self_p, cstr("argument must not be negative"))
@@ -278,8 +294,14 @@ func _math1(self_p, argc_i, argv_p, which, o) {
         r = fsub(x, trunc(x))
     } else if (which == 15) {
         r = fdiv(fmul(x, 3.14159265358979323846), 180.0)
+        if (_is_finite(r) == 0) {
+            r = fmul(fdiv(x, 180.0), 3.14159265358979323846)    # x * pi overflowed although the result fits
+        }
     } else {
         r = fdiv(fmul(x, 180.0), 3.14159265358979323846)
+        if (_is_finite(r) == 0) {
+            r = fmul(fdiv(x, 3.14159265358979323846), 180.0)
+        }
     }
     if (_is_finite(r) == 0) {
         _math_overflow(self_p)
@@ -401,11 +423,7 @@ func _round_to_int(self_p, o, r) {
 # 0 = floor, 1 = ceil, 2 = round, 3 = trunc
 func _round_builtin(self_p, argc_i, argv_p, which, o) {
     lv_arity(self_p, argc_i, 1, 1)
-    if (_tag(argv_p) == T_INT) {
-        _cp(o, argv_p)
-        return 0
-    }
-    let x = _arg_num(self_p, argv_p, 0)
+    let x = _arg_flt(self_p, argv_p, 0)
     if (which == 0) {
         _round_to_int(self_p, o, floor(x))
     } else if (which == 1) {
@@ -496,8 +514,7 @@ func _int_pow(base, n) {
 
 func lb_pow(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
-    _arg_num(self_p, argv_p, 0)
-    _arg_num(self_p, argv_p, 1)
+    _same_number_type(self_p, argv_p)
     let o = stack_buf(16)
     if (_tag(argv_p) == T_INT and _tag(argv_p + 16) == T_INT and _val(argv_p + 16) < 0) {
         if (_val(argv_p) == 0) {
@@ -529,7 +546,7 @@ func lb_pow(self_p, argc_i, argv_p) {
 func lb_atan2(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let o = stack_buf(16)
-    _flt(o, atan2(_arg_num(self_p, argv_p, 0), _arg_num(self_p, argv_p, 1)))
+    _flt(o, atan2(_arg_flt(self_p, argv_p, 0), _arg_flt(self_p, argv_p, 1)))
     retp(o)
 }
 
@@ -576,14 +593,25 @@ func _floor_divmod_int(a, b) {
     g_math_r = r
 }
 
-# The floored remainder of floats: the sign of the divisor. The divisor is not zero and both are
-# finite, so the result is finite.
+# The floored remainder of floats: the sign of the divisor, and smaller than it in size. The divisor is not
+# zero and both are finite, so the result is finite. Adding the divisor to a tiny remainder of the other sign
+# can round to the divisor itself (mod(-1e-300, 1e300)); the float just below it is the nearest one that is a
+# remainder.
 func _floor_mod_float(a, b) {
     let r = fmod(a, b)
     if (fne(r, 0.0) and (flt(r, 0.0) != flt(b, 0.0))) {
         r = fadd(r, b)
+        if (fge(fabs(r), fabs(b))) {
+            r = nextafter(b, 0.0)
+        }
     }
     return r
+}
+
+# The floored quotient of floats, the one that goes with _floor_mod_float: a = q * b + r up to rounding.
+# floor(a / b) can be one more: divmod(1.0, 0.1) gave [10.0, 0.0999...] although 10 * 0.1 + 0.0999 is 1.1.
+func _floor_div_float(a, b) {
+    return round(fdiv(fsub(a, _floor_mod_float(a, b)), b))
 }
 
 func lb_mod(self_p, argc_i, argv_p) {
@@ -619,7 +647,7 @@ func lb_floor_div(self_p, argc_i, argv_p) {
     if (feq(b, 0.0)) {
         _div_zero()
     }
-    let q = floor(fdiv(_num(argv_p), b))
+    let q = _floor_div_float(_num(argv_p), b)
     if (_is_finite(q) == 0) {
         _float_overflow(cstr("floor_div"))
     }
@@ -648,7 +676,7 @@ func lb_divmod(self_p, argc_i, argv_p) {
     if (feq(b, 0.0)) {
         _div_zero()
     }
-    let q = floor(fdiv(_num(argv_p), b))
+    let q = _floor_div_float(_num(argv_p), b)
     if (_is_finite(q) == 0) {
         _float_overflow(cstr("divmod"))
     }
@@ -661,11 +689,15 @@ func lb_divmod(self_p, argc_i, argv_p) {
 
 func lb_lerp(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 3, 3)
-    let a = _arg_num(self_p, argv_p, 0)
-    let b = _arg_num(self_p, argv_p, 1)
-    let t = _arg_num(self_p, argv_p, 2)
+    let a = _arg_flt(self_p, argv_p, 0)
+    let b = _arg_flt(self_p, argv_p, 1)
+    let t = _arg_flt(self_p, argv_p, 2)
     let o = stack_buf(16)
     let r = fadd(a, fmul(fsub(b, a), t))
+    # b - a can overflow when the result does not: lerp(-1e308, 1e308, 0.5) is 0.0.
+    if (_is_finite(fsub(b, a)) == 0) {
+        r = fadd(fmul(a, fsub(1.0, t)), fmul(b, t))
+    }
     if (_is_finite(r) == 0) {
         _math_overflow(self_p)
     }
@@ -827,6 +859,11 @@ func lb_dense_list(self_p, argc_i, argv_p) {
     if (n < 0) {
         lv_error(E_ARGUMENT, cstr("dense_list() size must not be negative"), cstr("Usage: dense_list(100, 1.5)"))
     }
+    # 2^36 floats take 512 GiB; a list that size is refused here with the line, not as a bare "out of memory".
+    if (n > 68719476736) {
+        _errf(E_ARGUMENT, cstr("Use a smaller size."),
+              cstr("dense_list() would make %lld items, too many to hold in memory"), n, 0, 0)
+    }
     let o = stack_buf(16)
     _dense_new(o, n)
     let dat = ld64(_val(o) + D_DATA)
@@ -945,6 +982,77 @@ func _mat_cols(m, argn) {
     return cols
 }
 
+# The one number type of a matrix: T_FLOAT for a dense row or rows of floats, T_INT for rows of ints. Items of
+# other types, or ints with floats, are errors.
+func _mat_kind(m, argn) {
+    if (_tag(m) == T_DENSE) {
+        return T_FLOAT
+    }
+    let kind = 0
+    let rows = ld64(_val(m) + L_ITEMS)
+    for (let i = 0; i < ld64(_val(m) + L_COUNT); i++) {
+        let row = rows + 16 * i
+        if (_tag(row) == T_DENSE) {
+            kind = _mat_kind_join(kind, T_FLOAT, argn)
+        } else {
+            let items = ld64(_val(row) + L_ITEMS)
+            for (let j = 0; j < ld64(_val(row) + L_COUNT); j++) {
+                let t = _tag(items + 16 * j)
+                if (t != T_INT and t != T_FLOAT) {
+                    _errf4(E_TYPE, cstr("A matrix holds only numbers."),
+                           cstr("mat_mul() argument %d: row %d holds a %s, not a number"), argn, i + 1, _type_name(items + 16 * j), 0)
+                }
+                kind = _mat_kind_join(kind, t, argn)
+            }
+        }
+    }
+    return kind
+}
+
+func _mat_kind_join(kind, t, argn) {
+    if (kind != 0 and kind != t) {
+        _errf(E_TYPE, cstr("Ints and floats do not mix: convert the items with float(x) or int(x)."),
+              cstr("mat_mul() argument %d holds ints and floats"), argn, 0, 0)
+    }
+    return t
+}
+
+func _type_name_of_tag(t) {
+    if (t == T_INT) {
+        return cstr("ints")
+    }
+    return cstr("floats")
+}
+
+# The product of two int matrices as a list of int lists; an overflow in a product or a sum is an error.
+func _mat_mul_int(o, a, b, rows_a, cols_a, cols_b) {
+    let row = stack_buf(16)
+    let cell = stack_buf(16)
+    _list_new(o, rows_a)
+    for (let i = 0; i < rows_a; i++) {
+        let ai = ld64(_val(ld64(_val(a) + L_ITEMS) + 16 * i) + L_ITEMS)
+        _list_new(row, cols_b)
+        for (let j = 0; j < cols_b; j++) {
+            let acc = 0
+            for (let k = 0; k < cols_a; k++) {
+                let bk = ld64(_val(ld64(_val(b) + L_ITEMS) + 16 * k) + L_ITEMS)
+                let x = _val(ai + 16 * k)
+                let y = _val(bk + 16 * j)
+                if (mulof(x, y) != 0) {
+                    _overflow(cstr("*"))
+                }
+                if (addof(acc, x * y) != 0) {
+                    _overflow(cstr("+"))
+                }
+                acc = acc + x * y
+            }
+            _int(cell, acc)
+            _list_push(row, cell)
+        }
+        _list_push(o, row)
+    }
+}
+
 func lb_mat_mul(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let o = stack_buf(16)
@@ -973,6 +1081,16 @@ func lb_mat_mul(self_p, argc_i, argv_p) {
     if (cols_a != rows_b) {
         _errf(E_ARGUMENT, cstr("The first matrix needs as many columns as the second has rows."),
               cstr("mat_mul() dimension mismatch (%d columns vs %d rows)"), cols_a, rows_b, 0)
+    }
+    let ka = _mat_kind(a, 1)
+    let kb = _mat_kind(b, 2)
+    if (ka != kb) {
+        _errf(E_TYPE, cstr("Ints and floats do not mix: convert one matrix with float(x) or int(x)."),
+              cstr("mat_mul() matrices must both hold ints or both hold floats, got %s and %s"), _type_name_of_tag(ka), _type_name_of_tag(kb), 0)
+    }
+    if (ka == T_INT) {
+        _mat_mul_int(o, a, b, rows_a, cols_a, cols_b)
+        retp(o)
     }
     let fa = lv_alloc(8 * rows_a * cols_a)
     let fb = lv_alloc(8 * rows_b * cols_b)

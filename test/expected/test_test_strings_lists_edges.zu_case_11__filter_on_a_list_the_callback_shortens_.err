@@ -1,0 +1,7 @@
+Index Error [E0401] in /tmp/zue_test_case.zu at line 2:
+  item 2 is out of bounds: the list was made shorter (now 2 items, 4 when filter() began)
+
+   2 | print(filter(ws, func(v) {
+     |       ^^^^^^^^^^^^^^^^^^^^
+
+Hint: Do not remove items from a list while a function walks it; build a new list instead.

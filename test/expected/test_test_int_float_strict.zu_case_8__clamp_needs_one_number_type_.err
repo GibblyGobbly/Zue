@@ -1,0 +1,7 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
+  clamp() arguments must all be int or all be float, got int, float and int
+
+   4 | print(clamp(pass(5), pass(1.0), pass(10)))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Convert the arguments with int() or float() so that all have the same type.

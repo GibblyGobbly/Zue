@@ -1,0 +1,7 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
+  pow() arguments must both be int or both be float, got int and float
+
+   4 | print(pow(pass(2), pass(0.5)))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Convert one of them with int() or float() so that both have the same type.

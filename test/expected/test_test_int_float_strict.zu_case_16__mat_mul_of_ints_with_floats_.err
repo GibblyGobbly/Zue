@@ -1,0 +1,7 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
+  mat_mul() matrices must both hold ints or both hold floats, got ints and floats
+
+   4 | print(mat_mul(pass([[1, 2]]), pass([[1.0], [2.0]])))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Ints and floats do not mix: convert one matrix with float(x) or int(x).

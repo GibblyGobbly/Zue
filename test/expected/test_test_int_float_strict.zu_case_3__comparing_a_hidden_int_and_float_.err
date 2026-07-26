@@ -1,0 +1,7 @@
+Type Error [E0211] in /tmp/zue_test_case.zu at line 4:
+  cannot compare int with float
+
+   4 | print(pass(9007199254740993) == pass(9007199254740992.0))
+     |       ---------------------- ^^ ------------------------
+
+Hint: Compare values of the same type (comparing with null is always allowed).

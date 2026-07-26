@@ -1,0 +1,6 @@
+Index Error [E0401] in /tmp/zue_test_case.zu at line 2:
+  item 2 is out of bounds: the list was made shorter while a loop walked it (now 2 items)
+
+   2 | for (let z in zs) {
+
+Hint: Do not remove items from a list while a for-in loop walks it; build a new list instead.

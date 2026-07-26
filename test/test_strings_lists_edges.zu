@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// Edges of strings and lists: lengths near the largest int, NUL bytes inside strings, the order of chars
+// above 127, and lists changed while they are walked.
+
+# CASE substring with a length near the largest int
+func pass(v) {
+    return [v, null][0]
+}
+print(substring(pass("abc"), 1, pass(9223372036854775807)))
+print(substring("abc", 3, 5), substring("abc", 0, -1) == "")
+# CASE substring with a negative start
+print(substring("abc", -5, 2))
+# CASE strings with NUL bytes compare by every byte
+let z = to_string('\0')
+let a = "a" + z + "b"
+let c = "a" + z + "c"
+print(a == c, a < c, a > c, a < a + "x")
+let l = [c, a]
+sort(l)
+print(l[0] == a)
+# CASE split walks past a NUL byte
+let z = to_string('\0')
+let a = "a" + z + "b"
+let parts = split(a + ",x,,y", ",")
+print(len(parts), len(parts[0]), parts[1], parts[2])
+# CASE to_int of text with a NUL byte
+print(to_int("12" + to_string('\0') + "xyz"))
+# CASE to_float of text with a NUL byte
+print(to_float("1.5" + to_string('\0') + "x"))
+# CASE chars above 127 order the same in sort and in comparisons
+let hi = "é"[0]
+let cs = [hi, 'a']
+sort(cs)
+print(hi > 'a', cs[1] == hi)
+let ss = ["é", "a"]
+sort(ss)
+print(ss)
+# CASE range over the whole int range
+let lo = -9223372036854775807 - 1
+let hi = 9223372036854775807
+print(range(lo, hi, hi))
+print(range(lo, hi, 4611686018427387904))
+print(range(0, hi, 4611686018427387904))
+print(range(hi, lo, -hi))
+# CASE range too long to hold
+print(range(0, 9223372036854775807))
+# CASE map takes the count once
+let xs = [1, 2, 3]
+print(map(xs, func(v) {
+    append(xs, v)
+    return v * 2
+}))
+print(len(xs))
+# CASE filter on a list the callback shortens
+let ws = [1, 2, 3, 4]
+print(filter(ws, func(v) {
+    remove(ws, 0)
+    return true
+}))
+# CASE for-in ignores appended items
+let ys = [1, 2, 3]
+for (let y in ys) {
+    append(ys, y)
+}
+print(ys)
+# CASE for-in on a list the loop shortens
+let zs = [1, 2, 3, 4]
+for (let z in zs) {
+    remove(zs, 0)
+}
+# CASE int of a float too large names int
+func pass(v) {
+    return [v, null][0]
+}
+print(int(pass(1e19)))
+# CASE dense_list too large to hold
+print(dense_list(100000000000000, 0.0))

@@ -1,1 +1,7 @@
-Runtime Error: out of memory
+Argument Error [E0440] in /tmp/zue_test_case.zu at line 1:
+  dense_list() would make 2305843009213693952 items, too many to hold in memory
+
+   1 | print(len(dense_list(2305843009213693952, 1.0)))
+     |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Use a smaller size.

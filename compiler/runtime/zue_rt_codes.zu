@@ -181,6 +181,12 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("slice end must be")) != 0) {
         return cstr("E0202")
     }
+    if (strstr(msg, cstr("clamp() arguments must all be")) != 0) {
+        return cstr("E0202")
+    }
+    if (strstr(msg, cstr("must both hold ints or both hold floats")) != 0) {
+        return cstr("E0202")
+    }
     if (strstr(msg, cstr("but got")) != 0) {
         return cstr("E0203")
     }
@@ -374,6 +380,9 @@ func lv_code_for(msg) {
         return cstr("E0440")
     }
     if (strstr(msg, cstr("too many boxes")) != 0) {
+        return cstr("E0440")
+    }
+    if (strstr(msg, cstr("too many to hold in memory")) != 0) {
         return cstr("E0440")
     }
     if (strstr(msg, cstr("on a closed file")) != 0) {

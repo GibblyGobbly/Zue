@@ -19,8 +19,12 @@ const MAX_DEPTH = 100000
 func _operand_error(op, a, b) {
     let msg = stack_buf(160)
     snprintf(msg, 160, cstr("cannot use '%s' on %s and %s"), op, _type_name(a), _type_name(b))
-    if (ld8(op) == 43 and ld8(op + 1) == 0) {
+    if (ld8(op) == 43 and ld8(op + 1) == 0 and (_is_num(a) == 0 or _is_num(b) == 0)) {
         lv_error_labeled(E_TYPE, msg, cstr("Both sides must be numbers, or both strings. Build text with \"\{x}\" or to_string(x)."),
+                         0, _type_name(a), _type_name(b))
+    }
+    if (_is_num(a) and _is_num(b)) {
+        lv_error_labeled(E_TYPE, msg, cstr("Ints and floats do not mix: convert one side with float(x) or int(x)."),
                          0, _type_name(a), _type_name(b))
     }
     lv_error_labeled(E_TYPE, msg, cstr("Both sides must be numbers."), 0, _type_name(a), _type_name(b))
@@ -68,12 +72,14 @@ func _oob(idx, len, what) {
 # Arithmetic
 
 # A number element as a double; a dense list holds only numbers.
+# A value stored in a dense list: a float. An int does not become one by itself.
 func _elem(v) {
-    if (_tag(v) == T_INT) {
-        return i2f(_val(v))
-    }
     if (_tag(v) == T_FLOAT) {
         return _val(v)
+    }
+    if (_tag(v) == T_INT) {
+        _errf(E_TYPE, cstr("A dense list holds only floats; convert an int with float(x)."),
+              cstr("cannot store a %s in a dense list"), _type_name(v), 0, 0)
     }
     _errf(E_TYPE, cstr("A dense list holds only numbers."),
           cstr("cannot store a %s in a dense list"), _type_name(v), 0, 0)
@@ -105,23 +111,32 @@ func _op_symbol(op) {
     return cstr("/")
 }
 
-# Element i of a list or dense list as a double; an element that is not a number is an error.
-func _list_elem(v, i, op) {
-    if (_tag(v) == T_DENSE) {
-        return ld64(_val(v) + D_DATA)[i]
+# The one number type of the items of a plain list: T_INT, T_FLOAT, or 0 for an empty list. An item that
+# is not a number, or a list that mixes ints and floats, is an error.
+func _list_num_kind(v, op) {
+    let n = ld64(_val(v) + L_COUNT)
+    let items = ld64(_val(v) + L_ITEMS)
+    let kind = 0
+    for (let i = 0; i < n; i++) {
+        let t = _tag(items + 16 * i)
+        if (t != T_INT and t != T_FLOAT) {
+            _errf4(E_TYPE, cstr("Both lists must hold only numbers."),
+                   cstr("cannot use '%s' on a list: element %d is a %s, not a number"), op, i, _type_name(items + 16 * i), 0)
+        }
+        if (kind == 0) {
+            kind = t
+        } else if (t != kind) {
+            _errf4(E_TYPE, cstr("Ints and floats do not mix: convert the items with float(x) or int(x)."),
+                   cstr("cannot use '%s' on a list that holds ints and floats (element %d)"), op, i, 0, 0)
+        }
     }
-    let e = ld64(_val(v) + L_ITEMS) + 16 * i
-    if (_tag(e) != T_INT and _tag(e) != T_FLOAT) {
-        _errf4(E_TYPE, cstr("Both lists must hold only numbers."),
-               cstr("cannot use '%s' on a list: element %d is a %s, not a number"), op, i, _type_name(e), 0)
-    }
-    return _num(e)
+    return kind
 }
 
-# Element-wise arithmetic on two lists or two dense lists of the same length: the result is a
-# dense list (an empty list when two empty plain lists meet). A list mixed with a dense list,
-# lists of different lengths, a non-number element, a division by zero and a result that is
-# not finite are errors.
+# Element-wise arithmetic on two lists or two dense lists of the same length. Two lists of ints give a
+# list of ints, computed like the operator on two ints (overflow and division by zero are errors); floats
+# give a dense list. A list mixed with a dense list, lists of different lengths, a non-number element,
+# ints with floats, a division by zero and a result that is not finite are errors.
 func _list_arith(o, op, a, b) {
     let sym = _op_symbol(op)
     let n = 0
@@ -133,38 +148,69 @@ func _list_arith(o, op, a, b) {
             _errf4(E_ARGUMENT, cstr("Both lists need the same number of elements."),
                    cstr("cannot use '%s' on lists of different lengths (%d and %d)"), sym, n, ld64(_val(b) + D_COUNT), 0)
         }
-        if (n == 0) {
-            _dense_new(o, 0)
-            return 0
+        _dense_new(o, n)
+        let out = ld64(_val(o) + D_DATA)
+        let xs = ld64(_val(a) + D_DATA)
+        let ys = ld64(_val(b) + D_DATA)
+        for (let i = 0; i < n; i++) {
+            out[i] = _float_elem_op(op, sym, xs[i], ys[i])
         }
-    } else if (ta == T_LIST and tb == T_LIST) {
-        n = ld64(_val(a) + L_COUNT)
-        if (ld64(_val(b) + L_COUNT) != n) {
-            _errf4(E_ARGUMENT, cstr("Both lists need the same number of elements."),
-                   cstr("cannot use '%s' on lists of different lengths (%d and %d)"), sym, n, ld64(_val(b) + L_COUNT), 0)
-        }
-        if (n == 0) {
-            _list_new(o, 0)
-            return 0
-        }
-    } else {
+        return 0
+    }
+    if (ta != T_LIST or tb != T_LIST) {
         _errf(E_TYPE, cstr("Use two lists, or two dense lists."),
               cstr("cannot use '%s' on a %s and a %s"), sym, _type_name(a), _type_name(b))
     }
-    _dense_new(o, n)
-    let out = ld64(_val(o) + D_DATA)
-    for (let i = 0; i < n; i++) {
-        let x = _list_elem(a, i, sym)
-        let y = _list_elem(b, i, sym)
-        if (op == 3 and feq(y, 0.0)) {
-            _div_zero()
-        }
-        let r = _float_op(op, x, y)
-        if (_is_finite(r) == 0) {
-            _float_overflow(sym)
-        }
-        out[i] = r
+    n = ld64(_val(a) + L_COUNT)
+    if (ld64(_val(b) + L_COUNT) != n) {
+        _errf4(E_ARGUMENT, cstr("Both lists need the same number of elements."),
+               cstr("cannot use '%s' on lists of different lengths (%d and %d)"), sym, n, ld64(_val(b) + L_COUNT), 0)
     }
+    let ka = _list_num_kind(a, sym)
+    let kb = _list_num_kind(b, sym)
+    if (n == 0) {
+        _list_new(o, 0)
+        return 0
+    }
+    if (ka != kb) {
+        _errf(E_TYPE, cstr("Ints and floats do not mix: convert the items with float(x) or int(x)."),
+              cstr("cannot use '%s' on a list of %s and a list of %s"), sym, _type_name(ld64(_val(a) + L_ITEMS)), _type_name(ld64(_val(b) + L_ITEMS)))
+    }
+    let xs = ld64(_val(a) + L_ITEMS)
+    let ys = ld64(_val(b) + L_ITEMS)
+    if (ka == T_FLOAT) {
+        _dense_new(o, n)
+        let out = ld64(_val(o) + D_DATA)
+        for (let i = 0; i < n; i++) {
+            out[i] = _float_elem_op(op, sym, _val(xs + 16 * i), _val(ys + 16 * i))
+        }
+        return 0
+    }
+    _list_new(o, n)
+    let cell = stack_buf(16)
+    for (let i = 0; i < n; i++) {
+        if (op == 0) {
+            lvp_add(cell, xs + 16 * i, ys + 16 * i)
+        } else if (op == 1) {
+            lvp_sub(cell, xs + 16 * i, ys + 16 * i)
+        } else if (op == 2) {
+            lvp_mul(cell, xs + 16 * i, ys + 16 * i)
+        } else {
+            lvp_div(cell, xs + 16 * i, ys + 16 * i)
+        }
+        _list_push(o, cell)
+    }
+}
+
+func _float_elem_op(op, sym, x, y) {
+    if (op == 3 and feq(y, 0.0)) {
+        _div_zero()
+    }
+    let r = _float_op(op, x, y)
+    if (_is_finite(r) == 0) {
+        _float_overflow(sym)
+    }
+    return r
 }
 
 func lvp_add(o, a, b) {
@@ -177,8 +223,8 @@ func lvp_add(o, a, b) {
         _int(o, _val(a) + _val(b))
         return 0
     }
-    if (_is_num(a) and _is_num(b)) {
-        _flt_checked(o, fadd(_num(a), _num(b)), cstr("+"))
+    if (_tag(a) == T_FLOAT and _tag(b) == T_FLOAT) {
+        _flt_checked(o, fadd(_val(a), _val(b)), cstr("+"))
         return 0
     }
     if (ta == T_STR and tb == T_STR) {
@@ -217,8 +263,8 @@ func lvp_sub(o, a, b) {
         _int(o, _val(a) - _val(b))
         return 0
     }
-    if (_is_num(a) and _is_num(b)) {
-        _flt_checked(o, fsub(_num(a), _num(b)), cstr("-"))
+    if (_tag(a) == T_FLOAT and _tag(b) == T_FLOAT) {
+        _flt_checked(o, fsub(_val(a), _val(b)), cstr("-"))
         return 0
     }
     if (_is_listish(a) and _is_listish(b)) {
@@ -236,8 +282,8 @@ func lvp_mul(o, a, b) {
         _int(o, _val(a) * _val(b))
         return 0
     }
-    if (_is_num(a) and _is_num(b)) {
-        _flt_checked(o, fmul(_num(a), _num(b)), cstr("*"))
+    if (_tag(a) == T_FLOAT and _tag(b) == T_FLOAT) {
+        _flt_checked(o, fmul(_val(a), _val(b)), cstr("*"))
         return 0
     }
     if (_is_listish(a) and _is_listish(b)) {
@@ -258,12 +304,12 @@ func lvp_div(o, a, b) {
         _int(o, _val(a) / _val(b))
         return 0
     }
-    if (_is_num(a) and _is_num(b)) {
-        let d = _num(b)
+    if (_tag(a) == T_FLOAT and _tag(b) == T_FLOAT) {
+        let d = _val(b)
         if (feq(d, 0.0)) {
             _div_zero()
         }
-        _flt_checked(o, fdiv(_num(a), d), cstr("/"))
+        _flt_checked(o, fdiv(_val(a), d), cstr("/"))
         return 0
     }
     if (_is_listish(a) and _is_listish(b)) {
@@ -285,12 +331,12 @@ func lvp_mod(o, a, b) {
         _int(o, _val(a) % _val(b))
         return 0
     }
-    if (_is_num(a) and _is_num(b)) {
-        let d = _num(b)
+    if (_tag(a) == T_FLOAT and _tag(b) == T_FLOAT) {
+        let d = _val(b)
         if (feq(d, 0.0)) {
             _div_zero()
         }
-        _flt(o, fmod(_num(a), d))
+        _flt(o, fmod(_val(a), d))
         return 0
     }
     _operand_error(cstr("%"), a, b)
@@ -344,10 +390,14 @@ func lvp_shr(o, a, b) {
 
 # Comparison
 
+# Values of one family can be compared with == and !=. An int and a float are not one family: they never mix.
 func _family(v) {
     let t = _tag(v)
-    if (t == T_INT or t == T_FLOAT) {
+    if (t == T_INT) {
         return 1
+    }
+    if (t == T_FLOAT) {
+        return 3
     }
     if (t == T_LIST or t == T_DENSE) {
         return 2
@@ -365,8 +415,8 @@ func lvp_equal(a, b) {
     if (ta == T_INT and tb == T_INT) {
         return _val(a) == _val(b)
     }
-    if (_is_num(a) and _is_num(b)) {
-        return feq(_num(a), _num(b))
+    if (ta == T_FLOAT and tb == T_FLOAT) {
+        return feq(_val(a), _val(b))
     }
     if (ta != tb) {
         return 0
@@ -431,6 +481,23 @@ func lvp_ne(o, a, b) {
     _bool(o, lvp_equal(a, b) == 0)
 }
 
+# The order of two strings by their bytes, unsigned, over their whole length: a NUL byte is an ordinary
+# byte (strcmp stopped at it, so "a\0b" and "a\0c" were neither equal nor in order), and a string that is
+# the start of another comes first.
+func _str_order(a, b) {
+    let la = ld64(a)
+    let lb = ld64(b)
+    let n = la
+    if (lb < n) {
+        n = lb
+    }
+    let c = memcmp(a + S_DATA, b + S_DATA, n)
+    if (c != 0) {
+        return (c > 0) - (c < 0)
+    }
+    return (la > lb) - (la < lb)
+}
+
 # -1, 0 or 1; an error for values that have no order.
 func _order(a, b) {
     let ta = _tag(a)
@@ -438,24 +505,24 @@ func _order(a, b) {
     if (ta == T_INT and tb == T_INT) {
         return (_val(a) > _val(b)) - (_val(a) < _val(b))
     }
-    if (_is_num(a) and _is_num(b)) {
-        let x = _num(a)
-        let y = _num(b)
+    if (ta == T_FLOAT and tb == T_FLOAT) {
+        let x = _val(a)
+        let y = _val(b)
         return fgt(x, y) - flt(x, y)
     }
     if (ta == T_STR and tb == T_STR) {
-        let c = strcmp(_val(a) + S_DATA, _val(b) + S_DATA)
-        return (c > 0) - (c < 0)
+        return _str_order(_val(a), _val(b))
     }
     if (ta == T_CHAR and tb == T_CHAR) {
-        let x = lds8(a + 8)
-        let y = lds8(b + 8)
+        # unsigned, as strings compare and as < on two chars does (lvp_lt_fast)
+        let x = ld8(a + 8)
+        let y = ld8(b + 8)
         return (x > y) - (x < y)
     }
     if (ta == T_PTR and tb == T_PTR) {
         return ugt(_val(a), _val(b)) - ult(_val(a), _val(b))
     }
-    _errf(E_TYPE, cstr("Ordering works on two numbers, two strings or two chars."),
+    _errf(E_TYPE, cstr("Ordering works on two ints, two floats, two strings or two chars."),
           cstr("cannot order %s and %s with <, <=, > or >="), _type_name(a), _type_name(b), 0)
 }
 
@@ -855,11 +922,12 @@ func lvp_iter_len(v) {
 func lvp_iter_at(o, v, i) {
     let n = lvp_iter_len(v)
     if (i >= n) {
-        let what = cstr("list")
-        if (_tag(v) == T_STR) {
-            what = cstr("string")
+        # A for-in loop takes the length once; only a list made shorter in the loop gets here.
+        if (_tag(v) != T_STR) {
+            _errf(E_INDEX, cstr("Do not remove items from a list while a for-in loop walks it; build a new list instead."),
+                  cstr("item %lld is out of bounds: the list was made shorter while a loop walked it (now %lld items)"), i, n, 0)
         }
-        _oob(i, n, what)
+        _oob(i, n, cstr("string"))
     }
     if (_tag(v) == T_DENSE) {
         _flt(o, ld64(ld64(_val(v) + D_DATA) + i * 8))
@@ -1079,6 +1147,46 @@ func lv_flush_stdout_at_exit(code) {
 # result is returned as an LV in registers, so the generated code never has to give the runtime the
 # address of a value and LLVM can keep its values in registers.
 
+# The slow path of an operator whose operand on side (1 left, 2 right) is a whole-number literal the checker
+# could not decide (see ll_binop): next to a float the literal is that float. Its float is exact (the
+# compiler sends only literals of at most 2^53 here). op is the index in the table of _dyn_op.
+func lvv_binop_lit(op, side, at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    if (side == 2 and at == T_FLOAT and bt == T_INT) {
+        _set(b, T_FLOAT, i2f(bp))
+    } else if (side == 1 and bt == T_FLOAT and at == T_INT) {
+        _set(a, T_FLOAT, i2f(ap))
+    }
+    if (op == 0) {
+        lvp_add_fast(o, a, b)
+    } else if (op == 1) {
+        lvp_sub_fast(o, a, b)
+    } else if (op == 2) {
+        lvp_mul_fast(o, a, b)
+    } else if (op == 3) {
+        lvp_div(o, a, b)
+    } else if (op == 4) {
+        lvp_mod(o, a, b)
+    } else if (op == 5) {
+        lvp_lt_fast(o, a, b)
+    } else if (op == 6) {
+        lvp_le_fast(o, a, b)
+    } else if (op == 7) {
+        lvp_gt_fast(o, a, b)
+    } else if (op == 8) {
+        lvp_ge_fast(o, a, b)
+    } else if (op == 9) {
+        lvp_eq_fast(o, a, b)
+    } else {
+        lvp_ne_fast(o, a, b)
+    }
+    retp(o)
+}
+
 func lvv_add(at, ap, bt, bp) {
     let a = stack_buf(16)
     let b = stack_buf(16)
@@ -1291,7 +1399,13 @@ func lvp_num_like(o, v, like) {
         float_like = _tag(ld64(_val(like) + L_ITEMS)) == T_FLOAT
     }
     if (float_like) {
-        _set(o, T_FLOAT, i2f(_val(v)))
+        let f = i2f(_val(v))
+        if (_val(v) == -9223372036854775807 - 1 or (fge(fabs(f), 9223372036854775808.0) == 0 and f2i(f) == _val(v))) {
+            _set(o, T_FLOAT, f)
+        } else {
+            _errf(E_TYPE, cstr("A float holds whole numbers exactly only up to 9007199254740992. Write a float literal, or keep the value an int"),
+                  cstr("the number literal %lld has no exact float value"), _val(v), 0, 0)
+        }
     }
 }
 

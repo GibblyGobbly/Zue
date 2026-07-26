@@ -1,14 +1,41 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 //
-// + - * / between two lists: element by element, and the result is a dense list of floats.
+// + - * / between two lists: element by element. Two lists of ints give a list of ints, computed like the
+// operator on two ints; two lists of floats give a dense list of floats. Ints and floats never mix.
 
-# CASE the result holds floats and the checker knows it
+# CASE lists of ints give ints and the checker knows it
 let s = [4, 6] + [2, 3]
+let x = s[0]
+x = x + 1
+print(s, x)
+print([4, 6] * [2, 3], [4, 6] / [2, 3], [4, 6] - [2, 3])
+# CASE a float variable cannot take an item of int list arithmetic
+let s = [4, 6] + [2, 3]
+let x: float = s[0]
+# CASE lists of floats give a dense list of floats
+let s = [4.0, 6.0] + [2.0, 3.0]
 let x = s[0]
 x = x + 1.5
 print(s, x)
-print([4, 6] * [2, 3], [4, 6] / [2, 3], [4, 6] - [2, 3])
-# CASE an int variable cannot take an item of list arithmetic
-let s = [4, 6] + [2, 3]
-let x: int = s[0]
+print([4.0, 6.0] / [8.0, 3.0])
+# CASE int list arithmetic overflows like int arithmetic
+func pass(v) {
+    return [v, null][0]
+}
+print([pass(9223372036854775807)] + [pass(1)])
+# CASE int list division by zero
+func pass(v) {
+    return [v, null][0]
+}
+print([pass(1)] / [pass(0)])
+# CASE a list of ints with a list of floats
+func pass(v) {
+    return [v, null][0]
+}
+print(pass([1, 2]) + pass([1.0, 2.0]))
+# CASE a list that mixes ints and floats
+func pass(v) {
+    return [v, null][0]
+}
+print(pass([1, 2.5]) + pass([1.0, 2.0]))

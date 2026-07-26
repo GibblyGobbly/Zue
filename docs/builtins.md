@@ -106,6 +106,10 @@ Each thread has a stack of 1 MiB of address space (memory is used as it grows, w
 runtime), so a thread can nest roughly 1200 calls where the main thread allows 100000. The operating
 system's limit on mappings (`vm.max_map_count`) bounds the number of threads at once: each one uses two mappings. On a machine where it is 1048576, 70000 threads ran and the spawn after about 500000 failed; a thread that cannot get a stack is an error.
 
+A thread that waits forever (a `recv` on a channel nothing sends to, a `wait` that never ends) is never
+reclaimed: its stack, about 6.5 KB, stays for as long as the program runs, like a goroutine leak in Go. Close
+channels that will get no more values, so that receivers wake up.
+
 ```
 func worker(id, results) {
     send(results, id * id)
@@ -140,7 +144,7 @@ byte strings: `len("héllo")` is 6, and indexing is zero-based by byte. `to_uppe
 | Function | Description | Example |
 |---|---|---|
 | `char_at(s, i)` | The character at index `i` as a one-character string; `""` when out of range | `char_at("ABC", 1)` is `"B"` |
-| `substring(s, start, n)` | `n` characters starting at `start`; the result is cut at the end of the string | `substring("Hello", 0, 2)` is `"He"` |
+| `substring(s, start, n)` | `n` characters starting at `start`; the result is cut at the end of the string. A negative `start` is an `Argument Error` | `substring("Hello", 0, 2)` is `"He"` |
 | `slice(s, start, end)` | Positions `start` to `end`, from 0, both included | `slice("Hello", 1, 3)` is `"ell"` |
 
 For a slice written as an expression, with positions from 0 and both ends included, see [slices](syntax.md#slices): `"Hello"[1:3]` is `"ell"`.
@@ -396,7 +400,7 @@ list, and its size is fixed: `append` does not accept it.
 | `mat_mul(a, b)` | Matrix product of two lists of rows (lists or dense lists); returns a list of dense rows |
 
 `+ - * /` between two lists of numbers do the same as the `vec_*` functions:
-`[1, 2] + [3, 4]` is `d[4.0, 6.0]`: the result holds floats even when both lists hold ints, and the checker types it as `list<float>`.
+`[1, 2] + [3, 4]` is `[4, 6]`: two lists of ints give a list of ints, computed like the operator on two ints (an overflow or a division by zero is an error, and `/` divides like ints). Two lists of floats give a dense list of floats: `[1.0, 2.0] + [3.0, 4.0]` is `d[4.0, 6.0]`. A list of ints with a list of floats, or a list that holds both, is a Type Error. `mat_mul` of two int matrices gives exact ints the same way.
 
 ```javascript
 print(vec_mul([1, 2], [3, 4]))                      # d[3.0, 8.0]

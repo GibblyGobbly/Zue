@@ -8,7 +8,7 @@ and explains it.
 
 | Rule | What it means |
 |---|---|
-| Ints and floats do not convert for you | `sqrt(n)` with an int variable `n` is an error. A number written in the source adapts (`sqrt(16)` is fine), a variable never does. Use `float(n)` or `int(x)` to convert |
+| Ints and floats do not convert for you | `sqrt(n)` with an int variable `n` is an error. A number written in the source adapts (`sqrt(16)` is fine), a variable never does. Use `float(n)` or `int(x)` to convert. This holds at run time too: an int and a float given to an operator, a comparison, `sort` or a float function are a Type Error even where the checker could not see the types |
 | No infinity and no NaN | An argument outside a function's domain is an `Argument Error` (`sqrt(-4)`, `ln(0)`, `asin(2)`). A result too large for a float is a `Runtime Error` (`float overflow in exp()`) |
 | Integer overflow is an error | `9223372036854775807 + 1` stops with `integer overflow in '+'`. It never wraps |
 | Division by zero is an error | `1 / 0`, `5 % 0` and `mod(5, 0)` all stop the program |
@@ -28,8 +28,8 @@ is integer division and `%` keeps the sign of the left side. See [syntax](syntax
 | `sign(x)` | int | `-1`, `0` or `1` |
 | `min(a, b)`, `max(a, b)` | same type | Both ints or both floats |
 | `min(list)`, `max(list)` | item | A non-empty list, all ints or all floats |
-| `clamp(x, lo, hi)` | same type | `lo` above `hi` is an `Argument Error` |
-| `sum(list)` | same type as the items | Ints overflow-check; floats use a compensated sum |
+| `clamp(x, lo, hi)` | same type | All three ints or all three floats; `lo` above `hi` is an `Argument Error` |
+| `sum(list)` | same type as the items | Ints overflow-check; floats use a compensated sum, and a partial sum that overflows does not make the result fail when the sum itself fits (`sum([1e308, 1e308, -1e308])` is `1e308`) |
 | `mean(list)` | float | Always a float |
 | `lerp(a, b, t)` | float | `lerp(0, 100, 0.5)` is `50.0` |
 
@@ -41,7 +41,7 @@ is integer division and `%` keeps the sign of the left side. See [syntax](syntax
 | `isqrt(n)` | int | The largest `r` with `r * r <= n` |
 | `mod(x, y)` | same type | Floored remainder: the sign of `y`. `mod(-7, 3)` is `2`, while `-7 % 3` is `-1` |
 | `floor_div(x, y)` | same type | Division rounded down: `floor_div(-7, 3)` is `-3` |
-| `divmod(x, y)` | list | `[floor_div(x, y), mod(x, y)]` |
+| `divmod(x, y)` | list | `[floor_div(x, y), mod(x, y)]`; for floats the quotient is the one that goes with the remainder, so `q * y + r` is `x` up to rounding (`divmod(1.0, 0.1)` is `[9.0, 0.0999...]`), and the remainder is always smaller than `y` |
 
 ### Powers, roots and logarithms
 

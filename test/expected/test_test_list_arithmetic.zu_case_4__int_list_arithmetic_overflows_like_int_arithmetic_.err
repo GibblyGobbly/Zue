@@ -1,0 +1,7 @@
+Runtime Error [E0410] in /tmp/zue_test_case.zu at line 4:
+  integer overflow in '+'
+
+   4 | print([pass(9223372036854775807)] + [pass(1)])
+     |       --------------------------- ^ ---------
+
+Hint: The result does not fit in a 64-bit int. Use floats for very large numbers.

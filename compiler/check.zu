@@ -76,6 +76,7 @@ func ck_init_results() {
     RESULTS["split"] = "list<string>"
     RESULTS["map_keys"] = "list<string>"
     RESULTS["range"] = "list<int>"
+    RESULTS["dense_list"] = "list<float>"
 }
 
 ck_init_results()
@@ -312,10 +313,27 @@ func lit_record(n, what) {
     }
 }
 
+# A whole-number literal (or + - * of them) next to a value of unknown type: decided at run time.
+func lit_mark_any(n) {
+    if (n.k == "num") {
+        if (n.ads == null) {
+            n.ads = {}
+            append(LITERALS, n)
+        }
+        n.ads["*"] = "any"
+    } else if (n.k == "bin" and is_int_tree(n)) {
+        lit_mark_any(n.l)
+        lit_mark_any(n.r)
+    }
+}
+
 # After the whole program is checked: what each recorded literal is in the ordinary version of its function.
 func settle_literals() {
     for (let n in LITERALS) {
-        let sigs = BODY_SIGS[n.ad]
+        let sigs = null
+        if (n.ad != null) {
+            sigs = BODY_SIGS[n.ad]
+        }
         let floats = 0
         let all = sigs != null
         if (sigs != null) {
@@ -328,7 +346,9 @@ func settle_literals() {
             }
         }
         n.ad = null
-        if (floats > 0 and all) {
+        if (n.ads["*"] == "any") {
+            n.ad = "dyn"
+        } else if (floats > 0 and all) {
             n.k = "float"
             if (index_of(n.v, ".") < 0) {
                 n.v = "{n.v}.0"
@@ -699,6 +719,21 @@ func ck_bin(n) {
     let a = ck_expr(n.l)
     let b = ck_expr(n.r)
     let op = n.op
+    # A whole-number literal next to a float becomes a float: 2.5 * 2 is 2.5 * 2.0, x < 1 for a float x is
+    # x < 1.0. The runtime never mixes an int with a float.
+    # Next to a value whose type is not known here the literal takes that value's number type at run time.
+    let bitwise = op == "&" or op == "|" or op == "^" or op == "<<" or op == ">>"
+    if (op != "and" and op != "or" and op != "**" and not bitwise and n.unary == null) {
+        if (a == "int~" and (b == "float" or b == "float~")) {
+            a = adapt_expr(n.l, a, "float")
+        } else if (b == "int~" and (a == "float" or a == "float~")) {
+            b = adapt_expr(n.r, b, "float")
+        } else if (a == "int~" and b == "any") {
+            lit_mark_any(n.l)
+        } else if (b == "int~" and a == "any") {
+            lit_mark_any(n.r)
+        }
+    }
     if (STRICT and (op != "==" and op != "!=" or (a != "null" and b != "null"))) {
         strict_known(a, n.l, "the left operand of '{op}'")
         strict_known(b, n.r, "the right operand of '{op}'")
@@ -765,9 +800,20 @@ func ck_bin(n) {
         return "string"
     }
     if (kind_of(a) == "list" and kind_of(b) == "list") {
-        # Element-wise arithmetic gives a dense list, which holds floats even when both lists hold ints.
+        # Element-wise arithmetic: two lists of ints give a list of ints, floats a dense list of floats.
         if (op == "+" or op == "-" or op == "*" or op == "/") {
-            return "list<float>"
+            let ea = elem_of(a)
+            let eb = elem_of(b)
+            if (ea == "int" and eb == "int") {
+                return "list<int>"
+            }
+            if (ea == "float" and eb == "float") {
+                return "list<float>"
+            }
+            if (ea != null and eb != null and ea != eb) {
+                bin_error(n, a, b)
+                return "any"
+            }
         }
         return "list"
     }
@@ -827,6 +873,8 @@ func adapt_builtin_args(n, alt, argtypes) {
         }
         if (p == "float" and argtypes[i] == "int~") {
             argtypes[i] = adapt_expr(n.args[i], argtypes[i], "float")
+        } else if (alt[0][i] == "T" and argtypes[i] == "int~" and contains(argtypes, "any")) {
+            lit_mark_any(n.args[i])
         }
     }
 }
@@ -1809,6 +1857,10 @@ func ck_stmt(n) {
         ck_index(tt, ck_expr(n.index), n.index)
         let et = ck_expr(n.e)
         let el = elem_of(tt)
+        # a[i] += 1 on a list of floats: the literal is a float.
+        if (n.op != null and el == "float" and et == "int~") {
+            et = adapt_expr(n.e, et, "float")
+        }
         let od = object_def(tt)
         if (od != null and n.op == null and n.index.k == "str") {
             let fi = field_index(od, n.index.v)

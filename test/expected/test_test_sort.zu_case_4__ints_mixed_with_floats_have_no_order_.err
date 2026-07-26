@@ -1,0 +1,7 @@
+Type Error [E0211] in /tmp/zue_test_case.zu at line 5:
+  cannot order int and float with <, <=, > or >=
+
+   5 | sort(m)
+     | ^^^^^^^
+
+Hint: Ordering works on two ints, two floats, two strings or two chars.

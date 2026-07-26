@@ -17,11 +17,15 @@ print(d)
 let a = [3, -1, 0, -7, 12, 5, -1]
 sort(a)
 print(a)
-# CASE floats, and ints mixed with floats
+# CASE floats
 let f = [2.5, -1.5, 0.0, 10.25]
 sort(f)
 print(f)
-let m = [3, 1.5, 2, 0.5]
+# CASE ints mixed with floats have no order
+func pass(v) {
+    return [v, null][0]
+}
+let m = pass([3, 1.5, 2, 0.5])
 sort(m)
 print(m)
 # CASE strings and chars

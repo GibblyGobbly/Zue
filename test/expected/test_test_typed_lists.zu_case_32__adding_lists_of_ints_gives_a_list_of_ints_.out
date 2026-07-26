@@ -1,0 +1,9 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 4:
+  cannot store string in list<int>
+
+   4 | c[0] = "x"
+     | -      ^^^ this is string
+     | |
+     | list<int>
+
+Hint: A list<int> holds only int items

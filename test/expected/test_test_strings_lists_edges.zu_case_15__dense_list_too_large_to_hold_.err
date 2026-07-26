@@ -1,0 +1,7 @@
+Argument Error [E0440] in /tmp/zue_test_case.zu at line 1:
+  dense_list() would make 100000000000000 items, too many to hold in memory
+
+   1 | print(dense_list(100000000000000, 0.0))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Use a smaller size.

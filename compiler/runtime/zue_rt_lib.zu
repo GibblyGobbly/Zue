@@ -121,6 +121,14 @@ func _arg_int(self_p, argv, i) {
 }
 
 # A number argument as a double.
+# A float argument; an int is an error, as everywhere a float is wanted (int and float never mix).
+func _arg_flt(self_p, argv, i) {
+    if (_tag(argv + 16 * i) != T_FLOAT) {
+        _arg_fail(self_p, argv, i, cstr("float"))
+    }
+    return _val(argv + 16 * i)
+}
+
 func _arg_num(self_p, argv, i) {
     if (_is_num(argv + 16 * i) == 0) {
         _arg_fail(self_p, argv, i, cstr("number"))
@@ -343,7 +351,8 @@ func lb_int(self_p, argc_i, argv_p) {
     } else if (t == T_FLOAT) {
         let f = _val(argv_p)
         if (fge(f, -9223372036854775808.0) == 0 or flt(f, 9223372036854775808.0) == 0) {
-            lv_error(E_RUNTIME, cstr("to_int() of a float that does not fit in a 64-bit int"), cstr("The largest int is 9223372036854775807. Keep very large numbers as floats"))
+            _errf(E_RUNTIME, cstr("The largest int is 9223372036854775807. Keep very large numbers as floats"),
+                  cstr("%s() of a float that does not fit in a 64-bit int"), _fname(self_p), 0, 0)
         }
         _int(o, f2i(f))
     } else if (t == T_CHAR) {
@@ -351,7 +360,7 @@ func lb_int(self_p, argc_i, argv_p) {
     } else if (t == T_BOOL) {
         _int(o, ld32(argv_p + 8))
     } else if (t == T_STR) {
-        _int(o, _parse_int(self_p, _val(argv_p) + S_DATA))
+        _int(o, _parse_int(self_p, _number_text(self_p, argv_p)))
     } else {
         _errf(E_TYPE, cstr("int() takes a float, a char, a bool or text that is a whole number, such as int(\"42\")"), cstr("int() cannot convert %s"), _type_name(argv_p), 0, 0)
     }
@@ -415,7 +424,7 @@ func lb_float(self_p, argc_i, argv_p) {
     } else if (t == T_BOOL) {
         _flt(o, i2f(ld32(argv_p + 8)))
     } else if (t == T_STR) {
-        _flt(o, _parse_float(self_p, _val(argv_p) + S_DATA))
+        _flt(o, _parse_float(self_p, _number_text(self_p, argv_p)))
     } else {
         _errf(E_TYPE, cstr("float() takes an int, a char, a bool or text that is a number, such as float(\"2.5\")"), cstr("float() cannot convert %s"), _type_name(argv_p), 0, 0)
     }
@@ -478,6 +487,17 @@ func lb_fixed(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# The C text of a string to be read as a number. A NUL byte would end the text early and hide what follows
+# (to_int("12\0xyz") read 12), so it is an error.
+func _number_text(self_p, v) {
+    let p = _val(v) + S_DATA
+    if (strlen(p) != ld64(_val(v))) {
+        _errf(E_ARGUMENT, cstr("Text read as a number holds only digits, a sign, a point and an exponent."),
+              cstr("%s() cannot read text that holds a NUL byte as a number"), _fname(self_p), 0, 0)
+    }
+    return p
+}
+
 func lb_to_int(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let o = stack_buf(16)
@@ -485,7 +505,7 @@ func lb_to_int(self_p, argc_i, argv_p) {
         callv(o, lb_int, self_p, argc_i, argv_p)
         retp(o)
     }
-    _int(o, _parse_int(self_p, _val(argv_p) + S_DATA))
+    _int(o, _parse_int(self_p, _number_text(self_p, argv_p)))
     retp(o)
 }
 
@@ -595,12 +615,19 @@ func lb_range(self_p, argc_i, argv_p) {
     if (step == 0) {
         lv_error(E_ARGUMENT, cstr("range() step must not be 0"), cstr("A step of 0 never reaches the end. Use 1, or a negative step to count down"))
     }
+    # The span and the step are taken as unsigned 64-bit numbers: end - start can be larger than the largest
+    # int (range(-2^63, 2^63 - 1, 2^62) has 4 items), and end - start + step - 1 wrapped before.
     let n = 0
     if (step > 0 and end > start) {
-        n = (end - start + step - 1) / step
+        n = udiv(end - start - 1, step) + 1
     }
     if (step < 0 and end < start) {
-        n = (start - end + (0 - step) - 1) / (0 - step)
+        n = udiv(start - end - 1, 0 - step) + 1
+    }
+    # 2^36 items take 1 TiB; a list that size is refused here with the line, not as a bare "out of memory".
+    if (ugt(n, 68719476736)) {
+        _errf(E_ARGUMENT, cstr("Use a larger step or a smaller span, or loop with for (let i = start; i < end; i += step)."),
+              cstr("range() would make %llu items, too many to hold in memory"), n, 0, 0)
     }
     let o = stack_buf(16)
     _list_new(o, n)
@@ -809,14 +836,10 @@ func lb_slice(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# The order of two items for sort, min and max; an int and a float have none (they never mix).
 func _sort_cmp(a, b) {
     if (_tag(a) == T_INT and _tag(b) == T_INT) {
         return (_val(a) > _val(b)) - (_val(a) < _val(b))
-    }
-    if (_is_num(a) and _is_num(b)) {
-        let x = _num(a)
-        let y = _num(b)
-        return fgt(x, y) - flt(x, y)
     }
     return _order(a, b)
 }
@@ -950,14 +973,26 @@ func lb_sort(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# A list walked by map, filter or reduce that the callback made shorter.
+func _walk_check(self_p, l, i, n) {
+    if (i >= ld64(l + L_COUNT)) {
+        _errf4(E_INDEX, cstr("Do not remove items from a list while a function walks it; build a new list instead."),
+               cstr("item %d is out of bounds: the list was made shorter (now %d items, %d when %s() began)"), i, ld64(l + L_COUNT), n, _fname(self_p))
+    }
+}
+
 func lb_map(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let l = _arg_list(self_p, argv_p, 0)
     let o = stack_buf(16)
     let a = stack_buf(16)
     let r = stack_buf(16)
-    _list_new(o, ld64(l + L_COUNT))
-    for (let i = 0; i < ld64(l + L_COUNT); i++) {
+    # The count is taken once: items the callback appends are not visited (a callback that appended looped
+    # forever), and one that removes items makes the walk stop with an error, not read past the end.
+    let n = ld64(l + L_COUNT)
+    _list_new(o, n)
+    for (let i = 0; i < n; i++) {
+        _walk_check(self_p, l, i, n)
         _cp(a, ld64(l + L_ITEMS) + 16 * i)
         lvp_call(r, argv_p + 16, 1, a)
         _list_push(o, r)
@@ -971,8 +1006,10 @@ func lb_filter(self_p, argc_i, argv_p) {
     let o = stack_buf(16)
     let a = stack_buf(16)
     let r = stack_buf(16)
-    _list_new(o, ld64(l + L_COUNT))
-    for (let i = 0; i < ld64(l + L_COUNT); i++) {
+    let n = ld64(l + L_COUNT)
+    _list_new(o, n)
+    for (let i = 0; i < n; i++) {
+        _walk_check(self_p, l, i, n)
         _cp(a, ld64(l + L_ITEMS) + 16 * i)
         lvp_call(r, argv_p + 16, 1, a)
         if (lvp_truth(r) != 0) {
@@ -988,7 +1025,9 @@ func lb_reduce(self_p, argc_i, argv_p) {
     let acc = stack_buf(16)
     let pair = stack_buf(32)
     _cp(acc, argv_p + 32)
-    for (let i = 0; i < ld64(l + L_COUNT); i++) {
+    let n = ld64(l + L_COUNT)
+    for (let i = 0; i < n; i++) {
+        _walk_check(self_p, l, i, n)
         _cp(pair, acc)
         _cp(pair + 16, ld64(l + L_ITEMS) + 16 * i)
         lvp_call(acc, argv_p + 16, 2, pair)
@@ -1029,7 +1068,8 @@ func lb_substring(self_p, argc_i, argv_p) {
     let n = _arg_int(self_p, argv_p, 2)
     let o = stack_buf(16)
     if (start < 0) {
-        start = 0
+        _errf(E_ARGUMENT, cstr("Count positions from 0, the first character."),
+              cstr("substring() start must not be negative, got %lld"), start, 0, 0)
     }
     if (start >= ld64(s)) {
         _str(o, cstr(""))
@@ -1038,7 +1078,8 @@ func lb_substring(self_p, argc_i, argv_p) {
     if (n < 0) {
         n = 0
     }
-    if (start + n > ld64(s)) {
+    # Compared with what is left, not as start + n, which can wrap past the largest int.
+    if (n > ld64(s) - start) {
         n = ld64(s) - start
     }
     _str_n(o, s + S_DATA + start, n)
@@ -1437,16 +1478,18 @@ func lb_split(self_p, argc_i, argv_p) {
         }
         retp(o)
     }
-    # Like strtok: every character of the delimiter separates, and empty pieces
-    # are dropped.
-    let copy = lv_alloc(ld64(s) + 1)
-    memcpy(copy, s + S_DATA, ld64(s) + 1)
-    let save = stack_buf(8)
-    let tok = strtok_r(copy, d + S_DATA, save)
-    while (tok != 0) {
-        _str(piece, tok)
-        _list_push(o, piece)
-        tok = strtok_r(0, d + S_DATA, save)
+    # Like strtok: every character of the delimiter separates, and empty pieces are dropped. The bytes are
+    # walked by the string's length, so a NUL byte is an ordinary character (strtok stopped at it).
+    let n = ld64(s)
+    let start = 0
+    for (let i = 0; i <= n; i++) {
+        if (i == n or memchr(d + S_DATA, ld8(s + S_DATA + i), ld64(d)) != 0) {
+            if (i > start) {
+                _str_n(piece, s + S_DATA + start, i - start)
+                _list_push(o, piece)
+            }
+            start = i + 1
+        }
     }
     retp(o)
 }

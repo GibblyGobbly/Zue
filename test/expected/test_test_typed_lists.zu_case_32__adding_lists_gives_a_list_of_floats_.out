@@ -1,9 +1,0 @@
-Type Error [E0204] in /tmp/zue_test_case.zu at line 4:
-  cannot store string in list<float>
-
-   4 | c[0] = "x"
-     | -      ^^^ this is string
-     | |
-     | list<float>
-
-Hint: A list<float> holds only float items

@@ -1,7 +1,0 @@
-Type Error [E0211] in /tmp/zue_test_case.zu at line 5:
-  cannot order string and int with <, <=, > or >=
-
-   5 | ssort(l)
-     | ^^^^^^^^
-
-Hint: Ordering works on two numbers, two strings or two chars.

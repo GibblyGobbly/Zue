@@ -1,0 +1,9 @@
+Type Error [E0201] in /tmp/zue_test_case.zu at line 4:
+  cannot use '%' on int and float
+
+   4 | print(pass(7) % pass(2.0))
+     |       ------- ^ --------- float
+     |       |
+     |       int
+
+Hint: Ints and floats do not mix: convert one side with float(x) or int(x).

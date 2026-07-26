@@ -87,7 +87,12 @@ let Div = X / Y
 assert(Sum[0] == 3)   # 1 + 2 = 3
 assert(Sub[0] == -1)  # 1 - 2 = -1
 assert(Mul[0] == 2)   # 1 * 2 = 2
-assert(Div[0] == 0.5) # 1 / 2 = 0.5
+assert(Div[0] == 0)   # 1 / 2 = 0: lists of ints give ints
+
+let Xf = [1.0, 2.0, 3.0, 4.0]
+let Yf = [2.0, 2.0, 2.0, 2.0]
+let Divf = Xf / Yf
+assert(Divf[0] == 0.5) # 1.0 / 2.0 = 0.5: lists of floats give a dense list of floats
 
 assert(Sum[3] == 6)   # 4 + 2 = 6
 assert(Mul[3] == 8)   # 4 * 2 = 8
@@ -123,7 +128,7 @@ print("  Benchmark ran, clock moved forward:", end >= start)
 assert(BenchSum[0] == 3)           # 1 + 2 = 3
 assert(BenchSub[0] == -1)          # 1 - 2 = -1
 assert(BenchMul[size-1] == 100000) # 50000 * 2 = 100000
-assert(BenchDiv[0] == 0.5)         # 1 / 2 = 0.5
+assert(BenchDiv[0] == 0)           # 1 / 2 = 0 for ints
 
 print("  ✓ Benchmark passed")
 

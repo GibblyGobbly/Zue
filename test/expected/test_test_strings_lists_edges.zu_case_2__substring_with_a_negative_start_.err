@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 1:
+  substring() start must not be negative, got -5
+
+   1 | print(substring("abc", -5, 2))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Count positions from 0, the first character.

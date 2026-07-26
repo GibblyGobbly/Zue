@@ -1,9 +1,0 @@
-Type Error [E0204] in /tmp/zue_test_case.zu at line 2:
-  cannot assign float to 'x', which is int
-
-   2 | let x: int = s[0]
-     |        ---   ^^^^ this is float
-     |        |
-     |        'x' is declared int
-
-Hint: A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)

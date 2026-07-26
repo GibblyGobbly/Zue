@@ -216,7 +216,7 @@ fix: Convert one side on purpose: to_string(x), float(x), int(x).
 
 == E0202
 title: A function was given the wrong kind of value
-match: argument 1 must be | argument 2 must be | argument 3 must be | argument 4 must be | argument must be an int | digits must be an int | cannot be called with | arguments must both be | slice start must be | slice end must be
+match: argument 1 must be | argument 2 must be | argument 3 must be | argument 4 must be | argument must be an int | digits must be an int | cannot be called with | arguments must both be | slice start must be | slice end must be | clamp() arguments must all be | must both hold ints or both hold floats
 text: The function needs a value of a certain type for this argument and got another one.
 example:
     print(sqrt("a"))
@@ -388,7 +388,7 @@ fix: Pass a list whose items are all ints or all floats.
 
 == E0440
 title: The program ran out of stack or memory
-match: stack overflow | out of memory | too many boxes
+match: stack overflow | out of memory | too many boxes | too many to hold in memory
 text: A recursion that never stops uses up the stack. Very large data can use up memory.
 example:
     func f(n) { return f(n + 1) }
