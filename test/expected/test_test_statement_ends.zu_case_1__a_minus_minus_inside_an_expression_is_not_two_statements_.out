@@ -1,0 +1,6 @@
+Syntax Error [E0123] in /tmp/zue_test_case.zu at line 2:
+  Expected a line break after the statement
+
+   2 | let x = a--1
+     |            ^ unexpected number
+

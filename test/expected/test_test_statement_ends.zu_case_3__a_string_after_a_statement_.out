@@ -1,0 +1,6 @@
+Syntax Error [E0123] in /tmp/zue_test_case.zu at line 1:
+  Expected a line break after the statement
+
+   1 | print(1) "two"
+     |          ^^^^^ unexpected string
+

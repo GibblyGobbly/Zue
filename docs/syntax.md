@@ -328,7 +328,8 @@ let xs = [
 ]
 ```
 
-`return` followed by a line break returns nothing: the value must start on the same line.
+`return` followed by a line break returns nothing: the value must start on the same line. Several statements may share a line (`let a = 1 let b = 2`), but a number, string or char right
+after a finished statement is a Syntax Error: `let x = a--1` would otherwise be `let x = a--` and a stray `1`.
 
 ## Next
 

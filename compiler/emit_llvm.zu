@@ -1667,7 +1667,14 @@ func compile_module_body(m, stmts, fname) {
     }
     run_defers(0)
     ll("ret void")
-    finish_function("define internal void @{fname}() \{", ST.ctx)
+    # clang's optimizer takes time that grows much faster than the size of one function: a top-level body of
+    # 5,600 lines took 27 s and one of 18,000 lines about 7 minutes. A body that large is built without
+    # optimizing it (2.5 s and about 14 s for 22,400 lines); smaller ones, the usual case, are optimized.
+    if (len(ST.ctx.out) > 100000) {
+        finish_function("define internal void @{fname}() noinline optnone \{", ST.ctx)
+    } else {
+        finish_function("define internal void @{fname}() \{", ST.ctx)
+    }
 }
 
 # Loads, parses and compiles an imported file. Returns null if it cannot be read.

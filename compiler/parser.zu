@@ -722,6 +722,13 @@ func p_stmt_end(before) {
         p_recover()
     } else if (P_pos == before) {
         p_next()
+    } else if ((P_kind == "num" or P_kind == "float" or P_kind == "str" or P_kind == "char") and P_toks[P_pos - 1].t != "nl") {
+        # Several statements may share a line (let a = 1 let b = 2), but a literal right after a finished
+        # statement cannot start one that does anything: let x = a--1 was let x = a-- and a stray 1, and
+        # let y = 3 4 dropped the 4 without a word. (An if statement has already read the line break while it
+        # looked for else.)
+        p_fail("Expected a line break after the statement")
+        p_recover()
     }
 }
 
@@ -1179,6 +1186,15 @@ func p_use(st, word) {
         return mk_use(st, st, names, "", st, nspans)
     }
     let pt = p_next()
+    # The path is found when the program is compiled, so it cannot depend on a value: no interpolation.
+    if (len(pt.v) == 0) {
+        p_fail_at(pt, "Expected string path after {word}: the path is empty", "this path is empty")
+        return mk_use(st, P_prev, names, "", pt, nspans)
+    }
+    if (len(pt.v) != 1 or type(pt.v[0]) != "string") {
+        p_fail_at(pt, "Expected string path after {word}: a path cannot hold an interpolation", "this path has an interpolation")
+        return mk_use(st, P_prev, names, "", pt, nspans)
+    }
     return mk_use(st, P_prev, names, pt.v[0], pt, nspans)
 }
 

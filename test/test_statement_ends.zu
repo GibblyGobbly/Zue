@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// A literal cannot follow a finished statement on the same line (let x = a--1 was two statements); a use path
+// is plain text; for steps that store into a list or a field print back as valid source (zue unparse).
+
+# CASE a minus minus inside an expression is not two statements
+let a = 5
+let x = a--1
+print(x)
+# CASE two calls on one line are two statements
+print(1) print(2)
+# CASE a string after a statement
+print(1) "two"
+# CASE a number after a statement
+let y = 3 4
+# CASE statements after blocks on their own lines
+if (true) {
+    print(1)
+}
+let b = 2
+for (let i = 0; i < 2; i++) {
+    print(i)
+}
+while (false) {
+}
+func f() {
+    return 1
+}
+print(f(), b)
+# CASE a use path with an interpolation
+let p = "a"
+use "{p}.zu"
+# CASE for steps that store into a list and a field
+let c = [0]
+for (let i = 0; i < 3; c[0] += 1) {
+    i++
+}
+let m = {"if": 0}
+for (; m.if < 2; m.if += 1) {
+}
+print(c, m)

@@ -1,0 +1,6 @@
+Syntax Error [E0121] in /tmp/zue_test_case.zu at line 2:
+  Expected string path after use: a path cannot hold an interpolation
+
+   2 | use "{p}.zu"
+     |     ^^^^^^^^ this path has an interpolation
+

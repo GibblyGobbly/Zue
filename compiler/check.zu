@@ -571,10 +571,13 @@ func check_name(n, what) {
     return true
 }
 
-func undefined_error(span, name, what, scopes) {
+func undefined_error(span, name, what, scopes, with_guess) {
     let d = fail_at(span, "{what} '{name}' is not defined", "Name Error")
     diag_text(d, "not declared anywhere")
-    let guess = suggest(name, name_candidates(scopes))
+    let guess = null
+    if (with_guess) {
+        guess = suggest(name, name_candidates(scopes))
+    }
     if (guess != null) {
         diag_hint(d, "Did you mean '{guess}'?")
     } else if (what == "Function") {
@@ -2047,11 +2050,15 @@ func report_undefined() {
     if (OPEN_IMPORT) {
         return null
     }
+    # Only the first 100 errors are printed (diag.zu), so only they get a "did you mean": a suggestion compares
+    # the name with every name in scope, and doing it for thousands of undefined names took minutes.
+    let reported = 0
     for (let p in PENDING) {
         if (HOISTED[p.name] != null) {
             continue
         }
-        undefined_error(p.span, p.name, p.what, p.scopes)
+        undefined_error(p.span, p.name, p.what, p.scopes, reported < 100)
+        reported += 1
     }
 }
 

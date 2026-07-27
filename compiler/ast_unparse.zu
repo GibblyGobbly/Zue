@@ -233,6 +233,9 @@ func simple_text(n) {
     if (n.k == "assign") {
         return "{n.name} = {expr(n.e)}"
     }
+    if (n.k == "setidx") {
+        return stmt_body(n, 0)    # a for step such as a[0] += 1 or m.if += 1
+    }
     return expr(n)
 }
 
