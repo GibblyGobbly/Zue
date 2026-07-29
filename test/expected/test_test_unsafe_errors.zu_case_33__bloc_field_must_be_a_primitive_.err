@@ -1,7 +1,7 @@
 Type Error [E0470] in /tmp/zue_test_case.zu at line 2:
-  Bloc field 'name' only accepts int, float, bool, char, or another bloc
+  Bloc field 'name' only accepts int, float, bool, char, string, or another bloc
 
-   2 | let t = Tag{"hello"}
-     |         ^^^^^^^^^^^^
+   2 | let t = Tag{[1, 2]}
+     |         ^^^^^^^^^^^
 
-Hint: Bloc values must stay inline and only use int, float, bool, char, or nested blocs
+Hint: Bloc values must stay inline and only use int, float, bool, char, string, or nested blocs

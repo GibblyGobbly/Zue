@@ -50,8 +50,17 @@ export func walk_nested(x, out) {
         return null
     }
     if (x.k == "func") {
+        # A parameter of the nested function hides any outer name of the same spelling in its whole body,
+        # so it is not a use of an outer variable (it made that variable a captured cell for nothing).
+        let seen = {}
+        for (let p in x.params) {
+            seen[p] = true
+        }
         let order = []
-        walk_names(x, out, order)
+        walk_names(x, seen, order)
+        for (let nm in order) {
+            out[nm] = true
+        }
         return null
     }
     for (let y in node_children(x)) {

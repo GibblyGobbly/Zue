@@ -49,6 +49,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("Unexpected semicolon")) != 0) {
         return cstr("E0110")
     }
+    if (strstr(msg, cstr("is nested more than")) != 0) {
+        return cstr("E0110")
+    }
     if (strstr(msg, cstr("Expected ')'")) != 0) {
         return cstr("E0111")
     }
@@ -115,6 +118,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("Map literal keys")) != 0) {
         return cstr("E0119")
     }
+    if (strstr(msg, cstr("is given twice")) != 0) {
+        return cstr("E0119")
+    }
     if (strstr(msg, cstr("fields cannot have types")) != 0) {
         return cstr("E0120")
     }
@@ -139,7 +145,19 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("Expected 'case' or 'default'")) != 0) {
         return cstr("E0122")
     }
+    if (strstr(msg, cstr("two default branches")) != 0) {
+        return cstr("E0122")
+    }
+    if (strstr(msg, cstr("appears twice in this switch")) != 0) {
+        return cstr("E0122")
+    }
     if (strstr(msg, cstr("Expected")) != 0) {
+        return cstr("E0123")
+    }
+    if (strstr(msg, cstr("statement outside loop")) != 0) {
+        return cstr("E0123")
+    }
+    if (strstr(msg, cstr("defer expects a call")) != 0) {
         return cstr("E0123")
     }
     if (strstr(msg, cstr("different lengths")) != 0) {
@@ -185,6 +203,9 @@ func lv_code_for(msg) {
         return cstr("E0202")
     }
     if (strstr(msg, cstr("must both hold ints or both hold floats")) != 0) {
+        return cstr("E0202")
+    }
+    if (strstr(msg, cstr("needs a string, list or map")) != 0) {
         return cstr("E0202")
     }
     if (strstr(msg, cstr("but got")) != 0) {
@@ -349,6 +370,12 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("status must be from")) != 0) {
         return cstr("E0412")
     }
+    if (strstr(msg, cstr("is out of range")) != 0) {
+        return cstr("E0412")
+    }
+    if (strstr(msg, cstr("needs one pad character")) != 0) {
+        return cstr("E0412")
+    }
     if (strstr(msg, cstr("cannot read")) != 0) {
         return cstr("E0413")
     }
@@ -385,6 +412,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("too many to hold in memory")) != 0) {
         return cstr("E0440")
     }
+    if (strstr(msg, cstr("too large to hold in memory")) != 0) {
+        return cstr("E0440")
+    }
     if (strstr(msg, cstr("on a closed file")) != 0) {
         return cstr("E0450")
     }
@@ -402,6 +432,18 @@ func lv_code_for(msg) {
     }
     if (strstr(msg, cstr("cannot read system entropy")) != 0) {
         return cstr("E0451")
+    }
+    if (strstr(msg, cstr("cannot wait for itself")) != 0) {
+        return cstr("E0452")
+    }
+    if (strstr(msg, cstr("every blue thread is waiting")) != 0) {
+        return cstr("E0452")
+    }
+    if (strstr(msg, cstr("on a closed channel")) != 0) {
+        return cstr("E0452")
+    }
+    if (strstr(msg, cstr("from a closed channel")) != 0) {
+        return cstr("E0452")
     }
     if (strstr(msg, cstr("unsafe")) != 0) {
         return cstr("E0460")

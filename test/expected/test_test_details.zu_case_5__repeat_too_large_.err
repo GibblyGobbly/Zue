@@ -1,0 +1,7 @@
+Argument Error [E0440] in /tmp/zue_test_case.zu at line 1:
+  repeat() of 40000000000000 copies is too large to hold in memory
+
+   1 | print(repeat("ab", 40000000000000))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Use a smaller count.

@@ -1,0 +1,6 @@
+Syntax Error [E0119] in /tmp/zue_test_case.zu at line 1:
+  Map literal key 'a' is given twice
+
+   1 | print({"a": 1, "a": 2})
+     |                ^^^ the key again
+

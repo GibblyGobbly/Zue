@@ -181,6 +181,9 @@ func p_found_text() {
     if (t == "nl" or p_first_on_line()) {
         return "unexpected end of line"
     }
+    if (t == "eof" and P_inline > 0) {
+        return "the interpolation ends here"
+    }
     if (t == "eof") {
         return "unexpected end of file"
     }
@@ -287,7 +290,10 @@ func p_skip_nl() {
 }
 
 # Parses source text with its own token stream, then restores the parser.
+let P_inline = 0
+
 func parse_inline(text, line, col) {
+    P_inline += 1
     let saved_toks = P_toks
     let saved_pos = P_pos
     let saved_depth = P_depth
@@ -300,6 +306,7 @@ func parse_inline(text, line, col) {
     if (not (P_kind == "eof")) {
         p_fail("Invalid expression inside string interpolation")
     }
+    P_inline -= 1
     P_toks = saved_toks
     P_pos = saved_pos
     P_depth = saved_depth
@@ -356,6 +363,9 @@ func p_map_literal(st) {
         if (len(kt.v) != 1 or type(kt.v[0]) != "string") {
             p_fail_at(kt, "Map literal keys must be plain strings", "this key has an interpolation")
             break
+        }
+        if (contains(keys, kt.v[0])) {
+            p_fail_at(kt, "Map literal key '{kt.v[0]}' is given twice", "the key again")
         }
         append(keys, kt.v[0])
         p_expect(":", "Expected ':' after map key")
@@ -465,6 +475,7 @@ func p_func_rest(name, nt, st, is_export) {
         }
     }
     p_close(")", "Expected ')'")
+    p_skip_nl()
     p_expect("\{", "Expected '\{'")
     let declared = null
     if (has_type) {
@@ -532,6 +543,9 @@ func p_primary() {
     if (t == ";") {
         let d = p_fail("Unexpected semicolon ';'")
         diag_hint(d, "A statement ends at the end of the line. Put each statement on its own line")
+    } else if (t == "eof" and P_inline > 0) {
+        # "{1 +}": the end of the interpolation, not of the file
+        p_fail("Invalid expression inside string interpolation: an expression is missing before its closing }")
     } else {
         let d = p_fail("Unexpected token '{t}': expected an expression")
         if (t == "else") {
@@ -678,7 +692,24 @@ let BINARY = {
 }
 
 # Parses an expression whose operators all bind at least as tight as min_bp.
+# Expressions nested deeper than this are a syntax error: the parser, the checker and the code generator
+# each recurse once per level, and about 20,000 levels ran the compiler out of stack.
+const MAX_NESTING = 10000
+let P_nesting = 0
+
 func p_expr_bp(min_bp) {
+    P_nesting += 1
+    if (P_nesting > MAX_NESTING) {
+        let d = p_fail("Expression is nested more than {MAX_NESTING} levels deep")
+        diag_hint(d, "Split it into several statements with variables for the parts")
+        diag_exit_if_errors()
+    }
+    let r = p_expr_bp_inner(min_bp)
+    P_nesting -= 1
+    return r
+}
+
+func p_expr_bp_inner(min_bp) {
     let st = P_tk
     let left = null
     if (min_bp <= 3 and (P_kind == "not")) {
@@ -894,13 +925,14 @@ func p_cond_paren(what) {
 
 func p_if(st) {
     let cond = p_cond_paren("if")
-    p_eat("nl")
+    p_skip_nl()
     p_expect("\{", "Expected '\{'")
     let then_body = p_block()
     let els = []
-    p_eat("nl")
+    # else may come after blank lines; the line breaks read here also end the if statement (p_stmt_end)
+    p_skip_nl()
     if (p_eat("else")) {
-        p_eat("nl")
+        p_skip_nl()
         if ((P_kind == "if")) {
             els = [p_statement()]
         } else {
@@ -932,7 +964,7 @@ func p_for_header(st) {
         if (p_eat_word("in")) {
             let iter = p_expr()
             p_close(")", "Expected ')' after for-in iterable")
-            p_eat("nl")
+            p_skip_nl()
             p_expect("\{", "Expected '\{' for loop body")
             let body = p_block()
             return mk_forin(st, P_prev, name, iter, body, nt)
@@ -969,7 +1001,7 @@ func p_for_rest(st, init) {
         incr = p_statement()
     }
     p_close(")", "Expected ')' after loop increment")
-    p_eat("nl")
+    p_skip_nl()
     p_expect("\{", "Expected '\{' for loop body")
     let body = p_block()
     return mk_for(st, P_prev, init, cond, incr, body)
@@ -979,17 +1011,32 @@ func p_switch(st) {
     p_open("(", "Expected '(' after switch")
     let e = p_expr()
     p_close(")", "Expected ')'")
+    p_skip_nl()
     p_expect("\{", "Expected '\{' starting switch block")
     let cases = []
     let dflt = []
+    let seen_default = false
+    let seen_values = {}
     while (not (P_kind == "}") and not (P_kind == "eof")) {
         let cline = P_tk.line
         if (p_eat("case")) {
             let v = p_expr()
+            # A literal value given twice: the second case could never run.
+            if (v.k == "num" or v.k == "float" or v.k == "str" or v.k == "char" or v.k == "bool") {
+                let key = "{v.k}:{v.v}"
+                if (seen_values[key] == true) {
+                    p_fail_at(v, "case value {v.v} appears twice in this switch", "already a case above")
+                }
+                seen_values[key] = true
+            }
             p_expect(":", "Expected ':' after case value")
             let body = p_case_body()
             append(cases, {"value": v, "body": body, "line": cline})
         } else if (p_eat("default")) {
+            if (seen_default) {
+                p_fail_at(P_prev, "switch has two default branches", "the second default")
+            }
+            seen_default = true
             p_expect(":", "Expected ':' after default")
             dflt = p_case_body()
         } else if (p_eat("nl")) {
@@ -1094,6 +1141,10 @@ func p_typedef(st, word, is_export) {
             break
         }
         let ft = p_next()
+        # the same check the runtime makes when the type is defined, found before the program runs
+        if (contains(fields, ft.v)) {
+            p_fail_at(ft, "{word} has duplicate field names", "'{ft.v}' is already a field")
+        }
         append(fields, ft.v)
         append(fspans, ft)
         if (P_kind == ":") {
@@ -1287,7 +1338,7 @@ func p_statement() {
     if (t == "while") {
         p_next()
         let cond = p_cond_paren("while")
-        p_eat("nl")
+        p_skip_nl()
         p_expect("\{", "Expected '\{'")
         let body = p_block()
         return mk_while(tk, P_prev, cond, body)

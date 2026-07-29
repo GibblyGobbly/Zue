@@ -1,0 +1,6 @@
+Syntax Error [E0470] in /tmp/zue_test_case.zu at line 2:
+  template has duplicate field names
+
+   2 | template T { a, b, a }
+     |                    ^ 'a' is already a field
+

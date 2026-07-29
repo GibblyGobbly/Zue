@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 1:
+  pad_left() needs one pad character, got "ab"
+
+   1 | print(pad_left("7", 3, "ab"))
+     |       ^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Pad with one character, for example pad_left(s, 5, "0").

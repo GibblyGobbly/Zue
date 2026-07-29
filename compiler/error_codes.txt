@@ -70,7 +70,7 @@ fix: Close the brace and write a complete expression, or write \{ for a brace th
 
 == E0110
 title: An expression was expected
-match: expected an expression | Unexpected semicolon
+match: expected an expression | Unexpected semicolon | is nested more than
 text: The program has a token where a value, a name or a call should be. A statement ends at the
     end of the line, so a semicolon is not needed.
 example:
@@ -154,7 +154,7 @@ fix: Write a type such as list<int>.
 
 == E0119
 title: A map literal key is not a string
-match: Map literal keys
+match: Map literal keys | is given twice
 text: In a map literal such as {"a": 1}, each key is a plain string.
 example:
     let m = {1: 2}
@@ -180,7 +180,7 @@ fix: Write a declaration after export.
 
 == E0122
 title: A switch has something other than case or default
-match: Expected 'case' or 'default'
+match: Expected 'case' or 'default' | two default branches | appears twice in this switch
 text: Inside switch (x) { ... } only case and default clauses may appear.
 example:
     switch (x) { print(1) }
@@ -188,7 +188,7 @@ fix: Put the statements under a case or default.
 
 == E0123
 title: A token other than the expected one was found
-match: Expected
+match: Expected | statement outside loop | defer expects a call
 text: The parser needed a particular token here (such as a brace after a function header) and
     found something else.
 example:
@@ -216,7 +216,7 @@ fix: Convert one side on purpose: to_string(x), float(x), int(x).
 
 == E0202
 title: A function was given the wrong kind of value
-match: argument 1 must be | argument 2 must be | argument 3 must be | argument 4 must be | argument must be an int | digits must be an int | cannot be called with | arguments must both be | slice start must be | slice end must be | clamp() arguments must all be | must both hold ints or both hold floats
+match: argument 1 must be | argument 2 must be | argument 3 must be | argument 4 must be | argument must be an int | digits must be an int | cannot be called with | arguments must both be | slice start must be | slice end must be | clamp() arguments must all be | must both hold ints or both hold floats | needs a string, list or map
 text: The function needs a value of a certain type for this argument and got another one.
 example:
     print(sqrt("a"))
@@ -364,7 +364,7 @@ fix: Check the range of the input before calling.
 
 == E0412
 title: A function was given a value it cannot work with
-match: must not be negative | must not be 0 | argument must be greater than | argument must be between | is greater than the upper | needs a list with at least one | digits must be between | decimals must be between | exponent of an int | mode ' | contains a NUL byte | status must be from
+match: must not be negative | must not be 0 | argument must be greater than | argument must be between | is greater than the upper | needs a list with at least one | digits must be between | decimals must be between | exponent of an int | mode ' | contains a NUL byte | status must be from | is out of range | needs one pad character
 text: The type is right but the value is not allowed, such as a negative size or an empty list.
 example:
     print(range(0, 10, 0))
@@ -388,7 +388,7 @@ fix: Pass a list whose items are all ints or all floats.
 
 == E0440
 title: The program ran out of stack or memory
-match: stack overflow | out of memory | too many boxes | too many to hold in memory
+match: stack overflow | out of memory | too many boxes | too many to hold in memory | too large to hold in memory
 text: A recursion that never stops uses up the stack. Very large data can use up memory.
 example:
     func f(n) { return f(n + 1) }
@@ -412,6 +412,18 @@ match: cannot read system entropy
 text: trand() and tshuffle() read the kernel's entropy source and report a failure instead of
     returning a number that is not random.
 fix: Check that the program is allowed to use getrandom, or use rand() with srand(seed).
+
+== E0452
+title: A thread or a channel cannot go on
+match: cannot wait for itself | every blue thread is waiting | on a closed channel | from a closed channel
+text: A thread cannot wait for itself; when every thread waits for another, none can go on (a deadlock);
+    a closed channel takes no more values, and an empty closed channel gives none.
+example:
+    let ch = channel(1)
+    channel_close(ch)
+    send(ch, 1)
+fix: Send before closing, close a channel only when no more values come, and make sure some thread
+    sends what another receives.
 
 == E0460
 title: An unsafe rule was broken

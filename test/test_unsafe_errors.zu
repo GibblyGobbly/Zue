@@ -177,7 +177,7 @@ let p = P{1, 2}
 print(p.z)
 # CASE bloc field must be a primitive
 bloc Tag { name }
-let t = Tag{"hello"}
+let t = Tag{[1, 2]}
 # CASE bloc wrong arity
 bloc P { x, y }
 let p = P{1}

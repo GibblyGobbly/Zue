@@ -146,6 +146,7 @@ example to be sure it causes the error it claims to.
 | `E0440` | The program ran out of stack or memory |
 | `E0450` | A file operation failed |
 | `E0451` | The operating system could not give random bytes |
+| `E0452` | A thread or a channel cannot go on |
 | `E0460` | An unsafe rule was broken |
 | `E0470` | A bloc or template rule was broken |
 | `E0480` | An assertion failed |

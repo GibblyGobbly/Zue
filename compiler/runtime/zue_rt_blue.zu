@@ -339,6 +339,10 @@ func lb_spawn(self_p, argc_i, argv_p) {
     let co = lv_alloc(CO_SIZE)
     let uc = lv_alloc(UC_SIZE)
     st64(co + CO_UC, uc)
+    # The thread starts at the place of this spawn call, so its first frame in a call stack names that line
+    # (it said "called at line 0").
+    st64(co + CO_POS, ld64(addr_of("lv_pos")))
+    st64(co + CO_POSMOD, ld64(addr_of("lv_pos_mod")))
     let n = argc_i - 1
     if (n > 0) {
         let args = lv_alloc(n * 16)
@@ -491,6 +495,7 @@ func lb_recv(self_p, argc_i, argv_p) {
     if (ld64(ch + CH_COUNT) > 0) {
         let at = ld64(ch + CH_BUF) + ld64(ch + CH_HEAD) * 16
         _cp(o, at)
+        _null(at)    # the slot would keep the received value alive
         st64(ch + CH_HEAD, (ld64(ch + CH_HEAD) + 1) % ld64(ch + CH_CAP))
         st64(ch + CH_COUNT, ld64(ch + CH_COUNT) - 1)
         let s = _blue_q_pop(ch, CH_SENDQ, CH_SENDT)

@@ -14,7 +14,7 @@ and every `alloc` must be freed before that block ends.
 
 ## Functions
 
-Available only inside `unsafe { }`:
+Available only while an `unsafe { }` block runs (in it, or in a function called from it):
 
 | Function | Meaning |
 |---|---|
@@ -181,7 +181,13 @@ unsafe {
 | `R10` | Every `alloc()` is freed, with `free` or `defer`, before its block ends; a leak is an error that names the line of the `alloc` |
 
 Rules are checked when the operation runs, except R6, which is a compile-time error. A rule
-violation stops the program with exit status 1. `box` and `bloc` values are rejected inside `unsafe` blocks.
+violation stops the program with exit status 1. `box` values are rejected inside `unsafe` blocks; a `bloc`
+can be made there.
+
+The pointer functions work in any code that runs while a block is open, including a function called from
+inside one (a helper can `alloc`, `load` and `store`); outside every block they are an error. Blocks nest at
+run time when a function with its own block is called from inside another, at most 64 deep, so a recursive
+function that opens a block on every call stops with `unsafe blocks are nested more than 64 deep`.
 
 Together the rules say three things. A pointer never outlives its block (R1, R2, R5). Every
 access stays inside a live allocation (R3, R4, R7, R8). And nothing turns a pointer into another

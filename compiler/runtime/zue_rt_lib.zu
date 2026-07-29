@@ -248,8 +248,9 @@ func lb_print(self_p, argc_i, argv_p) {
 }
 
 func lb_str_len(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
     let o = stack_buf(16)
-    callv(o, lb_len, self_p, argc_i, argv_p)
+    _int(o, ld64(_arg_str(self_p, argv_p, 0)))
     retp(o)
 }
 
@@ -406,6 +407,18 @@ func _parse_float(self_p, s) {
     if (_is_finite(r) == 0) {
         _errf(E_RUNTIME, cstr("Zue has no infinity: the value must fit in a 64-bit float."),
               cstr("%s() value \"%s\" does not fit in a 64-bit float"), _fname(self_p), s, 0)
+    }
+    # A value too small for a float would read as 0.0 without a word (to_float("1e-400")); it is an error
+    # unless the digits before the exponent are all zero.
+    if (feq(r, 0.0)) {
+        let q = start
+        while (ld8(q) != 0 and ld8(q) != 101 and ld8(q) != 69) {
+            if (ld8(q) >= 49 and ld8(q) <= 57) {
+                _errf(E_RUNTIME, cstr("The smallest float above 0 is about 4.9e-324."),
+                      cstr("%s() value \"%s\" does not fit in a 64-bit float"), _fname(self_p), s, 0)
+            }
+            q += 1
+        }
     }
     return r
 }
@@ -678,7 +691,9 @@ func lb_system(self_p, argc_i, argv_p) {
     fflush(_stdout())
     let rc = system(cmd + S_DATA)
     if (rc == -1) {
-        _int(o, -1)
+        let e = ld32(__errno_location())
+        _errf(E_RUNTIME, cstr("The system could not start a shell for the command."),
+              cstr("system() failed: %s"), strerror(e), 0, 0)
     } else if (band(rc, 127) == 0) {
         _int(o, band(shr(rc, 8), 255))
     } else {
@@ -806,6 +821,7 @@ func lb_remove(self_p, argc_i, argv_p) {
     _cp(o, items + 16 * i)
     lv_wb_range(items + 16 * i, 16 * (count - i))
     memmove(items + 16 * i, items + 16 * (i + 1), 16 * (count - i - 1))
+    _null(items + 16 * (count - 1))    # the slot past the end would keep the moved value alive
     st64(l + L_COUNT, count - 1)
     retp(o)
 }
@@ -828,7 +844,7 @@ func lb_slice(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 3, 3)
     _arg_int(self_p, argv_p, 1)
     _arg_int(self_p, argv_p, 2)
-    if (_tag(argv_p) != T_LIST) {
+    if (_tag(argv_p) != T_LIST and _tag(argv_p) != T_DENSE) {
         _arg_str(self_p, argv_p, 0)
     }
     let o = stack_buf(16)
@@ -1049,15 +1065,9 @@ func lb_concat(self_p, argc_i, argv_p) {
     let a = stack_buf(16)
     let b = stack_buf(16)
     let o = stack_buf(16)
-    _text_str(self_p, argv_p, 0, a)
-    _text_str(self_p, argv_p + 16, 1, b)
-    if (_tag(argv_p) == T_STR) {
-        _cp(a, argv_p)
-    }
-    if (_tag(argv_p + 16) == T_STR) {
-        _cp(b, argv_p + 16)
-    }
-    lvp_add(o, a, b)
+    _arg_str(self_p, argv_p, 0)
+    _arg_str(self_p, argv_p, 1)
+    lvp_add(o, argv_p, argv_p + 16)
     retp(o)
 }
 
@@ -1411,41 +1421,58 @@ func lb_repeat(self_p, argc_i, argv_p) {
         retp(o)
     }
     if (n > 70368744177664 / ld64(s)) {
-        _die_oom()
+        _errf(E_ARGUMENT, cstr("Use a smaller count."), cstr("repeat() of %lld copies is too large to hold in memory"), n, 0, 0)
     }
-    let b = stack_buf(B_SIZE)
-    _buf_init(b)
+    # One allocation of the exact size (a growing buffer copied everything twice and used about 5 times the
+    # result at its peak).
+    let total = ld64(s) * n
+    let st = lv_alloc_atomic(S_DATA + total + 1)
+    st64(st, total)
     for (let i = 0; i < n; i++) {
-        _buf_add(b, s + S_DATA, ld64(s))
+        memcpy(st + S_DATA + i * ld64(s), s + S_DATA, ld64(s))
     }
-    _buf_done(o, b)
+    st8(st + S_DATA + total, 0)
+    _set(o, T_STR, st)
     retp(o)
 }
 
+# pad_left and pad_right: s padded with copies of the one character ch (all of its bytes, so "é" works) up to
+# width w, counted in pad characters. The result is made in one allocation of its exact size.
 func _pad(self_p, argv, left, o) {
     let s = _arg_str(self_p, argv, 0)
     let w = _arg_int(self_p, argv, 1)
     let tmp = stack_buf(16)
-    let pad = _text_str(self_p, argv + 32, 0, tmp)
-    if (ld64(s) >= w or ld64(pad) == 0) {
+    let pad = _text_str(self_p, argv + 32, 2, tmp)
+    let plen = ld64(pad)
+    if (plen == 0 or _rl_cp_len(pad + S_DATA) != plen) {
+        _errf(E_ARGUMENT, cstr("Pad with one character, for example pad_left(s, 5, \"0\")."),
+              cstr("%s() needs one pad character, got \"%s\""), _fname(self_p), pad + S_DATA, 0)
+    }
+    if (ld64(s) >= w) {
         _cp(o, argv)
         return 0
     }
-    if (w - ld64(s) > 70368744177664) {
-        _die_oom()
+    let count = w - ld64(s)
+    if (count > 70368744177664 / plen) {
+        _errf(E_ARGUMENT, cstr("Use a smaller width."), cstr("%s() result of width %lld is too large to hold in memory"), _fname(self_p), w, 0)
     }
-    let b = stack_buf(B_SIZE)
-    _buf_init(b)
+    let total = ld64(s) + count * plen
+    let st = lv_alloc_atomic(S_DATA + total + 1)
+    st64(st, total)
+    let at = st + S_DATA
     if (left == 0) {
-        _buf_add(b, s + S_DATA, ld64(s))
+        memcpy(at, s + S_DATA, ld64(s))
+        at += ld64(s)
     }
-    for (let i = 0; i < w - ld64(s); i++) {
-        _buf_add(b, pad + S_DATA, 1)
+    for (let i = 0; i < count; i++) {
+        memcpy(at, pad + S_DATA, plen)
+        at += plen
     }
     if (left != 0) {
-        _buf_add(b, s + S_DATA, ld64(s))
+        memcpy(at, s + S_DATA, ld64(s))
     }
-    _buf_done(o, b)
+    st8(st + S_DATA + total, 0)
+    _set(o, T_STR, st)
 }
 
 func lb_pad_left(self_p, argc_i, argv_p) {
@@ -1462,7 +1489,7 @@ func lb_pad_right(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-# Splits on every occurrence of the delimiter; empty pieces are kept.
+# Splits on each character of the delimiter; empty pieces are dropped. An empty delimiter gives the characters.
 func lb_split(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let tmp = stack_buf(16)
@@ -1478,7 +1505,8 @@ func lb_split(self_p, argc_i, argv_p) {
         }
         retp(o)
     }
-    # Like strtok: every character of the delimiter separates, and empty pieces are dropped. The bytes are
+    # Every character of the delimiter separates (it is a set of characters, not a word), and empty pieces are
+    # dropped. The bytes are
     # walked by the string's length, so a NUL byte is an ordinary character (strtok stopped at it).
     let n = ld64(s)
     let start = 0
@@ -1498,7 +1526,7 @@ func lb_join(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let l = _arg_list(self_p, argv_p, 0)
     let tmp = stack_buf(16)
-    let d = _text_str(self_p, argv_p + 16, 0, tmp)
+    let d = _text_str(self_p, argv_p + 16, 1, tmp)
     let b = stack_buf(B_SIZE)
     let o = stack_buf(16)
     let count = ld64(l + L_COUNT)

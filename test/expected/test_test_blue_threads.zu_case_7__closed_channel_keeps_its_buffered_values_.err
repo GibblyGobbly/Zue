@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 6:
+Runtime Error [E0452] in /tmp/zue_test_case.zu at line 6:
   receive from a closed channel with no values left
 
    6 | recv(ch)

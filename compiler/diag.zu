@@ -56,8 +56,16 @@ export func span_tok(line, col, ecol) {
 export func diag_new(kind, span, msg) {
     let d = Diag(kind, ST.src_file, ST.src_lines, span, "", msg, [], "", [], [])
     append(DIAGS, d)
+    ERROR_LINES["{ST.src_file}:{span.line}"] = true
+    if (FILE_ORDER[ST.src_file] == null) {
+        FILE_ORDER[ST.src_file] = len(map_keys(FILE_ORDER))
+    }
     return d
 }
+
+# The lines that have an error ("file:line"), and the order in which files got their first error.
+let ERROR_LINES = {}
+let FILE_ORDER = {}
 
 # Text printed next to the carets of the main span.
 export func diag_text(d, text) {
@@ -97,12 +105,7 @@ export func diag_trace(d, text) {
 
 # True when an error is already recorded on this line of the current file.
 export func diag_on_line(line) {
-    for (let d in DIAGS) {
-        if (d.span.line == line and d.file == ST.src_file) {
-            return true
-        }
-    }
-    return false
+    return ERROR_LINES["{ST.src_file}:{line}"] == true
 }
 
 # True for a byte that continues a UTF-8 character.
@@ -340,26 +343,50 @@ export func render(d) {
 }
 
 # Position order: by file as recorded, then line, then column.
+# Errors of one file come together, files in the order of their first error, and within a file by place.
 func before(a, b) {
+    if (a.file != b.file) {
+        return FILE_ORDER[a.file] < FILE_ORDER[b.file]
+    }
     if (a.span.line != b.span.line) {
         return a.span.line < b.span.line
     }
     return a.span.col < b.span.col
 }
 
+# A stable merge sort: errors at the same place keep the order they were found in. (An insertion that
+# rebuilt the list made 10,000 errors take about 2 s.)
 func sorted_diags() {
+    return merge_sorted(DIAGS)
+}
+
+func merge_sorted(xs) {
+    let n = len(xs)
+    if (n < 2) {
+        return xs
+    }
+    let mid = n / 2
+    let a = merge_sorted(cut(xs, 0, mid))
+    let b = merge_sorted(cut(xs, mid, n))
     let out = []
-    for (let d in DIAGS) {
-        let i = len(out)
-        while (i > 0 and before(d, out[i - 1])) {
-            i -= 1
+    let i = 0
+    let j = 0
+    while (i < len(a) and j < len(b)) {
+        if (before(b[j], a[i])) {
+            append(out, b[j])
+            j += 1
+        } else {
+            append(out, a[i])
+            i += 1
         }
-        let rest = cut(out, i, len(out))
-        out = cut(out, 0, i)
-        append(out, d)
-        for (let r in rest) {
-            append(out, r)
-        }
+    }
+    while (i < len(a)) {
+        append(out, a[i])
+        i += 1
+    }
+    while (j < len(b)) {
+        append(out, b[j])
+        j += 1
     }
     return out
 }
@@ -407,6 +434,7 @@ export func diag_print_all() {
             print(render_json(d))
         }
         DIAGS = []
+        ERROR_LINES = {}
         return null
     }
     let shown = 0
@@ -433,6 +461,7 @@ export func diag_print_all() {
         print("{total} errors found.")
     }
     DIAGS = []
+    ERROR_LINES = {}
 }
 
 # Ends the run with status 1 if any error is recorded.

@@ -1,4 +1,4 @@
-Type Error in /tmp/zue_test_case.zu at line 4:
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
   len() needs a string, list or map, got int
 
    4 | print(len(pass(5)))

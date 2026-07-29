@@ -1,0 +1,6 @@
+Syntax Error [E0122] in /tmp/zue_test_case.zu at line 5:
+  case value 1 appears twice in this switch
+
+   5 | case 1:
+     |      ^ already a case above
+

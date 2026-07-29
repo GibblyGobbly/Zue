@@ -77,6 +77,7 @@ const BK_FLOAT = 2
 const BK_BOOL = 3
 const BK_CHAR = 4
 const BK_BLOC = 5
+const BK_STR = 7
 const BK_PRIM = 6
 # The box table grows in chunks of 4096 slots that never move, so a slot address stays valid while
 # more boxes are made. Freed slots are reused through a free list.
@@ -337,6 +338,10 @@ func _bloc_kind_of(v) {
     if (t == T_BLOC) {
         return BK_BLOC
     }
+    # a string is immutable, so a bloc may hold one as a typed bloc already could (field: string)
+    if (t == T_STR) {
+        return BK_STR
+    }
     return BK_UNSET
 }
 
@@ -508,7 +513,7 @@ func _bloc_validate(d, argc, argv, msg) {
         let fname = ld64(ld64(d + BD_FIELDS) + i * 8)
         let kind = _bloc_kind_of(v)
         if (kind == BK_UNSET) {
-            snprintf(msg, 256, cstr("Bloc field '%s' only accepts int, float, bool, char, or another bloc"), fname)
+            snprintf(msg, 256, cstr("Bloc field '%s' only accepts int, float, bool, char, string, or another bloc"), fname)
             return 0
         }
         let size = BLOC_SLOT_BYTES
@@ -534,7 +539,7 @@ func _bloc_validate(d, argc, argv, msg) {
                 if (have == BK_BLOC) {
                     snprintf(msg, 256, cstr("Bloc '%s' field '%s' must hold a nested bloc"), name, fname)
                 } else {
-                    snprintf(msg, 256, cstr("Bloc '%s' field '%s' must hold an int, float, bool or char"), name, fname)
+                    snprintf(msg, 256, cstr("Bloc '%s' field '%s' must hold an int, float, bool, char or string"), name, fname)
                 }
                 return 0
             }
@@ -571,7 +576,7 @@ func _bloc_construct(o, type, argc, argv) {
         }
         _fk_check_values(cstr("Bloc"), ld64(d + BD_NAME), ld64(d + BD_FIELDS), codes, ld64(d + BD_FEXTRA), argc, argv)
     } else if (_bloc_validate(d, argc, argv, msg) == 0) {
-        lv_error(E_TYPE, msg, cstr("Bloc values must stay inline and only use int, float, bool, char, or nested blocs"))
+        lv_error(E_TYPE, msg, cstr("Bloc values must stay inline and only use int, float, bool, char, string, or nested blocs"))
     }
     let n = argc
     if (n == 0) {

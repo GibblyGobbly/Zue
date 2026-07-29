@@ -1,0 +1,7 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
+  pad_left() argument 3 must be a string, got int
+
+   4 | print(pad_left("7", 3, pass(5)))
+     |                        ^^^^^^^ expected string, found int
+
+Hint: Convert a number to text with to_string(x), or write it inside a string: "{x}"

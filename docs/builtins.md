@@ -29,7 +29,7 @@ as `sqrt() argument 1 must be a number, got string`.
 | `clock()` | Monotonic time in seconds, as a float. The zero point is arbitrary: subtract two readings |
 | `args()` | The command-line arguments after the program name, as a list of strings |
 | `exit(code)` | Flushes standard output and ends the program with that status (default 0). The status must be from 0 to 255 (`Argument Error` otherwise). If standard output cannot be written (a full disk, a closed pipe), the status is 1 and the reason goes to standard error |
-| `system(cmd)` | Runs `cmd` with the shell and returns its exit status as an int. A NUL byte in `cmd` is an `Argument Error` |
+| `system(cmd)` | Runs `cmd` with the shell and returns its exit status as an int. A NUL byte in `cmd` is an `Argument Error`, and a shell that cannot be started is a `Runtime Error` (`system() failed: ...`) |
 
 Floats are printed with up to six significant digits and always show a point or an exponent (`print(1.0)` prints `1.0`).
 
@@ -98,7 +98,7 @@ Every failure is an error, as everywhere in Zue:
 | `recv` on a closed channel with no values left, `send` on a closed channel, closing twice | `Runtime Error` |
 | A thread waits in `send` or `recv` when the channel is closed | `Runtime Error` for that thread |
 | Every thread waits and none can wake another | `Runtime Error`: deadlock |
-| `wait`, `yield`, `send` or `recv` inside an `unsafe` block | `Runtime Error` |
+| `wait`, `yield`, `send` or `recv` inside an `unsafe` block that would make the thread give up the processor (a `send` to a full channel, a `recv` from an empty one, a `wait` for a thread that has not finished, any `yield`) | `Runtime Error`; a call that finishes at once is allowed. A pointer may not be sent in any case |
 | An error inside a thread | The program stops, as an error in the main thread does |
 | Recursion too deep in a thread | `Runtime Error`: stack overflow |
 
@@ -172,11 +172,11 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 |---|---|---|
 | `concat(s1, s2)` | Joins two strings; both must be strings | `concat("He", "llo")` is `"Hello"` |
 | `to_upper(s)`, `to_lower(s)` | Case conversion (ASCII) | `to_upper("abc")` is `"ABC"` |
-| `trim(s)`, `trim_left(s)`, `trim_right(s)` | Remove whitespace from both ends, the start or the end | `trim("  hi  ")` is `"hi"` |
+| `trim(s)`, `trim_left(s)`, `trim_right(s)` | Remove whitespace (space, tab, `\n`, `\r`, `\v` and `\f`) from both ends, the start or the end | `trim("  hi  ")` is `"hi"` |
 | `replace(s, old, new)` | Replaces all occurrences of `old` with `new`. An empty `old` changes nothing | `replace("foobar", "o", "a")` is `"faabar"` |
 | `reverse(s)` | Returns a new string or list in the opposite order; the original does not change | `reverse("Zue")` is `"euZ"` |
 | `repeat(s, n)` | `n` copies of `s`; `""` when `n` is 0 or less | `repeat("Na", 3)` is `"NaNaNa"` |
-| `pad_left(s, w, ch)` | Pads the start of `s` with the character `ch` up to width `w` | `pad_left("7", 3, "0")` is `"007"` |
+| `pad_left(s, w, ch)` | Pads the start of `s` with the character `ch` (exactly one character) up to width `w` | `pad_left("7", 3, "0")` is `"007"` |
 | `pad_right(s, w, ch)` | Pads the end of `s` | `pad_right("Ok", 5, ".")` is `"Ok..."` |
 | `to_string(v)` | Text of any value | `to_string(12)` is `"12"` |
 | `to_string(x, digits)` | Text of a float with 1 to 17 significant digits instead of 6; another type or a count outside 1 to 17 is an error | `to_string(0.1 + 0.2, 17)` is `"0.30000000000000004"` |
@@ -190,7 +190,7 @@ strings only: `"a" + 1` is a `Type Error`, so write `"a{1}"` or `"a" + to_string
 
 | Function | Description | Example |
 |---|---|---|
-| `split(s, delim)` | Splits into a list of strings. Empty pieces are dropped. An empty delimiter splits into characters | `split("a,b,c", ",")` is `["a", "b", "c"]` |
+| `split(s, delim)` | Splits into a list of strings. Every character of `delim` separates (`split("a-b,c", "-,")` gives three pieces), and empty pieces are dropped. An empty delimiter splits into characters | `split("a,b,c", ",")` is `["a", "b", "c"]` |
 | `join(list, delim)` | Joins list items (converted to text) with the delimiter | `join(["a", "b", "c"], "-")` is `"a-b-c"` |
 
 ### Interpolation
@@ -355,11 +355,11 @@ Angles are in radians. All of these return a float.
 | Function | Description |
 |---|---|
 | `rand()` | A float in `[0, 1)` |
-| `rand(max)` | An integer from `0` to `max`, both ends included; `max` must be an int |
+| `rand(max)` | An integer from `0` to `max`, both ends included; `max` must be an int. A negative `max` gives `max` to `0` (the bounds are swapped) |
 | `rand(min, max)` | An integer from `min` to `max`, both ends included (swapped if `min > max`); both must be ints |
 | `srand(seed)` | Seeds the generator, for reproducible sequences; `seed` must be an int. `srand()` reseeds from the OS |
 | `trand()` | A 64-bit integer (may be negative) from the OS entropy source |
-| `trand(max)` | An integer from `0` to `max`, both ends included, from the OS entropy source |
+| `trand(max)` | An integer from `0` to `max`, both ends included (swapped for a negative `max`), from the OS entropy source |
 | `trand(min, max)` | An integer from `min` to `max`, both ends included (swapped if `min > max`), from the OS entropy source |
 
 The generator is xoroshiro128++, and `srand` expands the seed with SplitMix64. Without `srand`,
@@ -373,9 +373,9 @@ falls back to the clock. It costs a system call per number, so use `rand` in hot
 Ranges are exact: a draw that would favour small values is thrown away and drawn again, so every
 integer from `min` to `max` is equally likely.
 
-A 128-bit generator can produce at most 2^128 different sequences, which covers every ordering of
-up to 34 items. A seeded `shuffle` of a longer list is well mixed but cannot reach every ordering;
-use `tshuffle` for that.
+`srand` takes one 64-bit seed, so seeded runs can start from at most 2^64 states, which covers every
+ordering of up to 20 items (20! is below 2^64, 21! above). A seeded `shuffle` of a longer list is well
+mixed but cannot reach every ordering; use `tshuffle` for that.
 
 ```javascript
 srand(7)
@@ -468,7 +468,7 @@ directory of the running program, not to the source file.
 | `close(handle)` | Flushes and closes the file. Closing twice is a runtime error, and so is a failed flush (`close() failed: No space left on device`) |
 | `write(handle, text)` | Writes a string to the file and returns `null`. `text` must be a string. A failed write is an error with the system's reason (`write() failed: Bad file descriptor` for a file opened with `"r"`) |
 | `read(handle)` | Reads the rest of the file into one string. A read error is an error (`read() failed: ...`), not an empty string |
-| `read_line(handle)` | Reads the next line without its newline; `null` at end of file. A read error is an error |
+| `read_line(handle)` | Reads the next line without its line ending (`\n` or `\r\n`); `null` at end of file. A read error is an error |
 | `file_exists(path)` | `true` if the path exists. In every path, a NUL byte is an `Argument Error` |
 | `remove_file(path)` | Deletes the file; `true` on success, `false` on failure |
 | `flush(handle)` | Writes buffered data out without closing the file. A failed flush is an error |

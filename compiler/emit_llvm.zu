@@ -530,7 +530,8 @@ func ex_call(n) {
     }
     let callee = n.callee
     if (callee.k == "id") {
-        if (callee.name == "defer" and len(n.args) == 1 and n.args[0].k == "call") {
+        # defer(address_of(x)) gives a pointer now, as defer(p) does; it is not a call to run later.
+        if (callee.name == "defer" and len(n.args) == 1 and n.args[0].k == "call" and not is_address_of_call(n.args[0])) {
             return ex_defer(n)
         }
         if ((callee.name == "address_of" or callee.name == "addr") and resolve(callee.name).kind != "local") {
@@ -581,6 +582,10 @@ func generic_call(n) {
 
 HOOKS.generic_call = generic_call
 HOOKS.builtin = call_builtin
+
+func is_address_of_call(c) {
+    return c.callee.k == "id" and (c.callee.name == "address_of" or c.callee.name == "addr") and resolve(c.callee.name).kind != "local"
+}
 
 # address_of(name): a pointer to the variable's own storage.
 func ex_address_of(n) {

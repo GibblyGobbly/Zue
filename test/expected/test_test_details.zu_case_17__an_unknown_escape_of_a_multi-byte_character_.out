@@ -1,0 +1,7 @@
+Syntax Error [E0102] in /tmp/zue_test_case.zu at line 1:
+  Unknown escape '\é' in string
+
+   1 | print("\é")
+     |        ^^ not an escape
+
+Hint: The escapes are \n \t \r \\ \" \' \{ and \}

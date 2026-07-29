@@ -6,8 +6,8 @@ Zue has four ways to define your own structured values:
 |---|---|---|---|
 | `data` | yes | GC heap (a map) | quick records |
 | `template` | yes | GC heap, schema-checked | entities, game state, anything that changes |
-| `bloc` | no | small GC object, at most 32 bytes | vectors, colors, small immutable values |
-| `box` | yes | manual byte buffer, freed at scope end | scratch bytes, up to 4096 |
+| `bloc` | no | small GC object, at most 64 bytes | vectors, colors, small immutable values |
+| `box` | yes | manual byte buffer, freed at scope end | scratch bytes, up to 16 MiB |
 
 Their rules are checked at run time by the runtime library; a violation stops the program with
 the messages shown below. `make test` checks every rule (`test/test_unsafe_errors.zu`).
@@ -92,15 +92,15 @@ print(r.max.x)              # 10
 
 | Rule | Error |
 |---|---|
-| At most 32 bytes: every primitive field takes 8, a nested bloc takes its own size | `bloc exceeds the cache-line size limit (32 bytes)` |
-| Fields hold only int, float, bool, char, or a bloc | `Bloc field 'name' only accepts int, float, bool, char, or another bloc` |
+| At most 64 bytes: every primitive field takes 8, a nested bloc takes its own size | `bloc exceeds the cache-line size limit (64 bytes)` |
+| Fields hold only int, float, bool, char, string, or a bloc | `Bloc field 'name' only accepts int, float, bool, char, string, or another bloc` |
 | A nested-bloc field keeps the same bloc type | `Bloc 'R' field 'min' must use the same nested bloc type`, or `Bloc 'R' field 'max' must hold a nested bloc` when a plain value is given |
 | The constructor needs one value per field | `Bloc 'Vec2' expects 2 field value(s), but got 1` |
 | Blocs are immutable | `bloc values are immutable` |
 | Unknown fields | `Field 'z' does not exist on this bloc value` |
 | Unique field names, one field list per name | `bloc has duplicate field names`, `bloc 'V' is already defined with different fields` |
 
-So a bloc holds at most four numbers, for example `Color{r, g, b, a}`. For anything bigger or
+So a bloc holds at most eight numbers, for example `Color{r, g, b, a}`. For anything bigger or
 mutable, use a template.
 
 ## box
@@ -118,8 +118,8 @@ free(buf)
 
 | Rule | Error |
 |---|---|
-| Size from 1 to 4096 bytes | `box size must be between 1 and 4096 bytes` |
-| At most 4096 boxes live at once (freed boxes are reused) | `box allocation failed: more than 4096 boxes are live at once` |
+| Size from 1 to 16777216 bytes | `box size must be between 1 and 16777216 bytes` |
+| At most 16777216 boxes live at once (freed boxes are reused) | `too many boxes are live at once` |
 | Index from `0` to `len - 1` (or negative from the end) | `box index 2 is out of bounds for a box of 2 bytes` |
 | Bytes are integers 0-255 | `box bytes must be integers from 0 to 255` |
 | No use after free, including `.len` and `len()` | `box was already freed (use-after-free)` |
@@ -144,10 +144,8 @@ print(p.bytes[0])           # 9
 
 ## Inside unsafe blocks
 
-`box` and `bloc` values may not be created inside `unsafe { }`
-(`box values are not allowed inside unsafe blocks`); a `bloc` and a `template` can be made there and
-managed by hand with `alloc(object)`. See [unsafe](unsafe.md).
-See [unsafe](unsafe.md).
+A `box` may not be created inside `unsafe { }` (`box values are not allowed inside unsafe blocks`); a
+`bloc` and a `template` can be made there, and managed by hand with `alloc(object)`. See [unsafe](unsafe.md).
 
 ## How it works
 
@@ -156,7 +154,7 @@ All of this is in `compiler/runtime/zue_rt_data.zu`.
 - **bloc**: a small GC object holding a pointer to a shared descriptor (name, field names, kinds,
   size) and one 16-byte value cell per field. The first construction fixes the layout. A nested
   bloc is stored as a field value holding the inner bloc.
-- **box**: a slot in a fixed table of 4096 entries. The handle encodes a generation number,
+- **box**: a slot in a table that grows in chunks of 4096 entries (up to 16777216 slots). The handle encodes a generation number,
   which is bumped when the box is freed, so a reused slot never resurrects an old handle. Each
   box remembers the scope that created it, and the scope's exit frees it. A box stored in a
   template is marked as template-owned and freed when the template is collected.

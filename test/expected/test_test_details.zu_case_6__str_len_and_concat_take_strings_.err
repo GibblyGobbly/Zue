@@ -1,0 +1,7 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 5:
+  str_len() argument 1 must be a string, got list
+
+   5 | print(str_len(pass([1])))
+     |               ^^^^^^^^^ expected string, found list
+
+Hint: Pass a string such as "abc"

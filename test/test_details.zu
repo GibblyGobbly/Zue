@@ -1,0 +1,105 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// Smaller rules: padding with one character, empty slices, dense slices, escaped map keys, numbers too small
+// for a float, line endings, duplicate cases and keys, float literals at the edge of the range, messages
+// inside strings, deep nesting, line breaks before braces, duplicate fields and strings in blocs.
+
+# CASE pad with one character, also one of several bytes
+print(pad_left("7", 3, "0"), pad_right("Ok", 5, "."), pad_left("x", 3, "é"))
+# CASE pad with more than one character
+print(pad_left("7", 3, "ab"))
+# CASE pad names the pad argument
+func pass(v) {
+    return [v, null][0]
+}
+print(pad_left("7", 3, pass(5)))
+# CASE join names the separator argument
+func pass(v) {
+    return [v, null][0]
+}
+print(join(["a"], pass(5)))
+# CASE repeat too large
+print(repeat("ab", 40000000000000))
+# CASE str_len and concat take strings
+func pass(v) {
+    return [v, null][0]
+}
+print(str_len("abc"))
+print(str_len(pass([1])))
+# CASE empty slices at the end
+print(""[0:] == "", "abc"[3:] == "", [1, 2][2:])
+# CASE slices of dense lists
+let d = dense_list(3, 1.5)
+print(d[1:], slice(d, 0, 1), d[3:])
+# CASE map keys with quotes print escaped
+print({"a\"b": "x", "c\\d": 1})
+# CASE text too small for a float
+print(to_float("0.0e-400"), to_float("1e-300"))
+print(to_float("1e-400"))
+# CASE read_line drops a CRLF ending
+let f = open("test_details_tmp.txt", "w")
+write(f, "a\r\nb\n")
+close(f)
+let g = open("test_details_tmp.txt", "r")
+print(len(read_line(g)), len(read_line(g)))
+close(g)
+print(remove_file("test_details_tmp.txt"))
+# CASE two default branches
+let x = 1
+switch (x) {
+default:
+    print(1)
+default:
+    print(2)
+}
+# CASE a case value given twice
+let x = 1
+switch (x) {
+case 1:
+    print(1)
+case 1:
+    print(2)
+}
+# CASE a map key given twice
+print({"a": 1, "a": 2})
+# CASE float literals at the edge of the range
+print(1e0000001, 0e9999999, 1.7976931348623158e308)
+# CASE a float literal past the edge
+print(1.797693134862315808e308)
+# CASE an unknown escape of a multi-byte character
+print("\é")
+# CASE an interpolation that ends early
+print("{1 +}")
+# CASE line breaks before braces and else
+func f()
+{
+    return 1
+}
+let x = 2
+switch (x)
+{
+case 2:
+    print("two")
+}
+if (false) {
+    print(0)
+}
+
+else {
+    print(f())
+}
+# CASE a template with a duplicate field
+print("not run")
+template T { a, b, a }
+# CASE blocs hold strings
+bloc A { s, n }
+let a = A{"hi", 1}
+print(a, a == A{"hi", 1}, a == A{"ho", 1})
+bloc B { s: string }
+print(B{"x"})
+# CASE defer of an address_of pointer
+let v = 1
+unsafe {
+    defer(address_of(v))
+}

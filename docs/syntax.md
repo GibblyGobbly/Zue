@@ -256,10 +256,17 @@ Recursion is limited to 100000 nested calls; beyond that the program stops with
 ```javascript
 func save(path, text) {
     let f = open(path, "w")
+    if (f == null) {
+        print("cannot write {path}")
+        return null
+    }
     defer(close(f))
     write(f, text)
 }
 ```
+
+Deferred calls run when the scope ends normally or with `return`; `exit()` and an error end the program
+without running them.
 
 Inside `unsafe { }`, `defer(ptr)` frees a pointer instead (see
 [unsafe](unsafe.md)).

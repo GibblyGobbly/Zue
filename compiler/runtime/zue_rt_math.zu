@@ -40,6 +40,8 @@ extern("ferror", "i32", "ptr")
 extern("fileno", "i32", "ptr")
 extern("fstat", "i32", "i32,ptr")
 extern("nextafter", "double", "double,double")
+extern("ftell", "i64", "ptr")
+extern("fgetc", "i32", "ptr")
 
 # Math
 
@@ -772,8 +774,37 @@ func lb_read(self_p, argc_i, argv_p) {
     let b = stack_buf(B_SIZE)
     let o = stack_buf(16)
     let chunk = stack_buf(65536)
+    let fp = ld64(f + FI_FP)
     _buf_init(b)
-    let n = fread(chunk, 1, 65536, ld64(f + FI_FP))
+    # A regular file is read straight into a string of its size (a growing buffer used about 3.8 times the
+    # size at its peak). If the file grew meanwhile, the rest is read the general way below.
+    let st = stack_buf(144)
+    let pos = ftell(fp)
+    if (pos >= 0 and fstat(fileno(fp), st) == 0 and band(ld32(st + 24), 61440) == 32768 and ld64(st + 48) >= pos) {
+        let want = ld64(st + 48) - pos
+        let str = lv_alloc_atomic(S_DATA + want + 1)
+        let got = fread(str + S_DATA, 1, want, fp)
+        if (ferror(fp) != 0) {
+            _io_fail(self_p)
+        }
+        let c = -1
+        if (got == want) {
+            c = fgetc(fp)
+        }
+        if (c < 0) {
+            if (ferror(fp) != 0) {
+                _io_fail(self_p)
+            }
+            st64(str, got)
+            st8(str + S_DATA + got, 0)
+            _set(o, T_STR, str)
+            retp(o)
+        }
+        _buf_add(b, str + S_DATA, got)
+        st8(chunk, c)
+        _buf_add(b, chunk, 1)
+    }
+    let n = fread(chunk, 1, 65536, fp)
     while (n > 0) {
         _buf_add(b, chunk, n)
         n = fread(chunk, 1, 65536, ld64(f + FI_FP))
@@ -802,8 +833,12 @@ func lb_read_line(self_p, argc_i, argv_p) {
         _null(o)
         retp(o)
     }
+    # The line ending goes: "\n", or "\r\n" from a file written on Windows.
     if (n > 0 and ld8(line + n - 1) == 10) {
         n -= 1
+        if (n > 0 and ld8(line + n - 1) == 13) {
+            n -= 1
+        }
     }
     _str_n(o, line, n)
     free(line)
@@ -1382,6 +1417,10 @@ func lb_ssort(self_p, argc_i, argv_p) {
                 w++
                 _cp(last, cur)
             }
+        }
+        # slots past the new end would keep the removed values alive
+        for (let k = w; k < ld64(l + L_COUNT); k++) {
+            _null(items + 16 * k)
         }
         st64(l + L_COUNT, w)
     } else {

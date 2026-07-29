@@ -15,4 +15,4 @@ Call stack, innermost call first:
   ... 1233 more calls ...
   in forever(), called at line 2: return forever(n + 1) + 1
   in forever(), called at line 2: return forever(n + 1) + 1
-  in forever(), called at line 0
+  in forever(), called at line 4: wait(spawn(forever, 0))

@@ -703,12 +703,16 @@ func lvp_slice(o, t, lo, hi) {
         n = ld64(_val(t))
     } else if (tt == T_LIST) {
         n = ld64(_val(t) + L_COUNT)
+    } else if (tt == T_DENSE) {
+        n = ld64(_val(t) + D_COUNT)
     } else {
         _errf(E_TYPE, cstr("Slices work on strings and lists"), cstr("cannot slice a value of type %s"), _type_name(t), 0, 0)
     }
     if (_tag(lo) == T_NULL and _tag(hi) == T_NULL) {
         if (tt == T_LIST) {
             _list_of(o, n, ld64(_val(t) + L_ITEMS))
+        } else if (tt == T_DENSE) {
+            _dense_slice(o, t, 0, n)
         } else {
             _cp(o, t)
         }
@@ -725,8 +729,19 @@ func lvp_slice(o, t, lo, hi) {
         b = _val(hi)
     }
     let what = cstr("string")
-    if (tt == T_LIST) {
+    if (tt != T_STR) {
         what = cstr("list")
+    }
+    # Both ends are included, so s[a:] with a at the length is the empty rest (""[0:], s[len(s):]).
+    if (_tag(hi) == T_NULL and a == n) {
+        if (tt == T_STR) {
+            _str(o, cstr(""))
+        } else if (tt == T_DENSE) {
+            _dense_slice(o, t, 0, 0)
+        } else {
+            _list_new(o, 0)
+        }
+        return 0
     }
     if (a < 0 or b > n - 1) {
         _errf4(E_INDEX, cstr("Positions start at 0 like indexes and both ends are included, so a slice stays within 0 to the last index"),
@@ -738,8 +753,17 @@ func lvp_slice(o, t, lo, hi) {
     }
     if (tt == T_STR) {
         _str_n(o, _val(t) + S_DATA + a, b - a + 1)
+    } else if (tt == T_DENSE) {
+        _dense_slice(o, t, a, b - a + 1)
     } else {
         _list_of(o, b - a + 1, ld64(_val(t) + L_ITEMS) + 16 * a)
+    }
+}
+
+func _dense_slice(o, t, start, count) {
+    _dense_new(o, count)
+    if (count != 0) {
+        memcpy(ld64(_val(o) + D_DATA), ld64(_val(t) + D_DATA) + 8 * start, 8 * count)
     }
 }
 

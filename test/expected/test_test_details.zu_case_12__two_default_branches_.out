@@ -1,0 +1,6 @@
+Syntax Error [E0122] in /tmp/zue_test_case.zu at line 5:
+  switch has two default branches
+
+   5 | default:
+     | ^^^^^^^ the second default
+

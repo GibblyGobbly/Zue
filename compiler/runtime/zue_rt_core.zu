@@ -1112,7 +1112,15 @@ func _buf_value(b, v) {
             }
             first = 0
             _buf_cstr(b, cstr("\""))
-            _buf_add(b, ld64(e + E_KEY) + S_DATA, ld64(ld64(e + E_KEY)))
+            # A quote or a backslash in the key is escaped, so the key reads back as the same text.
+            let key = ld64(e + E_KEY)
+            for (let j = 0; j < ld64(key); j++) {
+                let ch = ld8(key + S_DATA + j)
+                if (ch == 34 or ch == 92) {
+                    _buf_cstr(b, cstr("\\"))
+                }
+                _buf_add(b, key + S_DATA + j, 1)
+            }
             _buf_cstr(b, cstr("\": "))
             _buf_value(b, e + E_VAL)
         }

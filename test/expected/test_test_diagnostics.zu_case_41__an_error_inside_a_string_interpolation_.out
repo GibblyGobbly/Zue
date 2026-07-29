@@ -1,7 +1,6 @@
-Syntax Error [E0110] in /tmp/zue_test_case.zu at line 1:
-  Unexpected token 'eof': expected an expression
+Syntax Error [E0106] in /tmp/zue_test_case.zu at line 1:
+  Invalid expression inside string interpolation: an expression is missing before its closing }
 
    1 | print("value {1 +}")
-     |                  ^ unexpected end of file
+     |                  ^ the interpolation ends here
 
-Hint: Finish the expression: a value, a name or a call is needed here

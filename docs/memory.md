@@ -77,10 +77,10 @@ exits. Reading or writing a closed file is an error (`read() on a closed file`).
 
 ## Boxes: fixed buffers with an owner
 
-`box[n]` makes a zeroed buffer of 1 to 4096 bytes, outside the collected heap. When `n` is a
+`box[n]` makes a zeroed buffer of 1 to 16777216 bytes, outside the collected heap. When `n` is a
 number written in the source (`box[16]`), the bytes live in the function's own stack frame, so
 making a box costs no allocation. When the size is a variable (`box[n]`) the bytes come from the
-C heap instead. Either way a table of 4096 handles tracks the live boxes, and freed slots are
+C heap instead. Either way a table of handles (up to 16777216) tracks the live boxes, and freed slots are
 reused. A box is freed when:
 
 - the scope that made it ends,
@@ -94,7 +94,7 @@ the bytes of a stack box to the heap, so the box stays valid after the function 
 
 ## Blocs: small values stored inline
 
-A `bloc` is a record of up to 32 bytes of numbers, booleans, chars or other blocs. Its fields
+A `bloc` is a record of up to 64 bytes of numbers, booleans, chars, strings or other blocs. Its fields
 are fixed on first use, it is immutable, and it lives on the heap like any small object.
 
 ## Raw memory: `unsafe`, `alloc`, `free`, `defer`
@@ -104,7 +104,7 @@ Inside `unsafe { }` you can allocate cells with `alloc(n)`, read and write them 
 `address_of`. This memory is yours: nothing collects it, and it must be freed with `free(ptr)`
 exactly once. `defer(ptr)` frees it when the block ends, even on an early exit.
 
-Twelve safety rules are checked at run time and give an error instead of memory corruption:
+Ten safety rules are checked at run time and give an error instead of memory corruption:
 bounds, use after free, double free, pointers escaping the block, pointers stored in lists or
 maps, bad casts, and more. They are listed in [unsafe](unsafe.md).
 
@@ -130,9 +130,9 @@ write(f, "saved")
 | Stack | 1 GiB (smaller when address space is limited) | the same error |
 | One allocation | 64 TiB | `Runtime Error: out of memory` |
 | Elements in one list or dense list | 2^42 | `Runtime Error: out of memory` |
-| Box size | 1 to 4096 bytes | `box size must be between 1 and 4096 bytes` |
-| Live boxes | 4096 | `box allocation failed: more than 4096 boxes are live at once` |
-| Bloc size | 32 bytes | `Bloc '...' exceeds the 32-byte cache-line cap` |
+| Box size | 1 to 16777216 bytes | `box size must be between 1 and 16777216 bytes` |
+| Live boxes | 16777216 | `too many boxes are live at once` |
+| Bloc size | 64 bytes | `bloc exceeds the cache-line size limit (64 bytes)` |
 | Integer | 64-bit signed | `integer overflow in '+'` (and `-`, `*`, ...) |
 
 When the machine runs out of real memory the program stops with `Runtime Error: out of memory`

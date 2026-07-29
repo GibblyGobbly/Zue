@@ -1,4 +1,4 @@
-Runtime Error in /tmp/zue_test_case.zu at line 2:
+Runtime Error [E0452] in /tmp/zue_test_case.zu at line 2:
   deadlock: every blue thread is waiting for another
 
    2 | recv(ch)
