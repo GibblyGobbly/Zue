@@ -1,0 +1,7 @@
+Index Error [E0401] in /tmp/zue_test_case.zu at line 1:
+  Slice -6:4 is out of bounds for a string of length 5
+
+   1 | print("hello"[-6:])
+     |       ^^^^^^^^^^^^
+
+Hint: Positions start at 0 like indexes (or count from the end when negative) and both ends are included

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+//
+// round and fixed round alike (halves away from zero, decided on the exact value), char_at and replace do
+// not fail silently, and slices count from the end like indexes.
+
+# CASE round to digits decides on the exact value
+print(round(2.675, 2), round(1.005, 2), round(0.125, 2), round(-2.675, 2), round(3.14159, 3))
+# CASE fixed rounds like round
+print(fixed(2.5, 0), fixed(3.5, 0), fixed(-2.5, 0), fixed(0.125, 2), fixed(2.675, 2))
+# CASE char_at counts from the end like an index
+print(char_at("abc", 1), char_at("abc", -1))
+# CASE char_at outside the string
+print(char_at("abc", 5))
+# CASE replace of an empty string
+print(replace("aaa", "", "x"))
+# CASE slices count from the end
+print("hello"[-2:], "hello"[1:-2], [1, 2, 3][-2:], slice("hello", -3, -1))
+# CASE a slice before the start
+print("hello"[-6:])

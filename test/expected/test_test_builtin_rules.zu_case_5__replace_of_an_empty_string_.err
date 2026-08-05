@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 1:
+  replace() cannot replace an empty string: it occurs everywhere
+
+   1 | print(replace("aaa", "", "x"))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Give the text to look for, for example replace(s, "a", "b").

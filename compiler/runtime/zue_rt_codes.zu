@@ -376,6 +376,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("needs one pad character")) != 0) {
         return cstr("E0412")
     }
+    if (strstr(msg, cstr("cannot replace an empty string")) != 0) {
+        return cstr("E0412")
+    }
     if (strstr(msg, cstr("cannot read")) != 0) {
         return cstr("E0413")
     }

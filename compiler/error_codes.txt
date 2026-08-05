@@ -364,7 +364,7 @@ fix: Check the range of the input before calling.
 
 == E0412
 title: A function was given a value it cannot work with
-match: must not be negative | must not be 0 | argument must be greater than | argument must be between | is greater than the upper | needs a list with at least one | digits must be between | decimals must be between | exponent of an int | mode ' | contains a NUL byte | status must be from | is out of range | needs one pad character
+match: must not be negative | must not be 0 | argument must be greater than | argument must be between | is greater than the upper | needs a list with at least one | digits must be between | decimals must be between | exponent of an int | mode ' | contains a NUL byte | status must be from | is out of range | needs one pad character | cannot replace an empty string
 text: The type is right but the value is not allowed, such as a negative size or an empty list.
 example:
     print(range(0, 10, 0))

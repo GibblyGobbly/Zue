@@ -40,6 +40,7 @@ extern("ferror", "i32", "ptr")
 extern("fileno", "i32", "ptr")
 extern("fstat", "i32", "i32,ptr")
 extern("nextafter", "double", "double,double")
+extern("fma", "double", "double,double,double")
 extern("ftell", "i64", "ptr")
 extern("fgetc", "i32", "ptr")
 
@@ -472,17 +473,41 @@ func lb_round(self_p, argc_i, argv_p) {
         _cp(o, argv_p)
         retp(o)
     }
+    _flt(o, _round_digits(x, digits))
+    retp(o)
+}
+
+# x rounded to digits decimal places (0 to 15), halves away from zero, decided on the exact value of x. Used by
+# round(x, digits) and fixed(x, digits), so both round the same way.
+func _round_digits(x, digits) {
     let scale = 1.0
     for (let i = 0; i < digits; i++) {
         scale = fmul(scale, 10.0)
     }
     let v = fmul(x, scale)
     if (fge(fabs(v), 9007199254740992.0)) {
-        _flt(o, x)
-        retp(o)
+        return x    # no fraction left at this size
     }
-    _flt(o, fdiv(round(v), scale))
-    retp(o)
+    return fdiv(_round_scaled(x, scale, v), scale)
+}
+
+# round(v) where v is x * scale rounded to a double. The multiply can land exactly on a half when the true
+# product is just below or above it: 2.675 is 2.67499999999999982..., but 2.675 * 100 rounds to 267.5, and
+# round(2.675, 2) gave 2.68. fma gives the exact error of the multiply, which says where the true value is.
+# A true half (0.125 * 100) rounds away from zero, as round() does.
+func _round_scaled(x, scale, v) {
+    let r = round(v)
+    if (fne(fabs(fsub(v, trunc(v))), 0.5)) {
+        return r
+    }
+    let err = fma(x, scale, fsub(0.0, v))
+    if (feq(err, 0.0)) {
+        return r
+    }
+    if (fgt(err, 0.0)) {
+        return ceil(v)
+    }
+    return floor(v)
 }
 
 func lb_trunc(self_p, argc_i, argv_p) {

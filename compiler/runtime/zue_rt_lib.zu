@@ -479,7 +479,9 @@ func lb_fixed(self_p, argc_i, argv_p) {
     let fmt = stack_buf(16)
     snprintf(fmt, 16, cstr("%%.%df"), decimals)
     let tmp = stack_buf(400)
-    snprintf(tmp, 400, fmt, dbl(_val(argv_p)))
+    # Rounded first the way round(x, digits) rounds (halves away from zero); printf alone sent halves to the
+    # even neighbour, so fixed(2.5, 0) was "2" while round(2.5) is 3.
+    snprintf(tmp, 400, fmt, dbl(_round_digits(_val(argv_p), decimals)))
     # A tiny negative number rounds to zero: write 0.00, not -0.00.
     let start = 0
     if (ld8(tmp) == 45) {
@@ -1101,11 +1103,15 @@ func lb_char_at(self_p, argc_i, argv_p) {
     let s = _arg_str(self_p, argv_p, 0)
     let i = _arg_int(self_p, argv_p, 1)
     let o = stack_buf(16)
-    if (i < 0 or i >= ld64(s)) {
-        _str(o, cstr(""))
-    } else {
-        _str_n(o, s + S_DATA + i, 1)
+    # as s[i]: a negative index counts from the end, and one outside the string is an Index Error (it gave "")
+    let at = i
+    if (at < 0) {
+        at += ld64(s)
     }
+    if (at < 0 or at >= ld64(s)) {
+        _oob(i, ld64(s), cstr("string"))
+    }
+    _str_n(o, s + S_DATA + at, 1)
     retp(o)
 }
 
@@ -1361,8 +1367,8 @@ func lb_replace(self_p, argc_i, argv_p) {
     let to = _text_str(self_p, argv_p + 32, 2, t2)
     let o = stack_buf(16)
     if (ld64(frm) == 0) {
-        _cp(o, argv_p)
-        retp(o)
+        _errf(E_ARGUMENT, cstr("Give the text to look for, for example replace(s, \"a\", \"b\")."),
+              cstr("replace() cannot replace an empty string: it occurs everywhere"), 0, 0, 0)
     }
     let b = stack_buf(B_SIZE)
     _buf_init(b)

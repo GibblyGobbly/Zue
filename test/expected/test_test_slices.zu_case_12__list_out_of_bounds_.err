@@ -4,4 +4,4 @@ Index Error [E0401] in /tmp/zue_test_case.zu at line 2:
    2 | print(l[1:9])
      |       ^^^^^^
 
-Hint: Positions start at 0 like indexes and both ends are included, so a slice stays within 0 to the last index
+Hint: Positions start at 0 like indexes (or count from the end when negative) and both ends are included

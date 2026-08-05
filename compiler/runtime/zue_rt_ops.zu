@@ -720,13 +720,20 @@ func lvp_slice(o, t, lo, hi) {
     }
     let a = 0
     let b = n - 1
+    # A negative position counts from the end, as in indexing: "hello"[-2:] is "lo".
     if (_tag(lo) != T_NULL) {
         _need_int_index(lo, cstr("slice start must be an int, got %s"))
         a = _val(lo)
+        if (a < 0) {
+            a += n
+        }
     }
     if (_tag(hi) != T_NULL) {
         _need_int_index(hi, cstr("slice end must be an int, got %s"))
         b = _val(hi)
+        if (b < 0) {
+            b += n
+        }
     }
     let what = cstr("string")
     if (tt != T_STR) {
@@ -743,13 +750,22 @@ func lvp_slice(o, t, lo, hi) {
         }
         return 0
     }
+    # the messages show the positions as written, before a negative one was counted from the end
+    let wa = a
+    let wb = b
+    if (_tag(lo) != T_NULL) {
+        wa = _val(lo)
+    }
+    if (_tag(hi) != T_NULL) {
+        wb = _val(hi)
+    }
     if (a < 0 or b > n - 1) {
-        _errf4(E_INDEX, cstr("Positions start at 0 like indexes and both ends are included, so a slice stays within 0 to the last index"),
-               cstr("Slice %lld:%lld is out of bounds for a %s of length %lld"), a, b, what, n)
+        _errf4(E_INDEX, cstr("Positions start at 0 like indexes (or count from the end when negative) and both ends are included"),
+               cstr("Slice %lld:%lld is out of bounds for a %s of length %lld"), wa, wb, what, n)
     }
     if (a > b) {
         _errf(E_INDEX, cstr("The start of a slice must not come after its end"),
-              cstr("Slice start %lld is after its end %lld"), a, b, 0)
+              cstr("Slice start %lld is after its end %lld"), wa, wb, 0)
     }
     if (tt == T_STR) {
         _str_n(o, _val(t) + S_DATA + a, b - a + 1)

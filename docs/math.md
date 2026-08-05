@@ -18,6 +18,22 @@ and explains it.
 Operators: `+ - * / %`, `**` (power), and the bitwise `& | ^ << >> ~` on ints. `/` on two ints
 is integer division and `%` keeps the sign of the left side. See [syntax](syntax.md#operators).
 
+### Two remainders: `%` and `mod`
+
+They give the same result when both numbers are positive, and differ when one is negative:
+
+| | `%` | `mod(x, y)` |
+|---|---|---|
+| Sign of the result | the sign of `x` (the left side) | the sign of `y` (the divisor) |
+| Goes with | `/` (division toward zero): `x == (x / y) * y + x % y` | `floor_div` (division rounding down): `x == floor_div(x, y) * y + mod(x, y)` |
+| `7 % 3`, `mod(7, 3)` | `1` | `1` |
+| `-7 % 3`, `mod(-7, 3)` | `-1` | `2` |
+| `7 % -3`, `mod(7, -3)` | `1` | `-2` |
+| `-7.5 % 2.0`, `mod(-7.5, 2.0)` | `-1.5` | `0.5` |
+| Use it for | the part left over after `/`, as in C and Java | wrapping around: a clock hour `mod(h - 5, 24)`, an index `mod(i - 1, len(xs))`, as in Python |
+
+Both need two ints or two floats, and a zero divisor is an error.
+
 ## Function reference
 
 ### Numbers
