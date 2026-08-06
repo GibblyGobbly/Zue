@@ -14,7 +14,7 @@
 
 use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
-use { diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, span_at, span_line, node_span, suggest } from "diag.zu"
+use { diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, node_span, suggest } from "diag.zu"
 use { cut } from "ranges.zu"
 use { node_children } from "ast_nodes.zu"
 
@@ -571,19 +571,30 @@ func check_name(n, what) {
     return true
 }
 
-func undefined_error(span, name, what, scopes, with_guess) {
+func undefined_error(span, name, what, scopes) {
     let d = fail_at(span, "{what} '{name}' is not defined", "Name Error")
     diag_text(d, "not declared anywhere")
-    let guess = null
-    if (with_guess) {
-        guess = suggest(name, name_candidates(scopes))
-    }
-    if (guess != null) {
-        diag_hint(d, "Did you mean '{guess}'?")
-    } else if (what == "Function") {
+    if (what == "Function") {
         diag_hint(d, "Define it with func {name}(...) before calling it, or check the spelling of a builtin")
     } else {
         diag_hint(d, "Declare variables with 'let' before using them")
+    }
+    # the "did you mean" replaces the hint later, if the error is printed (fill_guesses)
+    if (d != null) {
+        d.guess = [name, scopes]
+    }
+}
+
+# Gives each printed undefined-name error a "did you mean" when a declared name is close to it.
+func fill_guesses() {
+    for (let d in diag_shown()) {
+        if (d.guess != null) {
+            let guess = suggest(d.guess[0], name_candidates(d.guess[1]))
+            if (guess != null) {
+                diag_hint(d, "Did you mean '{guess}'?")
+            }
+            d.guess = null
+        }
     }
 }
 
@@ -1188,7 +1199,14 @@ func ck_builtin(n, name, argtypes) {
                 diag_hint(d, convert_hint(el, vt, n.args[1]))
             }
         }
+        # append and sort give back the list they changed
+        if (kind_of(first) == "list") {
+            return first
+        }
         return "any"
+    }
+    if (name == "sort" and len(argtypes) == 1 and kind_of(first) == "list") {
+        return first
     }
     let result = "any"
     if (SIGS[name] != null) {
@@ -2050,16 +2068,13 @@ func report_undefined() {
     if (OPEN_IMPORT) {
         return null
     }
-    # Only the first 100 errors are printed (diag.zu), so only they get a "did you mean": a suggestion compares
-    # the name with every name in scope, and doing it for thousands of undefined names took minutes.
-    let reported = 0
     for (let p in PENDING) {
         if (HOISTED[p.name] != null) {
             continue
         }
-        undefined_error(p.span, p.name, p.what, p.scopes, reported < 100)
-        reported += 1
+        undefined_error(p.span, p.name, p.what, p.scopes)
     }
+    fill_guesses()
 }
 
 # Reports every Type Error it can prove, in source order, and ends the run if there is one.

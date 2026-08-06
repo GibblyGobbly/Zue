@@ -31,19 +31,19 @@ as `sqrt() argument 1 must be a number, got string`.
 | `exit(code)` | Flushes standard output and ends the program with that status (default 0). The status must be from 0 to 255 (`Argument Error` otherwise). If standard output cannot be written (a full disk, a closed pipe), the status is 1 and the reason goes to standard error |
 | `system(cmd)` | Runs `cmd` with the shell and returns its exit status as an int. A NUL byte in `cmd` is an `Argument Error`, and a shell that cannot be started is a `Runtime Error` (`system() failed: ...`) |
 
-Floats are printed with up to six significant digits and always show a point or an exponent (`print(1.0)` prints `1.0`).
+Floats print exactly: the shortest text that reads back as the same number (`print(0.1 + 0.2)` prints `0.30000000000000004`), always with a point or an exponent (`print(1.0)` prints `1.0`).
 
 ### Lists
 
 | Function | Effect |
 |---|---|
-| `append(list, v)` / `list_append(list, v)` | Add to the end |
+| `append(list, v)` / `list_append(list, v)` | Add to the end; returns the same list, so `print(append(x, 1))` shows it |
 | `remove(list, i)` | Remove and return the element at `i` (negative counts from the end); an index out of range is an `Index Error` |
 | `find(list, v)` | Index of the first equal element, or `-1`. Lists only |
 | `slice(list, a, b)` | New list of the elements at positions `a` to `b`, counting from 0 and including both ends; same as `list[a:b]`. A position outside the list, or `a` after `b`, is an `Index Error`. Also works on strings |
 | `range(end)`, `range(start, end)`, `range(start, end, step)` | List of integers; `step` may be negative and must not be 0 |
 | `map(list, fn)`, `filter(list, fn)`, `reduce(list, fn, init)` | Higher-order helpers; return new values. `reduce` needs all three arguments |
-| `sort(list)` | In-place ascending, stable sort of numbers, strings or chars; returns `null`. Mixing numbers and strings is an error. A list of 256 or more non-negative ints is sorted by radix sort (no comparisons, several times faster); everything else by insertion sort for 16 items or fewer and merge sort above that |
+| `sort(list)` | In-place ascending, stable sort of numbers, strings or chars; returns the same list, sorted. Mixing numbers and strings is an error. A list of 256 or more non-negative ints is sorted by radix sort (no comparisons, several times faster); everything else by insertion sort for 16 items or fewer and merge sort above that |
 | `shuffle(list)` | In-place Fisher-Yates shuffle with the seeded generator, so `srand` makes it repeatable. Every index draw is unbiased |
 | `tshuffle(list)` | The same shuffle, but the randomness comes from the OS entropy source, so it cannot be repeated and every ordering of a list of any length can occur |
 | `ssort(list)` | Stalin sort, in place: deletes every element smaller than the last one kept, leaving a non-decreasing list. Returns `null`. Works on dense lists too |
@@ -144,7 +144,7 @@ byte strings: `len("héllo")` is 6, and indexing is zero-based by byte. `to_uppe
 | Function | Description | Example |
 |---|---|---|
 | `char_at(s, i)` | The character at index `i` as a one-character string; `""` when out of range | `char_at("ABC", 1)` is `"B"` |
-| `substring(s, start, n)` | `n` characters starting at `start`; the result is cut at the end of the string. A negative `start` is an `Argument Error` | `substring("Hello", 0, 2)` is `"He"` |
+| `substring(s, start, n)` | `n` characters starting at `start`; the result is cut at the end of the string. A negative `start` or `n` is an `Argument Error` | `substring("Hello", 0, 2)` is `"He"` |
 | `slice(s, start, end)` | Positions `start` to `end`, from 0, both included | `slice("Hello", 1, 3)` is `"ell"` |
 
 For a slice written as an expression, with positions from 0 and both ends included, see [slices](syntax.md#slices): `"Hello"[1:3]` is `"ell"`.
@@ -206,9 +206,10 @@ A string literal evaluates any expression written inside `{ }` and inserts its t
 The text inside `{ }` is parsed as a normal Zue expression. Write `\{` for a literal opening
 brace. To fill placeholders by position, give `print` a string with `{}` and the values after it: `print("{} items, {} lines", 4, 3)`.
 
-Values print as follows: integers in decimal, floats with up to six significant digits
-(`1.0` prints as `1.0`), `true` / `false`, `null`, lists as `[1, 2]` (strings inside a list are
-not quoted), and maps as `{"key": value}`.
+Values print as follows: integers in decimal, floats as the shortest text that reads back as the
+same number (`1.0` prints as `1.0`, `2.0 / 3.0` as `0.6666666666666666`), `true` / `false`, `null`,
+lists as `[1, "a"]` and maps as `{"key": "value"}`. Strings inside a list, a map, a bloc or a template
+are quoted, with `\"`, `\\`, `\n`, `\t` and `\r` escaped; a string printed on its own is not.
 
 ```javascript
 let name = "Nova"
@@ -286,7 +287,7 @@ be numbers (an int or a float); anything else is a `Type Error` such as
 argument is outside the function's domain is an `Argument Error` (`sqrt() argument must not be
 negative`), and a float result that is too large is a `Runtime Error` (`float overflow in
 exp()`, `float overflow in '*'`). Results that are not whole numbers print
-with up to six significant digits, so `sqrt(2)` prints `1.41421`, and a float without a
+exactly, so `sqrt(2)` prints `1.4142135623730951`, and a float without a
 fractional part prints with `.0` (`sqrt(16)` prints `4.0`).
 
 ### Basic utilities

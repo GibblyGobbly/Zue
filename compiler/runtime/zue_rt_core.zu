@@ -29,6 +29,7 @@ extern("exit", "void", "i32")
 extern("free", "void", "ptr")
 extern("calloc", "ptr", "i64,i64")
 extern("realloc", "ptr", "ptr,i64")
+extern("sysinfo", "i32", "ptr")
 
 # LV tags
 const T_NULL = 0
@@ -435,7 +436,7 @@ func _error_source(pos) {
     }
     let text = ld64(ld64(m + MOD_LINES) + (line - 1) * 8)
     fprintf(_stderr(), cstr("\n%4d | "), line)
-    _put_source(text, 0, 1000000)
+    _put_source(text, 0, strlen(text))
     fputc(10, _stderr())
     let col = band(shr(pos, 22), 4095)
     let tlen = strlen(text)
@@ -988,6 +989,38 @@ func _map_del(map, key) {
 
 # Strings
 
+# The bytes of memory this machine has, RAM and swap together, from sysinfo(2), asked once. Nothing
+# larger can ever be made, so a size above it is refused at once instead of after a long wait or a crash.
+const SI_TOTALRAM = 32      # struct sysinfo on x86-64 Linux
+const SI_TOTALSWAP = 64
+const SI_MEM_UNIT = 104
+const SI_SIZE = 112
+let g_machine_bytes = 0
+
+func _machine_bytes() {
+    if (g_machine_bytes == 0) {
+        let si = stack_buf(SI_SIZE)
+        memset(si, 0, SI_SIZE)
+        if (sysinfo(si) != 0) {
+            # not known: every size is let through to the allocator, which reports what it cannot get
+            g_machine_bytes = -1
+            return g_machine_bytes
+        }
+        let unit = ld32(si + SI_MEM_UNIT)
+        if (unit == 0) {
+            unit = 1
+        }
+        g_machine_bytes = (ld64(si + SI_TOTALRAM) + ld64(si + SI_TOTALSWAP)) * unit
+    }
+    return g_machine_bytes
+}
+
+# 1 when n things of size bytes each are more than this machine's memory. Written as a division, so
+# a huge n cannot wrap around.
+func _too_big(n, size) {
+    return ugt(n, udiv(_machine_bytes(), size))
+}
+
 func _buf_init(b) {
     st64(b + B_CAP, 64)
     st64(b + B_LEN, 0)
@@ -995,7 +1028,7 @@ func _buf_init(b) {
 }
 
 func _buf_add(b, s, n) {
-    if (ugt(n, 70368744177664) or ugt(ld64(b + B_LEN) + n, 70368744177664)) {
+    if (_too_big(n, 1) or _too_big(ld64(b + B_LEN) + n, 1)) {
         _die_oom()
     }
     if (ld64(b + B_LEN) + n + 1 > ld64(b + B_CAP)) {
@@ -1012,12 +1045,32 @@ func _buf_cstr(b, s) {
     _buf_add(b, s, strlen(s))
 }
 
-# The text of the double whose bits are f, printed like %.6g, with ".0" added when the text has
-# neither a point nor an exponent, so that a float never prints like an int (see _float_text).
+# The text of the double whose bits are f: the shortest that reads back as exactly the same
+# number (0.1 + 0.2 prints 0.30000000000000004, 123456789.0 prints as it is written), with ".0"
+# added when the text has neither a point nor an exponent, so that a float never prints like an int.
 func _buf_float(b, f) {
     let tmp = stack_buf(64)
-    _float_text(tmp, f, 6)
+    _float_exact(tmp, f)
     _buf_cstr(b, tmp)
+}
+
+# Writes into tmp (64 bytes) the shortest text of the double whose bits are f that reads back as the
+# same bits. A double that reads back from fewer than 15 digits also reads back from its 15-digit
+# text, and %g drops the trailing zeros, so trying 15, 16 and 17 digits finds the shortest. That does
+# not hold for the subnormal doubles below 2.2e-308, which have fewer bits: they try from 1 digit.
+func _float_exact(tmp, f) {
+    let digits = 15
+    if (band(shr(f, 52), 2047) == 0) {
+        digits = 1
+    }
+    while (digits < 17) {
+        _float_text(tmp, f, digits)
+        if (strtod(tmp, 0) == f) {
+            return 0
+        }
+        digits += 1
+    }
+    _float_text(tmp, f, 17)
 }
 
 # Writes into tmp (64 bytes) the text of the double whose bits are f with that many significant
@@ -1068,6 +1121,44 @@ func _int_text(v, end) {
     return p
 }
 
+# The string object str in double quotes, as it would be written in source: a quote, a backslash,
+# a newline, a tab and a carriage return are escaped, so "1" and 1 or "a, b" and "a", "b" look different.
+func _buf_quoted(b, str) {
+    _buf_cstr(b, cstr("\""))
+    let from = 0
+    for (let j = 0; j < ld64(str); j++) {
+        let ch = ld8(str + S_DATA + j)
+        let esc = 0
+        if (ch == 34) {
+            esc = cstr("\\\"")
+        } else if (ch == 92) {
+            esc = cstr("\\\\")
+        } else if (ch == 10) {
+            esc = cstr("\\n")
+        } else if (ch == 9) {
+            esc = cstr("\\t")
+        } else if (ch == 13) {
+            esc = cstr("\\r")
+        }
+        if (esc != 0) {
+            _buf_add(b, str + S_DATA + from, j - from)
+            _buf_cstr(b, esc)
+            from = j + 1
+        }
+    }
+    _buf_add(b, str + S_DATA + from, ld64(str) - from)
+    _buf_cstr(b, cstr("\""))
+}
+
+# A value inside a list, a map, a bloc or a template: a string is quoted, everything else prints as on its own.
+func _buf_item(b, v) {
+    if (_tag(v) == T_STR) {
+        _buf_quoted(b, _val(v))
+    } else {
+        _buf_value(b, v)
+    }
+}
+
 func _buf_value(b, v) {
     let tmp = stack_buf(64)
     let t = _tag(v)
@@ -1095,7 +1186,7 @@ func _buf_value(b, v) {
             if (i != 0) {
                 _buf_cstr(b, cstr(", "))
             }
-            _buf_value(b, ld64(l + L_ITEMS) + 16 * i)
+            _buf_item(b, ld64(l + L_ITEMS) + 16 * i)
         }
         _buf_cstr(b, cstr("]"))
     } else if (t == T_MAP) {
@@ -1111,18 +1202,9 @@ func _buf_value(b, v) {
                 _buf_cstr(b, cstr(", "))
             }
             first = 0
-            _buf_cstr(b, cstr("\""))
-            # A quote or a backslash in the key is escaped, so the key reads back as the same text.
-            let key = ld64(e + E_KEY)
-            for (let j = 0; j < ld64(key); j++) {
-                let ch = ld8(key + S_DATA + j)
-                if (ch == 34 or ch == 92) {
-                    _buf_cstr(b, cstr("\\"))
-                }
-                _buf_add(b, key + S_DATA + j, 1)
-            }
-            _buf_cstr(b, cstr("\": "))
-            _buf_value(b, e + E_VAL)
+            _buf_quoted(b, ld64(e + E_KEY))
+            _buf_cstr(b, cstr(": "))
+            _buf_item(b, e + E_VAL)
         }
         _buf_cstr(b, cstr("}"))
     } else if (t == T_DENSE) {
@@ -1186,7 +1268,7 @@ func lv_interp(n_i, parts) {
         total += ld64(_val(part))
     }
     if (all_text != 0) {
-        if (ugt(total, 70368744177664)) {
+        if (_too_big(total, 1)) {
             _die_oom()
         }
         let st = lv_alloc_atomic(S_DATA + total + 1)
@@ -1224,7 +1306,7 @@ func lv_interp(n_i, parts) {
             }
         }
         if (simple != 0) {
-            if (ugt(sum, 70368744177664)) {
+            if (_too_big(sum, 1)) {
                 _die_oom()
             }
             let st = lv_alloc_atomic(S_DATA + sum + 1)

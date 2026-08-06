@@ -258,8 +258,9 @@ func lb_append(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     _arg_list(self_p, argv_p, 0)
     _list_push(argv_p, argv_p + 16)
+    # the same list, changed in place, so print(append(x, 1)) shows it
     let o = stack_buf(16)
-    _null(o)
+    _cp(o, argv_p)
     retp(o)
 }
 
@@ -639,8 +640,8 @@ func lb_range(self_p, argc_i, argv_p) {
     if (step < 0 and end < start) {
         n = udiv(start - end - 1, 0 - step) + 1
     }
-    # 2^36 items take 1 TiB; a list that size is refused here with the line, not as a bare "out of memory".
-    if (ugt(n, 68719476736)) {
+    # each item is a 16-byte value; a list larger than memory is refused here with the line, not as a bare "out of memory"
+    if (_too_big(n, 16)) {
         _errf(E_ARGUMENT, cstr("Use a larger step or a smaller span, or loop with for (let i = start; i < end; i += step)."),
               cstr("range() would make %llu items, too many to hold in memory"), n, 0, 0)
     }
@@ -981,8 +982,9 @@ func lb_sort(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let l = _arg_list(self_p, argv_p, 0)
     let n = ld64(l + L_COUNT)
+    # the same list, sorted in place
     let o = stack_buf(16)
-    _null(o)
+    _cp(o, argv_p)
     if (n >= RADIX_MIN and _radix_sort(ld64(l + L_ITEMS), n) != 0) {
         retp(o)
     }
@@ -1083,12 +1085,13 @@ func lb_substring(self_p, argc_i, argv_p) {
         _errf(E_ARGUMENT, cstr("Count positions from 0, the first character."),
               cstr("substring() start must not be negative, got %lld"), start, 0, 0)
     }
+    if (n < 0) {
+        _errf(E_ARGUMENT, cstr("The third argument is how many characters to take; use 0 or more."),
+              cstr("substring() length must not be negative, got %lld"), n, 0, 0)
+    }
     if (start >= ld64(s)) {
         _str(o, cstr(""))
         retp(o)
-    }
-    if (n < 0) {
-        n = 0
     }
     # Compared with what is left, not as start + n, which can wrap past the largest int.
     if (n > ld64(s) - start) {
@@ -1426,7 +1429,7 @@ func lb_repeat(self_p, argc_i, argv_p) {
         _str(o, cstr(""))
         retp(o)
     }
-    if (n > 70368744177664 / ld64(s)) {
+    if (_too_big(n, ld64(s))) {
         _errf(E_ARGUMENT, cstr("Use a smaller count."), cstr("repeat() of %lld copies is too large to hold in memory"), n, 0, 0)
     }
     # One allocation of the exact size (a growing buffer copied everything twice and used about 5 times the
@@ -1459,7 +1462,7 @@ func _pad(self_p, argv, left, o) {
         return 0
     }
     let count = w - ld64(s)
-    if (count > 70368744177664 / plen) {
+    if (_too_big(count, plen)) {
         _errf(E_ARGUMENT, cstr("Use a smaller width."), cstr("%s() result of width %lld is too large to hold in memory"), _fname(self_p), w, 0)
     }
     let total = ld64(s) + count * plen
@@ -1551,7 +1554,7 @@ func lb_join(self_p, argc_i, argv_p) {
         if (count > 1) {
             total += ld64(d) * (count - 1)
         }
-        if (ugt(total, 70368744177664)) {
+        if (_too_big(total, 1)) {
             _die_oom()
         }
         let st = lv_alloc_atomic(S_DATA + total + 1)

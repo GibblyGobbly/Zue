@@ -1,0 +1,9 @@
+["a", 1, "1"]
+{"k": "v", "n": 1}
+[["x"], {"a": ["b", "c"]}]
+["q\"x", "back\\slash", "line\nbreak", "tab\tend", ""]
+P{name: "bo", age: 3}
+top level strings stay plain
+no
+a, b
+["a"]

@@ -14,7 +14,7 @@ use { MODULES, MOD_LIST, uid } from "shared.zu"
 use { mk_id_line } from "ast_nodes.zu"
 use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analysis.zu"
 use { GC_LOWMEM, HOOKS, LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS, SPECS } from "ll_state.zu"
-use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.zu"
+use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_temp_alloca, ll_keep, ll_release_temps, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.zu"
 use { ll_call_out, ll_char, ll_condbr, ll_copy, ll_copy_heap, ll_cstr, ll_float, ll_gname, ll_int } from "ll_state.zu"
 use { DBG, dbg_function, dbg_module_text, ll_store_pos, ll_ic, ll_kstr, ll_label, ll_mark, ll_mark_line, ll_mark_pos, ll_new_ctx, ll_new_label, ll_null, ll_pos, ll_pos_range, ll_reg } from "ll_state.zu"
 use { ll_float_text, ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } from "ll_state.zu"
@@ -627,9 +627,12 @@ func ex_defer(n) {
     }
     let inner = n.args[0]
     let f = copy_slot(ex(inner.callee))
+    ll_keep(f)
     let saved = []
     for (let a in ex_list(inner.args)) {
-        append(saved, copy_slot(a))
+        let kept = copy_slot(a)
+        ll_keep(kept)
+        append(saved, kept)
     }
     append(ST.ctx.defers[len(ST.ctx.defers) - 1], {"kind": "call", "f": f, "args": saved})
     return ll_null()
@@ -974,7 +977,7 @@ func compile_function(n) {
     if (len(caps) == 0) {
         return ll_call_lv("lv_closure", "ptr @{fname}, ptr {ll_cstr(name)}, i32 0, ptr null")
     }
-    let arr = ll_alloca("[{len(caps)} x ptr]")
+    let arr = ll_temp_alloca("[{len(caps)} x ptr]")
     for (let i = 0; i < len(caps); i++) {
         let p = ll_reg()
         ll("{p} = getelementptr inbounds [{len(caps)} x ptr], ptr {arr}, i64 0, i64 {i}")
@@ -1319,7 +1322,7 @@ func st_forin(n) {
     let prepared = ll_call_out("lvp_iter_prepare", "ptr {it}")
     let count = ll_reg()
     ll("{count} = call i64 @lvp_iter_len(ptr {prepared})")
-    let idx = ll_alloca("i64")
+    let idx = ll_temp_alloca("i64")
     ll("store i64 0, ptr {idx}")
     let cond = ll_new_label("icond")
     let body = ll_new_label("ibody")
@@ -1663,8 +1666,11 @@ func compile_module_body(m, stmts, fname) {
     ll("store ptr @mod_{m.id}, ptr @lv_pos_mod")
     define_types(stmts)
     for (let s in stmts) {
+        ST.ctx.pooling = true
         st(s)
+        ll_release_temps()
     }
+    ST.ctx.pooling = false
     if (m.id == 0 and has_zero_arg_main(stmts)) {
         let sink = ll_slot()
         let main_var = ll_gname("main")
@@ -1672,14 +1678,7 @@ func compile_module_body(m, stmts, fname) {
     }
     run_defers(0)
     ll("ret void")
-    # clang's optimizer takes time that grows much faster than the size of one function: a top-level body of
-    # 5,600 lines took 27 s and one of 18,000 lines about 7 minutes. A body that large is built without
-    # optimizing it (2.5 s and about 14 s for 22,400 lines); smaller ones, the usual case, are optimized.
-    if (len(ST.ctx.out) > 100000) {
-        finish_function("define internal void @{fname}() noinline optnone \{", ST.ctx)
-    } else {
-        finish_function("define internal void @{fname}() \{", ST.ctx)
-    }
+    finish_function("define internal void @{fname}() \{", ST.ctx)
 }
 
 # Loads, parses and compiles an imported file. Returns null if it cannot be read.

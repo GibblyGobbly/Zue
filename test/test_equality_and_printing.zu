@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+# CASE lists compare their contents
+func pass(v) {
+    return [v, null][0]
+}
+print([1, 2] == [1, 2], [1, 2] == [2, 1], [1, 2] == [1, 2, 3], [1, 2] != [1, 2])
+print([1, [2, "x"]] == [1, [2, "x"]], [[1]] == [[2]])
+print(pass([1]) == pass([1.0]), [] == [])
+let a = [1, 2]
+print(a == a)
+# CASE maps compare their keys and values in any order
+print({"a": 1, "b": 2} == {"b": 2, "a": 1}, {"a": 1} == {"a": 2}, {"a": 1} == {"b": 1})
+print({"a": [1]} == {"a": [1]}, {"a": 1} == {"a": 1, "b": 2}, {} == {})
+# CASE contains and find use the same rule
+print(contains([[1], [2]], [2]), find([[1], [2]], [2]), contains([{"k": 1}], {"k": 1}))
+# CASE dense lists compare with lists of floats
+print(dense_list(2, 0.5) == [0.5, 0.5], dense_list(2, 0.5) == [0.5], dense_list(2, 0.5) == dense_list(2, 0.5))
+# CASE lists that contain themselves and very deep lists compare
+func pass(v) {
+    return [v, null][0]
+}
+let x = []
+let y = []
+append(x, y)
+append(y, x)
+print(x == y)
+let p = [pass(1)]
+append(p, p)
+let q = [pass(1)]
+append(q, q)
+let r = [pass(2)]
+append(r, r)
+print(p == q, p == r)
+let m1 = {"a": pass(1)}
+m1["self"] = m1
+let m2 = {"a": pass(1)}
+m2["self"] = m2
+print(m1 == m2)
+let d1 = []
+let d2 = []
+let c1 = d1
+let c2 = d2
+for (let i = 0; i < 100000; i++) {
+    let n1 = [pass(i)]
+    let n2 = [pass(i)]
+    append(c1, n1)
+    append(c2, n2)
+    c1 = n1
+    c2 = n2
+}
+print(d1 == d2)
+append(c2, 5)
+print(d1 == d2)
+# CASE sort and append give back the list
+let xs = [3, 1, 2]
+print(sort(xs))
+print(append(xs, 4))
+print(xs)
+let ys = sort(["b", "a"])
+print(ys)
+# CASE substring with a negative length
+print(substring("abc", 1, -1))
+# CASE floats print exactly
+print(0.1 + 0.2, 123456789.0, 2.0 / 3.0, 1.0, 0.5, 1e20, 1e-5)
+print(1.7976931348623157e308, 5e-324, -2.5)
+print([0.1 + 0.2, 1.0])
+print("{0.1 + 0.2}")
+print(to_string(0.1 + 0.2), to_string(2.0 / 3.0, 3))
+# CASE strings inside lists, maps and blocs print with quotes
+print(["a", 1, "1"])
+print({"k": "v", "n": 1})
+print([["x"], {"a": ["b", "c"]}])
+print(["q\"x", "back\\slash", "line\nbreak", "tab\tend", ""])
+bloc P { name, age }
+print(P{"bo", 3})
+print("top level strings stay plain", ["no"][0])
+print(join(["a", "b"], ", "), to_string(["a"]))

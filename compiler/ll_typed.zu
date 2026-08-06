@@ -10,7 +10,7 @@
 # call, which reports the error.
 
 use { diag_exit_if_errors, diag_hint, diag_new, node_span } from "diag.zu"
-use { HOOKS, SPECS, ll, ll_alloca, ll_args_array, ll_br, ll_call_out, ll_slot, ll_condbr, ll_cstr, ll_float_text, ll_gname, ll_label, ll_mark, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
+use { HOOKS, SPECS, ll, ll_alloca, ll_temp_alloca, ll_args_array, ll_br, ll_call_out, ll_slot, ll_condbr, ll_cstr, ll_float_text, ll_gname, ll_label, ll_mark, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
 use { find_local, resolve } from "ll_scope.zu"
 use { box_raw, ty_load, unbox_checked } from "ll_unbox.zu"
 use { SPEC_FRAME_SIZE, SPEC_MAX_DEPTH, machine_type, parse_sig, spec_closure_global, spec_key_of, spec_symbol } from "ll_spec.zu"
@@ -314,7 +314,7 @@ func math_finite_or_slow(r, good, slow) {
 func tex_math_call(n) {
     let ms = math_spec(n)
     let rt = machine_type(ms.res)
-    let out = ll_alloca(rt)
+    let out = ll_temp_alloca(rt)
     let raws = []
     let kinds = []
     for (let a in n.args) {
@@ -451,7 +451,7 @@ func tex_math_call(n) {
 func tex_spec_call(n) {
     let sp = call_spec(n)
     let rt = machine_type(sp.sig.res)
-    let out = ll_alloca(rt)
+    let out = ll_temp_alloca(rt)
     let g = ll_gname(sp.name)
     let tag = ll_reg()
     ll("{tag} = load i64, ptr {g}")
@@ -618,7 +618,7 @@ export func tex_step(kind, op, cur, pos) {
 
 # a and b / a or b: the right side runs only when the left does not decide.
 func tex_logic(n) {
-    let res = ll_alloca("i64")
+    let res = ll_temp_alloca("i64")
     let left = tex(n.l)
     let lw = ll_reg()
     ll("{lw} = zext i1 {left} to i64")

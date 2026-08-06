@@ -230,7 +230,7 @@ func lvp_add(o, a, b) {
     if (ta == T_STR and tb == T_STR) {
         let la = ld64(_val(a))
         let lb = ld64(_val(b))
-        if (ugt(la + lb, 70368744177664)) {
+        if (_too_big(la + lb, 1)) {
             _die_oom()
         }
         # One exact-size allocation, each part copied from its own bytes. (This once called _str_n with the
@@ -405,8 +405,197 @@ func _family(v) {
     return 100 + t
 }
 
-# == without the type check.
+# == without the type check. Lists and maps compare their contents.
 func lvp_equal(a, b) {
+    if (_is_container(_tag(a)) and _is_container(_tag(b))) {
+        return _equal_deep(a, b)
+    }
+    return _equal_flat(a, b)
+}
+
+func _is_container(t) {
+    return t == T_LIST or t == T_DENSE or t == T_MAP
+}
+
+# Item i of a list or a dense list, written at o.
+func _seq_item(o, v, i) {
+    if (_tag(v) == T_DENSE) {
+        _set(o, T_FLOAT, ld64(ld64(_val(v) + D_DATA) + i * 8))
+    } else {
+        _cp(o, ld64(_val(v) + L_ITEMS) + 16 * i)
+    }
+}
+
+func _seq_count(v) {
+    if (_tag(v) == T_DENSE) {
+        return ld64(_val(v) + D_COUNT)
+    }
+    return ld64(_val(v) + L_COUNT)
+}
+
+# Deep ==. Two lists (or dense lists) are equal when they have the same items in the same order; two
+# maps when they have the same keys with equal values, in any order. Nested containers go on a work
+# list instead of a recursive call, so any depth works, and every pair of containers taken up is put
+# in a set: a pair met again (a list that contains itself) is not compared a second time, which is
+# what makes such comparisons end. The record w holds both, in malloc memory that is freed at the end;
+# nothing here allocates on the heap, and the values stay reachable from a and b.
+const EQ_WORK = 0       # pairs still to compare, 32 bytes each (two values)
+const EQ_WORK_N = 8
+const EQ_WORK_CAP = 16
+const EQ_SEEN = 24      # set of container pairs: 2 words per slot, an empty slot has 0 in its first word
+const EQ_SEEN_N = 32
+const EQ_SEEN_CAP = 40
+const EQ_ROOT_A = 48    # the first pair, put in the set only once a second pair shows up
+const EQ_ROOT_B = 56
+const EQ_ROOT_TAKEN = 64    # 1 once the first pair has been compared
+const EQ_SIZE = 72
+const EQ_FIRST_CAP = 16
+
+func _equal_deep(a, b) {
+    let w = stack_buf(EQ_SIZE)
+    memset(w, 0, EQ_SIZE)
+    st64(w + EQ_ROOT_A, _val(a))
+    st64(w + EQ_ROOT_B, _val(b))
+    _eq_push(w, a, b)
+    let x = stack_buf(16)
+    let y = stack_buf(16)
+    let r = 1
+    while (r != 0 and ld64(w + EQ_WORK_N) != 0) {
+        let n = ld64(w + EQ_WORK_N) - 1
+        st64(w + EQ_WORK_N, n)
+        _cp(x, ld64(w + EQ_WORK) + 32 * n)
+        _cp(y, ld64(w + EQ_WORK) + 32 * n + 16)
+        r = _eq_pair(w, x, y)
+    }
+    free(ld64(w + EQ_WORK))
+    free(ld64(w + EQ_SEEN))
+    return r
+}
+
+func _eq_push(w, x, y) {
+    let n = ld64(w + EQ_WORK_N)
+    if (n == ld64(w + EQ_WORK_CAP)) {
+        let cap = EQ_FIRST_CAP
+        if (n != 0) {
+            cap = n * 2
+        }
+        let grown = realloc(ld64(w + EQ_WORK), cap * 32)
+        if (grown == 0) {
+            _die_oom()
+        }
+        st64(w + EQ_WORK, grown)
+        st64(w + EQ_WORK_CAP, cap)
+    }
+    _cp(ld64(w + EQ_WORK) + 32 * n, x)
+    _cp(ld64(w + EQ_WORK) + 32 * n + 16, y)
+    st64(w + EQ_WORK_N, n + 1)
+}
+
+# Adds the pair (pa, pb) to the set; returns 1 when it was there already.
+func _eq_seen_add(w, pa, pb) {
+    if ((ld64(w + EQ_SEEN_N) + 1) * 2 > ld64(w + EQ_SEEN_CAP)) {
+        let old = ld64(w + EQ_SEEN)
+        let old_cap = ld64(w + EQ_SEEN_CAP)
+        let cap = EQ_FIRST_CAP
+        if (old_cap != 0) {
+            cap = old_cap * 2
+        }
+        let slots = calloc(cap, 16)
+        if (slots == 0) {
+            _die_oom()
+        }
+        st64(w + EQ_SEEN, slots)
+        st64(w + EQ_SEEN_CAP, cap)
+        st64(w + EQ_SEEN_N, 0)
+        for (let i = 0; i < old_cap; i++) {
+            if (ld64(old + 16 * i) != 0) {
+                _eq_seen_add(w, ld64(old + 16 * i), ld64(old + 16 * i + 8))
+            }
+        }
+        free(old)
+    }
+    let cap = ld64(w + EQ_SEEN_CAP)
+    let slots = ld64(w + EQ_SEEN)
+    let i = band(_rl_hash(bxor(_rl_hash(pa), pb)), cap - 1)
+    while (ld64(slots + 16 * i) != 0) {
+        if (ld64(slots + 16 * i) == pa and ld64(slots + 16 * i + 8) == pb) {
+            return 1
+        }
+        i = band(i + 1, cap - 1)
+    }
+    st64(slots + 16 * i, pa)
+    st64(slots + 16 * i + 8, pb)
+    st64(w + EQ_SEEN_N, ld64(w + EQ_SEEN_N) + 1)
+    return 0
+}
+
+# One item pair inside two containers: two containers are put on the work list (and count as equal
+# for now), anything else is compared at once.
+func _eq_item(w, x, y) {
+    if (_is_container(_tag(x)) and _is_container(_tag(y))) {
+        _eq_push(w, x, y)
+        return 1
+    }
+    return _equal_flat(x, y)
+}
+
+func _eq_pair(w, x, y) {
+    let tx = _tag(x)
+    let ty = _tag(y)
+    if ((tx == T_MAP) != (ty == T_MAP)) {
+        return 0
+    }
+    if (tx == ty and _val(x) == _val(y)) {
+        return 1
+    }
+    let is_root = _val(x) == ld64(w + EQ_ROOT_A) and _val(y) == ld64(w + EQ_ROOT_B)
+    if (ld64(w + EQ_SEEN_CAP) == 0) {
+        if (is_root != 0 and ld64(w + EQ_ROOT_TAKEN) != 0) {
+            return 1
+        }
+        st64(w + EQ_ROOT_TAKEN, 1)
+        if (is_root == 0) {
+            _eq_seen_add(w, ld64(w + EQ_ROOT_A), ld64(w + EQ_ROOT_B))
+        }
+    }
+    if (ld64(w + EQ_SEEN_CAP) != 0 and _eq_seen_add(w, _val(x), _val(y)) != 0) {
+        return 1
+    }
+    if (tx == T_MAP) {
+        let mx = _val(x)
+        if (ld64(mx + M_COUNT) != ld64(_val(y) + M_COUNT)) {
+            return 0
+        }
+        let other = stack_buf(16)
+        for (let i = 0; i < ld64(mx + M_USED); i++) {
+            let e = ld64(mx + M_ENTRIES) + i * E_SIZE
+            if (ld32(e + E_LIVE) == 0) {
+                continue
+            }
+            _map_get(other, y, ld64(e + E_KEY))
+            if (g_found == 0 or _eq_item(w, e + E_VAL, other) == 0) {
+                return 0
+            }
+        }
+        return 1
+    }
+    let n = _seq_count(x)
+    if (n != _seq_count(y)) {
+        return 0
+    }
+    let xi = stack_buf(16)
+    let yi = stack_buf(16)
+    for (let i = 0; i < n; i++) {
+        _seq_item(xi, x, i)
+        _seq_item(yi, y, i)
+        if (_eq_item(w, xi, yi) == 0) {
+            return 0
+        }
+    }
+    return 1
+}
+
+func _equal_flat(a, b) {
     let ta = _tag(a)
     let tb = _tag(b)
     if (ta == T_NULL or tb == T_NULL) {
@@ -430,7 +619,7 @@ func lvp_equal(a, b) {
     if (ta == T_STR) {
         return _str_same(_val(a), _val(b))
     }
-    if (ta == T_LIST or ta == T_DENSE or ta == T_MAP or ta == T_FILE) {
+    if (ta == T_FILE) {
         return _val(a) == _val(b)
     }
     if (ta >= T_BLOC_TYPE and ta <= T_PTR) {

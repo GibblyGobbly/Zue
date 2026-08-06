@@ -148,7 +148,11 @@ Operators do no hidden conversions. From loosest to tightest: `or`, `and`, `== !
 | `<`, `<=`, `>`, `>=` order two numbers, two strings or two chars | `1 < "a"` | error |
 | Conditions (`if`, `while`, `for`, `and`, `or`, `not`) must be booleans | `if (5)` | `condition must be a boolean, got int`: write `if (x != 0)` or `if (len(s) > 0)` |
 
-`1 == 1.0` is `true`. Two lists or maps are equal only when they are the same object.
+`1 == 1.0` is `true`. Two lists are equal when they hold equal items in the same order, and two maps when they have the
+same keys with equal values, in any order: `[1, [2]] == [1, [2]]` and `{"a": 1, "b": 2} == {"b": 2, "a": 1}`
+are `true`, and `contains` and `find` use the same rule. An int item never equals a float item
+(`[1] == [1.0]` is `false`). Any depth of nesting works, and so do lists and maps that contain
+themselves: two of them are equal when no difference can be found anywhere inside.
 
 Between two lists of numbers, `+ - * /` work element by element and return a dense list:
 `[1, 2] + [3, 4]` gives `d[4.0, 6.0]`: the items are floats even when both lists hold ints.

@@ -129,6 +129,7 @@ write(f, "saved")
 | Call depth | 100000 | `stack overflow: recursion is too deep` |
 | Stack | 1 GiB (smaller when address space is limited) | the same error |
 | One allocation | 64 TiB | `Runtime Error: out of memory` |
+| A string, a list or a dense list made at once (`range`, `dense_list`, `repeat`, `pad_left`, `pad_right`, `join`, `+`) | the machine's RAM plus swap (16 bytes per list item, 8 per dense item, 1 per character) | an `Argument Error` naming the function (`range`, `dense_list`, `repeat`, `pad_*`), otherwise `Runtime Error: out of memory` |
 | Elements in one list or dense list | 2^42 | `Runtime Error: out of memory` |
 | Box size | 1 to 16777216 bytes | `box size must be between 1 and 16777216 bytes` |
 | Live boxes | 16777216 | `too many boxes are live at once` |

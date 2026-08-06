@@ -8,7 +8,7 @@ print("a" <= "a")
 print("a" >= "a")
 print(1 < 1.0)
 print(2 <= 2.0)
-# CASE float printing keeps six significant digits
+# CASE floats print the shortest text that reads back exactly
 print(3.14159265)
 print(1.0 / 3.0)
 print(100000000.5)

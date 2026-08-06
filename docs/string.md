@@ -49,7 +49,7 @@ A negative start, an end past the last index, or a start after the end is an `In
 |---|---|---|
 | `s[i]` | char | Zero-based; a negative `i` counts from the end |
 | `char_at(s, i)` | string | One character; `""` when out of range |
-| `substring(s, start, n)` | string | `n` bytes from `start`, cut at the end |
+| `substring(s, start, n)` | string | `n` bytes from `start`, cut at the end; a negative `start` or `n` is an error |
 | `slice(s, start, end)` | string | Positions from 0, both ends included; same as `s[a:b]` |
 | `s[a:b]` | string | Positions from 0, both ends included |
 

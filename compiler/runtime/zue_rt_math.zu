@@ -919,8 +919,8 @@ func lb_dense_list(self_p, argc_i, argv_p) {
     if (n < 0) {
         lv_error(E_ARGUMENT, cstr("dense_list() size must not be negative"), cstr("Usage: dense_list(100, 1.5)"))
     }
-    # 2^36 floats take 512 GiB; a list that size is refused here with the line, not as a bare "out of memory".
-    if (n > 68719476736) {
+    # each item is an 8-byte float; a list larger than memory is refused here with the line, not as a bare "out of memory"
+    if (_too_big(n, 8)) {
         _errf(E_ARGUMENT, cstr("Use a smaller size."),
               cstr("dense_list() would make %lld items, too many to hold in memory"), n, 0, 0)
     }

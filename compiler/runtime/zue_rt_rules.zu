@@ -639,6 +639,7 @@ const RL_LAST_NUMBER = 4294967295
 const RL_RESTART = 2147483648
 const RL_SLOT_MASK = 4294967295
 const RL_COMPACT_MIN = 1024
+const RL_FIRST_CAP = 64    # entries in the table when it is first made
 
 # address_of() of the same variable twice in one block gives the same pointer: slot address -> number.
 space("rl_addr_map", 32)
@@ -684,7 +685,7 @@ func zue_mem_new(base, cells, kind, line, depth) {
         return 0
     }
     if (rl_entry_n == rl_entry_cap) {
-        let cap = 64
+        let cap = RL_FIRST_CAP
         if (rl_entry_cap != 0) {
             cap = rl_entry_cap * 2
         }
@@ -890,8 +891,8 @@ func zue_mem_end() {
             rl_next = 1
         }
         _rl_reset_table()
-        # A long block can leave a large table behind; give it back.
-        if (rl_entry_cap > 4096) {
+        # A long block can leave a large table behind (large: big enough to be compacted); give it back.
+        if (rl_entry_cap > RL_COMPACT_MIN) {
             free(rl_entries)
             rl_entries = 0
             rl_entry_cap = 0

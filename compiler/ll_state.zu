@@ -162,7 +162,7 @@ export func ll_use_native(name) {
     }
 }
 
-template Ctx { out, allocas, scopes, defers, nested, capmap, is_main, line, loops, dead, unsafe_marks, no_unbox, lv, spills, dbg, dbg_locs, spec }
+template Ctx { out, allocas, scopes, defers, nested, capmap, is_main, line, loops, dead, unsafe_marks, no_unbox, lv, spills, dbg, dbg_locs, spec, pooling, pool, taken }
 
 # Set by --gc=lowmem: the program asks the collector to use less memory and accepts a lower speed.
 export const GC_LOWMEM = [false]
@@ -177,7 +177,7 @@ export const SPECS = {}
 export const HOOKS = {"generic_call": null, "ex": null, "builtin": null}
 
 export func ll_new_ctx(is_main) {
-    return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, null, null, 0, {}, null)
+    return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, null, null, 0, {}, null, false, {}, [])
 }
 
 # Debug information, for zue build -g: a line table, so that gdb, valgrind and perf name the Zue
@@ -292,11 +292,56 @@ export func ll_new_label(prefix) {
     return "{prefix}{uid()}"
 }
 
-# A fresh LV slot, allocated in the entry block.
+# An LV slot for a temporary value, allocated in the entry block.
 export func ll_slot() {
+    if (ST.ctx.pooling) {
+        return ll_temp_alloca("%LV")
+    }
     let name = "%t{uid()}"
     append(ST.ctx.allocas, "  {name} = alloca %LV, align 8")
     return name
+}
+
+# Temporaries of a statement at the top level of a module hold nothing the next statement needs, so
+# when the statement ends they go back to a pool (by type) and later statements reuse them: a long
+# top-level body has as many slots as its largest statement needs, not a new set for every statement.
+# clang's SROA pass takes time for each slot in proportion to the size of the function, which made
+# long scripts quadratic (11,200 lines took 23 s). Slots that outlive their statement are made with
+# ll_alloca (variables, box memory) or taken out of the pool with ll_keep (deferred call arguments).
+export func ll_temp_alloca(kind_text) {
+    if (not ST.ctx.pooling) {
+        return ll_alloca(kind_text)
+    }
+    let name = ""
+    if (map_has(ST.ctx.pool, kind_text) and len(ST.ctx.pool[kind_text]) > 0) {
+        name = remove(ST.ctx.pool[kind_text], -1)
+    } else {
+        name = ll_alloca(kind_text)
+    }
+    append(ST.ctx.taken, [kind_text, name])
+    return name
+}
+
+# Keeps the temporary slot name for the rest of the function: it is not given back to the pool.
+export func ll_keep(name) {
+    let kept = []
+    for (let t in ST.ctx.taken) {
+        if (t[1] != name) {
+            append(kept, t)
+        }
+    }
+    ST.ctx.taken = kept
+}
+
+# Gives the temporaries taken since the last call back to the pool.
+export func ll_release_temps() {
+    for (let t in ST.ctx.taken) {
+        if (not map_has(ST.ctx.pool, t[0])) {
+            ST.ctx.pool[t[0]] = []
+        }
+        append(ST.ctx.pool[t[0]], t[1])
+    }
+    ST.ctx.taken = []
 }
 
 export func ll_alloca(kind_text) {
@@ -440,7 +485,7 @@ export func ll_args_array(items) {
         return "null"
     }
     let n = len(items)
-    let arr = ll_alloca("[{n} x %LV]")
+    let arr = ll_temp_alloca("[{n} x %LV]")
     for (let i = 0; i < n; i++) {
         let p = ll_reg()
         ll("{p} = getelementptr inbounds [{n} x %LV], ptr {arr}, i64 0, i64 {i}")

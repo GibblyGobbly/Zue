@@ -12,7 +12,7 @@ and explains it.
 | No infinity and no NaN | An argument outside a function's domain is an `Argument Error` (`sqrt(-4)`, `ln(0)`, `asin(2)`). A result too large for a float is a `Runtime Error` (`float overflow in exp()`) |
 | Integer overflow is an error | `9223372036854775807 + 1` stops with `integer overflow in '+'`. It never wraps |
 | Division by zero is an error | `1 / 0`, `5 % 0` and `mod(5, 0)` all stop the program |
-| Floats print with up to six significant digits | `sqrt(2)` prints `1.41421`. A float with no fraction prints with `.0` (`sqrt(16)` prints `4.0`). For more digits use `fixed(x, decimals)` or `to_string(x, digits)` |
+| Floats print exactly (the shortest text that reads back as the same number) | `sqrt(2)` prints `1.4142135623730951`. A float with no fraction prints with `.0` (`sqrt(16)` prints `4.0`). For fewer digits use `fixed(x, decimals)` or `to_string(x, digits)` |
 | Zue has no negative zero | `-0.0` is `0.0` |
 
 Operators: `+ - * / %`, `**` (power), and the bitwise `& | ^ << >> ~` on ints. `/` on two ints

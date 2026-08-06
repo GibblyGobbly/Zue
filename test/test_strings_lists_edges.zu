@@ -9,7 +9,7 @@ func pass(v) {
     return [v, null][0]
 }
 print(substring(pass("abc"), 1, pass(9223372036854775807)))
-print(substring("abc", 3, 5), substring("abc", 0, -1) == "")
+print(substring("abc", 3, 5) == "")
 # CASE substring with a negative start
 print(substring("abc", -5, 2))
 # CASE strings with NUL bytes compare by every byte
@@ -77,3 +77,5 @@ func pass(v) {
 print(int(pass(1e19)))
 # CASE dense_list too large to hold
 print(dense_list(100000000000000, 0.0))
+# CASE substring with a negative length
+print(substring("abc", 0, -1))

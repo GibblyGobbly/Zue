@@ -1,4 +1,4 @@
-A{s: hi, n: 1}
+A{s: "hi", n: 1}
 true
 false
-B{s: x}
+B{s: "x"}

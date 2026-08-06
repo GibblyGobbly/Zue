@@ -1,0 +1,7 @@
+Argument Error [E0412] in /tmp/zue_test_case.zu at line 1:
+  substring() length must not be negative, got -1
+
+   1 | print(substring("abc", 0, -1))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: The third argument is how many characters to take; use 0 or more.

@@ -15,7 +15,10 @@ use { cut } from "ranges.zu"
 
 export template Span { line, col, eline, ecol }
 template Label { span, text }
-export template Diag { kind, file, lines, span, ptext, msg, labels, hint, notes, trace }
+# guess is what the checker needs to suggest a name ("did you mean") for this error, or null. A
+# suggestion compares the name with every name in scope, so it is made only for the errors that are
+# printed (diag_shown), after all of them are known.
+export template Diag { kind, file, lines, span, ptext, msg, labels, hint, notes, trace, guess }
 
 # More errors than this are counted but not printed.
 let MAX_PRINTED = 100
@@ -54,7 +57,7 @@ export func span_tok(line, col, ecol) {
 
 # Records an error and returns it, so the caller can add labels, a hint or notes.
 export func diag_new(kind, span, msg) {
-    let d = Diag(kind, ST.src_file, ST.src_lines, span, "", msg, [], "", [], [])
+    let d = Diag(kind, ST.src_file, ST.src_lines, span, "", msg, [], "", [], [], null)
     append(DIAGS, d)
     ERROR_LINES["{ST.src_file}:{span.line}"] = true
     if (FILE_ORDER[ST.src_file] == null) {
@@ -426,9 +429,20 @@ func render_json(d) {
     return "\{\"kind\": {json_str(d.kind)}, \"code\": {code}, \"file\": {json_str(d.file)}, {json_span(d.span)}, \"message\": {json_str(d.msg)}, \"text\": {json_str(d.ptext)}, \"hint\": {json_str(d.hint)}, \"labels\": [{join(labels, ", ")}], \"notes\": {json_list(d.notes)}, \"trace\": {json_list(d.trace)}}"
 }
 
+# The recorded errors that diag_print_all prints, in that order: all of them as JSON, the first
+# MAX_PRINTED as text.
+export func diag_shown() {
+    let all = sorted_diags()
+    if (FORMAT.mode == "json" or len(all) <= MAX_PRINTED) {
+        return all
+    }
+    return cut(all, 0, MAX_PRINTED)
+}
+
 # Prints every recorded error, in the order of the source, and forgets them.
 export func diag_print_all() {
-    let all = sorted_diags()
+    let total = len(DIAGS)
+    let all = diag_shown()
     if (FORMAT.mode == "json") {
         for (let d in all) {
             print(render_json(d))
@@ -440,9 +454,6 @@ export func diag_print_all() {
     let shown = 0
     let last_blank = true
     for (let d in all) {
-        if (shown >= MAX_PRINTED) {
-            break
-        }
         if (not last_blank) {
             print("")
         }
@@ -453,7 +464,6 @@ export func diag_print_all() {
         last_blank = len(rows) > 0 and rows[len(rows) - 1] == ""
         shown += 1
     }
-    let total = len(all)
     if (total > shown) {
         print("... and {total - shown} more errors not shown")
     }
@@ -479,39 +489,60 @@ export func die_line(kind, line, msg) {
 }
 
 # The least number of edits that turn a into b, where an edit inserts, deletes or replaces one
-# character or swaps two neighbours.
-func edit_distance(a, b) {
+# character or swaps two neighbours; or limit + 1 as soon as it is clear the number is more than limit.
+# Two strings whose lengths differ by more than limit need more edits than that, and once two rows in
+# a row are all above limit no later row can come back under it, so most pairs stop early. rows holds
+# three lists of at least len(b) + 1 items, reused from call to call.
+func edit_distance(a, b, limit, rows) {
     let n = len(a)
     let m = len(b)
-    let d = []
-    for (let i = 0; i <= n; i++) {
-        let row = []
-        for (let j = 0; j <= m; j++) {
-            if (i == 0) {
-                append(row, j)
-            } else if (j == 0) {
-                append(row, i)
-            } else {
-                let cost = 1
-                if (a[i - 1] == b[j - 1]) {
-                    cost = 0
-                }
-                let best = d[i - 1][j - 1] + cost
-                if (d[i - 1][j] + 1 < best) {
-                    best = d[i - 1][j] + 1
-                }
-                if (row[j - 1] + 1 < best) {
-                    best = row[j - 1] + 1
-                }
-                if (i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1] and d[i - 2][j - 2] + 1 < best) {
-                    best = d[i - 2][j - 2] + 1
-                }
-                append(row, best)
+    if (n - m > limit or m - n > limit) {
+        return limit + 1
+    }
+    let older = rows[0]
+    let prev = rows[1]
+    let row = rows[2]
+    for (let j = 0; j <= m; j++) {
+        prev[j] = j
+    }
+    let prev_low = 0
+    for (let i = 1; i <= n; i++) {
+        row[0] = i
+        let low = i
+        let ca = a[i - 1]
+        for (let j = 1; j <= m; j++) {
+            let cost = 1
+            if (ca == b[j - 1]) {
+                cost = 0
+            }
+            let best = prev[j - 1] + cost
+            if (prev[j] + 1 < best) {
+                best = prev[j] + 1
+            }
+            if (row[j - 1] + 1 < best) {
+                best = row[j - 1] + 1
+            }
+            if (i > 1 and j > 1 and ca == b[j - 2] and a[i - 2] == b[j - 1] and older[j - 2] + 1 < best) {
+                best = older[j - 2] + 1
+            }
+            row[j] = best
+            if (best < low) {
+                low = best
             }
         }
-        append(d, row)
+        if (low > limit and prev_low > limit) {
+            return limit + 1
+        }
+        let spare = older
+        older = prev
+        prev = row
+        row = spare
+        prev_low = low
     }
-    return d[n][m]
+    if (prev[m] > limit) {
+        return limit + 1
+    }
+    return prev[m]
 }
 
 # The candidate that is closest to word, or null when none is close enough to be a likely typo:
@@ -524,15 +555,34 @@ export func suggest(word, candidates) {
     let lower = to_lower(word)
     let best = null
     let best_d = limit + 1
+    # a candidate within limit edits is at most len(word) + limit long
+    let rows = []
+    for (let k = 0; k < 3; k++) {
+        let r = []
+        for (let j = 0; j <= len(word) + limit; j++) {
+            append(r, 0)
+        }
+        append(rows, r)
+    }
     for (let c in candidates) {
-        if (c == word) {
+        if (c == word or len(c) - len(word) >= best_d or len(word) - len(c) >= best_d) {
             continue
         }
-        let dist = edit_distance(lower, to_lower(c))
+        let dist = edit_distance(lower, lower_name(c), best_d - 1, rows)
         if (dist < best_d) {
             best = c
             best_d = dist
         }
     }
     return best
+}
+
+# to_lower of a name, made once for each name.
+let LOWER_NAMES = {}
+
+func lower_name(c) {
+    if (not map_has(LOWER_NAMES, c)) {
+        LOWER_NAMES[c] = to_lower(c)
+    }
+    return LOWER_NAMES[c]
 }
