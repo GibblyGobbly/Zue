@@ -12,7 +12,7 @@
 #
 #   python3 tools/fuzz_programs.py [--programs 50] [--seed 1]
 #
-# Development tool only: the repository itself needs just clang and make.
+# Development tool only: the repository itself needs just LLVM and make.
 
 import argparse
 import os

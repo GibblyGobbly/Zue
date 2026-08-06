@@ -6,7 +6,7 @@
 #
 # The compiler finds its runtime relative to itself (bin/zue -> ../compiler/build_runtime.sh), so
 # the archive keeps that layout. The runtime object is built here, so the first program does not
-# have to compile it. Needs a built bin/zue (run make first) and clang.
+# have to compile it. Needs a built bin/zue (run make first) and LLVM (see compiler/llvm_build.sh).
 #
 # Usage: tools/package_release.sh
 set -e
@@ -22,7 +22,7 @@ compiler/build_runtime.sh > /dev/null
 rm -rf dist
 mkdir -p "$STAGE/bin" "$STAGE/compiler/runtime" "$STAGE/C"
 cp bin/zue "$STAGE/bin/"
-cp compiler/build_runtime.sh "$STAGE/compiler/"
+cp compiler/build_runtime.sh compiler/llvm_build.sh "$STAGE/compiler/"
 cp compiler/runtime/*.zu "$STAGE/compiler/runtime/"
 cp C/zue_rt_native.o C/zue_rt_native.cc "$STAGE/C/"
 cp -r examples "$STAGE/"

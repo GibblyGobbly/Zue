@@ -17,7 +17,7 @@ OUT=C
 prev=$OUT/boot2.ll
 n=2
 while [ $n -le 8 ]; do
-    "${CC:-clang}" -O1 -w "$prev" $OUT/boot_rt.ll -lm -lpthread -ldl -o $OUT/zue_stage$n || exit 1
+    compiler/llvm_build.sh -O1 -o $OUT/zue_stage$n "$prev" $OUT/boot_rt.ll || exit 1
     next=$OUT/boot$((n + 1)).ll
     $OUT/zue_stage$n compiler/zuec.zu "$next" . || exit 1
     if cmp -s "$prev" "$next"; then

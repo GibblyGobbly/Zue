@@ -1,7 +1,7 @@
 # Architecture
 
-This page describes how a program becomes a binary. The only external pieces are clang
-(LLVM 18), libc and libm.
+This page describes how a program becomes a binary. The only external pieces are LLVM 22 (`opt`,
+`llc`, `ld.lld`, `llvm-link`), libc and libm. `compiler/llvm_build.sh` runs the LLVM tools.
 
 ```
 prog.zu
@@ -12,10 +12,10 @@ prog.zu
   |  compiler/emit_llvm.zu    LLVM IR text
   v
 C/prog.ll ----------------+
-                          |   clang -O1
+                          |   opt -O1, llc -O1, ld.lld
 C/zue_rt_native.o -------+-------------->  prog   (native executable, links libc and libm)
   ^
-  |  clang -c
+  |  opt -O2, llc -O2
 C/zue_rt_native.ll
   ^
   |  zue --native compiler/runtime/*.zu    (compiler/emit_native.zu)
@@ -30,7 +30,7 @@ compiler in detail.
 
 | File | Role |
 |---|---|
-| `zuec.zu` | Driver: `build`, `run`, `emit`, and the internal `--native` and positional forms. Builds the clang command line |
+| `zuec.zu` | Driver: `build`, `run`, `emit`, and the internal `--native` and positional forms. Builds the command line for `compiler/llvm_build.sh` |
 | `lexer.zu`, `token.zu` | Source text to tokens, each with its line, column and end; keyword and operator tables, including the keyword aliases. A lexical error is recorded and lexing goes on |
 | `diag.zu` | The error reporter shared by the lexer, the parser and the checker: an error has a place (a span), labels, a hint and notes; they are collected, sorted by position and printed with the source line and carets. Also `suggest`, the "did you mean" search |
 | `error_codes.zu` | Generated from `error_codes.txt` by `tools/gen_error_codes.py`: the error codes with their explanations, and `code_for(message)`. The runtime has the matching `zue_rt_codes.zu` |
@@ -195,13 +195,13 @@ func lb_len(self_p, argc_i, argv_p) {    // _p is a pointer parameter, _i a C in
 
 | Target | Effect |
 | --- | --- |
-| `make` | build `bin/zue` from the seeds with clang only; stage 1 and stage 2 must emit identical IR |
+| `make` | build `bin/zue` from the seeds with LLVM's tools only; stage 1 and stage 2 must emit identical IR |
 | `make seed` | refresh `bootstrap/zuec.ll` and `bootstrap/zue_rt_native.ll` |
 | `make test` | run every test in `test/` against the recorded output, then the native unit tests |
 | `make clean` | remove `bin/` and `C/` |
 
 In a compiled program, `ZUE_RT_GC_STRESS=N` collects every N allocations and
-`ZUE_RT_GC_STATS=1` prints counts at exit. `opt-18 -passes=verify x.ll -disable-output` checks IR.
+`ZUE_RT_GC_STATS=1` prints counts at exit. `opt-22 -passes=verify x.ll -disable-output` checks IR.
 
 ## Repository layout
 

@@ -9,7 +9,7 @@
 ---
 
 Zue is a compiled, self-hosted programming language with JavaScript-like syntax. The compiler is
-written in Zue; it generates LLVM IR, and clang (LLVM) turns that into native machine code. A finished program is an
+written in Zue; it generates LLVM IR, and LLVM's own tools (`opt`, `llc`, `ld.lld`) turn that into native machine code. A finished program is an
 ordinary executable.
 
 - Dynamically typed, with no implicit conversions: integer overflow is an error, and conditions
@@ -23,24 +23,24 @@ ordinary executable.
 | Tool | Why | Version |
 |---|---|---|
 | Linux on x86-64 | the only platform tested | any recent distribution |
-| `clang` | turns LLVM IR into machine code | 18 (generated IR uses opaque pointers) |
+| LLVM: `opt`, `llc`, `ld.lld`, `llvm-link` | optimize the IR, turn it into machine code and link it | 22 (another version with `LLVM=N`) |
 | `make` | runs the build | any |
 | C library development files (`libc6-dev` on Debian) | the C and math libraries linked into every program | glibc |
 | `git` | to download the source | any |
 
 ```bash
-# Debian / Ubuntu
-sudo apt install clang make libc6-dev git
+# Debian / Ubuntu (LLVM 22 from apt.llvm.org if the distribution does not have it)
+sudo apt install llvm-22 lld-22 make libc6-dev git
 
 # Fedora
-sudo dnf install clang make glibc-devel git
+sudo dnf install llvm lld make glibc-devel git
 
 # Arch
-sudo pacman -S clang make git
+sudo pacman -S llvm lld make git
 ```
 
-Check that `clang --version` reports 18. Optional extras: `llvm-18` (the `opt-18` tool checks
-generated IR) and `valgrind`.
+Check that `opt-22 --version` (or `opt --version`) reports 22. On a distribution with another
+version, build with `make LLVM=N`. No C compiler is needed. Optional extra: `valgrind`.
 
 ## Get Zue and build it
 

@@ -5,7 +5,7 @@
 # must equal the recorded files in test/expected/. Files made of "# CASE <name>" sections run
 # each case on its own.
 # Usage: compiler/run_tests.sh [file.zu ...]   (default: test/*.zu)
-# VERIFY_IR=1 compiler/run_tests.sh   also runs $OPT (default opt-18) -passes=verify on every generated IR file.
+# VERIFY_IR=1 compiler/run_tests.sh   also runs opt -passes=verify on every generated IR file.
 # RECORD=1 compiler/run_tests.sh   writes test/expected/ from the compiled programs. Read the
 #                                  diff (git diff test/expected) before committing it.
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -14,7 +14,7 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 [ $# -eq 0 ] && set -- test/*.zu
 RT=compiler/runtime
-EXT=ll; CC=${CC:-clang}; OPT=${OPT:-opt-18}
+EXT=ll; BUILD="$ROOT/compiler/llvm_build.sh"; OPT=$("$BUILD" --which opt)
 RTSRC=$("$ROOT/compiler/build_runtime.sh") || exit 1
 CASE_FILE="$TMP/case.zu"
 EXPECT=test/expected
@@ -42,9 +42,8 @@ check_one() {
         if [ -n "$VERIFY_IR" ] && ! "$OPT" -passes=verify -disable-output "$TMP/$name.$EXT" 2> "$TMP/gerr"; then
             fail=$((fail + 1)); echo "[FAIL] $label (IR verifier)"; head -5 "$TMP/gerr"; return
         fi
-        if ! $CC -O1 -w "$TMP/$name.$EXT" "$RTSRC" \
-             -lm -lpthread -ldl -o "$TMP/$name" 2> "$TMP/gerr"; then
-            fail=$((fail + 1)); echo "[FAIL] $label (clang)"; head -5 "$TMP/gerr"; return
+        if ! "$BUILD" -O1 -o "$TMP/$name" "$TMP/$name.$EXT" "$RTSRC" 2> "$TMP/gerr"; then
+            fail=$((fail + 1)); echo "[FAIL] $label (llvm)"; head -5 "$TMP/gerr"; return
         fi
         timeout 60 "$TMP/$name" > "$TMP/c.out" 2> "$TMP/c.err" < /dev/null; cc=$?
     fi
@@ -77,8 +76,7 @@ check_golden() {
     src=$1; name=gold_$$
     gold="${src%.zu}.golden"
     if ! "$ZUEC" "$src" "$TMP/$name.$EXT" . > "$TMP/cerr" 2>&1 ||
-       ! $CC -O1 -w "$TMP/$name.$EXT" "$RTSRC" \
-            -lm -lpthread -ldl -o "$TMP/$name" 2> "$TMP/gerr"; then
+       ! "$BUILD" -O1 -o "$TMP/$name" "$TMP/$name.$EXT" "$RTSRC" 2> "$TMP/gerr"; then
         fail=$((fail + 1)); echo "[FAIL] $src (build)"; head -3 "$TMP/cerr" "$TMP/gerr"; return
     fi
     "$TMP/$name" > "$TMP/c.out" 2> "$TMP/c.err" < /dev/null

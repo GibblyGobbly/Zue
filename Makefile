@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 
-# Zue source -> LLVM IR -> native binary (clang).
+# Zue source -> LLVM IR -> native binary (LLVM's opt, llc and ld.lld, through compiler/llvm_build.sh).
 #
-#   make            build bin/zue from the seeds in bootstrap/ (needs clang 18)
+#   make            build bin/zue from the seeds in bootstrap/ (needs LLVM 22: llvm-22 and lld-22)
 #   make test       compile and run every test, compare with test/expected/
 #   make verify-ir  run the tests and check every generated IR file with LLVM's verifier (opt)
-#   make LLVM=22    use clang-22 and opt-22 (any target)
+#   make LLVM=23    use another LLVM version (opt-23, llc-23, ld.lld-23; any target)
 #   make verify-debug  build the examples with zue build -g and check the line tables
 #   make codes-check   check that the error code files are generated, every example gets its code, and every recorded error has one
 #   make fuzz       compare random expressions and programs with an independent model (needs python3)
@@ -15,28 +15,21 @@
 #   make clean      remove build output
 #
 # bootstrap/zuec.ll and bootstrap/zue_rt_native.ll are the LLVM IR of the compiler and the
-# runtime, kept in the repository so the first compiler can be built with clang alone.
+# runtime, kept in the repository so the first compiler can be built with LLVM's tools alone.
 
 ifeq (,$(filter -j%,$(MAKEFLAGS)))
 MAKEFLAGS += -j$(shell nproc)
 endif
 
-# The LLVM toolchain: "make LLVM=22" uses clang-22 and opt-22. By default clang and opt-18.
-# Objects built by one version are not reused by another: run "make clean" when switching.
-LLVM ?=
-ifeq ($(LLVM),)
-CLANG = clang
-OPT = opt-18
-else
-CLANG = clang-$(LLVM)
-OPT = opt-$(LLVM)
+# The LLVM version comes from compiler/llvm_build.sh unless "make LLVM=N" picks one; the runtime
+# object records the version that made it and is rebuilt for another.
+ifneq ($(LLVM),)
+export LLVM
 endif
-export CC := $(CLANG)
-export OPT
+BUILD = compiler/llvm_build.sh
+OPT = $(shell $(BUILD) --which opt)
 BINDIR = bin
 OUT = C
-
-LIBS = -lm -lpthread -ldl
 
 SEED = bootstrap/zuec.ll
 SEED_RT = bootstrap/zue_rt_native.ll
@@ -49,10 +42,10 @@ all: $(BINDIR)/zue
 # IR again. The two compiler IR files must match.
 $(BINDIR)/zue: $(SEED) $(SEED_RT) $(COMPILER_LU) $(RT_LU)
 	@mkdir -p $(BINDIR) $(OUT)
-	@$(CLANG) -O1 -w $(SEED) $(SEED_RT) $(LIBS) -o $(OUT)/zue_seed
+	@$(BUILD) -O1 -o $(OUT)/zue_seed $(SEED) $(SEED_RT)
 	@$(OUT)/zue_seed --native $(RT_LU) -o $(OUT)/boot_rt.ll
 	@$(OUT)/zue_seed compiler/zuec.zu $(OUT)/boot1.ll .
-	@$(CLANG) -O1 -w $(OUT)/boot1.ll $(OUT)/boot_rt.ll $(LIBS) -o $(OUT)/zue_stage1
+	@$(BUILD) -O1 -o $(OUT)/zue_stage1 $(OUT)/boot1.ll $(OUT)/boot_rt.ll
 	@$(OUT)/zue_stage1 compiler/zuec.zu $(OUT)/boot2.ll .
 	@cmp $(OUT)/boot1.ll $(OUT)/boot2.ll
 	@cp $(OUT)/zue_stage1 $@

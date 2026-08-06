@@ -88,8 +88,8 @@ IR larger. `zue run -g prog.zu` and `zue emit -g prog.zu` take it too.
 
 ## Reporting a compiler bug
 
-If clang rejects the IR that Zue generated, the message says `Internal compiler error`. That is a bug in
-Zue, not in your program. The IR is kept in `C/<name>.ll`; `opt-18 -passes=verify C/<name>.ll -disable-output`
+If LLVM rejects the IR that Zue generated, the message says `Internal compiler error`. That is a bug in
+Zue, not in your program. The IR is kept in `C/<name>.ll`; `compiler/llvm_build.sh -c -o /dev/null C/<name>.ll`
 shows what LLVM objected to. Please report the Zue file and the IR.
 
 ## The error codes

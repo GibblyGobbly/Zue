@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 #
-# zue: the Zue compiler, written in Zue. It turns a .zu program into LLVM IR and has clang
-# build a native binary against the runtime in compiler/runtime (also written in Zue and
+# zue: the Zue compiler, written in Zue. It turns a .zu program into LLVM IR and has LLVM's tools
+# (opt, llc, ld.lld) build a native binary against the runtime in compiler/runtime (also written in Zue and
 # compiled by emit_native.zu).
 #
 #   zue build prog.zu -o prog [-S]     build a binary; -S keeps C/prog.ll and stops
@@ -52,20 +52,19 @@ func shell_quote(text) {
     return q + replace(text, q, "'\\''") + q
 }
 
-# The shell command that turns generated IR into a binary. The compiler's own files are
-# found through ZUE_HOME, or else from the place of the running zue binary (bin/zue is
-# one level below the tree). CC overrides the C compiler.
+# The shell command that turns generated IR into a binary with LLVM's tools (compiler/llvm_build.sh).
+# The compiler's own files are found through ZUE_HOME, or else from the place of the running zue
+# binary (bin/zue is one level below the tree).
 func build_command(code_path, out_path) {
     let home = "$\{ZUE_HOME:-$(dirname \"$(dirname \"$(readlink -f /proc/$PPID/exe)\")\")}"
-    let rt = "\"$(H=\"{home}\"; \"$H/compiler/build_runtime.sh\")\""
+    let setup = "H=\"{home}\"; RT=\"$(\"$H/compiler/build_runtime.sh\")\" || exit 1; "
     if (RELEASE[0]) {
         # The program and the runtime are joined into one module and optimized together, so that the small
         # runtime functions (allocation, indexing, the write barrier) are inlined into the program.
         # It takes about two seconds longer to build and runs about 10 to 20 percent faster.
-        let all = "{code_path}.release.ll"
-        return "RT={rt}; $\{LLVM_LINK:-llvm-link-18} -S {shell_quote(code_path)} \"$\{RT%.o}.ll\" -o {shell_quote(all)} && $\{CC:-clang} -O2 -w {shell_quote(all)} -lm -lpthread -ldl -o {shell_quote(out_path)}"
+        return setup + "\"$H/compiler/llvm_build.sh\" -O2 --one-module -o {shell_quote(out_path)} {shell_quote(code_path)} \"$\{RT%.o}.ll\""
     }
-    return "$\{CC:-clang} -O1 -w {shell_quote(code_path)} {rt} -lm -lpthread -ldl -o {shell_quote(out_path)}"
+    return setup + "\"$H/compiler/llvm_build.sh\" -O1 -o {shell_quote(out_path)} {shell_quote(code_path)} \"$RT\""
 }
 
 func usage() {
@@ -124,9 +123,9 @@ func build_program(path, out_path, stop) {
     let rc = system(build_command(code_path, out_path))
     if (rc != 0) {
         print("")
-        print("Internal compiler error: clang rejected the code Zue generated (exit {rc}).")
+        print("Internal compiler error: LLVM rejected the code Zue generated (exit {rc}).")
         print("This is a bug in Zue, not in your program. Please report it with {ST.src_file} and the generated IR, which was kept in {code_path}.")
-        print("To look at the IR: opt-18 -passes=verify {code_path} -disable-output")
+        print("To check the IR again: compiler/llvm_build.sh -c -o /dev/null {code_path}")
         exit(1)
     }
     print("[OK] built {out_path} from {code_path}")
@@ -168,7 +167,7 @@ func run_main(a) {
     let rc = system(build_command("C/{name}.ll", out_path))
     if (rc != 0) {
         print("")
-        print("Internal compiler error: clang rejected the code Zue generated (exit {rc}).")
+        print("Internal compiler error: LLVM rejected the code Zue generated (exit {rc}).")
         print("This is a bug in Zue, not in your program. Please report it with {ST.src_file} and the generated IR, which was kept in C/{name}.ll.")
         exit(1)
     }

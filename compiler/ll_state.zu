@@ -305,7 +305,7 @@ export func ll_slot() {
 # Temporaries of a statement at the top level of a module hold nothing the next statement needs, so
 # when the statement ends they go back to a pool (by type) and later statements reuse them: a long
 # top-level body has as many slots as its largest statement needs, not a new set for every statement.
-# clang's SROA pass takes time for each slot in proportion to the size of the function, which made
+# LLVM's SROA pass takes time for each slot in proportion to the size of the function, which made
 # long scripts quadratic (11,200 lines took 23 s). Slots that outlive their statement are made with
 # ll_alloca (variables, box memory) or taken out of the pool with ll_keep (deferred call arguments).
 export func ll_temp_alloca(kind_text) {

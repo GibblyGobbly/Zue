@@ -1,14 +1,17 @@
 # Getting Started
 
-Zue is a compiled language. The Zue compiler turns a program into LLVM IR, and `clang` turns
-the IR into a native executable.
+Zue is a compiled language. The Zue compiler turns a program into LLVM IR, and LLVM's tools turn
+the IR into a native executable: `opt` optimizes it, `llc` makes machine code and `ld.lld` links it
+with the C library (all through `compiler/llvm_build.sh`). No C compiler is needed.
 
 ## Choosing the LLVM version
 
-`make` uses `clang` (18 here). To build and test with another installed version, pass it by number:
-`make LLVM=22` and `make test LLVM=22` use `clang-22` and `opt-22`. Objects built by one version are
-not reused by another, so run `make clean` when switching. `bench/numeric_benchmarks.sh 22 -O2`
-times the programs in `bench/numeric` with a chosen version and optimization level.
+`make` uses LLVM 22. To build and test with another installed version, pass it by number:
+`make LLVM=23` and `make test LLVM=23` use `opt-23`, `llc-23` and `ld.lld-23` (or the plain `opt`,
+`llc` and `ld.lld` when they are that version, as on Fedora and Arch). `zue build` and `zue run` take
+the version from the `LLVM` environment variable the same way. The runtime object is rebuilt when the
+version changes. `bench/numeric_benchmarks.sh 23 -O2` times the programs in `bench/numeric` with a
+chosen version and optimization level.
 
 ## Requirements
 
@@ -16,22 +19,24 @@ Linux. The project is developed and tested on x86-64 with glibc.
 
 | Tool | Used for |
 |---|---|
-| `clang` (LLVM 18) | Compiling the generated IR and the runtime, and building the first compiler from the seeds |
+| LLVM 22: `opt`, `llc`, `ld.lld`, `llvm-link` | Compiling the generated IR and the runtime, linking programs, and building the first compiler from the seeds |
 | `make` | Building `bin/zue` and running the tests |
 
-Compiled programs link libc, libm, libpthread and libdl.
+Compiled programs link libc, libm, libpthread and libdl. The linker finds the C library and its start
+files (`Scrt1.o`, `crti.o`, `crtn.o`) through `ldd /bin/sh`, so the C development files must be
+installed.
 
 On Ubuntu or Debian:
 
 ```bash
-sudo apt install clang make libc6-dev
+sudo apt install llvm-22 lld-22 make libc6-dev
 ```
 
 ## Download a release
 
 Each version is published on the GitHub Releases page as `zue-<version>-linux-x86_64.tar.gz`, with a
 `.sha256` file. It holds a built `bin/zue` and the runtime, so no `make` is needed. It still needs
-`clang` on the machine.
+LLVM 22 (`llvm-22` and `lld-22`) on the machine.
 
 ```bash
 tar xzf zue-0.0.3-linux-x86_64.tar.gz
@@ -49,7 +54,7 @@ make clean      # removes bin/ and C/
 
 `make` does this, in order:
 
-1. Builds a seed compiler from `bootstrap/zuec.ll` and `bootstrap/zue_rt_native.ll` with clang.
+1. Builds a seed compiler from `bootstrap/zuec.ll` and `bootstrap/zue_rt_native.ll` with LLVM's tools.
 2. Uses it to compile the runtime and the compiler sources of the working tree.
 3. Builds that compiler (stage 1), uses it to compile the compiler again (stage 2), and
    requires the two IR files to be identical.
@@ -71,21 +76,21 @@ the new seeds together with the change that needs them. See [architecture](archi
 
 | Command | Effect |
 |---|---|
-| `zue build prog.zu -o out` | Write `C/prog.ll`, then build `out` with clang. Without `-o` the output is named after the file |
+| `zue build prog.zu -o out` | Write `C/prog.ll`, then build `out` with LLVM's tools. Without `-o` the output is named after the file |
 | `zue build prog.zu -S` | Write `C/prog.ll` and stop |
 | `zue run prog.zu [args...]` | Build into `C/run/prog`, run it, and exit with its status |
 | `zue emit prog.zu [-o out.ll]` | Write the IR only; the default is `C/prog.ll` |
 | `zue check prog.zu` | Find every lexical, syntax, type and import error without building; prints nothing when there is none |
 | `zue explain [CODE]` | Describe an error code such as `E0201`, with an example and the fix; without a code, list them all |
 | `zue build -g prog.zu` | Add line tables so that gdb, valgrind and perf show Zue lines (`run` and `emit` take `-g` too) |
-| `zue build --release prog.zu` | Join the program and the runtime and optimize them together: about 2 seconds slower to build, 10 to 20 percent faster to run (`run` takes `--release` too; needs `llvm-link-18`) |
+| `zue build --release prog.zu` | Join the program and the runtime and optimize them together: about 2 seconds slower to build, 10 to 20 percent faster to run (`run` takes `--release` too) |
 | `zue --error-format=json check prog.zu` | Print each compile error as one JSON object per line, for editors |
 
 How errors look and how to read them is in [errors](errors.md).
 
 Generated IR is written to a `C/` directory in the current directory (it is git-ignored in this
-repository), so it can be read before a binary exists. Set `CC` to use another C compiler
-driver for the final step (the default is `clang`).
+repository), so it can be read before a binary exists. Set `LLVM` to use another LLVM version, or
+`OPT`, `LLC`, `LLD` and `LLVM_LINK` to name the tools directly.
 
 ### Where zue finds the runtime
 

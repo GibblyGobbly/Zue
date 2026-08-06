@@ -11,7 +11,7 @@
 #
 #   python3 tools/fuzz_expressions.py [--programs 20] [--per-program 100] [--seed 1]
 #
-# This is a development tool: the repository itself needs only clang and make.
+# This is a development tool: the repository itself needs only LLVM and make.
 
 import argparse
 import os

@@ -18,7 +18,7 @@ compared with a recorded copy.
 | `zue ast prog.zu` | Prints the syntax tree, one top-level statement per line, so parser output can be read and compared |
 | `zue unparse prog.zu` | Writes the program back as source, with every binary expression parenthesized |
 | `make round-trip` | Runs `tools/check_round_trip.sh`: for every Zue file in the project, parse, unparse, parse again, and require the same tree |
-| `make verify-ir` | Runs the tests and checks every generated IR file with LLVM's verifier (`opt-18`) |
+| `make verify-ir` | Runs the tests and checks every generated IR file with LLVM's verifier (`opt`) |
 | `make codes-check` | Checks that the error code files are generated from `compiler/error_codes.txt` and that every example of the table causes the error it names |
 | `make verify-debug` | Builds the examples with `zue build -g` and checks the line tables and the IR |
 | `make fuzz` | Needs `python3`. `tools/fuzz_expressions.py` builds random int and bool expressions and compares what Zue prints with an independent evaluator; `tools/fuzz_programs.py` does the same for whole programs with loops, branches, functions and scoping, and also runs each program after `zue unparse`; `tools/fuzz_annotations.py` builds random type annotations such as `list<map<float>>` and checks parsing, the unparse round trip, the result, and that a wrong element type is a Type Error; `tools/fuzz_syntax_errors.py` breaks real programs (deleting, swapping and adding tokens and brackets, cutting the file short) and checks that `zue check` never crashes or hangs, always reports a line that exists, and reports at most one syntax error per line |
@@ -61,7 +61,7 @@ The runner prints one `[PASS]`, `[FAIL]` or `[SKIP]` line per test and a summary
 For each `test/<name>.zu`, `compiler/run_tests.sh`:
 
 1. Compiles it with `bin/zue` (the positional form `zue input.zu output.ll <root>`).
-2. Links the IR with the runtime object using clang.
+2. Links the IR with the runtime object using LLVM's tools (`compiler/llvm_build.sh`).
 3. Runs the binary from the repository root, with standard input closed and a 60 second limit.
 4. Compares standard output, standard error and the exit status with the files in
    `test/expected/`: `<key>.out`, `<key>.err` and `<key>.rc`. The key is the path with every
