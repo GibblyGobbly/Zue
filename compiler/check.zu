@@ -173,19 +173,17 @@ func fits(t, target) {
 
 # list<int> has the kind list and the element type int; a plain list has no element type.
 func kind_of(t) {
-    let i = index_of(t, "<")
-    if (i < 0) {
+    if (not contains(t, "<")) {
         return t
     }
-    return cut(t, 0, i)
+    return cut(t, 0, index_of(t, "<"))
 }
 
 func elem_of(t) {
-    let i = index_of(t, "<")
-    if (i < 0) {
+    if (not contains(t, "<")) {
         return null
     }
-    return cut(t, i + 1, len(t) - 1)
+    return cut(t, index_of(t, "<") + 1, len(t) - 1)
 }
 
 # The element type of a list or map literal whose items have types ts, or null when they differ.
@@ -235,7 +233,7 @@ func adapt_to(n, want) {
                 lit_record(n, "float")
             } else {
                 n.k = "float"
-                if (index_of(n.v, ".") < 0) {
+                if (not contains(n.v, ".")) {
                     n.v = "{n.v}.0"
                 }
             }
@@ -303,7 +301,7 @@ func lit_record(n, what) {
         append(LITERALS, n)
     }
     n.ad = CALLS[len(CALLS) - 1].body
-    let before = n.ads[key]
+    let before = map_get(n.ads, key, null)
     if (before == what) {
         return null
     }
@@ -332,13 +330,13 @@ func settle_literals() {
     for (let n in LITERALS) {
         let sigs = null
         if (n.ad != null) {
-            sigs = BODY_SIGS[n.ad]
+            sigs = map_get(BODY_SIGS, n.ad, null)
         }
         let floats = 0
         let all = sigs != null
         if (sigs != null) {
             for (let key in sigs) {
-                if (n.ads[key] == "float") {
+                if (map_get(n.ads, key, null) == "float") {
                     floats += 1
                 } else {
                     all = false
@@ -346,11 +344,11 @@ func settle_literals() {
             }
         }
         n.ad = null
-        if (n.ads["*"] == "any") {
+        if (map_get(n.ads, "*", null) == "any") {
             n.ad = "dyn"
         } else if (floats > 0 and all) {
             n.k = "float"
-            if (index_of(n.v, ".") < 0) {
+            if (not contains(n.v, ".")) {
                 n.v = "{n.v}.0"
             }
         } else if (floats > 0) {
@@ -396,8 +394,8 @@ func adapt_expr(n, et, want) {
 
 # The checker type for a type written in the source. An unknown name is an error when strict, else any.
 func annot(text, span, strict) {
-    let i = index_of(text, "<")
-    if (i >= 0) {
+    if (contains(text, "<")) {
+        let i = index_of(text, "<")
         let kind = cut(text, 0, i)
         let inner = annot(cut(text, i + 1, len(text) - 1), span, strict)
         if (inner == "any") {
@@ -411,7 +409,7 @@ func annot(text, span, strict) {
     if (text == "list" or text == "map" or text == "function") {
         return text
     }
-    let td = TYPEDEFS[text]
+    let td = map_get(TYPEDEFS, text, null)
     if (td != null) {
         if (td.is_bloc == true or td.is_template == true) {
             return text
@@ -498,7 +496,7 @@ func type_origin(name) {
     if (i < 0) {
         return null
     }
-    if (ORIGINS[i] == null or ORIGINS[i][name] == null) {
+    if (ORIGINS[i] == null or not map_has(ORIGINS[i], name)) {
         return null
     }
     return node_span(ORIGINS[i][name])
@@ -508,7 +506,7 @@ func type_origin(name) {
 func scope_of(name) {
     let i = len(SCOPES) - 1
     while (i >= 0) {
-        if (SCOPES[i][name] != null) {
+        if (map_has(SCOPES[i], name)) {
             return SCOPES[i]
         }
         i -= 1
@@ -539,20 +537,20 @@ func name_candidates(scopes) {
     let seen = {}
     for (let sc in scopes) {
         for (let key in map_keys(sc)) {
-            if (index_of(key, ":") < 0 and seen[key] == null) {
+            if (not contains(key, ":") and not map_has(seen, key)) {
                 seen[key] = true
                 append(out, key)
             }
         }
     }
     for (let key in map_keys(HOISTED)) {
-        if (seen[key] == null) {
+        if (not map_has(seen, key)) {
             seen[key] = true
             append(out, key)
         }
     }
     for (let key in map_keys(BUILTIN_NAMES)) {
-        if (seen[key] == null) {
+        if (not map_has(seen, key)) {
             append(out, key)
         }
     }
@@ -564,7 +562,7 @@ func name_candidates(scopes) {
 # as unknown.
 func check_name(n, what) {
     let name = n.name
-    if (BUILTIN_NAMES[name] == true or name == "null") {
+    if (map_has(BUILTIN_NAMES, name) or name == "null") {
         return false
     }
     append(PENDING, {"span": node_span(n), "name": name, "what": what, "scopes": cut(SCOPES, 0, len(SCOPES))})
@@ -622,7 +620,7 @@ func fail_at(span, msg, kind = "Type Error") {
     if (span.col == 0) {
         key = "{span.line}:{msg}"
     }
-    if (REPORTED[key] != null) {
+    if (map_has(REPORTED, key)) {
         return null
     }
     REPORTED[key] = true
@@ -1028,7 +1026,7 @@ func ck_strict_args(n, name, alts, argtypes) {
 }
 
 func article(t) {
-    if (index_of("aeiouAEIOU", char_at(t, 0)) >= 0) {
+    if (contains("aeiouAEIOU", char_at(t, 0))) {
         return "an"
     }
     return "a"
@@ -1063,7 +1061,7 @@ func field_index(td, field) {
 
 # The definition t names when t is a bloc or template type, else null.
 func object_def(t) {
-    let td = TYPEDEFS[t]
+    let td = map_get(TYPEDEFS, t, null)
     if (td != null and (td.is_bloc == true or td.is_template == true)) {
         return td
     }
@@ -1151,10 +1149,10 @@ func ck_call(n) {
     }
     let name = n.callee.name
     let known = lookup(name)
-    if (known == null and BUILTIN_NAMES[name] != true and check_name(n.callee, "Function")) {
+    if (known == null and not map_has(BUILTIN_NAMES, name) and check_name(n.callee, "Function")) {
         return "any"
     }
-    if (TYPEDEFS[name] != null and known == "type") {
+    if (map_has(TYPEDEFS, name) and known == "type") {
         if (TYPEDEFS[name].is_bloc == true or TYPEDEFS[name].is_template == true) {
             return ck_typed_construct(n, name, argtypes)
         }
@@ -1168,14 +1166,14 @@ func ck_call(n) {
     }
     # The body of a function is trusted only for the declaration the name stands for here (a parameter or a
     # local of the same name hides it) and only when the name is never assigned: after g = h a call of g runs h.
-    if (known == "function" and ASSIGNED[name] != true) {
+    if (known == "function" and not map_has(ASSIGNED, name)) {
         let fkey = "fn:{name}"
         let fidx = scope_index(fkey)
         if (fidx >= 0 and fidx == scope_index(name)) {
             return ck_user_call(name, SCOPES[fidx][fkey], fidx, argtypes, n)
         }
     }
-    if (known == null and BUILTIN_NAMES[name] == true) {
+    if (known == null and map_has(BUILTIN_NAMES, name)) {
         return ck_builtin(n, name, argtypes)
     }
     return "any"
@@ -1209,12 +1207,12 @@ func ck_builtin(n, name, argtypes) {
         return first
     }
     let result = "any"
-    if (SIGS[name] != null) {
+    if (map_has(SIGS, name)) {
         if (STRICT) {
             ck_strict_args(n, name, SIGS[name], argtypes)
         }
         result = ck_builtin_call(n, name, SIGS[name], argtypes)
-    } else if (RESULTS[name] != null) {
+    } else if (map_has(RESULTS, name)) {
         result = RESULTS[name]
     }
     if (el == null) {
@@ -1241,7 +1239,7 @@ func ck_builtin(n, name, argtypes) {
 func scope_index(key) {
     let i = len(SCOPES) - 1
     while (i >= 0) {
-        if (SCOPES[i][key] != null) {
+        if (map_has(SCOPES[i], key)) {
             return i
         }
         i -= 1
@@ -1346,13 +1344,13 @@ func ck_user_call(name, fn, idx, argtypes, call) {
     }
     let sep = ","
     let mkey = "{name}({join(types, sep)})"
-    if (MEMO[mkey] != null) {
+    if (map_has(MEMO, mkey)) {
         spec_site(call, fn, idx, types, MEMO[mkey])
         return MEMO[mkey]
     }
-    if (INPROG[mkey] != null) {
+    if (map_has(INPROG, mkey)) {
         RECURSIVE[mkey] = true
-        if (ASSUME[mkey] != null) {
+        if (map_has(ASSUME, mkey)) {
             spec_site(call, fn, idx, types, ASSUME[mkey])
             return ASSUME[mkey]
         }
@@ -1361,14 +1359,14 @@ func ck_user_call(name, fn, idx, argtypes, call) {
     INPROG[mkey] = true
     let rets1 = check_body(name, fn, idx, types, line)
     let result = join_returns(rets1)
-    if (RECURSIVE[mkey] == true and not is_scalar(result)) {
+    if (map_has(RECURSIVE, mkey) and not is_scalar(result)) {
         result = try_assume(name, fn, idx, types, line, mkey, rets1, result)
     }
     MEMO[mkey] = result
     if (MEMOLOG != null) {
         append(MEMOLOG, mkey)
     }
-    INPROG[mkey] = null
+    map_delete(INPROG, mkey)
     spec_site(call, fn, idx, types, result)
     return result
 }
@@ -1435,7 +1433,7 @@ func check_body(name, fn, idx, types, line) {
     }
     let body = "{fn.line}:{fn.col}:{name}"
     let key = join(types, ",")
-    if (BODY_SIGS[body] == null) {
+    if (not map_has(BODY_SIGS, body)) {
         BODY_SIGS[body] = []
     }
     if (not contains(BODY_SIGS[body], key)) {
@@ -1490,7 +1488,7 @@ func try_assume(name, fn, idx, types, line, mkey, rets1, first) {
     let hits = QUIET_HITS
     let rets = check_body(name, fn, idx, types, line)
     QUIET -= 1
-    ASSUME[mkey] = null
+    map_delete(ASSUME, mkey)
     if (QUIET_HITS == hits and join_returns(rets) == cand) {
         if (saved_log != null) {
             for (let e in MARKLOG) {
@@ -1508,7 +1506,7 @@ func try_assume(name, fn, idx, types, line, mkey, rets1, first) {
     }
     undo_marks(MARKLOG)
     for (let k in MEMOLOG) {
-        MEMO[k] = null
+        map_delete(MEMO, k)
     }
     MARKLOG = saved_log
     MEMOLOG = saved_memo
@@ -1548,7 +1546,7 @@ func ck_func(n) {
 func ck_expr(n) {
     let k = n.k
     if (k == "num") {
-        if (len(CALLS) > 0 and n.ads != null and n.ads[call_key()] == "float") {
+        if (len(CALLS) > 0 and n.ads != null and map_get(n.ads, call_key(), null) == "float") {
             return "float"
         }
         return "int~"
@@ -1665,7 +1663,7 @@ func ck_expr(n) {
     }
     if (k == "incdec") {
         let t = lookup(n.name)
-        if (t == null and BUILTIN_NAMES[n.name] != true) {
+        if (t == null and not map_has(BUILTIN_NAMES, n.name)) {
             append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": cut(SCOPES, 0, len(SCOPES))})
             return "any"
         }
@@ -1722,7 +1720,7 @@ func ck_assign(n) {
     let et = ck_expr(n.e)
     let s = scope_of(n.name)
     if (s == null) {
-        if (BUILTIN_NAMES[n.name] != true) {
+        if (not map_has(BUILTIN_NAMES, n.name)) {
             append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": cut(SCOPES, 0, len(SCOPES))})
         }
         return null
@@ -2000,7 +1998,7 @@ func mark_sty(n, t) {
         if (n.stys == null) {
             n.stys = {}
         }
-        let before = n.stys[key]
+        let before = map_get(n.stys, key, null)
         if (before == null) {
             n.stys[key] = t
         } else if (before != t) {
@@ -2035,10 +2033,17 @@ func undo_marks(log) {
         let e = log[i]
         if (e[1] == "sty") {
             e[0].sty = e[2]
-        } else if (e[1] == "stys") {
-            e[0].stys[e[3]] = e[2]
-        } else if (e[1] == "ads") {
-            e[0].ads[e[3]] = e[2]
+        } else if (e[1] == "stys" or e[1] == "ads") {
+            # null was "no entry yet": the entry is removed again
+            let table = e[0].stys
+            if (e[1] == "ads") {
+                table = e[0].ads
+            }
+            if (e[2] == null) {
+                map_delete(table, e[3])
+            } else {
+                table[e[3]] = e[2]
+            }
         } else {
             e[0].spec = e[2]
         }
@@ -2069,7 +2074,7 @@ func report_undefined() {
         return null
     }
     for (let p in PENDING) {
-        if (HOISTED[p.name] != null) {
+        if (map_has(HOISTED, p.name)) {
             continue
         }
         undefined_error(p.span, p.name, p.what, p.scopes)

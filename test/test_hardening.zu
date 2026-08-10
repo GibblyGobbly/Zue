@@ -28,7 +28,6 @@ print(words)
 # CASE index_of positions
 print(index_of("hello", "h"))
 print(index_of("hello", "o"))
-print(index_of("hello", "z"))
 print(index_of("hello", ""))
 print(last_index_of("hello", "h"))
 print(last_index_of("hello", "l"))
@@ -66,3 +65,5 @@ func f(n) {
 }
 print(f(99990))
 print(f(100000))
+# CASE index_of of a missing text is an error
+print(index_of("hello", "z"))

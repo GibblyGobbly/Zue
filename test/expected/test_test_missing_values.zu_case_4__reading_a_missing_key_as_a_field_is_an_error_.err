@@ -1,0 +1,7 @@
+Name Error [E0402] in /tmp/zue_test_case.zu at line 2:
+  Key 'zz' does not exist in the map
+
+   2 | print(m.zz)
+     |       ^^^^
+
+Hint: Check with map_has(m, key) first, or give a default: map_get(m, key, default).

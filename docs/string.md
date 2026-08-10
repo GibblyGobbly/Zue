@@ -58,8 +58,8 @@ A negative start, an end past the last index, or a start after the end is an `In
 | Function | Returns | Notes |
 |---|---|---|
 | `contains(s, sub)` | bool | Also works on a list |
-| `index_of(s, sub)` | int | First match, `-1` if none. An optional third argument is the start index |
-| `last_index_of(s, sub)` | int | Last match, `-1` if none |
+| `index_of(s, sub)` | int | First match; an `Argument Error` if there is none (check with `contains` first). An optional third argument is the start index |
+| `last_index_of(s, sub)` | int | Last match; an `Argument Error` if there is none |
 | `index_of_any(s, set)` | int | First byte that is in `set`, `-1` if none. Optional `start` |
 | `skip_chars(s, set)` | int | First byte that is not in `set`, or `len(s)`. Optional `start` |
 | `starts_with(s, pre)`, `ends_with(s, suf)` | bool | |
@@ -310,11 +310,10 @@ func is_palindrome(text) {
 }
 
 func shift_letter(c, k) {
-    let i = index_of(ALPHABET, c)
-    if (i < 0) {
+    if (not contains(ALPHABET, c)) {
         return c
     }
-    return char_at(ALPHABET, mod(i + k, 26))
+    return char_at(ALPHABET, mod(index_of(ALPHABET, c) + k, 26))
 }
 
 func caesar(text, k) {
@@ -349,7 +348,7 @@ How it works:
 
 - `reverse` returns a new string; the original does not change.
 - `is_palindrome` keeps only the letters, in lower case, and compares them with their reverse. Punctuation and spaces are ignored.
-- `index_of(ALPHABET, c)` finds a letter's place in the alphabet, or `-1` if `c` is not a letter, and then the letter is passed through unchanged.
+- `contains(ALPHABET, c)` tells whether `c` is a letter, and anything else is passed through unchanged; `index_of(ALPHABET, c)` then finds the letter's place in the alphabet (`index_of` of a missing text is an error, so it is asked only after `contains`).
 - `mod(i + k, 26)` wraps past `z` back to `a`, and it also works for a negative shift, so `caesar(secret, -3)` undoes the encoding.
 - Strings are built with `out = out + piece`: each `+` makes a new string, and the old one is dropped.
 

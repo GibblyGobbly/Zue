@@ -55,10 +55,10 @@ let LL_INT_COMPARE = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt
 # alit or blit is the float constant of a whole-number literal operand that the checker could not decide
 # (ad "dyn", see adapt_to in check.zu): next to a float it is that float, next to anything else the int.
 func ll_binop(op, a, b, pos, alit = null, blit = null) {
-    let arith = LL_INT_ARITH[op]
-    let compare = LL_INT_COMPARE[op]
-    let divide = LL_INT_DIVIDE[op]
-    let bitwise = LL_INT_BITWISE[op]
+    let arith = map_get(LL_INT_ARITH, op, null)
+    let compare = map_get(LL_INT_COMPARE, op, null)
+    let divide = map_get(LL_INT_DIVIDE, op, null)
+    let bitwise = map_get(LL_INT_BITWISE, op, null)
     if (arith == null and compare == null and divide == null and bitwise == null) {
         ll_store_pos(pos)
         return ll_call_out(LL_BINOPS[op], "ptr {a}, ptr {b}")
@@ -78,8 +78,8 @@ func ll_binop(op, a, b, pos, alit = null, blit = null) {
     let fcheck = ll_new_label("fcheck")
     let slow = ll_new_label("islow")
     let done = ll_new_label("idone")
-    let float_arith = LL_FLOAT_ARITH[op]
-    let float_compare = LL_FLOAT_COMPARE[op]
+    let float_arith = map_get(LL_FLOAT_ARITH, op, null)
+    let float_compare = map_get(LL_FLOAT_COMPARE, op, null)
     let float_op = float_arith != null or float_compare != null
     if (float_op) {
         ll_condbr(both, fast, fcheck)
@@ -485,7 +485,7 @@ func decided_in_spec(e) {
         return false
     }
     if (e.k == "num") {
-        return e.ads != null and e.ads[ST.ctx.spec.argkey] != null
+        return e.ads != null and map_has(e.ads, ST.ctx.spec.argkey)
     }
     return e.k == "bin" and (decided_in_spec(e.l) or decided_in_spec(e.r))
 }
@@ -936,7 +936,7 @@ func compile_function(n) {
         ll("{slot} = getelementptr inbounds %LV, ptr %argv, i64 {i}")
         let pk = null
         if (n.ptypes != null and (n.ptypes[i] == "int" or n.ptypes[i] == "float" or n.ptypes[i] == "bool")) {
-            if (not child.no_unbox and nested[n.params[i]] == null) {
+            if (not child.no_unbox and not map_has(nested, n.params[i])) {
                 pk = n.ptypes[i]
             }
         }
@@ -1083,13 +1083,13 @@ func copy_if_box(node, v) {
 # the variable and the function never takes an address.
 func raw_kind(n) {
     let t = n.sty
-    if (ST.ctx.spec != null and n.stys != null and n.stys[ST.ctx.spec.argkey] != null) {
+    if (ST.ctx.spec != null and n.stys != null and map_has(n.stys, ST.ctx.spec.argkey)) {
         t = n.stys[ST.ctx.spec.argkey]
     }
     if (ST.ctx.no_unbox or (t != "int" and t != "float" and t != "bool")) {
         return null
     }
-    if (ST.ctx.nested[n.name] != null) {
+    if (map_has(ST.ctx.nested, n.name)) {
         return null
     }
     return t
@@ -1156,7 +1156,7 @@ func compile_spec_function(n, key, entry) {
         let kind = sig.args[i]
         let raw = "%arg{i}"
         append(params, "{machine_type(kind)} {raw}")
-        if (not child.no_unbox and nested[n.params[i]] == null) {
+        if (not child.no_unbox and not map_has(nested, n.params[i])) {
             declare_typed(n.params[i], kind, raw)
         } else {
             declare(n.params[i], box_raw(kind, raw))
@@ -1181,7 +1181,7 @@ func st_funcdef(n) {
         ll_reg_global(n.name)
         let f = compile_function(n)
         ll_copy(ll_gname(n.name), f)
-        let entry = SPECS[spec_key_of(n.name)]
+        let entry = map_get(SPECS, spec_key_of(n.name), null)
         if (entry != null and entry.node.line == n.line and entry.node.col == n.col) {
             # remember the closure that was just made: calls go to the specialized functions only while the name holds it
             let payload_p = ll_reg()
@@ -1619,9 +1619,8 @@ func define_types(stmts) {
                 } else {
                     typed = true
                     # The runtime checks the container only; list<int> is judged at compile time.
-                    let lt = index_of(ft, "<")
-                    if (lt >= 0) {
-                        ft = cut(ft, 0, lt)
+                    if (contains(ft, "<")) {
+                        ft = cut(ft, 0, index_of(ft, "<"))
                     }
                     append(type_texts, "ptr {ll_cstr(ft)}")
                 }
@@ -1721,7 +1720,7 @@ func import_error(span, msg, text, hint) {
 func st_use(n) {
     ll_mark_line(n)
     let canon = path_norm(path_join(path_dir(ST.mod.canon), n.path))
-    let m2 = MODULES[canon]
+    let m2 = map_get(MODULES, canon, null)
     if (m2 == null) {
         m2 = compile_module(canon)
     }
@@ -1756,7 +1755,7 @@ func st_use(n) {
     }
     for (let i = 0; i < len(names); i++) {
         let name = names[i]
-        if (find(m2.exports, name) < 0) {
+        if (not contains(m2.exports, name)) {
             let hint = "Mark the function, type or constant with export in the module before importing it"
             let guess = suggest(name, m2.exports)
             if (guess != null) {

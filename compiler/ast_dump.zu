@@ -5,7 +5,7 @@
 #   (kind@line :field value :field value ...)
 # Fields are sorted by name, so the same tree always gives the same text.
 
-use { NODE_FIELDS, OPTIONAL_FIELDS } from "ast_nodes.zu"
+use { NODE_FIELDS, OPTIONAL_FIELDS, node_kind } from "ast_nodes.zu"
 
 func quote_text(s) {
     let q = "\""
@@ -45,7 +45,7 @@ func is_optional(key) {
 }
 
 func dump_node(n) {
-    let kind = n.k
+    let kind = node_kind(n)
     let keys = []
     let is_tree_node = type(n) == "template"
     if (is_tree_node) {

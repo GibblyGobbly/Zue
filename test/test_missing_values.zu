@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+# CASE map_has and map_get with a default answer for a missing key
+let m = {"a": 1}
+print(map_has(m, "a"), map_has(m, "zz"))
+print(map_get(m, "a"), map_get(m, "zz", 0), map_get(m, "a", 0))
+m["b"] = 2
+print(m["b"], m.b)
+# CASE a stored null is a value, not a missing key
+let n = {"x": null}
+print(map_has(n, "x"), n["x"], map_get(n, "x", 5))
+# CASE reading a missing key with brackets is an error
+let m = {"a": 1}
+print(m["zz"])
+# CASE reading a missing key as a field is an error
+let m = {"a": 1}
+print(m.zz)
+# CASE map_get of a missing key without a default is an error
+let m = {"a": 1}
+print(map_get(m, "zz"))
+# CASE a compound assignment reads the key first
+let m = {"a": 1}
+m["a"] += 1
+print(m["a"])
+m["zz"] += 1
+# CASE a misspelled key in a loop is caught where it is read
+let people = [{"name": "Astra"}, {"nmae": "Bo"}]
+for (let p in people) {
+    print(p.name)
+}
+# CASE find gives the position or an error naming the value
+print(find([10, 20, 30], 20), find(["a", "b"], "b"))
+print(contains([10, 20], 99))
+print(find([10, 20, 30], 99))
+# CASE find of a missing string shows it quoted
+print(find(["a", "b"], "z"))
+# CASE index_of and last_index_of find or fail
+print(index_of("banana", "an"), last_index_of("banana", "an"), index_of("banana", "an", 2))
+print(contains("banana", "x"))
+print(last_index_of("banana", "x"))
+# CASE index_of from a start names the position
+print(index_of("banana", "b", 1))

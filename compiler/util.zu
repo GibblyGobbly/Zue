@@ -12,10 +12,10 @@ export func die(kind, line, msg) {
 }
 
 export func path_dir(p) {
-    let i = last_index_of(p, "/")
-    if (i < 0) {
+    if (not contains(p, "/")) {
         return ""
     }
+    let i = last_index_of(p, "/")
     if (i == 0) {
         return "/"
     }

@@ -1,0 +1,7 @@
+Argument Error [E0403] in /tmp/zue_test_case.zu at line 1:
+  index_of() did not find "a" in the string
+
+   1 | print(index_of("", "a", 0))
+     |       ^^^^^^^^^^^^^^^^^^^^
+
+Hint: Check with contains(s, sub) first.

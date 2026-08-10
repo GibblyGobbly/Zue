@@ -1,0 +1,7 @@
+Argument Error [E0403] in /tmp/zue_test_case.zu at line 3:
+  find() did not find 99 in the list
+
+   3 | print(find([10, 20, 30], 99))
+     |       ^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Check with contains(list, value) first.

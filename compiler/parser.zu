@@ -71,7 +71,7 @@ func p_scope_pop() {
 
 func p_declare(name, tk) {
     let top = P_scopes[len(P_scopes) - 1]
-    let first = top[name]
+    let first = map_get(top, name, null)
     if (first != null) {
         let d = p_diag(tk, "'{name}' is already declared in this scope", "declared again here", false)
         if (d != null) {
@@ -210,7 +210,7 @@ func p_found_text() {
 func p_fail(msg) {
     let d = p_diag(p_here(), msg, p_found_text(), true)
     let tk = P_tk
-    if (d != null and type(tk.v) == "string" and KEYWORDS[tk.v] != null and index_of(msg, "name") >= 0) {
+    if (d != null and type(tk.v) == "string" and map_has(KEYWORDS, tk.v) and contains(msg, "name")) {
         diag_hint(d, "'{tk.v}' is a keyword and cannot be used as a name; choose another")
     }
     return d
@@ -610,7 +610,7 @@ func p_postfix() {
         } else if ((P_kind == ".")) {
             p_next()
             let tk = P_tk
-            let is_word = tk.t == "id" or (type(tk.v) == "string" and KEYWORDS[tk.v] != null)
+            let is_word = tk.t == "id" or (type(tk.v) == "string" and map_has(KEYWORDS, tk.v))
             if (not is_word) {
                 p_fail("Expected field name after '.'")
                 break
@@ -721,7 +721,7 @@ func p_expr_bp_inner(min_bp) {
         left = p_unary()
     }
     while (true) {
-        let bp = BINARY[P_tk.t]
+        let bp = map_get(BINARY, P_tk.t, null)
         if (bp == null or bp < min_bp) {
             break
         }
@@ -1024,7 +1024,7 @@ func p_switch(st) {
             # A literal value given twice: the second case could never run.
             if (v.k == "num" or v.k == "float" or v.k == "str" or v.k == "char" or v.k == "bool") {
                 let key = "{v.k}:{v.v}"
-                if (seen_values[key] == true) {
+                if (map_has(seen_values, key)) {
                     p_fail_at(v, "case value {v.v} appears twice in this switch", "already a case above")
                 }
                 seen_values[key] = true

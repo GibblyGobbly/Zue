@@ -1,0 +1,7 @@
+Argument Error [E0403] in /tmp/zue_test_case.zu at line 3:
+  last_index_of() did not find "x" in the string
+
+   3 | print(last_index_of("banana", "x"))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Check with contains(s, sub) first.

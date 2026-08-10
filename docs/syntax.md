@@ -173,6 +173,13 @@ map_set(player, "hp", 125)
 Map keys are strings. Reading or writing a list index outside `0 .. len - 1` (or the negative
 equivalent) is an `Index Error`; a list does not grow by assignment. Use `append`.
 
+Reading a key the map does not have, with `m["k"]`, `m.k` or `map_get(m, "k")`, is a `Name Error`
+(`Key 'k' does not exist in the map`), so a misspelled key is caught where it is read instead of
+giving `null`. Ask first with `map_has(m, "k")`, or give a default: `map_get(m, "k", 0)`. Writing
+a missing key adds it; `m["k"] += 1` reads first, so the key must be there. In the same way `find`,
+`index_of` and `last_index_of` are an `Argument Error` when they find nothing, instead of `-1`
+(which would index the last item); check with `contains` first.
+
 Map and list functions are listed in [core](builtins.md).
 
 ## Control flow

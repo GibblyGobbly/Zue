@@ -46,7 +46,7 @@ export func lit_int(n) {
 # Whether a whole-number literal is a float in the specialized version being emitted: the checker found it
 # wanted as a float for this signature (n.ads, see adapt_to in check.zu).
 export func spec_float_lit(n) {
-    return n.k == "num" and n.ads != null and ST.ctx.spec != null and n.ads[ST.ctx.spec.argkey] == "float"
+    return n.k == "num" and n.ads != null and ST.ctx.spec != null and map_get(n.ads, ST.ctx.spec.argkey, null) == "float"
 }
 
 # The kind (int, float or bool) n has when computed raw, or null when it cannot be.
@@ -117,12 +117,12 @@ export func call_spec(n) {
         return null
     }
     let name = n.callee.name
-    let entry = SPECS[spec_key_of(name)]
+    let entry = map_get(SPECS, spec_key_of(name), null)
     if (entry == null or find_local(name) != null or len(n.args) != len(entry.node.params)) {
         return null
     }
     for (let key in split(n.spec, ";")) {
-        if (entry.sigs[key] != null) {
+        if (map_has(entry.sigs, key)) {
             let sig = parse_sig(key, len(n.args))
             if (sig != null and args_fit(n.args, sig.args)) {
                 return {"key": key, "entry": entry, "sig": sig, "name": name}
@@ -197,7 +197,7 @@ func bin_kind(n) {
         }
         return null
     }
-    if (T_INT_CMP[op] != null) {
+    if (map_has(T_INT_CMP, op)) {
         return "bool"
     }
     if (op == "+" or op == "-" or op == "*" or op == "/") {
@@ -269,9 +269,9 @@ export func math_spec(n) {
     }
     let name = n.callee.name
     let kind = null
-    if (MATH_UNARY[name] != null and len(n.args) == 1) {
+    if (map_has(MATH_UNARY, name) and len(n.args) == 1) {
         kind = "unary"
-    } else if (MATH_ROUND[name] != null and len(n.args) == 1) {
+    } else if (map_has(MATH_ROUND, name) and len(n.args) == 1) {
         kind = "round"
     } else if (name == "pow" and len(n.args) == 2) {
         kind = "pow"
@@ -586,7 +586,7 @@ func tex_bin(n) {
     let u = operand_kind(n)
     let a = tex_as(n.l, u)
     let b = tex_as(n.r, u)
-    if (T_INT_CMP[op] != null) {
+    if (map_has(T_INT_CMP, op)) {
         let r = ll_reg()
         if (u == "float") {
             ll("{r} = fcmp {T_FLOAT_CMP[op]} double {a}, {b}")
@@ -597,7 +597,7 @@ func tex_bin(n) {
         }
         return r
     }
-    if (T_BITWISE[op] != null) {
+    if (map_has(T_BITWISE, op)) {
         let r = ll_reg()
         ll("{r} = {T_BITWISE[op]} i64 {a}, {b}")
         return r
@@ -651,7 +651,7 @@ func tex_int_arith(op, a, b, pos) {
     let slow = ll_new_label("tslow")
     let done = ll_new_label("tdone")
     let value = ll_reg()
-    if (T_INT_OP[op] != null) {
+    if (map_has(T_INT_OP, op)) {
         let pair = ll_reg()
         let overflow = ll_reg()
         ll("{pair} = call \{ i64, i1 } @llvm.{T_INT_OP[op]}.with.overflow.i64(i64 {a}, i64 {b})")
@@ -673,7 +673,7 @@ func tex_int_arith(op, a, b, pos) {
     ll("{spay} = extractvalue %LV {sres}, 1")
     ll_br(done)
     ll_label(fast)
-    if (T_INT_OP[op] == null) {
+    if (not map_has(T_INT_OP, op)) {
         let inst = "sdiv"
         if (op == "%") {
             inst = "srem"

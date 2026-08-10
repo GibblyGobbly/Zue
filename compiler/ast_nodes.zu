@@ -219,6 +219,14 @@ export func is_node(x) {
 
 # The values inside x that can hold more nodes: lists, maps and nodes. x is a node, or a map such as
 # a switch case. The tree walkers use it to visit every part of a tree.
+# The kind of a syntax tree node, or null for a map that is not a node (a switch case, a string part).
+export func node_kind(x) {
+    if (type(x) == "template") {
+        return x.k
+    }
+    return map_get(x, "k", null)
+}
+
 export func node_children(x) {
     let out = []
     if (type(x) == "map") {

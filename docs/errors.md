@@ -138,6 +138,7 @@ example to be sure it causes the error it claims to.
 | `E0302` | An import cannot be resolved |
 | `E0401` | An index or slice is outside its list or string |
 | `E0402` | A field or key does not exist |
+| `E0403` | A search found nothing |
 | `E0410` | An integer calculation overflowed |
 | `E0411` | A float calculation went out of range or outside its domain |
 | `E0412` | A function was given a value it cannot work with |

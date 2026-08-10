@@ -337,12 +337,20 @@ fix: Check len(xs) first, or use an index from 0 to len(xs) - 1.
 == E0402
 title: A field or key does not exist
 match: does not exist
-text: A template, bloc or box has only the fields that were declared.
+text: A template, bloc or box has only the fields that were declared, and reading m[key] or m.key needs the map to have that key.
 example:
     template P { x }
     let p = P(1)
     print(p.y)
-fix: Use a field that was declared, or add it to the declaration.
+fix: Use a field that was declared, or add it to the declaration. For a map, check with map_has(m, key) first, or give a default: map_get(m, key, default).
+
+== E0403
+title: A search found nothing
+match: did not find
+text: find, index_of and last_index_of give the position of what they look for; when it is not there, that is an error rather than -1, which would index the last item.
+example:
+    print(find([1, 2], 3))
+fix: Check with contains(list, value) or contains(s, sub) first.
 
 == E0410
 title: An integer calculation overflowed

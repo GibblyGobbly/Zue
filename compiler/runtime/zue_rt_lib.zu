@@ -730,11 +730,20 @@ func lb_map_set(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# map_get(m, key) is m[key]; map_get(m, key, default) gives default when the key is missing.
 func lb_map_get(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 2, 2)
+    lv_arity(self_p, argc_i, 2, 3)
     let m = _arg_map(self_p, argv_p, 0)
+    let key = _arg_str(self_p, argv_p, 1)
     let o = stack_buf(16)
-    _map_get(o, m, _arg_str(self_p, argv_p, 1))
+    _map_get(o, m, key)
+    if (g_found == 0) {
+        if (argc_i == 3) {
+            _cp(o, argv_p + 32)
+        } else {
+            _missing_key(key)
+        }
+    }
     retp(o)
 }
 
@@ -829,6 +838,15 @@ func lb_remove(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# A search that found nothing: an error naming the value, not -1, which would index the last item.
+func _not_found(self_p, v, where, hint) {
+    let b = stack_buf(B_SIZE)
+    _buf_init(b)
+    _buf_item(b, v)
+    _buf_add(b, cstr(""), 1)
+    _errf4(E_ARGUMENT, hint, cstr("%s() did not find %s in the %s"), _fname(self_p), ld64(b + B_BUF), where, 0)
+}
+
 func lb_find(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let l = _arg_list(self_p, argv_p, 0)
@@ -839,8 +857,7 @@ func lb_find(self_p, argc_i, argv_p) {
             retp(o)
         }
     }
-    _int(o, -1)
-    retp(o)
+    _not_found(self_p, argv_p + 16, cstr("list"), cstr("Check with contains(list, value) first."))
 }
 
 func lb_slice(self_p, argc_i, argv_p) {
@@ -1158,7 +1175,16 @@ func lb_index_of(self_p, argc_i, argv_p) {
     let sub = _text_str(self_p, argv_p + 16, 1, tmp)
     let frm = _start_arg(self_p, argc_i, argv_p, 2, ld64(s))
     let o = stack_buf(16)
-    _int(o, _find_sub(s, sub, frm))
+    let at = _find_sub(s, sub, frm)
+    if (at < 0) {
+        if (frm > 0) {
+            let where = stack_buf(64)
+            snprintf(where, 64, cstr("string after position %lld"), frm)
+            _not_found(self_p, argv_p + 16, where, cstr("Check with contains(s, sub) first."))
+        }
+        _not_found(self_p, argv_p + 16, cstr("string"), cstr("Check with contains(s, sub) first."))
+    }
+    _int(o, at)
     retp(o)
 }
 
@@ -1242,8 +1268,7 @@ func lb_last_index_of(self_p, argc_i, argv_p) {
         }
         i -= 1
     }
-    _int(o, -1)
-    retp(o)
+    _not_found(self_p, argv_p + 16, cstr("string"), cstr("Check with contains(s, sub) first."))
 }
 
 func lb_contains(self_p, argc_i, argv_p) {

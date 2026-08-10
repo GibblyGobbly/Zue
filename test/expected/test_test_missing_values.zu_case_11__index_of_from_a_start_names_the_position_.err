@@ -1,0 +1,7 @@
+Argument Error [E0403] in /tmp/zue_test_case.zu at line 1:
+  index_of() did not find "b" in the string after position 1
+
+   1 | print(index_of("banana", "b", 1))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Check with contains(s, sub) first.

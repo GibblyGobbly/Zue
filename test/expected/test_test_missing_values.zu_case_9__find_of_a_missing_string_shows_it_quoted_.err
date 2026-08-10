@@ -1,0 +1,7 @@
+Argument Error [E0403] in /tmp/zue_test_case.zu at line 1:
+  find() did not find "z" in the list
+
+   1 | print(find(["a", "b"], "z"))
+     |       ^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Check with contains(list, value) first.

@@ -34,8 +34,10 @@ use { cut } from "ranges.zu"
 
 # Name of a file without its directory and extension: "dir/prog.zu" is "prog".
 func base_name(path) {
-    let slash = last_index_of(path, "/")
-    let name = cut(path, slash + 1, len(path))
+    let name = path
+    if (contains(path, "/")) {
+        name = cut(path, last_index_of(path, "/") + 1, len(path))
+    }
     if (ends_with(name, ".zu")) {
         name = cut(name, 0, len(name) - 3)
     }

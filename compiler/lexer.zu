@@ -69,7 +69,8 @@ func lex_error(line, col, ecol, msg) {
 
 # The index of the end of the line that holds index i.
 func line_end(src, i) {
-    let e = index_of(src, "\n", i)
+    # index_of_any gives -1 when there is no line break after i
+    let e = index_of_any(src, "\n", i)
     if (e < 0) {
         return len(src)
     }
@@ -183,11 +184,11 @@ func interp_end(src, k, start_line) {
 # Counts the line breaks in src from index a up to index b, and moves LS to the start of the last line.
 func track_newlines(src, a, b) {
     let count = 0
-    let k = index_of(src, "\n", a)
+    let k = index_of_any(src, "\n", a)
     while (k >= 0 and k < b) {
         count += 1
         LS = k + 1
-        k = index_of(src, "\n", k + 1)
+        k = index_of_any(src, "\n", k + 1)
     }
     return count
 }
@@ -301,7 +302,7 @@ func string_unterminated(src, q_at, q_col, ls0, start_line) {
 # taken to end at its closing quote when there is one on the line, otherwise at the end of the line.
 func char_fail(src, i0, line, msg, hint) {
     let e = line_end(src, i0)
-    let q = index_of(src, "'", i0 + 1)
+    let q = index_of_any(src, "'", i0 + 1)
     let next = e
     if (q >= 0 and q < e) {
         next = q + 1
@@ -423,10 +424,7 @@ func utf8_len(c) {
 # (1.7976931348623157e308) and the next power of two; a value below the halfway point rounds down to the
 # largest float.
 func float_too_big(text) {
-    let e = index_of(text, "e")
-    if (e < 0) {
-        e = index_of(text, "E")
-    }
+    let e = index_of_any(text, "eE")
     let mant = text
     let ed = "0"
     let neg = false
@@ -441,11 +439,10 @@ func float_too_big(text) {
             ed = cut(ed, 1, len(ed))    # 1e0000001 is 1e1
         }
     }
-    let dot = index_of(mant, ".")
     let whole = mant
     let digits = mant
-    if (dot >= 0) {
-        whole = cut(mant, 0, dot)
+    if (contains(mant, ".")) {
+        whole = cut(mant, 0, index_of(mant, "."))
         digits = replace(mant, ".", "")
     }
     let lead = 0
@@ -501,8 +498,8 @@ func lex_number(src, i, line) {
             }
         }
         text = cut(src, s, i)
-        if (index_of(text, "_") >= 0) {
-            if (ends_with(text, "_") or index_of(text, "__") >= 0 or index_of(text, "_.") >= 0 or index_of(text, "._") >= 0) {
+        if (contains(text, "_")) {
+            if (ends_with(text, "_") or contains(text, "__") or contains(text, "_.") or contains(text, "._")) {
                 let d = lex_error(line, col_of(s), col_of(i), "Misplaced '_' in number")
                 diag_hint(d, "Put a single '_' between two digits, like 1_000")
             }
@@ -668,7 +665,7 @@ export func lex(src, first_line, first_col = 1) {
             let s = i
             i = skip_chars(src, IDENT_BYTES, i + 1)
             let word = cut(src, s, i)
-            let kw = KEYWORDS[word]
+            let kw = map_get(KEYWORDS, word, null)
             let col = s - ls + 1
             if (kw != null) {
                 append(toks, Token(kw, word, line, col, line, col + i - s))
@@ -705,7 +702,7 @@ export func lex(src, first_line, first_col = 1) {
             i = r[1]
             append(toks, Token("char", r[0], line, col, line, i - ls + 1))
         } else {
-            i = index_of(src, "\n", i)
+            i = index_of_any(src, "\n", i)
             if (i < 0) {
                 i = n
             }

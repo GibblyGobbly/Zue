@@ -39,7 +39,7 @@ Floats print exactly: the shortest text that reads back as the same number (`pri
 |---|---|
 | `append(list, v)` / `list_append(list, v)` | Add to the end; returns the same list, so `print(append(x, 1))` shows it |
 | `remove(list, i)` | Remove and return the element at `i` (negative counts from the end); an index out of range is an `Index Error` |
-| `find(list, v)` | Index of the first equal element, or `-1`. Lists only |
+| `find(list, v)` | Index of the first equal element; an `Argument Error` if there is none (check with `contains` first). Lists only |
 | `slice(list, a, b)` | New list of the elements at positions `a` to `b`, counting from 0 and including both ends; same as `list[a:b]`. A position outside the list, or `a` after `b`, is an `Index Error`. Also works on strings |
 | `range(end)`, `range(start, end)`, `range(start, end, step)` | List of integers; `step` may be negative and must not be 0 |
 | `map(list, fn)`, `filter(list, fn)`, `reduce(list, fn, init)` | Higher-order helpers; return new values. `reduce` needs all three arguments |
@@ -58,7 +58,7 @@ Maps use string keys. `m["k"]` and `m.k` read a key; `m["k"] = v` and `m.k = v` 
 | Function | Effect |
 |---|---|
 | `map_set(m, key, v)` | Insert or replace |
-| `map_get(m, key)` | Value for `key`, or `null` |
+| `map_get(m, key)` / `map_get(m, key, default)` | Value for `key`. A missing key is a `Name Error`, like `m[key]`, unless a default is given, which is then the result |
 | `map_has(m, key)` | `true` if present |
 | `map_delete(m, key)` | Remove; returns `true` if the key existed |
 | `map_keys(m)`, `map_values(m)` | Lists of keys or values |
@@ -158,11 +158,11 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 | Function | Description | Example |
 |---|---|---|
 | `contains(s, sub)` | `true` if `sub` is found in `s`; also works on a list | `contains("Team", "ea")` is `true` |
-| `index_of(s, sub)` | Index of the first occurrence, `-1` if none | `index_of("banana", "nan")` is `2` |
+| `index_of(s, sub)` | Index of the first occurrence; an `Argument Error` if there is none (check with `contains` first) | `index_of("banana", "nan")` is `2` |
 | `index_of(s, sub, start)` | The same, looking only from index `start` (0 to `len(s)`) | `index_of("banana", "an", 2)` is `3` |
 | `index_of_any(s, set)` | Index of the first byte that is in the string `set`, `-1` if none; takes an optional `start` | `index_of_any("a, b", ", ")` is `1` |
 | `skip_chars(s, set)` | Index of the first byte that is not in `set`, `len(s)` if there is none; takes an optional `start` | `skip_chars("  x", " ")` is `2` |
-| `last_index_of(s, sub)` | Index of the last occurrence, `-1` if none | `last_index_of("banana", "a")` is `5` |
+| `last_index_of(s, sub)` | Index of the last occurrence; an `Argument Error` if there is none | `last_index_of("banana", "a")` is `5` |
 | `starts_with(s, pre)` | `true` if `s` starts with `pre` | `starts_with("file.txt", "file")` is `true` |
 | `ends_with(s, suf)` | `true` if `s` ends with `suf` | `ends_with("file.txt", ".txt")` is `true` |
 

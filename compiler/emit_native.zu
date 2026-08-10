@@ -24,7 +24,7 @@
 # p[i] = v writes the 64-bit word at p + 8 * i.
 
 use { die } from "util.zu"
-use { mk_id_line, node_children } from "ast_nodes.zu"
+use { mk_id_line, node_children, node_kind } from "ast_nodes.zu"
 use { ll, ll_alloca, ll_br, ll_condbr, ll_escape, ll_label, ll_new_ctx, ll_new_label } from "ll_state.zu"
 use { ll_reg } from "ll_state.zu"
 use { find_local } from "ll_scope.zu"
@@ -72,7 +72,7 @@ func nfail(n, msg) {
 }
 
 func declare_once(key, text) {
-    if (NS.decl_ids[key] == null) {
+    if (not map_has(NS.decl_ids, key)) {
         NS.decl_ids[key] = true
         append(NS.decls, text)
     }
@@ -80,7 +80,7 @@ func declare_once(key, text) {
 
 # A NUL-terminated string constant as an i64 expression.
 func nstr(text) {
-    let name = NS.str_ids[text]
+    let name = map_get(NS.str_ids, text, null)
     if (name == null) {
         name = "@.n{len(NS.strs)}"
         append(NS.strs, "{name} = private unnamed_addr constant [{len(text) + 1} x i8] c\"{ll_escape(text)}\\00\"")
@@ -154,7 +154,7 @@ func cfold(e) {
         return 0
     }
     if (e.k == "id") {
-        return NS.consts[e.name]
+        return map_get(NS.consts, e.name, null)
     }
     if (e.k == "bin") {
         let a = cfold(e.l)
@@ -231,11 +231,11 @@ func nx_id(n) {
         ll("{r} = load i64, ptr {v}")
         return r
     }
-    let c = NS.consts[n.name]
+    let c = map_get(NS.consts, n.name, null)
     if (c != null) {
         return "{c}"
     }
-    if (NS.gvars[n.name] != null) {
+    if (map_has(NS.gvars, n.name)) {
         let r = ll_reg()
         ll("{r} = load i64, ptr @{n.name}")
         return r
@@ -259,11 +259,11 @@ func nx_bin(n) {
     let ops = {"+": "add", "-": "sub", "*": "mul", "/": "sdiv", "%": "srem"}
     let cmps = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
     let r = ll_reg()
-    if (ops[n.op] != null) {
+    if (map_has(ops, n.op)) {
         ll("{r} = {ops[n.op]} i64 {a}, {b}")
         return r
     }
-    if (cmps[n.op] != null) {
+    if (map_has(cmps, n.op)) {
         let f = ll_reg()
         ll("{f} = icmp {cmps[n.op]} i64 {a}, {b}")
         ll("{r} = zext i1 {f} to i64")
@@ -324,7 +324,7 @@ func nx_not(n) {
 
 func nx_float(n) {
     let t = n.v
-    if (index_of(t, ".") < 0) {
+    if (not contains(t, ".")) {
         t = "{t}.0"
     }
     return "bitcast (double {t} to i64)"
@@ -355,7 +355,7 @@ func call_text(args) {
 
 func nx_intrinsic(n, name, a) {
     let r = ll_reg()
-    if (TWO_OPS[name] != null) {
+    if (map_has(TWO_OPS, name)) {
         ll("{r} = {TWO_OPS[name]} i64 {a[0]}, {a[1]}")
         return r
     }
@@ -363,13 +363,13 @@ func nx_intrinsic(n, name, a) {
         ll("{r} = xor i64 {a[0]}, -1")
         return r
     }
-    if (CMP_OPS[name] != null) {
+    if (map_has(CMP_OPS, name)) {
         let f = ll_reg()
         ll("{f} = icmp {CMP_OPS[name]} i64 {a[0]}, {a[1]}")
         ll("{r} = zext i1 {f} to i64")
         return r
     }
-    if (OVF[name] != null) {
+    if (map_has(OVF, name)) {
         let st = ll_reg()
         let intr = "llvm.{OVF[name]}.with.overflow.i64"
         declare_once(intr, "declare \{ i64, i1 } @{intr}(i64, i64)")
@@ -379,7 +379,7 @@ func nx_intrinsic(n, name, a) {
         ll("{r} = zext i1 {f} to i64")
         return r
     }
-    if (LOADS[name] != null) {
+    if (map_has(LOADS, name)) {
         let ty = LOADS[name]
         let p = ptr_of(a[0])
         if (ty == "i64") {
@@ -395,7 +395,7 @@ func nx_intrinsic(n, name, a) {
         }
         return r
     }
-    if (ALOADS[name] != null) {
+    if (map_has(ALOADS, name)) {
         let ty = ALOADS[name]
         let p = ptr_of(a[0])
         if (ty == "i64") {
@@ -407,7 +407,7 @@ func nx_intrinsic(n, name, a) {
         ll("{r} = zext {ty} {v} to i64")
         return r
     }
-    if (ASTORES[name] != null) {
+    if (map_has(ASTORES, name)) {
         let ty = ASTORES[name]
         let p = ptr_of(a[0])
         let v = a[1]
@@ -436,7 +436,7 @@ func nx_intrinsic(n, name, a) {
         ll("fence seq_cst")
         return "0"
     }
-    if (STORES[name] != null) {
+    if (map_has(STORES, name)) {
         let ty = STORES[name]
         let p = ptr_of(a[0])
         let v = a[1]
@@ -447,7 +447,7 @@ func nx_intrinsic(n, name, a) {
         ll("store {ty} {v}, ptr {p}, align {WIDTH[ty]}")
         return "0"
     }
-    if (FLT_OPS[name] != null) {
+    if (map_has(FLT_OPS, name)) {
         let x = to_type(a[0], "double")
         let y = to_type(a[1], "double")
         let z = ll_reg()
@@ -460,7 +460,7 @@ func nx_intrinsic(n, name, a) {
         ll("{z} = fneg double {x}")
         return from_type(z, "double")
     }
-    if (FCMP_OPS[name] != null) {
+    if (map_has(FCMP_OPS, name)) {
         let x = to_type(a[0], "double")
         let y = to_type(a[1], "double")
         let f = ll_reg()
@@ -522,7 +522,7 @@ func nx_special(n, name) {
             nfail(n, "{name} takes one string literal")
         }
         let sym = args[0].v
-        if (NS.datas[sym] == null and NS.funcs[sym] == null and NS.syms[sym] == null) {
+        if (not map_has(NS.datas, sym) and not map_has(NS.funcs, sym) and not map_has(NS.syms, sym)) {
             NS.syms[sym] = true
             declare_once("sym_{sym}", "@{sym} = external global i8")
         }
@@ -562,7 +562,7 @@ func nx_call_ptr(n) {
 func nx_callv(n) {
     let out_w = nx(n.args[0])
     let callee = n.args[1]
-    let direct = callee.k == "id" and NS.funcs[callee.name] != null
+    let direct = callee.k == "id" and map_has(NS.funcs, callee.name)
     let target = ""
     let fv = ""
     if (not direct) {
@@ -627,7 +627,7 @@ func nx_call(n) {
     if (name == "dbl") {
         return nx(n.args[0])
     }
-    if (ARITY[name] != null) {
+    if (map_has(ARITY, name)) {
         if (len(n.args) != ARITY[name]) {
             nfail(n, "{name} takes {ARITY[name]} argument(s)")
         }
@@ -640,7 +640,7 @@ func nx_call(n) {
         }
         return nx_intrinsic(n, name, a)
     }
-    let info = NS.funcs[name]
+    let info = map_get(NS.funcs, name, null)
     if (info != null) {
         if (len(n.args) != len(info.kinds)) {
             nfail(n, "{name} takes {len(info.kinds)} argument(s), not {len(n.args)}")
@@ -657,7 +657,7 @@ func nx_call(n) {
         ll("{r} = call i64 @{name}({commas(parts)})")
         return r
     }
-    let ext = NS.externs[name]
+    let ext = map_get(NS.externs, name, null)
     if (ext != null) {
         let fixed = len(ext.params)
         if (len(n.args) < fixed or (len(n.args) > fixed and not ext.variadic)) {
@@ -740,7 +740,7 @@ func local_slot(name) {
     if (v != null) {
         return "ptr {v}"
     }
-    if (NS.gvars[name] != null) {
+    if (map_has(NS.gvars, name)) {
         return "ptr @{name}"
     }
     return null
@@ -976,7 +976,7 @@ func has_retv(x) {
         return false
     }
     if (type(x) == "template" or type(x) == "map") {
-        if (x.k == "call" and x.callee.k == "id" and (x.callee.name == "retv" or x.callee.name == "retp")) {
+        if (node_kind(x) == "call" and x.callee.k == "id" and (x.callee.name == "retv" or x.callee.name == "retp")) {
             return true
         }
         for (let v in node_children(x)) {

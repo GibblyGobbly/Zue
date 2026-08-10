@@ -972,6 +972,12 @@ func _dense_slice(o, t, start, count) {
     }
 }
 
+# A read of a key the map does not have: an error, not null, so a misspelled key cannot go unnoticed.
+func _missing_key(key) {
+    _errf(E_NAME, cstr("Check with map_has(m, key) first, or give a default: map_get(m, key, default)."),
+          cstr("Key '%s' does not exist in the map"), key + S_DATA, 0, 0)
+}
+
 func lvp_index(o, t, idx) {
     let tt = _tag(t)
     if (tt != T_LIST and tt >= T_BLOC_TYPE and tt <= T_PTR) {
@@ -1023,6 +1029,9 @@ func lvp_index(o, t, idx) {
             _errf(E_TYPE, cstr("Maps use string keys"), cstr("map key must be a string, got %s"), _type_name(idx), 0, 0)
         }
         _map_get(o, t, _val(idx))
+        if (g_found == 0) {
+            _missing_key(_val(idx))
+        }
         return 0
     }
     _errf(E_TYPE, cstr("Index lists and strings with ints, maps with strings"), cstr("cannot index %s"), _type_name(t), 0, 0)
@@ -1033,6 +1042,9 @@ func lvp_field(o, t, key) {
     let tt = _tag(t)
     if (tt == T_MAP) {
         _map_get(o, t, _val(key))
+        if (g_found == 0) {
+            _missing_key(_val(key))
+        }
         return 0
     }
     if (tt == T_TEMPLATE) {

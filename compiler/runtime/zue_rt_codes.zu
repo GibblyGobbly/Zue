@@ -319,6 +319,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("does not exist")) != 0) {
         return cstr("E0402")
     }
+    if (strstr(msg, cstr("did not find")) != 0) {
+        return cstr("E0403")
+    }
     if (strstr(msg, cstr("integer overflow")) != 0) {
         return cstr("E0410")
     }

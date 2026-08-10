@@ -3,12 +3,9 @@
 # CASE index_of with a start
 print(index_of("banana", "an"))
 print(index_of("banana", "an", 2))
-print(index_of("banana", "an", 4))
-print(index_of("banana", "a", 6))
 print(index_of("banana", "", 3))
 print(index_of("banana", "", 6))
 print(index_of("banana", 'n', 3))
-print(index_of("", "a", 0))
 print(index_of("aaa", "aa", 1))
 # CASE index_of_any
 print(index_of_any("hello, world", ", "))
@@ -48,3 +45,7 @@ func pass(v) {
     return [v, null][0]
 }
 print(skip_chars("abc", pass(5)))
+# CASE index_of from a start finds nothing after it
+print(index_of("banana", "an", 4))
+# CASE index_of in an empty string
+print(index_of("", "a", 0))

@@ -9,7 +9,7 @@
 # raw values (fn_spec in emit_llvm.zu). A call site uses it only after a check at run time that the name
 # still holds the very closure the specialized functions were made for (see tex_spec_call in ll_typed.zu).
 
-use { node_children } from "ast_nodes.zu"
+use { node_children, node_kind } from "ast_nodes.zu"
 use { LL_GLOBALS, SPECS } from "ll_state.zu"
 use { ST } from "state.zu"
 
@@ -85,7 +85,7 @@ export func has_call(x) {
     if (t != "template" and t != "map") {
         return false
     }
-    if (x.k == "call") {
+    if (node_kind(x) == "call") {
         return true
     }
     for (let y in node_children(x)) {
@@ -109,7 +109,7 @@ export func clear_kc(x) {
     if (t != "template" and t != "map") {
         return null
     }
-    if (x.k == "bin") {
+    if (node_kind(x) == "bin") {
         x.kc = null
     }
     for (let y in node_children(x)) {
@@ -130,7 +130,7 @@ func collect_sigs(x, found) {
     if (t != "template" and t != "map") {
         return null
     }
-    if (x.k == "call" and x.spec != null and x.callee.k == "id" and found[x.callee.name] != null) {
+    if (node_kind(x) == "call" and x.spec != null and x.callee.k == "id" and map_has(found, x.callee.name)) {
         for (let key in split(x.spec, ";")) {
             found[x.callee.name][key] = true
         }
@@ -166,7 +166,7 @@ export func spec_prescan(stmts) {
             }
         }
         if (name != null) {
-            if (declared[name] == null) {
+            if (not map_has(declared, name)) {
                 declared[name] = 1
             } else {
                 declared[name] = 2

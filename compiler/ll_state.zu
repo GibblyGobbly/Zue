@@ -53,7 +53,7 @@ export func ll_escape(text) {
 # A NUL-terminated string constant; returns its global name.
 export func ll_cstr(text) {
     let key = "s{text}"
-    let name = LL_STR_IDS[key]
+    let name = map_get(LL_STR_IDS, key, null)
     if (name == null) {
         name = "@.s{len(LL_STRS)}"
         append(LL_STRS, "{name} = private unnamed_addr constant [{len(text) + 1} x i8] c\"{ll_escape(text)}\\00\"")
@@ -65,7 +65,7 @@ export func ll_cstr(text) {
 # A constant LV with the given tag and payload text; returns its global name.
 export func ll_const(tag, payload) {
     let key = "{tag}:{payload}"
-    let name = LL_CONST_IDS[key]
+    let name = map_get(LL_CONST_IDS, key, null)
     if (name == null) {
         name = "@.c{len(LL_CONSTS)}"
         append(LL_CONSTS, "{name} = private constant %LV \{ i64 {tag}, i64 {payload} }")
@@ -98,14 +98,11 @@ export func ll_float_text(text) {
             t = cut(t, 1, len(t))
         }
     }
-    if (index_of(t, ".") < 0) {
-        let e = index_of(t, "e")
-        if (e < 0) {
-            e = index_of(t, "E")
-        }
-        if (e < 0) {
+    if (not contains(t, ".")) {
+        if (not contains(t, "e") and not contains(t, "E")) {
             t = "{t}.0"
         } else {
+            let e = index_of_any(t, "eE")
             let head = cut(t, 0, e)
             let tail = cut(t, e, len(t))
             t = "{head}.0{tail}"
@@ -131,7 +128,7 @@ export func ll_bool(b) {
 
 # The K[] slot for a string literal, as a constant pointer expression.
 export func ll_kstr(text) {
-    let idx = LL_K_IDS[text]
+    let idx = map_get(LL_K_IDS, text, null)
     if (idx == null) {
         idx = len(LL_KSTRS)
         append(LL_KSTRS, text)
@@ -147,7 +144,7 @@ export func ll_ic() {
 }
 
 export func ll_use_builtin(name) {
-    if (LL_BUILTIN_IDS[name] == null) {
+    if (not map_has(LL_BUILTIN_IDS, name)) {
         LL_BUILTIN_IDS[name] = true
         append(LL_BUILTINS, name)
     }
@@ -156,7 +153,7 @@ export func ll_use_builtin(name) {
 # Builtins called with their own LvFunc (nf_<name>) need a global for it.
 export func ll_use_native(name) {
     ll_use_builtin(name)
-    if (LL_NATIVE_IDS[name] == null) {
+    if (not map_has(LL_NATIVE_IDS, name)) {
         LL_NATIVE_IDS[name] = true
         append(LL_NATIVES, name)
     }
@@ -201,7 +198,7 @@ func dbg_quote(text) {
 
 # The metadata node for the file path, made on first use.
 func dbg_file(path) {
-    let known = DBG.files[path]
+    let known = map_get(DBG.files, path, null)
     if (known != null) {
         return known
     }
@@ -229,7 +226,7 @@ export func dbg_at(p) {
         return ""
     }
     let key = "{p}"
-    let known = c.dbg_locs[key]
+    let known = map_get(c.dbg_locs, key, null)
     if (known == null) {
         let line = p % 4194304
         let col = (p / 4194304) % 4096
@@ -473,7 +470,7 @@ export func ll_gname(name) {
 }
 
 export func ll_reg_global(name) {
-    if (ST.mod.globals[name] == null) {
+    if (not map_has(ST.mod.globals, name)) {
         ST.mod.globals[name] = true
         append(LL_GLOBALS, "{ll_gname(name)} = internal global %LV \{ i64 17, i64 0 }")
     }

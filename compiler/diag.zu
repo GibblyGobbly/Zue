@@ -60,7 +60,7 @@ export func diag_new(kind, span, msg) {
     let d = Diag(kind, ST.src_file, ST.src_lines, span, "", msg, [], "", [], [], null)
     append(DIAGS, d)
     ERROR_LINES["{ST.src_file}:{span.line}"] = true
-    if (FILE_ORDER[ST.src_file] == null) {
+    if (not map_has(FILE_ORDER, ST.src_file)) {
         FILE_ORDER[ST.src_file] = len(map_keys(FILE_ORDER))
     }
     return d
@@ -108,7 +108,7 @@ export func diag_trace(d, text) {
 
 # True when an error is already recorded on this line of the current file.
 export func diag_on_line(line) {
-    return ERROR_LINES["{ST.src_file}:{line}"] == true
+    return map_has(ERROR_LINES, "{ST.src_file}:{line}")
 }
 
 # True for a byte that continues a UTF-8 character.
@@ -136,7 +136,7 @@ func screen_width(text, n) {
 
 # The source line with each tab replaced by spaces.
 func shown_line(text) {
-    if (index_of(text, "\t") < 0) {
+    if (not contains(text, "\t")) {
         return text
     }
     return replace(text, "\t", repeat(" ", TAB_WIDTH))

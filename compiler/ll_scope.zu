@@ -52,8 +52,8 @@ export func at_top() {
 # nested function lives in a heap cell; its slot then holds the cell's address.
 export func declare(name, init_ptr) {
     let id = uid()
-    let is_cell = ST.ctx.nested[name] != null
-    let v = {"name": name, "cell": is_cell, "c": ""}
+    let is_cell = map_has(ST.ctx.nested, name)
+    let v = {"name": name, "cell": is_cell, "c": "", "ty": null}
     if (is_cell) {
         v.c = ll_alloca("ptr")
         let cell = ll_reg()
@@ -109,7 +109,7 @@ export func var_set(v, expr) {
 export func find_local_index(name) {
     let i = len(ST.ctx.scopes) - 1
     while (i >= 0) {
-        if (ST.ctx.scopes[i][name] != null) {
+        if (map_has(ST.ctx.scopes[i], name)) {
             return i
         }
         i -= 1
@@ -120,7 +120,7 @@ export func find_local_index(name) {
 export func find_local(name) {
     let i = len(ST.ctx.scopes) - 1
     while (i >= 0) {
-        let v = ST.ctx.scopes[i][name]
+        let v = map_get(ST.ctx.scopes[i], name, null)
         if (v != null) {
             return v
         }
@@ -134,17 +134,17 @@ export func resolve(name) {
     if (v != null) {
         return {"kind": "local", "v": v}
     }
-    let ci = ST.ctx.capmap[name]
+    let ci = map_get(ST.ctx.capmap, name, null)
     if (ci != null) {
         return {"kind": "cap", "i": ci}
     }
-    if (ST.mod.globals[name] != null) {
+    if (map_has(ST.mod.globals, name)) {
         return {"kind": "global"}
     }
     if (name == "null") {
         return {"kind": "null"}
     }
-    if (BUILTINS[name] != null) {
+    if (map_has(BUILTINS, name)) {
         return {"kind": "builtin"}
     }
     return {"kind": "global"}
