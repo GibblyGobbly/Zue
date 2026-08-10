@@ -60,7 +60,7 @@ A negative start, an end past the last index, or a start after the end is an `In
 | `contains(s, sub)` | bool | Also works on a list |
 | `index_of(s, sub)` | int | First match; an `Argument Error` if there is none (check with `contains` first). An optional third argument is the start index |
 | `last_index_of(s, sub)` | int | Last match; an `Argument Error` if there is none |
-| `index_of_any(s, set)` | int | First byte that is in `set`, `-1` if none. Optional `start` |
+| `index_of_any(s, set)` | int | First byte that is in `set`, or `len(s)` (the end) if none. Optional `start` |
 | `skip_chars(s, set)` | int | First byte that is not in `set`, or `len(s)`. Optional `start` |
 | `starts_with(s, pre)`, `ends_with(s, suf)` | bool | |
 

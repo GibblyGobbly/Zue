@@ -1220,7 +1220,8 @@ func _set_table(self_p, argv_p, scratch) {
     return scratch
 }
 
-# index_of_any(s, set, start): the first index at or after start whose byte is in set, or -1.
+# index_of_any(s, set, start): the first index at or after start whose byte is in set, or len(s) when
+# there is none (the end of the string, as skip_chars gives; not -1, which would index the last byte).
 func lb_index_of_any(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 3)
     let s = _arg_str(self_p, argv_p, 0)
@@ -1228,7 +1229,7 @@ func lb_index_of_any(self_p, argc_i, argv_p) {
     let i = _start_arg(self_p, argc_i, argv_p, 2, ld64(s))
     let n = ld64(s)
     let o = stack_buf(16)
-    _int(o, -1)
+    _int(o, n)
     while (i < n) {
         if (ld8(tbl + ld8(s + S_DATA + i)) != 0) {
             _int(o, i)

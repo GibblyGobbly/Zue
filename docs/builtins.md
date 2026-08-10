@@ -160,7 +160,7 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 | `contains(s, sub)` | `true` if `sub` is found in `s`; also works on a list | `contains("Team", "ea")` is `true` |
 | `index_of(s, sub)` | Index of the first occurrence; an `Argument Error` if there is none (check with `contains` first) | `index_of("banana", "nan")` is `2` |
 | `index_of(s, sub, start)` | The same, looking only from index `start` (0 to `len(s)`) | `index_of("banana", "an", 2)` is `3` |
-| `index_of_any(s, set)` | Index of the first byte that is in the string `set`, `-1` if none; takes an optional `start` | `index_of_any("a, b", ", ")` is `1` |
+| `index_of_any(s, set)` | Index of the first byte that is in the string `set`, or `len(s)` (the end) if none, as `skip_chars` gives; takes an optional `start` | `index_of_any("a, b", ", ")` is `1` |
 | `skip_chars(s, set)` | Index of the first byte that is not in `set`, `len(s)` if there is none; takes an optional `start` | `skip_chars("  x", " ")` is `2` |
 | `last_index_of(s, sub)` | Index of the last occurrence; an `Argument Error` if there is none | `last_index_of("banana", "a")` is `5` |
 | `starts_with(s, pre)` | `true` if `s` starts with `pre` | `starts_with("file.txt", "file")` is `true` |
