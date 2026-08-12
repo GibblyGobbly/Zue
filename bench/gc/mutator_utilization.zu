@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# mutator_utilization.zu: how often the program itself is stopped, not only how long the collector
+# pauses. It builds a live heap like live_heap.zu, then runs an allocating loop and records every gap
+# between two iterations that is longer than the resolution (default 10 microseconds). Collector
+# steps, the throttle, barrier hand-offs, page faults and the scheduler all show up as gaps.
+#
+# At the end it prints the stops and the minimum mutator utilization (MMU): for a window of w
+# milliseconds, the smallest share of any w-millisecond stretch of the loop in which the program ran.
+# Many short stops close together give a low MMU even when every single stop is short.
+#   mutator_utilization.zu <live MiB> <iterations> [resolution microseconds]
+let a = args()
+let live_mb = to_int(a[0])
+let iterations = to_int(a[1])
+let resolution = 0.00001
+if (len(a) > 2) {
+    resolution = to_float(a[2]) / 1000000.0
+}
+
+let live = []
+let objects = floor_div(live_mb * 1048576, 200)
+for (let i = 0; i < objects; i++) {
+    let row = []
+    for (let j = 0; j < 8; j++) {
+        append(row, i + j)
+    }
+    append(live, row)
+}
+
+# The stops are kept as floats in two lists: a float sits in the list cell itself, so recording a stop
+# allocates nothing but the occasional growth of the lists.
+let starts = []
+let lengths = []
+let n = len(live)
+let sum = 0
+let begin = clock()
+let prev = begin
+for (let i = 0; i < iterations; i++) {
+    let tmp = [i, i + 1, i + 2, i + 3]
+    let s = "k{i}"
+    sum += tmp[0] % 7 + len(s) + len(live[i % n])
+    let now = clock()
+    if (now - prev > resolution) {
+        append(starts, prev - begin)
+        append(lengths, now - prev)
+    }
+    prev = now
+}
+let run = prev - begin
+
+let count = len(lengths)
+let stopped = 0.0
+let longest = 0.0
+let over_100us = 0
+let over_1ms = 0
+for (let d in lengths) {
+    stopped += d
+    longest = max(longest, d)
+    if (d > 0.0001) {
+        over_100us += 1
+    }
+    if (d > 0.001) {
+        over_1ms += 1
+    }
+}
+
+# The smallest share of a window of w seconds left to the program. A window that holds a stop's start
+# counts the part of each stop that falls inside it; the worst window starts where a stop starts.
+func mmu(starts, lengths, w) {
+    let worst = 1.0
+    let n = len(starts)
+    for (let i = 0; i < n; i++) {
+        let end = starts[i] + w
+        let paused = 0.0
+        let j = i
+        while (j < n and starts[j] < end) {
+            paused += min(lengths[j], end - starts[j])
+            j += 1
+        }
+        worst = min(worst, max(0.0, 1.0 - paused / w))
+    }
+    return worst
+}
+
+print("live_mib {live_mb}  iterations {iterations}  checksum {sum}")
+print("run_s {fixed(run, 3)}  iterations_per_s {fixed(float(iterations) / run, 0)}")
+if (count == 0) {
+    print("no stops longer than {fixed(resolution * 1000000.0, 0)} us")
+    exit(0)
+}
+print("stops {count}  stopped_ms {fixed(stopped * 1000.0, 1)}  stopped_pct {fixed(100.0 * stopped / run, 1)}")
+# the windows first: sort below puts the lengths in order and breaks their pairing with the starts
+for (let w in [0.001, 0.01, 0.1]) {
+    print("mmu_{fixed(w * 1000.0, 0)}ms_pct {fixed(100.0 * mmu(starts, lengths, w), 1)}")
+}
+sort(lengths)
+print("longest_ms {fixed(longest * 1000.0, 2)}  p50_us {fixed(lengths[floor_div(count, 2)] * 1000000.0, 0)}  p99_us {fixed(lengths[floor_div(count * 99, 100)] * 1000000.0, 0)}  over_100us {over_100us}  over_1ms {over_1ms}")
