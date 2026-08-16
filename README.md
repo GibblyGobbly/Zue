@@ -39,6 +39,9 @@ sudo dnf install llvm lld make glibc-devel git
 sudo pacman -S llvm lld make git
 ```
 
+On Debian, Ubuntu or Linux Mint, `sh install.sh` in the source folder does all of this (LLVM 22 from
+apt.llvm.org, the optional tools too), then builds and tests; `sh install.sh --no-test` skips the tests.
+
 Check that `opt-22 --version` (or `opt --version`) reports 22. On a distribution with another
 version, build with `make LLVM=N`. No C compiler is needed. Optional extra: `valgrind`.
 

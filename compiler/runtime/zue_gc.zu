@@ -1,21 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 #
-# zue_gc.zu: memory management for compiled Zue programs: a conservative,
-# non-moving mark-and-sweep collector with a write barrier. A GC thread marks while the program runs;
-# the program thread sweeps in short steps. Compiled with `zue --native`.
+# zue_gc.zu: memory management for compiled Zue programs: a conservative, non-moving Immix collector
+# with a write barrier. A GC thread marks while the program runs and then sweeps. Compiled with
+# `zue --native`.
 #
-# Every runtime object is allocated here. Small objects come from 64 KB pages split
-# into size classes; large ones get pages of their own. A collection marks everything
-# reachable from the stack, the registers, the program's static data and any registered
-# root ranges, treating every aligned word as a possible pointer (interior pointers
-# count), then sweeps the rest. Objects that hold no pointers (strings, doubles, bytes)
-# are allocated "atomic" and never scanned.
+# Objects are bump allocated into 32 KB blocks of 128-byte lines; a block is cut from a 2 MB chunk. A
+# collection marks everything reachable from the stack, the registers, the program's static data and any
+# registered root ranges, treating every aligned word as a possible pointer (interior pointers count). A
+# line no live object touches is free, and the allocator reuses free lines (holes) in place. Objects that
+# hold no pointers (strings, doubles, bytes) are allocated "atomic", in blocks of their own that are never
+# scanned. Objects over MAX_MEDIUM bytes get a span of their own.
 #
-# Environment:
-#   ZUE_RT_GC_STRESS=N  collect every N allocations (testing)
-#   ZUE_RT_GC_STATS=1   print the collection count, live bytes, pages and the total and longest pause at exit
-#   see docs/gc.md for ZUE_RT_GC_STATS, _STRESS, _SLOW and _VERIFY
+# Each chunk has a descriptor outside the heap (calloc, so the collector never scans it) with one bit per
+# 16-byte granule in three bitmaps: object start, object end and mark. A word points into an object when a
+# start bit is found at or before it in its block and the first end bit after that start is at or after it.
+#
+# Environment: see docs/gc.md for ZUE_RT_GC_STATS, _STRESS, _SLOW and _VERIFY.
 
 extern("malloc", "ptr", "i64")
 extern("calloc", "ptr", "i64,i64")
@@ -49,110 +50,212 @@ extern("usleep", "i32", "i32")
 extern("sysconf", "i64", "i32")
 extern("getrlimit", "i32", "i32,ptr")
 
-# struct Page
-const PG_BASE = 0
-const PG_OBJ = 8
-const PG_NOBJS = 16       # u32
-const PG_BUMP = 20        # u32, objects handed out at least once
-const PG_FREE = 24        # u32, where the search for a free slot starts: no slot below it is free
-const PG_NFREE = 28       # u32, free slots below PG_BUMP (objects freed by a sweep that were not handed out again)
-const PG_USED_COUNT = 32  # u32
-const PG_ATOMIC = 36      # u8
-const PG_LARGE = 37       # u8
-const PG_IN_LIST = 39     # u8
-const PG_CLS = 40         # i32
-const PG_EPOCH = 44       # u32, the sweep that last handled this page; a page of the current sweep is skipped
-const PG_SPAN = 48        # bytes owned by a large page
-const PG_USED = 56
-const PG_MARK = 64
-const PG_NEXT = 72
-const PG_RECIP = 80       # i64, 2^32 / object size + 1: offset * PG_RECIP >> 32 is the object index
-const PG_SIZE = 88
-
-# struct Slot { key, page }
-const SLOT_SIZE = 16
-
-const PAGE_SHIFT = 16
+# Sizes
+const GRAN = 16                # objects start on a granule and take whole granules
+const LINE = 128               # the unit of reuse
+const LINE_SHIFT = 7
+const BLOCK = 32768            # 256 lines; holds normal or atomic objects, not both
+const BLOCK_SHIFT = 15
+const LINES_PER_BLOCK = 256
+const GRANS_PER_BLOCK = 2048
+const CHUNK_SIZE = 2097152     # 64 blocks, aligned to 2 MB
+const BLOCKS_PER_CHUNK = 64
+const MAX_MEDIUM = 8192        # a quarter of a block: larger objects get a span of their own
+const PAGE_SHIFT = 16          # the page table maps 64 KB of address space to a descriptor
 const PAGE_SIZE = 65536
-const MAX_SMALL = 32752
 const MIN_THRESHOLD = 16777216
-const CHUNK_SIZE = 2097152    # small-object pages are cut from chunks of this size (32 pages)
-const NCLASSES = 38
-const SPAN_CACHE_SLOTS = 512
-const TRIM_BATCH = 16         # empty pages given back to the OS per collector step, at most
-const TRIM_STEP_NS = 20000    # time a step spends giving pages back before it stops (at least one page is given back)
-const RETIRE_BATCH = 64       # pooled pages given up completely per collector step, at most
-const CHUNK_BYTES = 4096      # a larger object is scanned in pieces of this size
-const STEP_BYTES = 8192       # bytes the program allocates between two steps
-const SWEEP_STEP_NS = 50000   # time an incremental sweep step may take
-const TRIM_BYTES = 1048576    # cached large-object memory given back per call of _cache_trim
+const CHUNK_BYTES = 4096       # a larger object is scanned in pieces of this size
+const STEP_BYTES = 8192        # bytes the program allocates between two steps while a cycle runs
+const LOCAL_CAP = 256
+const GCT_BATCH = 16384        # words the GC thread marks before it looks at what the program thread handed over
+const THROTTLE_NS_STEP = 100000  # time a collector step of a program that allocates too fast is held back
+const ROOT_STEP_WORDS = 32768  # words of root ranges scanned in one step of the collector (256 KB)
+const SWEEP_CLAIM = 64         # blocks the GC thread claims for sweeping at a time
 
-table("_class_sizes", "i32", 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 192, 224, 256, 272, 320, 384, 448, 512, 528, 640, 768, 1024, 1040, 1280, 1536, 2048, 2064, 3072, 4096, 4112, 6144, 8192, 8208, 10920, 13104, 16368, 21840, 32752)
-space("_class_of", 2056)       # u8[MAX_SMALL / 16 + 1]
+# struct Chunk, the descriptor of a 2 MB chunk (calloc). Kind 1; offset 0 is shared with struct Large.
+const CD_KIND = 0              # u8: 1
+const CD_BASE = 8
+const CD_VMARK = 16            # the verifier's visited bits, allocated when the verifier first runs
+const CD_START = 64            # bit per granule: an object starts here
+const CD_END = 16448           # bit per granule: an object ends here (its last granule)
+const CD_MARK = 32832          # bit per granule, at an object's start: marked in the cycle
+const CD_LINES = 49216         # byte per line: the epoch of the cycle that last found the line live, 0 when free
+const CD_BLACK = 65600         # bit per line: allocated while the cycle marks
+const CD_BLK = 67648           # BlockInfo[64]
+const CD_SIZE = 68672
+const MAP_BYTES = 16384        # bytes of one granule bitmap of a chunk
+# struct BlockInfo (16 bytes)
+const BI_KIND = 0              # u8: 0 free, 1 normal objects, 2 atomic objects
+const BI_SWEPT = 1             # u8: the sweep epoch that last swept the block, or in which it was taken
+const BI_ZERO = 2              # u8: 1 while every byte of the block is zero
+const BI_COLD = 3              # u8: 1 when its memory was given back to the system
+const BI_SIZE = 16
 
-# State of the collector: one block of 64-bit fields (and two tables) that the functions reach
-# through _heap(). A field's offset is its constant H_NAME.
+# struct Large, the descriptor of an object over MAX_MEDIUM (calloc). Kind 2.
+const LD_KIND = 0              # u8: 2
+const LD_MARK = 1              # u8
+const LD_ATOMIC = 2            # u8
+const LD_BLACK = 3             # u8: allocated while the cycle marks
+const LD_VMARK = 4             # u8: visited by the verifier
+const LD_BASE = 8
+const LD_OBJ = 16              # the object's size
+const LD_SPAN = 24             # bytes mapped
+const LD_SIZE = 32
+
+# struct Allocator: bump allocation into one hole. The block is kept as its number (address >> BLOCK_SHIFT)
+# and the cursor as an offset: the collector's state is in the data segment, which is scanned, and an
+# address there would keep whatever object starts at it alive.
+const AL_BLOCK = 0             # block number, 0 when there is none
+const AL_OFF = 8               # where the next object goes, from the block's start
+const AL_LEFT = 16             # bytes left in the hole
+const AL_CD = 24               # the block's chunk descriptor
+const AL_G0 = 32               # the block's first granule, counted from the chunk's start
+const AL_SIZE = 40
+# Four allocators: [atomic][overflow]. The overflow allocator takes medium objects that do not fit the hole.
+
+# State of the collector: one block of 64-bit fields that the functions reach through _heap(). A field's
+# offset is its constant H_NAME. The fields named in zue_rt_blue.zu and zue_rt_ops.zu keep their names.
 const H_SETUP_DONE = 0
-const H_ALL_PAGES = 8
-const H_ALL_COUNT = 16
-const H_ALL_CAP = 24
-const H_POOL = 32
-const H_POOL_COUNT = 40
-const H_POOL_CAP = 48
-const H_POOL_COLD = 56        # pool entries below this index have been given back to the OS
-const H_TABLE = 64            # top level of the page table: 65536 pointers to second-level tables
-const H_HEAP_LO = 72
-const H_HEAP_HI = 80
-const H_BYTES_SINCE_GC = 88
-const H_THRESHOLD = 96
-const H_EXTRA = 104            # the pacer's heap goal: bytes the program may allocate between two cycle ends before it is slowed down
-const H_LIMIT = 112    # bytes allocated since the last collection that make _gc_alloc look at the collector
-const H_LIVE_BYTES = 120
-const H_GC_READY = 128
-const H_GC_BUSY = 136
-const H_STRESS_EVERY = 144
-const H_ALLOC_COUNT = 152
-const H_COLLECTIONS = 160
-const H_STACK_BASE = 168
-const H_MSTACK = 176           # MarkItem { p, n }
-const H_MTOP = 184
-const H_MCAP = 192
-const H_ROOTS = 200            # Range { lo, hi }
-const H_ROOT_COUNT = 208
-const H_ROOT_CAP = 216
-const H_PAUSE_TOTAL = 224      # nanoseconds spent in collections
-const H_PAUSE_MAX = 232        # the longest single collection, in nanoseconds
-const H_MARK_TOTAL = 240       # nanoseconds spent marking
-const H_SWEEP_TOTAL = 248      # nanoseconds spent sweeping
-const H_STACK_LOW = 256        # lowest usable address of the program thread stack; 0 when unknown
-const H_CHUNK_BASE = 264         # the start of the current chunk; 0 before the first
-const H_CHUNK_USED = 272         # pages of it cut so far (a count, not an address: see _chunk_page)
-const H_IDX = 280              # object index set by _page_of
-const H_MARKING = 288          # 1 from the start of an incremental cycle until its marks are final
-const H_VERIFY = 304           # 1: at the end of each incremental cycle check that no live object is unmarked
-const H_VMODE = 312            # 1 while the verifier walks the heap
-const H_VSTACK = 320           # 1 while the verifier reads the stack
-const H_SWEEPING = 328         # 1 from the end of marking until every page is swept
-const H_SWEEP_I = 336          # next page to sweep
-const H_SWEEP_KEEP = 344       # pages kept so far; the list of pages is compacted as it is swept
-const H_SWEEP_EPOCH = 352
-const H_SWEEPSTEP_MAX = 360    # the longest incremental sweep step, in nanoseconds
-const H_FINISH_MAX = 376       # the longest end of a cycle (verify, hook, sweep), in nanoseconds
-const H_BEGIN_MAX = 384        # the longest start of a cycle (marking the roots), in nanoseconds
-const H_CACHE_COUNT = 392
-const H_CACHE_BYTES = 400
-const H_CACHE_SPAN = 408       # span of the slot taken by _cache_take
+const H_TABLE = 8              # top level of the page table: 65536 pointers to second-level tables
+const H_HEAP_LO = 16
+const H_HEAP_HI = 24
+const H_BYTES_SINCE_GC = 32
+const H_THRESHOLD = 40
+const H_EXTRA = 48             # the pacer's heap goal: bytes the program may allocate between two cycle ends before it is slowed down
+const H_LIMIT = 56             # bytes allocated since the last collection that make _gc_alloc look at the collector
+const H_LIVE_BYTES = 64
+const H_GC_READY = 72
+const H_GC_BUSY = 80
+const H_STRESS_EVERY = 88
+const H_ALLOC_COUNT = 96
+const H_COLLECTIONS = 104
+const H_STACK_BASE = 112
+const H_MSTACK = 120           # MarkItem { p, n }
+const H_MTOP = 128
+const H_MCAP = 136
+const H_ROOTS = 144            # Range { lo, hi }
+const H_ROOT_COUNT = 152
+const H_ROOT_CAP = 160
+const H_PAUSE_TOTAL = 168      # nanoseconds the program thread spent in collector steps
+const H_PAUSE_MAX = 176
+const H_STACK_LOW = 184        # lowest usable address of the program thread stack; 0 when unknown
+const H_MARKING = 192          # 1 from the start of a cycle until its marks are final
+const H_VERIFY = 200
+const H_VMODE = 208            # 1 while the verifier walks the heap
+const H_VSTACK = 216           # 1 while the verifier reads the stack
+const H_SWEEPING = 224         # 1 from the end of marking until the sweep is done and the pacer has run
+const H_EPOCH = 232            # the line epoch of the running or last cycle, 1 to 255
+const H_CHUNKS = 240           # Chunk*[]
+const H_CHUNK_COUNT = 248
+const H_CHUNK_CAP = 256
+const H_FRESH_CD = 264         # the chunk new blocks are cut from; 0 before the first
+const H_FRESH_USED = 272       # blocks of it cut so far
+const H_LARGE = 280            # Large*[]
+const H_LARGE_COUNT = 288
+const H_LARGE_CAP = 296
+const H_LISTS = 304            # BlockList[4] { buf, n, cap }: recyclable normal, recyclable atomic, free, free cold
+const L_RECYC = 0
+const L_FREE = 2
+const L_COLD = 3
+const H_SW_CHUNK = 400         # the sweep's cursor: chunk index
+const H_SW_BLOCK = 408         # and block index
+const H_SW_EPOCH = 416         # the sweep epoch, 1 to 255
+const H_SW_LARGE = 424         # large objects that existed when the sweep began
+const H_SW_DONE = 432          # 1 when the GC thread has finished the sweep
+const H_STATS = 448
+const H_MSTACK_GROW = 456
+const H_GCT_STATE = 464        # 0: idle, 1: marking, 2: marking and out of work, 3: sweeping
+const H_SHARED_N = 488         # items the program thread has handed over and the GC thread has not taken yet
+const H_SHARED_CAP = 496
+const H_SHARED_BUF = 504
+const H_LOCAL_N = 512          # items waiting in H_LOCAL_BUF
+const H_CYCLE_BYTES = 520      # H_BYTES_SINCE_GC when the cycle began
+const H_SLOW_US = 528          # ZUE_RT_GC_SLOW: microseconds the GC thread sleeps after each piece of marking
+const H_GCT_NS = 536           # nanoseconds the GC thread spent marking
+const H_SWEEP_NS = 544         # nanoseconds the GC thread spent sweeping
+const H_MUTEX = 552            # pthread_mutex_t, 40 bytes, valid when zero filled
+const H_COND_GC = 592          # pthread_cond_t, 48 bytes: wakes the GC thread
+const H_COND_DONE = 640        # pthread_cond_t: the GC thread has run out of work
+const H_LOCAL_BUF = 688        # MarkItem[LOCAL_CAP]
+const H_CYCLE_T0 = 4784        # when the running cycle began
+const H_CYCLE_MAX = 4792       # the longest cycle from its start to final marks
+const H_CYCLE_GCT0 = 4800      # H_GCT_NS when the running cycle began
+const H_CYCLE_COST = 4808      # the pacer's measure of a cycle: nanoseconds from its start to the end of its sweep, per MiB live
+const H_THROTTLE_CALL = 4816   # nanoseconds the running collector step has spun to slow the program down
+const H_THROTTLE_NS = 4824
+const H_THROTTLE_N = 4832
+const H_PAUSE_MAX_SLEEP = 4840 # of the longest pause, the nanoseconds that were the throttle's spin
+const H_THROTTLE_MAX = 4848
+const H_LAST_END = 4856        # when the last cycle ended
+const H_ALLOC_RATE = 4864      # the pacer's measure of the program: bytes allocated per millisecond
+const H_PRE = 4872             # the helper thread's block (calloc); 0 when no helper runs
+const H_RS_ON = 4880           # 1 while the root ranges from unsafe code are being scanned in steps
+const H_RS_I = 4888
+const H_RS_POS = 4896
+const H_BS_ON = 4904           # 1 while the stacks of the blue threads that are away are being scanned in steps
+const H_BS_CUR = 4912
+const H_LOWMEM = 4920          # 1 for a program built with --gc=lowmem
+const H_BEGIN_MAX = 4928       # the longest start of a cycle
+const H_FINISH_MAX = 4936      # the longest end of the marking (verify, hook, sweep start)
+const H_ALLOC = 4944           # Allocator[4]
+const H_LARGE_BYTES = 5104     # bytes mapped for large objects
+const H_COLD_KEEP = 5112       # free blocks the trim leaves hot
+const H_SLOT_GC = 5120         # { first granule, size, bytes marked in this cycle } of the object _find found, for the marking thread
+const H_SLOT = 5144            # the same for the program thread
+const HEAP_SIZE = 5168
+# The block of the helper thread, which makes chunks ahead of time.
+const PRE_SLOTS = 16
+const PRE_RING = 0
+const PRE_HEAD = 128           # next slot the program thread takes (written by the program thread only)
+const PRE_TAIL = 136           # next slot the helper fills (written by the helper only)
+const PRE_WANT = 144           # how many ready chunks the helper keeps; 0 until the program has asked for a second chunk
+const PRE_MUTEX = 152
+const PRE_COND = 192
+const PRE_HITS = 240
+const PRE_MISSES = 248
+const PRE_HINT = 256           # 1 while new chunks ask for huge pages; the helper turns it off
+const PRE_MADE = 264
+const PRE_SPIKES = 272
+const PRE_OFF_AT = 280
+const PRE_MAXNS = 288
+const PRE_SIZE = 296
+const SPIKE_NS = 1000000       # a chunk that takes longer than this to make is a spike (the pause goal is below a millisecond)
+const HINT_SPIKES = 3          # this many spikes switch the huge page hint off for the chunks made after them
+space("_heap0", HEAP_SIZE)
+space("lv_stack_low", 8)    # a copy of H_STACK_LOW for generated code, which does the stack test of a direct call itself
+space("_hibit", 256)        # the highest set bit of a byte
+space("_lobit", 256)        # the lowest set bit of a byte
+
+func _heap() {
+    return addr_of("_heap0")
+}
+
+func _now_ns() {
+    let ts = stack_buf(16)
+    clock_gettime(1, ts)
+    return ld64(ts) * 1000000000 + ld64(ts + 8)
+}
 
 func _die_oom() {
     write(2, cstr("Runtime Error: out of memory\n"), 29)
     exit(1)
 }
 
-func _class_size(c) {
-    return ld32(addr_of("_class_sizes") + c * 4)
+func _invariant_fail(what) {
+    let buf = stack_buf(200)
+    let n = snprintf(buf, 200, cstr("Runtime Error: GC invariant broken: %s\n"), what)
+    write(2, buf, n)
+    exit(1)
 }
 
-# Size-class lookup table, filled before the first allocation.
+func _lock() {
+    pthread_mutex_lock(_heap() + H_MUTEX)
+}
+
+func _unlock() {
+    pthread_mutex_unlock(_heap() + H_MUTEX)
+}
+
 func _gc_setup() {
     let h = _heap()
     st64(h + H_SETUP_DONE, 1)
@@ -160,20 +263,30 @@ func _gc_setup() {
     st64(h + H_THRESHOLD, MIN_THRESHOLD)
     st64(h + H_EXTRA, 4 * MIN_THRESHOLD)
     st64(h + H_LIMIT, 4611686018427387904)
-    let c = 0
-    let tab = addr_of("_class_of")
-    for (let i = 0; i <= MAX_SMALL / 16; i++) {
-        while (_class_size(c) < i * 16) {
-            c++
+    st64(h + H_EPOCH, 1)
+    st64(h + H_SW_EPOCH, 1)
+    st64(h + H_COLD_KEEP, MIN_THRESHOLD / BLOCK)
+    let hi = addr_of("_hibit")
+    let lo = addr_of("_lobit")
+    for (let b = 1; b < 256; b++) {
+        let top = 7
+        while (band(b, shl(1, top)) == 0) {
+            top--
         }
-        st8(tab + i, c)
+        st8(hi + b, top)
+        let low = 0
+        while (band(b, shl(1, low)) == 0) {
+            low++
+        }
+        st8(lo + b, low)
     }
 }
 
-# Page table: the page descriptor of each 64 KB page, found from the address with two loads. The
-# first level is indexed by bits 32 to 47 of the address, the second by bits 16 to 31.
+# Page table: the descriptor of each 64 KB of address space, found from the address with two loads. The
+# first level is indexed by bits 32 to 47 of the address, the second by bits 16 to 31. Writers hold the mutex;
+# the marking thread reads without it, and a descriptor is complete before the table shows it.
 
-func _table_insert(key, pg) {
+func _table_insert(key, d) {
     let h = _heap()
     if (ld64(h + H_TABLE) == 0) {
         let top = calloc(65536, 8)
@@ -191,19 +304,21 @@ func _table_insert(key, pg) {
         }
         st64a(slot, l2)
     }
-    st64a(l2 + band(key, 65535) * 8, pg)    # the page is complete before the table shows it to the GC thread
+    st64a(l2 + band(key, 65535) * 8, d)
 }
 
 func _table_find(key) {
     let h = _heap()
-    let l2 = ld64a(ld64a(h + H_TABLE) + shr(key, 16) * 8)
+    let top = ld64a(h + H_TABLE)
+    if (top == 0) {
+        return 0
+    }
+    let l2 = ld64a(top + shr(key, 16) * 8)
     if (l2 == 0) {
         return 0
     }
     return ld64a(l2 + band(key, 65535) * 8)
 }
-
-# Pages
 
 func _note_heap(lo, n) {
     let h = _heap()
@@ -215,52 +330,42 @@ func _note_heap(lo, n) {
     }
 }
 
-func _track_page(pg) {
-    let h = _heap()
-    if (ld64(h + H_ALL_COUNT) == ld64(h + H_ALL_CAP)) {
-        if (ld64(h + H_ALL_CAP) != 0) {
-            st64(h + H_ALL_CAP, ld64(h + H_ALL_CAP) * 2)
-        } else {
-            st64(h + H_ALL_CAP, 256)
+# A growable array of words (calloc, never scanned): { buf, n, cap } at p.
+func _arr_push(p, v) {
+    if (ld64(p + 8) == ld64(p + 16)) {
+        let cap = ld64(p + 16) * 2
+        if (cap == 0) {
+            cap = 64
         }
-        st64(h + H_ALL_PAGES, realloc(ld64(h + H_ALL_PAGES), ld64(h + H_ALL_CAP) * 8))
-        if (ld64(h + H_ALL_PAGES) == 0) {
+        let buf = realloc(ld64(p), cap * 8)
+        if (buf == 0) {
             _die_oom()
         }
+        st64(p, buf)
+        st64(p + 16, cap)
     }
-    st64(ld64(h + H_ALL_PAGES) + ld64(h + H_ALL_COUNT) * 8, pg)
-    st64(h + H_ALL_COUNT, ld64(h + H_ALL_COUNT) + 1)
+    st64(ld64(p) + ld64(p + 8) * 8, v)
+    st64(p + 8, ld64(p + 8) + 1)
 }
 
-func _init_small_page(pg, cls, atomic) {
-    let h = _heap()
-    let size = _class_size(cls)
-    st32(pg + PG_CLS, cls)
-    st32(pg + PG_EPOCH, ld64(h + H_SWEEP_EPOCH))
-    st64(pg + PG_OBJ, size)
-    st64(pg + PG_RECIP, udiv(4294967296, size) + 1)
-    st32(pg + PG_NOBJS, PAGE_SIZE / size)
-    st32(pg + PG_BUMP, 0)
-    st32(pg + PG_FREE, 0)
-    st32(pg + PG_NFREE, 0)
-    st32(pg + PG_USED_COUNT, 0)
-    st8(pg + PG_ATOMIC, atomic)
-    st8(pg + PG_LARGE, 0)
-    st8(pg + PG_IN_LIST, 0)
-    free(ld64(pg + PG_USED))
-    free(ld64(pg + PG_MARK))
-    let n = ld32(pg + PG_NOBJS)
-    st64(pg + PG_USED, calloc(n, 1))
-    st64(pg + PG_MARK, calloc(n, 1))
-    if (ld64(pg + PG_USED) == 0 or ld64(pg + PG_MARK) == 0) {
-        _die_oom()
+func _arr_pop(p) {
+    if (ld64(p + 8) == 0) {
+        return 0
     }
+    st64(p + 8, ld64(p + 8) - 1)
+    return ld64(ld64(p) + ld64(p + 8) * 8)
 }
+
+func _list(i) {
+    return _heap() + H_LISTS + i * 24
+}
+
+# Chunks
 
 # Maps a 2 MB chunk aligned to 2 MB, asks for huge pages and touches it, so that the kernel has zeroed
 # and attached the memory when this returns. Returns 0 when the system has no memory left. The first
 # touch of a huge page can take milliseconds, which is why the helper thread does it ahead of time. hint is
-# 0 once the helper has seen the hint cost spikes (see _pre_main).
+# 0 once the helper has seen the hint cost spikes (see _pre_judge).
 func _chunk_make(hint) {
     let raw = mmap(0, CHUNK_SIZE * 2, 3, 34, -1, 0)    # read and write, private and anonymous
     if (raw == -1 or raw == 0) {
@@ -284,10 +389,7 @@ func _chunk_make(hint) {
 }
 
 # The hint costs speed when the kernel has to compact memory to find a huge page, and the cost shows as a
-# chunk that takes long to make. After HINT_SPIKES such chunks, new chunks stop asking for huge pages. There
-# is no size limit on this: the kernel docs tie these stalls to fragmentation of free memory, not to the size
-# of the heap. At 1 and 4 GiB no chunk took long and the hint stayed on; at 10 GiB it went off after about
-# 6,400 chunks.
+# chunk that takes long to make. After HINT_SPIKES such chunks, new chunks stop asking for huge pages.
 func _pre_judge(pre, dt) {
     st64(pre + PRE_MADE, ld64(pre + PRE_MADE) + 1)
     if (dt > ld64(pre + PRE_MAXNS)) {
@@ -302,8 +404,8 @@ func _pre_judge(pre, dt) {
     }
 }
 
-# The helper thread: keeps PRE_WANT chunks ready for the program thread. It sleeps on PRE_COND
-# and holds the mutex only to decide whether to sleep, never while it makes a chunk.
+# The helper thread: keeps PRE_WANT chunks ready for the program thread. It sleeps on PRE_COND and holds the
+# mutex only to decide whether to sleep, never while it makes a chunk.
 func _pre_main(pre) {
     pthread_mutex_lock(pre + PRE_MUTEX)
     while (1 == 1) {
@@ -326,239 +428,193 @@ func _pre_main(pre) {
     return 0
 }
 
-# A 64 KB page, zero filled and aligned to 64 KB. Pages are cut from 2 MB chunks of fresh anonymous
-# memory, which the kernel zeroes, and which may be backed by huge pages: far fewer page faults than
-# one allocation per page. A chunk comes ready from the helper thread when one is there.
-func _chunk_page() {
+# A new chunk with its descriptor, in the page table and the list of chunks. Program thread, mutex held.
+# The memory comes ready from the helper thread when it has one.
+func _chunk_new() {
     let h = _heap()
-    if (ld64(h + H_CHUNK_BASE) == 0 or ld64(h + H_CHUNK_USED) == CHUNK_SIZE / PAGE_SIZE) {
-        let base = 0
-        let pre = ld64(h + H_PRE)
+    let base = 0
+    let pre = ld64(h + H_PRE)
+    if (pre != 0) {
+        let head = ld64a(pre + PRE_HEAD)
+        if (ld64a(pre + PRE_TAIL) != head) {
+            base = ld64(pre + PRE_RING + (head % PRE_SLOTS) * 8)
+            st64a(pre + PRE_HEAD, head + 1)
+            st64(pre + PRE_HITS, ld64(pre + PRE_HITS) + 1)
+        } else if (ld64a(pre + PRE_WANT) != 0) {
+            st64(pre + PRE_MISSES, ld64(pre + PRE_MISSES) + 1)
+            if (ld64a(pre + PRE_WANT) < PRE_SLOTS) {
+                st64a(pre + PRE_WANT, ld64a(pre + PRE_WANT) * 2)    # the program outruns the helper: keep more ready
+            }
+        } else {
+            st64a(pre + PRE_WANT, 2)    # the second chunk has been asked for: from now on keep some ready
+        }
+        pthread_mutex_lock(pre + PRE_MUTEX)
+        pthread_cond_signal(pre + PRE_COND)
+        pthread_mutex_unlock(pre + PRE_MUTEX)
+    }
+    if (base == 0) {
+        let hint = 1
         if (pre != 0) {
-            let head = ld64a(pre + PRE_HEAD)
-            if (ld64a(pre + PRE_TAIL) != head) {
-                base = ld64(pre + PRE_RING + (head % PRE_SLOTS) * 8)
-                st64a(pre + PRE_HEAD, head + 1)
-                st64(pre + PRE_HITS, ld64(pre + PRE_HITS) + 1)
-            } else if (ld64a(pre + PRE_WANT) != 0) {
-                st64(pre + PRE_MISSES, ld64(pre + PRE_MISSES) + 1)
-                if (ld64a(pre + PRE_WANT) < PRE_SLOTS) {
-                    st64a(pre + PRE_WANT, ld64a(pre + PRE_WANT) * 2)    # the program outruns the helper: keep more ready
-                }
-            } else {
-                st64a(pre + PRE_WANT, 2)    # the second chunk has been asked for: from now on keep some ready
-            }
-            pthread_mutex_lock(pre + PRE_MUTEX)
-            pthread_cond_signal(pre + PRE_COND)
-            pthread_mutex_unlock(pre + PRE_MUTEX)
+            hint = ld64a(pre + PRE_HINT)
         }
+        base = _chunk_make(hint)
         if (base == 0) {
-            let hint = 1
-            if (pre != 0) {
-                hint = ld64a(pre + PRE_HINT)
-            }
-            base = _chunk_make(hint)
-            if (base == 0) {
-                _die_oom()
-            }
-        }
-        st64(h + H_CHUNK_BASE, base)
-        st64(h + H_CHUNK_USED, 0)
-    }
-    # The state is the chunk's start and a count, never the address just past its end: the collector scans
-    # this block as a root, and an address one past the end is the start of whatever is mapped next to the
-    # chunk, often a large object. That kept a dead large object reachable, and made the verifier report it.
-    let page = ld64(h + H_CHUNK_BASE) + ld64(h + H_CHUNK_USED) * PAGE_SIZE
-    st64(h + H_CHUNK_USED, ld64(h + H_CHUNK_USED) + 1)
-    return page
-}
-
-func _new_small_page(cls, atomic) {
-    let h = _heap()
-    let pg = 0
-    if (ld64(h + H_POOL_COUNT) != 0 and ld64(h + H_MARKING) == 0) {    # a pooled page is still in the page table: the GC thread may read it
-        st64(h + H_POOL_COUNT, ld64(h + H_POOL_COUNT) - 1)
-        pg = ld64(ld64(h + H_POOL) + ld64(h + H_POOL_COUNT) * 8)
-        if (ld64(h + H_POOL_COLD) > ld64(h + H_POOL_COUNT)) {
-            st64(h + H_POOL_COLD, ld64(h + H_POOL_COUNT))
-        }
-    }
-    if (pg != 0) {
-        st64(pg + PG_NEXT, 0)
-        # A recycled page still holds its old objects. A fresh one is already zero.
-        memset(ld64(pg + PG_BASE), 0, PAGE_SIZE)
-        _init_small_page(pg, cls, atomic)
-    } else {
-        pg = calloc(1, PG_SIZE)
-        let mem = _chunk_page()
-        if (pg == 0) {
             _die_oom()
         }
-        st64(pg + PG_BASE, mem)
-        _note_heap(mem, PAGE_SIZE)
-        _track_page(pg)
-        _init_small_page(pg, cls, atomic)
-        _table_insert(shr(mem, PAGE_SHIFT), pg)
     }
-    return pg
+    let cd = calloc(1, CD_SIZE)
+    if (cd == 0) {
+        _die_oom()
+    }
+    st8(cd + CD_KIND, 1)
+    st64(cd + CD_BASE, base)
+    for (let i = 0; i < BLOCKS_PER_CHUNK; i++) {
+        st8(cd + CD_BLK + i * BI_SIZE + BI_ZERO, 1)
+    }
+    _arr_push(h + H_CHUNKS, cd)
+    _note_heap(base, CHUNK_SIZE)
+    for (let off = 0; off < CHUNK_SIZE; off += PAGE_SIZE) {
+        _table_insert(shr(base + off, PAGE_SHIFT), cd)
+    }
+    return cd
 }
 
-# A freed large span is kept for reuse, because mapping and unmapping memory costs more than clearing
-# it. The cache holds at most H_THRESHOLD bytes of touched memory, which is no more than the garbage that
-# was resident before the sweep, so the peak does not grow. A span not reused within one collection is given back.
-func _cache_take(need) {
+func _block_info(cd, bi) {
+    return cd + CD_BLK + bi * BI_SIZE
+}
+
+# Granule bitmaps. Bit g of a map is bit (g & 7) of byte g >> 3.
+
+func _bit_set(map, g) {
+    let p = map + shr(g, 3)
+    st8a(p, bor(ld8(p), shl(1, band(g, 7))))
+}
+
+func _bit_clear(map, g) {
+    let p = map + shr(g, 3)
+    st8a(p, band(ld8(p), bnot(shl(1, band(g, 7)))))
+}
+
+# The start of the object that granule g of a chunk falls in, searching back to the start of the block, or -1.
+func _obj_start(cd, g) {
+    let map = cd + CD_START
+    let lo = shr(band(g, bnot(GRANS_PER_BLOCK - 1)), 3)
+    let i = shr(g, 3)
+    let b = band(ld8a(map + i), shl(2, band(g, 7)) - 1)
+    if (b != 0) {
+        return i * 8 + ld8(addr_of("_hibit") + b)
+    }
+    i--
+    while (i >= lo) {
+        if (band(i, 7) == 7 and ld64a(map + i - 7) == 0) {
+            i -= 8
+            continue
+        }
+        b = ld8a(map + i)
+        if (b != 0) {
+            return i * 8 + ld8(addr_of("_hibit") + b)
+        }
+        i--
+    }
+    return -1
+}
+
+# The last granule of the object that starts at granule s: the first end bit at or after s, in its block.
+func _obj_end(cd, s) {
+    let map = cd + CD_END
+    let hi = shr(band(s, bnot(GRANS_PER_BLOCK - 1)) + GRANS_PER_BLOCK, 3)
+    let i = shr(s, 3)
+    let b = band(ld8a(map + i), bnot(shl(1, band(s, 7)) - 1))
+    if (b != 0) {
+        return i * 8 + ld8(addr_of("_lobit") + b)
+    }
+    i++
+    while (i < hi) {
+        if (band(i, 7) == 0 and ld64a(map + i) == 0) {
+            i += 8
+            continue
+        }
+        b = ld8a(map + i)
+        if (b != 0) {
+            return i * 8 + ld8(addr_of("_lobit") + b)
+        }
+        i++
+    }
+    _invariant_fail(cstr("an object start without an end"))
+    return -1
+}
+
+# The object that w points into: its descriptor (a chunk or a large object), or 0. For a chunk the object's
+# first granule is left at slot and its size at slot + 8; for a large object its size at slot + 8.
+func _find(w, slot) {
     let h = _heap()
-    for (let i = ld64(h + H_CACHE_COUNT) - 1; i >= 0; i--) {
-        let e = (h + H_SPAN_CACHE) + i * 32
-        let sp = ld64(e + 8)
-        if (sp >= need and sp <= need + need / 4) {
-            let base = ld64(e)
-            st64(h + H_CACHE_SPAN, sp)
-            st64(h + H_CACHE_BYTES, ld64(h + H_CACHE_BYTES) - (ld64(e + 24)))
-            st64(h + H_CACHE_COUNT, ld64(h + H_CACHE_COUNT) - 1)
-            let last = (h + H_SPAN_CACHE) + ld64(h + H_CACHE_COUNT) * 32
-            st64(e, ld64(last))
-            st64(e + 8, ld64(last + 8))
-            st64(e + 16, ld64(last + 16))
-            st64(e + 24, ld64(last + 24))
-            st64(last, 0)    # a stale address in the data segment would keep a dead object alive
-            st64(last + 8, 0)
-            st64(last + 16, 0)
-            st64(last + 24, 0)
-            return base
+    if (ult(w, ld64a(h + H_HEAP_LO)) or uge(w, ld64a(h + H_HEAP_HI))) {
+        return 0
+    }
+    let d = _table_find(shr(w, PAGE_SHIFT))
+    if (d == 0) {
+        return 0
+    }
+    if (ld8(d) == 2) {
+        if (ult(w, ld64(d + LD_BASE)) or uge(w, ld64(d + LD_BASE) + ld64(d + LD_OBJ))) {
+            return 0
+        }
+        st64(slot + 8, ld64(d + LD_OBJ))
+        return d
+    }
+    let off = w - ld64(d + CD_BASE)
+    if (ld8a(_block_info(d, shr(off, BLOCK_SHIFT)) + BI_KIND) == 0) {
+        return 0
+    }
+    let g = shr(off, 4)
+    let s = _obj_start(d, g)
+    if (s < 0) {
+        return 0
+    }
+    let e = _obj_end(d, s)
+    if (e < g) {
+        return 0
+    }
+    st64(slot, s)
+    st64(slot + 8, (e - s + 1) * GRAN)
+    return d
+}
+
+func _line_black(cd, g) {
+    let l = shr(g, 3)
+    return band(ld8a(cd + CD_BLACK + shr(l, 3)), shl(1, band(l, 7)))
+}
+
+# Sets the mark bit of the object at granule s; 0 when it was set already (by this or another thread).
+func _mark_bit(cd, s) {
+    let p = cd + CD_MARK + shr(s, 3)
+    let bit = shl(1, band(s, 7))
+    while (1 == 1) {
+        let old = ld8a(p)
+        if (band(old, bit) != 0) {
+            return 0
+        }
+        if (cas8(p, old, bor(old, bit)) != 0) {
+            return 1
         }
     }
     return 0
 }
 
-func _cache_put(mem, span, used) {
-    let h = _heap()
-    let touched = band(used + 4095, -4096)    # the part of the span that was ever written
-    if (ld64(h + H_CACHE_COUNT) < SPAN_CACHE_SLOTS) {
-        let e = (h + H_SPAN_CACHE) + ld64(h + H_CACHE_COUNT) * 32
-        let stamp = ld64(h + H_COLLECTIONS)
-        if (ld64(h + H_CACHE_BYTES) + touched > ld64(h + H_THRESHOLD)) {
-            stamp = 0    # over the cap: expired at once, given back by _cache_trim in small pieces
+# The lines of the object at granules s to s + n / GRAN - 1 are live in this cycle.
+func _mark_lines(cd, s, n) {
+    let e = _heap() + H_EPOCH
+    let first = shr(s, 3)
+    let last = shr(s + n / GRAN - 1, 3)
+    let ep = ld64(e)
+    for (let l = first; l <= last; l++) {
+        if (ld8a(cd + CD_LINES + l) != ep) {
+            st8a(cd + CD_LINES + l, ep)
         }
-        st64(e, mem)
-        st64(e + 8, span)
-        st64(e + 16, stamp)
-        st64(e + 24, touched)
-        st64(h + H_CACHE_COUNT, ld64(h + H_CACHE_COUNT) + 1)
-        st64(h + H_CACHE_BYTES, ld64(h + H_CACHE_BYTES) + (touched))
-        return 0
     }
-    munmap(mem, span)
 }
 
-# Gives back the cached spans that no allocation used since the previous collection, at most TRIM_BYTES
-# at a time so that one call stays short. Returns 1 when it gave something back.
-func _cache_trim() {
-    let h = _heap()
-    let budget = TRIM_BYTES
-    let released = 0
-    let i = 0
-    while (i < ld64(h + H_CACHE_COUNT) and budget > 0) {
-        let e = (h + H_SPAN_CACHE) + i * 32
-        if (ld64(e + 16) < ld64(h + H_COLLECTIONS)) {
-            let sp = ld64(e + 8)
-            let n = sp
-            if (n > budget) {
-                n = budget
-            }
-            munmap(ld64(e), n)
-            released = 1
-            budget -= n
-            let t = ld64(e + 24)
-            let drop = n
-            if (drop > t) {
-                drop = t
-            }
-            st64(h + H_CACHE_BYTES, ld64(h + H_CACHE_BYTES) - (drop))
-            if (n == sp) {
-                st64(h + H_CACHE_COUNT, ld64(h + H_CACHE_COUNT) - 1)
-                let last = (h + H_SPAN_CACHE) + ld64(h + H_CACHE_COUNT) * 32
-                st64(e, ld64(last))
-                st64(e + 8, ld64(last + 8))
-                st64(e + 16, ld64(last + 16))
-                st64(e + 24, ld64(last + 24))
-                st64(last, 0)    # a stale address in the data segment would keep a dead object alive
-                st64(last + 8, 0)
-                st64(last + 16, 0)
-                st64(last + 24, 0)
-            } else {
-                st64(e, ld64(e) + n)
-                st64(e + 8, sp - n)
-                st64(e + 24, t - drop)
-            }
-        } else {
-            i++
-        }
-    }
-    return released
-}
-
-# An object over MAX_SMALL gets its own span, rounded up to whole pages and aligned to 64 KB. A fresh
-# mapping is zeroed by the kernel and touched only when used; a reused span is cleared here. The used
-# and mark bytes live at the end of the descriptor.
-func _alloc_large(n, atomic) {
-    let h = _heap()
-    let span = band(n + PAGE_SIZE - 1, bnot(PAGE_SIZE - 1))
-    let mem = _cache_take(span)
-    if (mem != 0) {
-        span = ld64(h + H_CACHE_SPAN)
-        memset(mem, 0, n)
-    } else {
-        let raw = mmap(0, span + PAGE_SIZE, 3, 34, -1, 0)    # read and write, private and anonymous
-        if (raw == -1 or raw == 0) {
-            _die_oom()
-        }
-        mem = band(raw + PAGE_SIZE - 1, bnot(PAGE_SIZE - 1))
-        if (mem > raw) {
-            munmap(raw, mem - raw)
-        }
-        munmap(mem + span, raw + PAGE_SIZE - mem)
-    }
-    let pg = calloc(1, PG_SIZE + 2)
-    if (pg == 0) {
-        _die_oom()
-    }
-    st64(pg + PG_BASE, mem)
-    st64(pg + PG_OBJ, n)
-    st32(pg + PG_EPOCH, ld64(h + H_SWEEP_EPOCH))
-    st32(pg + PG_NOBJS, 1)
-    st32(pg + PG_BUMP, 1)
-    st32(pg + PG_USED_COUNT, 1)
-    st8(pg + PG_ATOMIC, atomic)
-    st8(pg + PG_LARGE, 1)
-    st64(pg + PG_SPAN, span)
-    st64(pg + PG_USED, pg + PG_SIZE)
-    st64(pg + PG_MARK, pg + PG_SIZE + 1)
-    st8(pg + PG_SIZE, 1)
-    st8(pg + PG_SIZE + 1, ld64(h + H_MARKING))    # allocated during a cycle: survives it
-    _note_heap(mem, span)
-    let off = 0
-    while (off < span) {
-        _table_insert(shr(mem + off, PAGE_SHIFT), pg)
-        off += PAGE_SIZE
-    }
-    _track_page(pg)
-    st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + (n))
-    return mem
-}
-
-# Retires a dead large object: its page table entries and descriptor go, its span is cached or unmapped.
-func _free_large(pg) {
-    let mem = ld64(pg + PG_BASE)
-    let span = ld64(pg + PG_SPAN)
-    let off = 0
-    while (off < span) {
-        _table_insert(shr(mem + off, PAGE_SHIFT), 0)
-        off += PAGE_SIZE
-    }
-    _cache_put(mem, span, ld64(pg + PG_OBJ))
-    free(pg)
-}
+# Allocation
 
 # Sets H_LIMIT: the threshold while collecting is allowed, -1 when every allocation is to be counted
 # (stress mode), and out of reach while the collector runs or has not started.
@@ -567,7 +623,7 @@ func _set_limit() {
     st64(h + H_LIMIT, 4611686018427387904)
     if (ld64(h + H_GC_READY) != 0 and ld64(h + H_GC_BUSY) == 0) {
         st64(h + H_LIMIT, ld64(h + H_THRESHOLD))
-        if (ld64(h + H_MARKING) != 0 or ld64(h + H_SWEEPING) != 0 or _pool_pending() != 0) {
+        if (ld64(h + H_MARKING) != 0 or ld64(h + H_SWEEPING) != 0) {
             st64(h + H_LIMIT, ld64(h + H_BYTES_SINCE_GC) + STEP_BYTES)
         }
         if (ld64(h + H_STRESS_EVERY) != 0) {
@@ -586,57 +642,173 @@ func _gc_check() {
         } else if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_THRESHOLD) or (ld64(h + H_STRESS_EVERY) != 0 and ld64(h + H_ALLOC_COUNT) % ld64(h + H_STRESS_EVERY) == 0)) {
             _gc_work()
         } else {
-            _pool_trim()    # pages the sweep emptied go back to the system a few at a time, cycle or no cycle
             _set_limit()
         }
     }
 }
 
-# The allocation that almost every call is: a small object, no collector work due, and a page of that size
-# class with a free slot or room to bump. It is kept short on purpose. _slow_gc_alloc is large (it can set
-# up the collector, run a step of it, map a page, allocate a large object), and when its code sat in this
-# function every call paid for it: six saved registers and a 264-byte frame before the first instruction.
+# The allocation that almost every call is: an object that fits the hole of its allocator, and no collector
+# work due. A hole is cleared when it is taken, so the object is already zero. It is kept short on purpose:
+# _slow_gc_alloc takes holes and blocks, runs collector steps and allocates large objects.
 func _gc_alloc(size, atomic) {
     let h = _heap()
-    let n = size + 1    # keeps a pointer just past the end inside the object
-    if (ld64(h + H_SETUP_DONE) != 0 and ule(n, MAX_SMALL) and ld64(h + H_BYTES_SINCE_GC) <= ld64(h + H_LIMIT)) {
-        let cls = ld8(addr_of("_class_of") + (n + 15) / 16)
-        let pg = ld64((h + H_CLASS_LIST) + atomic * 320 + cls * 8)
-        if (pg != 0) {
-            let osz = ld64(pg + PG_OBJ)
-            let nfree = ld32(pg + PG_NFREE)
-            let idx = ld32(pg + PG_BUMP)
-            if (nfree != 0) {
-                # The free slots are the zero bytes of the page's used map below PG_BUMP; there are nfree of them,
-                # so the search ends. A sweep only clears bytes of that map: it does not touch the dead objects.
-                let used = ld64(pg + PG_USED)
-                idx = ld32(pg + PG_FREE)
-                while (ld8(used + idx) != 0) {
-                    idx++
-                }
-                st32(pg + PG_FREE, idx + 1)
-                st32(pg + PG_NFREE, nfree - 1)
-                let obj = ld64(pg + PG_BASE) + idx * osz
-                memset(obj, 0, osz)    # a recycled object holds its old contents
-                st8(used + idx, 1)
-                if (ld64(h + H_MARKING) != 0) {
-                    st8a(ld64(pg + PG_MARK) + idx, 1)    # allocated during a cycle: survives it
-                }
-                st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + osz)
-                return obj
-            }
-            if (idx < ld32(pg + PG_NOBJS)) {
-                st32(pg + PG_BUMP, idx + 1)
-                st8(ld64(pg + PG_USED) + idx, 1)
-                if (ld64(h + H_MARKING) != 0) {
-                    st8a(ld64(pg + PG_MARK) + idx, 1)
-                }
-                st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + osz)
-                return ld64(pg + PG_BASE) + idx * osz
-            }
+    let n = band(size + GRAN, -GRAN)    # one byte more than asked (a pointer just past the end stays inside), whole granules
+    if (ule(size, MAX_MEDIUM - GRAN) and ld64(h + H_BYTES_SINCE_GC) <= ld64(h + H_LIMIT)) {
+        let a = h + H_ALLOC + atomic * (2 * AL_SIZE)
+        let left = ld64(a + AL_LEFT)
+        if (ule(n, left)) {
+            let off = ld64(a + AL_OFF)
+            st64(a + AL_OFF, off + n)
+            st64(a + AL_LEFT, left - n)
+            let cd = ld64(a + AL_CD)
+            let g = ld64(a + AL_G0) + shr(off, 4)
+            _bit_set(cd + CD_START, g)
+            _bit_set(cd + CD_END, g + shr(n, 4) - 1)
+            st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
+            return shl(ld64(a + AL_BLOCK), BLOCK_SHIFT) + off
         }
     }
     return _slow_gc_alloc(size, atomic)
+}
+
+# A block for allocator kind k (1 normal, 2 atomic): a recyclable one of that kind unless only a free block
+# will do, then one the program sweeps itself while the GC thread's sweep is still on, then a free one
+# (_take_free). Mutex held. Returns the block's address.
+func _take_block(k, free_only) {
+    let h = _heap()
+    if (free_only == 0) {
+        let b = _arr_pop(_list(L_RECYC + k - 1))
+        if (b != 0) {
+            return b
+        }
+    }
+    # At most one block: a program that sweeps until it finds room can sweep thousands of full blocks in one stop.
+    let b = 0
+    if (ld64(h + H_SWEEPING) != 0 and ld64(h + H_SW_DONE) == 0) {
+        b = _sweep_claim()
+    }
+    if (b != 0) {
+        _unlock()
+        let cd = _table_find(shr(b, PAGE_SHIFT))
+        let bi = shr(b - ld64(cd + CD_BASE), BLOCK_SHIFT)
+        let free_lines = _sweep_block(cd, bi)
+        _lock()
+        let info = _block_info(cd, bi)
+        if (free_lines == LINES_PER_BLOCK) {
+            st8a(info + BI_KIND, 0)
+            return _block_ready(b, k)
+        }
+        if (free_only == 0 and free_lines != 0 and ld8(info + BI_KIND) == k) {
+            return b
+        }
+        if (free_lines != 0) {
+            _arr_push(_list(L_RECYC + ld8(info + BI_KIND) - 1), b)
+        }
+    }
+    return _take_free(k)
+}
+
+# A free block, then one whose memory was given back, then a new one cut from a chunk. Mutex held.
+func _take_free(k) {
+    let h = _heap()
+    let b = _arr_pop(_list(L_FREE))
+    if (b == 0) {
+        b = _arr_pop(_list(L_COLD))
+    }
+    if (b == 0) {
+        let cd = ld64(h + H_FRESH_CD)
+        if (cd == 0 or ld64(h + H_FRESH_USED) == BLOCKS_PER_CHUNK) {
+            cd = _chunk_new()
+            st64(h + H_FRESH_CD, cd)
+            st64(h + H_FRESH_USED, 0)
+        }
+        b = ld64(cd + CD_BASE) + ld64(h + H_FRESH_USED) * BLOCK
+        st64(h + H_FRESH_USED, ld64(h + H_FRESH_USED) + 1)
+    }
+    return _block_ready(b, k)
+}
+
+# A free block becomes a block of kind k. The sweep that may be running skips it.
+func _block_ready(b, k) {
+    let h = _heap()
+    let cd = _table_find(shr(b, PAGE_SHIFT))
+    let info = _block_info(cd, shr(b - ld64(cd + CD_BASE), BLOCK_SHIFT))
+    st8(info + BI_SWEPT, ld64(h + H_SW_EPOCH))
+    st8(info + BI_COLD, 0)
+    st8a(info + BI_KIND, k)
+    return b
+}
+
+# Moves allocator a to the next hole of its block at or after line `from`, that is at least n bytes: returns
+# 1 when it found one. A hole is a run of free lines; it is cleared here unless the block is still all zero,
+# and while a cycle marks it is live in this cycle and black.
+func _next_hole(a, from, n) {
+    let h = _heap()
+    let cd = ld64(a + AL_CD)
+    let bi = shr(ld64(a + AL_G0), 11)
+    let lines = cd + CD_LINES + bi * LINES_PER_BLOCK
+    let i = from
+    while (i < LINES_PER_BLOCK) {
+        while (i < LINES_PER_BLOCK and ld8a(lines + i) != 0) {
+            i++
+        }
+        let j = i
+        while (j < LINES_PER_BLOCK and ld8a(lines + j) == 0) {
+            j++
+        }
+        if (j > i and (j - i) * LINE >= n) {
+            let base = shl(ld64(a + AL_BLOCK), BLOCK_SHIFT)
+            let info = _block_info(cd, bi)
+            if (ld8(info + BI_ZERO) == 0) {
+                memset(base + i * LINE, 0, (j - i) * LINE)
+            }
+            st8(info + BI_ZERO, 0)
+            st64(a + AL_OFF, i * LINE)
+            st64(a + AL_LEFT, (j - i) * LINE)
+            if (ld64(h + H_MARKING) != 0) {
+                _blacken(cd, bi * LINES_PER_BLOCK + i, bi * LINES_PER_BLOCK + j)
+            }
+            return 1
+        }
+        i = j
+    }
+    return 0
+}
+
+# Lines lo to hi - 1 of a chunk hold what the program allocates during this cycle: live in it, and black.
+func _blacken(cd, lo, hi) {
+    let ep = ld64(_heap() + H_EPOCH)
+    for (let l = lo; l < hi; l++) {
+        st8a(cd + CD_LINES + l, ep)
+        let p = cd + CD_BLACK + shr(l, 3)
+        st8a(p, bor(ld8(p), shl(1, band(l, 7))))
+    }
+}
+
+# Gives allocator a (kind k) a hole of at least n bytes.
+func _refill(a, k, n, free_only) {
+    let h = _heap()
+    if (ld64(a + AL_BLOCK) != 0) {
+        let from = shr(ld64(a + AL_OFF) + ld64(a + AL_LEFT) + LINE - 1, LINE_SHIFT)
+        if (_next_hole(a, from, n) != 0) {
+            return 0
+        }
+    }
+    while (1 == 1) {
+        _lock()
+        let b = _take_block(k, free_only)
+        _unlock()
+        let cd = _table_find(shr(b, PAGE_SHIFT))
+        st64(a + AL_BLOCK, shr(b, BLOCK_SHIFT))
+        st64(a + AL_CD, cd)
+        st64(a + AL_G0, shr(b - ld64(cd + CD_BASE), 4))
+        st64(a + AL_OFF, 0)
+        st64(a + AL_LEFT, 0)
+        if (_next_hole(a, 0, n) != 0) {
+            return 0
+        }
+    }
+    return 0
 }
 
 func _slow_gc_alloc(size, atomic) {
@@ -647,53 +819,79 @@ func _slow_gc_alloc(size, atomic) {
     if (ugt(size, 70368744177664)) {
         _die_oom()    # more than 64 TiB: no request like that can be met, and size + 16 would wrap
     }
-    let n = size + 1    # keeps a pointer just past the end inside the object
+    let n = band(size + GRAN, -GRAN)
     if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_LIMIT)) {
         _gc_check()
     }
-    if (n > MAX_SMALL) {
-        return _alloc_large(n, atomic)
+    if (n > MAX_MEDIUM) {
+        return _alloc_large(size + 1, atomic)
     }
-    let cls = ld8(addr_of("_class_of") + (n + 15) / 16)
-    let head = (h + H_CLASS_LIST) + atomic * 320 + cls * 8
-    let pg = ld64(head)
-    while (pg != 0 and ld32(pg + PG_NFREE) == 0 and ld32(pg + PG_BUMP) >= ld32(pg + PG_NOBJS)) {
-        st8(pg + PG_IN_LIST, 0)
-        pg = ld64(pg + PG_NEXT)
-        st64(head, pg)
-    }
-    if (pg == 0) {
-        pg = _new_small_page(cls, atomic)
-        st64(pg + PG_NEXT, ld64(head))
-        st8(pg + PG_IN_LIST, 1)
-        st64(head, pg)
-    }
-    let osz = ld64(pg + PG_OBJ)
-    let idx = 0
-    if (ld32(pg + PG_NFREE) != 0) {
-        let used = ld64(pg + PG_USED)
-        idx = ld32(pg + PG_FREE)
-        while (ld8(used + idx) != 0) {
-            idx++
+    let a = h + H_ALLOC + atomic * (2 * AL_SIZE)
+    if (ugt(n, ld64(a + AL_LEFT))) {
+        if (n > LINE) {
+            # A medium object that does not fit the hole: the overflow allocator takes it, so the holes of
+            # the block are not skipped for it.
+            a = a + AL_SIZE
+            if (ugt(n, ld64(a + AL_LEFT))) {
+                _refill(a, atomic + 1, n, 1)
+            }
+        } else {
+            _refill(a, atomic + 1, n, 0)
         }
-        st32(pg + PG_FREE, idx + 1)
-        st32(pg + PG_NFREE, ld32(pg + PG_NFREE) - 1)
-        memset(ld64(pg + PG_BASE) + idx * osz, 0, osz)    # a recycled object holds its old contents
-    } else {
-        idx = ld32(pg + PG_BUMP)
-        st32(pg + PG_BUMP, idx + 1)
     }
-    st8(ld64(pg + PG_USED) + idx, 1)
-    if (ld64(h + H_MARKING) != 0) {
-        st8a(ld64(pg + PG_MARK) + idx, 1)    # allocated during a cycle: survives it
+    let off = ld64(a + AL_OFF)
+    st64(a + AL_OFF, off + n)
+    st64(a + AL_LEFT, ld64(a + AL_LEFT) - n)
+    let cd = ld64(a + AL_CD)
+    let g = ld64(a + AL_G0) + shr(off, 4)
+    _bit_set(cd + CD_START, g)
+    _bit_set(cd + CD_END, g + shr(n, 4) - 1)
+    st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
+    return shl(ld64(a + AL_BLOCK), BLOCK_SHIFT) + off
+}
+
+# An object over MAX_MEDIUM gets its own span, rounded up to whole 64 KB pages and aligned to them. A fresh
+# mapping is zeroed by the kernel and touched only when used.
+func _alloc_large(n, atomic) {
+    let h = _heap()
+    let span = band(n + PAGE_SIZE - 1, bnot(PAGE_SIZE - 1))
+    let raw = mmap(0, span + PAGE_SIZE, 3, 34, -1, 0)    # read and write, private and anonymous
+    if (raw == -1 or raw == 0) {
+        _die_oom()
     }
-    let obj = ld64(pg + PG_BASE) + idx * osz
-    st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + (osz))
-    return obj
+    let mem = band(raw + PAGE_SIZE - 1, bnot(PAGE_SIZE - 1))
+    if (mem > raw) {
+        munmap(raw, mem - raw)
+    }
+    munmap(mem + span, raw + PAGE_SIZE - mem)
+    let d = calloc(1, LD_SIZE)
+    if (d == 0) {
+        _die_oom()
+    }
+    st8(d + LD_KIND, 2)
+    st8(d + LD_ATOMIC, atomic)
+    st8(d + LD_BLACK, ld64(h + H_MARKING))    # allocated during a cycle: survives it
+    st64(d + LD_BASE, mem)
+    st64(d + LD_OBJ, n)
+    st64(d + LD_SPAN, span)
+    _lock()
+    _note_heap(mem, span)
+    for (let off = 0; off < span; off += PAGE_SIZE) {
+        _table_insert(shr(mem + off, PAGE_SHIFT), d)
+    }
+    _arr_push(h + H_LARGE, d)
+    st64(h + H_LARGE_BYTES, ld64(h + H_LARGE_BYTES) + span)
+    _unlock()
+    st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
+    return mem
 }
 
 func lv_alloc(n) {
     return _gc_alloc(n, 0)
+}
+
+func lv_alloc_atomic(n) {
+    return _gc_alloc(n, 1)
 }
 
 # Memory outside the heap whose life the collector decides: the bytes of a box that a template owns,
@@ -710,58 +908,23 @@ func lv_gc_note_external(n) {
     }
 }
 
-func lv_alloc_atomic(n) {
-    return _gc_alloc(n, 1)
-}
-
-# The page holding address w, or 0; the object's index is stored at idxp. The program thread uses
-# H_IDX and the marking thread H_IDX_GC, so that two threads never share the slot.
-func _page_find(w, idxp) {
-    let h = _heap()
-    if (ult(w, ld64a(h + H_HEAP_LO)) or uge(w, ld64a(h + H_HEAP_HI))) {
-        return 0
-    }
-    if (ld64a(h + H_TABLE) == 0) {
-        return 0
-    }
-    let pg = _table_find(shr(w, PAGE_SHIFT))
-    if (pg == 0) {
-        return 0
-    }
-    let idx = 0
-    if (ld8(pg + PG_LARGE) != 0) {
-        if (uge(w, ld64(pg + PG_BASE) + ld64(pg + PG_OBJ))) {
-            return 0
-        }
-    } else {
-        idx = shr((w - ld64(pg + PG_BASE)) * ld64(pg + PG_RECIP), 32)
-        if (idx >= ld32(pg + PG_BUMP)) {
-            return 0
-        }
-    }
-    if (ld8(ld64(pg + PG_USED) + idx) == 0) {
-        return 0
-    }
-    st64(idxp, idx)
-    return pg
-}
-
-# The page holding address w, or 0; the object's index is left in H_IDX. Program thread only.
-func _page_of(w) {
-    let h = _heap()
-    return _page_find(w, h + H_IDX)
-}
-
 func lv_realloc(p, n) {
     if (p == 0) {
         return _gc_alloc(n, 0)
     }
-    let pg = _page_of(p)
-    if (pg == 0) {
+    let h = _heap()
+    let d = _find(p, h + H_SLOT)
+    if (d == 0) {
         _die_oom()
     }
-    let old = ld64(pg + PG_OBJ)
-    let q = _gc_alloc(n, ld8(pg + PG_ATOMIC))
+    let old = ld64(h + H_SLOT + 8)
+    let atomic = 0
+    if (ld8(d) == 2) {
+        atomic = ld8(d + LD_ATOMIC)
+    } else if (ld8a(_block_info(d, shr(p - ld64(d + CD_BASE), BLOCK_SHIFT)) + BI_KIND) == 2) {
+        atomic = 1
+    }
+    let q = _gc_alloc(n, atomic)
     let m = n
     if (old < n) {
         m = old
@@ -791,31 +954,53 @@ func _push(p, n) {
     st64(h + H_MTOP, ld64(h + H_MTOP) + 1)
 }
 
-# Marks the object w points into and queues it for scanning on the mark stack. Used by the marking
-# thread, and by the program thread at the start of a cycle and in the verifier (the GC thread sleeps then).
+# Marks the object w points into and returns its address when it is to be scanned (not atomic and not
+# marked before), else 0. Its size is left at slot + 8.
+func _mark_find(w, slot) {
+    let h = _heap()
+    let d = _find(w, slot)
+    if (d == 0) {
+        return 0
+    }
+    if (ld8(d) == 2) {
+        if (ld64(h + H_VMODE) != 0) {
+            return _vmark_large(d)
+        }
+        let m = d + LD_MARK
+        if (ld8(d + LD_BLACK) != 0 or ld8a(m) != 0 or cas8(m, 0, 1) == 0) {
+            return 0
+        }
+        st64(slot + 16, ld64(slot + 16) + ld64(d + LD_OBJ))
+        if (ld8(d + LD_ATOMIC) != 0) {
+            return 0
+        }
+        return ld64(d + LD_BASE)
+    }
+    let s = ld64(slot)
+    let n = ld64(slot + 8)
+    if (ld64(h + H_VMODE) != 0) {
+        return _vmark(d, s, n)
+    }
+    # An object in a black line was allocated during this cycle: it survives it, and what it points to was
+    # reachable at the snapshot or is new too, so it is not scanned.
+    if (_line_black(d, s) != 0 or _mark_bit(d, s) == 0) {
+        return 0
+    }
+    _mark_lines(d, s, n)
+    st64(slot + 16, ld64(slot + 16) + n)
+    if (ld8a(_block_info(d, shr(s, 11)) + BI_KIND) == 2) {
+        return 0
+    }
+    return ld64(d + CD_BASE) + s * GRAN
+}
+
+# Marks the object w points into and queues it for scanning on the mark stack. Used by the marking thread,
+# and by the program thread at the start of a cycle and in the verifier (the GC thread waits then).
 func _mark_word(w) {
     let h = _heap()
-    let pg = _page_find(w, h + H_IDX_GC)
-    if (pg == 0) {
-        return 0
-    }
-    let idx = ld64(h + H_IDX_GC)
-    let m = ld64(pg + PG_MARK) + idx
-    if (ld64(h + H_VMODE) != 0) {
-        return _vmark(pg, idx)
-    }
-    if (ld8a(m) != 0) {
-        return 0
-    }
-    if (cas8(m, 0, 1) == 0) {    # the other thread marked it first
-        return 0
-    }
-    if (ld8(pg + PG_ATOMIC) == 0) {
-        let obj = ld64(pg + PG_BASE)
-        if (ld8(pg + PG_LARGE) == 0) {
-            obj = obj + idx * ld64(pg + PG_OBJ)
-        }
-        _push(obj, ld64(pg + PG_OBJ))
+    let p = _mark_find(w, h + H_SLOT_GC)
+    if (p != 0) {
+        _push(p, ld64(h + H_SLOT_GC + 8))
     }
     return 0
 }
@@ -834,28 +1019,13 @@ func _scan_range(lo, hi) {
     }
 }
 
-# Marking by the program thread while the GC thread runs: the barrier. The object is marked here, so that
-# it is queued once, and handed over in batches.
+# Marking by the program thread while the GC thread runs: the barrier. The object is marked here, so that it
+# is queued once, and handed over in batches.
 func _shade_word(w) {
     let h = _heap()
-    let pg = _page_find(w, h + H_IDX)
-    if (pg == 0) {
-        return 0
-    }
-    let idx = ld64(h + H_IDX)
-    let m = ld64(pg + PG_MARK) + idx
-    if (ld8a(m) != 0) {
-        return 0
-    }
-    if (cas8(m, 0, 1) == 0) {
-        return 0
-    }
-    if (ld8(pg + PG_ATOMIC) == 0) {
-        let obj = ld64(pg + PG_BASE)
-        if (ld8(pg + PG_LARGE) == 0) {
-            obj = obj + idx * ld64(pg + PG_OBJ)
-        }
-        _local_add(obj, ld64(pg + PG_OBJ))
+    let p = _mark_find(w, h + H_SLOT)
+    if (p != 0) {
+        _local_add(p, ld64(h + H_SLOT + 8))
     }
     return 0
 }
@@ -882,13 +1052,13 @@ func _local_add(p, n) {
     st64(h + H_LOCAL_BUF + i * 16 + 8, n)
     st64(h + H_LOCAL_N, i + 1)
     if (i + 1 == LOCAL_CAP) {
-        pthread_mutex_lock(h + H_MUTEX)
+        _lock()
         _hand_over()
-        pthread_mutex_unlock(h + H_MUTEX)
+        _unlock()
     }
 }
 
-# Moves the local batch to the shared one and wakes the GC thread if it ran dry. H_MUTEX is held.
+# Moves the local batch to the shared one and wakes the GC thread if it ran dry. Mutex held.
 func _hand_over() {
     let h = _heap()
     let k = ld64(h + H_LOCAL_N)
@@ -917,9 +1087,9 @@ func _hand_over() {
     return 0
 }
 
-# Write barrier. While a cycle is marking, an object the program is about to overwrite a pointer to
-# is marked first, so everything that was reachable when the cycle began is found (snapshot at the
-# beginning). An overwritten word that is not a pointer is ignored by _mark_word.
+# Write barrier. While a cycle is marking, an object the program is about to overwrite a pointer to is marked
+# first, so everything that was reachable when the cycle began is found (snapshot at the beginning). An
+# overwritten word that is not a pointer is ignored.
 
 # Before the 16-byte value at p is overwritten.
 func lv_wb_cell(p) {
@@ -953,8 +1123,8 @@ func lv_wb_range(p, n) {
     return 0
 }
 
-# Scans the piece of the top mark item (at most CHUNK_BYTES; the rest stays on the stack) and
-# returns the number of words scanned.
+# Scans the piece of the top mark item (at most CHUNK_BYTES; the rest stays on the stack) and returns the
+# number of words scanned.
 func _scan_top() {
     let h = _heap()
     st64(h + H_MTOP, ld64(h + H_MTOP) - 1)
@@ -974,6 +1144,8 @@ func _drain() {
         _scan_top()
     }
 }
+
+# Roots
 
 func _root_register(lo, hi) {
     let h = _heap()
@@ -1044,19 +1216,29 @@ func lv_gc_root_remove(lo) {
     }
 }
 
-
+# Whether the object at p survived the marking that just ended: marked, or allocated during it. A value
+# that is not a heap object counts as marked. Program thread, after the marks are final.
 func lv_gc_is_marked(p) {
     let h = _heap()
-    let pg = _page_of(p)
-    if (pg == 0) {
+    let d = _find(p, h + H_SLOT)
+    if (d == 0) {
         return 1
     }
-    return ld8(ld64(pg + PG_MARK) + ld64(h + H_IDX))
+    if (ld8(d) == 2) {
+        if (ld8(d + LD_MARK) != 0 or ld8(d + LD_BLACK) != 0) {
+            return 1
+        }
+        return 0
+    }
+    let s = ld64(h + H_SLOT)
+    if (band(ld8(d + CD_MARK + shr(s, 3)), shl(1, band(s, 7))) != 0 or _line_black(d, s) != 0) {
+        return 1
+    }
+    return 0
 }
 
-# Kept out of line, with every callee-saved register spilled into its frame, so that
-# values held only in registers are found by the stack scan.
-# Marks what the stack and the registers point to, without following it.
+# Kept out of line, with every callee-saved register spilled into its frame, so that values held only in
+# registers are found by the stack scan. Marks what the stack and the registers point to, without following it.
 func _scan_stack_cur() {
     let h = _heap()
     spill_regs()
@@ -1066,16 +1248,15 @@ func _scan_stack_cur() {
     }
 }
 
-# The verifier scans every stack at once. A cycle scans the stacks of the blue threads that are away in
-# steps (_blue_scan_step).
+# The verifier scans every stack at once. A cycle scans the stacks of the blue threads that are away in steps
+# (_blue_scan_step).
 func _scan_stack() {
     _scan_stack_cur()
     _blue_scan_parked()
 }
 
-# Marks what the data segment and the registered root ranges point to, without following it.
+# Marks what the data segment points to, without following it.
 func _scan_static() {
-    let h = _heap()
     # lv_frames (2.4 MB of call positions and static names) never holds a heap pointer
     let frames = addr_of("lv_frames")
     _scan_range(addr_of("__data_start"), frames)
@@ -1091,10 +1272,10 @@ func _scan_roots() {
     }
 }
 
-# One step of the scan of the root ranges that unsafe code registered: a slice of ROOT_STEP_WORDS words,
-# so that a large buffer does not make one long pause. The program thread runs it between its own work.
-# A store into a range that is still to be scanned shades the value it overwrites, so nothing the
-# range held when the cycle began is lost. The cycle cannot end while this is on.
+# One step of the scan of the root ranges that unsafe code registered: a slice of ROOT_STEP_WORDS words, so
+# that a large buffer does not make one long pause. A store into a range that is still to be scanned shades
+# the value it overwrites, so nothing the range held when the cycle began is lost. The cycle cannot end while
+# this is on.
 func _root_step() {
     let h = _heap()
     if (ld64(h + H_RS_ON) == 0) {
@@ -1129,391 +1310,262 @@ func _root_step() {
 
 # Sweeping
 
-func _pool_push(pg) {
+# The next block the sweep has not reached, claimed for whoever sweeps it, or 0 when there is none. Mutex held.
+func _sweep_claim() {
     let h = _heap()
-    if (ld64(h + H_POOL_COUNT) == ld64(h + H_POOL_CAP)) {
-        if (ld64(h + H_POOL_CAP) != 0) {
-            st64(h + H_POOL_CAP, ld64(h + H_POOL_CAP) * 2)
-        } else {
-            st64(h + H_POOL_CAP, 64)
+    let ep = ld64(h + H_SW_EPOCH)
+    while (ld64(h + H_SW_CHUNK) < ld64(h + H_CHUNK_COUNT)) {
+        let cd = ld64(ld64(h + H_CHUNKS) + ld64(h + H_SW_CHUNK) * 8)
+        let bi = ld64(h + H_SW_BLOCK)
+        st64(h + H_SW_BLOCK, bi + 1)
+        if (bi + 1 == BLOCKS_PER_CHUNK) {
+            st64(h + H_SW_BLOCK, 0)
+            st64(h + H_SW_CHUNK, ld64(h + H_SW_CHUNK) + 1)
         }
-        st64(h + H_POOL, realloc(ld64(h + H_POOL), ld64(h + H_POOL_CAP) * 8))
-        if (ld64(h + H_POOL) == 0) {
-            _die_oom()
+        let info = _block_info(cd, bi)
+        if (ld8(info + BI_KIND) != 0 and ld8(info + BI_SWEPT) != ep) {
+            st8(info + BI_SWEPT, ep)
+            return ld64(cd + CD_BASE) + bi * BLOCK
         }
-    }
-    st64(ld64(h + H_POOL) + ld64(h + H_POOL_COUNT) * 8, pg)
-    st64(h + H_POOL_COUNT, ld64(h + H_POOL_COUNT) + 1)
-}
-
-# Sweeping works page by page. A sweep starts with empty class lists; each page that is swept and has
-# room goes back on its list, so the allocator only ever sees swept pages, and a page made during the
-# sweep carries the current epoch and is not swept again. The list of pages is compacted as it is walked.
-
-func _sweep_begin() {
-    let h = _heap()
-    st64(h + H_LIVE_BYTES, 0)
-    memset((h + H_CLASS_LIST), 0, 640)
-    st64(h + H_SWEEP_EPOCH, ld64(h + H_SWEEP_EPOCH) + 1)
-    st64(h + H_SWEEP_I, 0)
-    st64(h + H_SWEEP_KEEP, 0)
-    st64(h + H_SWEEPING, 1)
-}
-
-# Sweeps one page. Returns 0 when the page was a dead large object and is gone.
-func _sweep_page(pg) {
-    let h = _heap()
-    if (ld8(pg + PG_IN_LIST) == 3) {
-        # The address range may have been handed out again by now, so the entry may belong to a newer page; it must not be this one.
-        if (ld64(h + H_VERIFY) != 0 and _table_find(shr(ld64(pg + PG_BASE), PAGE_SHIFT)) == pg) {
-            _invariant_fail(cstr("a page that was given up is still in the page table"))
-        }
-        free(pg)    # a page that _pool_retire gave up: only the descriptor is left
-        return 0
-    }
-    st32(pg + PG_EPOCH, ld64(h + H_SWEEP_EPOCH))
-    if (ld8(pg + PG_IN_LIST) == 2) {
-        return 1
-    }
-    if (ld8(pg + PG_LARGE) != 0) {
-        if (ld8(ld64(pg + PG_MARK)) == 0) {
-            _free_large(pg)
-            return 0
-        }
-        st8(ld64(pg + PG_MARK), 0)
-        st64(h + H_LIVE_BYTES, ld64(h + H_LIVE_BYTES) + (ld64(pg + PG_SPAN)))
-        return 1
-    }
-    st8(pg + PG_IN_LIST, 0)
-    st64(pg + PG_NEXT, 0)
-    let used = ld64(pg + PG_USED)
-    let mark = ld64(pg + PG_MARK)
-    let osz = ld64(pg + PG_OBJ)
-    let base = ld64(pg + PG_BASE)
-    let bump = ld32(pg + PG_BUMP)
-    let live = 0
-    let nfree = 0
-    for (let j = 0; j < bump; j++) {
-        if (ld8(used + j) == 0) {
-            nfree++    # free since an earlier sweep and not handed out again
-            continue
-        }
-        if (ld8(mark + j) != 0) {
-            st8(mark + j, 0)
-            live++
-            continue
-        }
-        # Dead: the slot is free once its byte in the used map is zero. The object itself is not touched here
-        # (the allocator clears it when it hands it out, and has to write it then anyway).
-        st8(used + j, 0)
-        nfree++
-        if (ld64(h + H_VERIFY) != 0) {
-            memset(base + j * osz, 221, osz)    # a use after free then reads obvious garbage
-        }
-    }
-    st32(pg + PG_FREE, 0)
-    st32(pg + PG_NFREE, nfree)
-    st32(pg + PG_USED_COUNT, live)
-    st64(h + H_LIVE_BYTES, ld64(h + H_LIVE_BYTES) + (live * osz))
-    if (live == 0) {
-        # Empty: recycle the whole page for any size class.
-        _pool_push(pg)
-        st32(pg + PG_BUMP, 0)
-        st32(pg + PG_FREE, 0)
-        st32(pg + PG_NFREE, 0)
-        st8(pg + PG_IN_LIST, 2)
-        return 1
-    }
-    if (nfree != 0 or ld32(pg + PG_BUMP) < ld32(pg + PG_NOBJS)) {
-        let head = (h + H_CLASS_LIST) + ld8(pg + PG_ATOMIC) * 320 + ld32(pg + PG_CLS) * 8
-        st64(pg + PG_NEXT, ld64(head))
-        st64(head, pg)
-        st8(pg + PG_IN_LIST, 1)
-    }
-    return 1
-}
-
-# Sweeps pages for up to budget_ns (0: no time limit) or max_pages pages (0: no limit). Returns 1 when
-# every page has been swept.
-func _sweep_some(budget_ns, max_pages) {
-    let h = _heap()
-    let t_end = 0
-    if (budget_ns != 0) {
-        t_end = _now_ns() + budget_ns
-    }
-    let pages = 0
-    while (ld64(h + H_SWEEP_I) < ld64(h + H_ALL_COUNT)) {
-        let pg = ld64(ld64(h + H_ALL_PAGES) + ld64(h + H_SWEEP_I) * 8)
-        st64(h + H_SWEEP_I, ld64(h + H_SWEEP_I) + 1)
-        let keep = 1
-        if (ld32(pg + PG_EPOCH) != ld64(h + H_SWEEP_EPOCH)) {
-            keep = _sweep_page(pg)
-        }
-        if (keep != 0) {
-            st64(ld64(h + H_ALL_PAGES) + ld64(h + H_SWEEP_KEEP) * 8, pg)
-            st64(h + H_SWEEP_KEEP, ld64(h + H_SWEEP_KEEP) + 1)
-        }
-        pages++
-        if (max_pages != 0 and pages >= max_pages) {
-            break
-        }
-        if (t_end != 0 and _now_ns() >= t_end) {
-            break
-        }
-    }
-    if (ld64(h + H_SWEEP_I) >= ld64(h + H_ALL_COUNT)) {
-        return 1
     }
     return 0
 }
 
-# ZUE_RT_GC_STATS=3: after each sweep, where the heap's bytes are: per size class the pages, the slots
-# in use and the slots free, and the totals for large objects and pooled empty pages.
-func _census() {
+# Clears the start and end bits of every object that starts in byte i of the maps (one line) and is in
+# `dead`, a bit set of those objects.
+func _clear_dead(cd, i, dead) {
     let h = _heap()
-    let acc = calloc(NCLASSES * 2 + 8, 8)
-    if (acc == 0) {
-        return 0
+    let base = ld64(cd + CD_BASE)
+    for (let k = 0; k < 8; k++) {
+        if (band(dead, shl(1, k)) != 0) {
+            let s = i * 8 + k
+            let e = _obj_end(cd, s)
+            if (ld64(h + H_VERIFY) != 0) {
+                memset(base + s * GRAN, 221, (e - s + 1) * GRAN)    # a use after free then reads obvious garbage
+            }
+            _bit_clear(cd + CD_START, s)
+            _bit_clear(cd + CD_END, e)
+        }
     }
-    let large_n = 0
-    let large_b = 0
-    let pooled = 0
-    for (let i = 0; i < ld64(h + H_ALL_COUNT); i++) {
-        let pg = ld64(ld64(h + H_ALL_PAGES) + i * 8)
-        if (ld8(pg + PG_LARGE) != 0) {
-            large_n++
-            large_b += ld64(pg + PG_SPAN)
-            continue
-        }
-        if (ld8(pg + PG_IN_LIST) == 3) {
-            continue
-        }
-        if (ld8(pg + PG_IN_LIST) == 2) {
-            pooled++
-            continue
-        }
-        let c = ld32(pg + PG_CLS)
-        st64(acc + c * 16, ld64(acc + c * 16) + 1)
-        st64(acc + c * 16 + 8, ld64(acc + c * 16 + 8) + ld32(pg + PG_USED_COUNT))
-    }
-    let buf = stack_buf(200)
-    let total_pages = 0
-    let total_live = 0
-    for (let c = 0; c < NCLASSES; c++) {
-        let np = ld64(acc + c * 16)
-        if (np == 0) {
-            continue
-        }
-        let used = ld64(acc + c * 16 + 8)
-        let sz = _class_size(c)
-        let slots = np * (PAGE_SIZE / sz)
-        let n = snprintf(buf, 200, cstr("ZUE_RT_GC_CENSUS,class %d,size %d,%llu pages,%llu slots in use,%llu slots free,%llu%% of the page bytes in use\n"), c, sz, np, used, slots - used, used * sz * 100 / (np * PAGE_SIZE))
-        write(2, buf, n)
-        total_pages += np
-        total_live += used * sz
-    }
-    let n2 = snprintf(buf, 200, cstr("ZUE_RT_GC_CENSUS,small pages %llu (%llu MiB), live in them %llu MiB, large objects %llu (%llu MiB), pooled empty pages %llu\n"), total_pages, total_pages * PAGE_SIZE / 1048576, total_live / 1048576, large_n, large_b / 1048576, pooled)
-    write(2, buf, n2)
-    free(acc)
-    return 0
 }
 
-func _sweep_end() {
+# Sweeps block bi of a chunk and returns its free lines. In each live line the objects that were not marked
+# lose their start and end bits (not in black lines: they hold what was allocated during the cycle). Then every
+# line not live in this cycle is free: its epoch and its bits are cleared. The marks and black bits are cleared
+# for the next cycle. Nothing else of a dead object is touched: a hole is cleared when the allocator takes it.
+func _sweep_block(cd, bi) {
     let h = _heap()
-    st64(h + H_ALL_COUNT, ld64(h + H_SWEEP_KEEP))
-    st64(h + H_SWEEPING, 0)
-    if (ld64(h + H_STATS) == 3) {
-        _census()
-    }
-}
-
-func _cpu_ns() {
-    let ts = stack_buf(16)
-    clock_gettime(3, ts)
-    return ld64(ts) * 1000000000 + ld64(ts + 8)
-}
-
-const H_MSTACK_GROW = 424      # how often the mark stack was enlarged
-const H_STATS = 432            # 1 when ZUE_RT_GC_STATS is set
-const H_CLASS_LIST = 440    # Page*[2][40]: pages with room, per [atomic][class]
-const H_SPAN_CACHE = 1080    # SpanSlot[512] { base, span, stamp, touched }: freed large spans kept for reuse
-# The GC thread. Everything below is guarded by H_MUTEX except H_LOCAL_BUF and H_LOCAL_N,
-# which only the program thread touches, and H_IDX_GC, which only the thread that marks uses.
-const H_GCT_STATE = 17464      # 0: no cycle (the GC thread sleeps), 1: marking, 2: its mark stack is empty and it waits
-const H_IDX_GC = 17480         # object index set by _page_find for the marking thread
-const H_SHARED_N = 17488       # items the program thread has handed over and the GC thread has not taken yet
-const H_SHARED_CAP = 17496
-const H_SHARED_BUF = 17504     # MarkItem { p, n }
-const H_LOCAL_N = 17512        # items waiting in H_LOCAL_BUF
-const H_CYCLE_BYTES = 17520    # H_BYTES_SINCE_GC when the cycle began
-const H_SLOW_US = 17528        # ZUE_RT_GC_SLOW: microseconds the GC thread sleeps after each piece of marking (to widen races in tests)
-const H_GCT_NS = 17536         # nanoseconds the GC thread spent marking
-const H_MUTEX = 17544          # pthread_mutex_t, 40 bytes, valid when zero filled
-const H_COND_GC = 17584        # pthread_cond_t, 48 bytes: wakes the GC thread
-const H_COND_DONE = 17632      # pthread_cond_t: the GC thread has run out of work
-const H_LOCAL_BUF = 17680      # MarkItem[LOCAL_CAP]
-const LOCAL_CAP = 256
-const GCT_BATCH = 16384        # words the GC thread marks before it looks at what the program thread handed over
-const THROTTLE_NS_STEP = 100000  # time a collector step of a program that allocates too fast is held back
-const H_CYCLE_T0 = 21776       # when the running cycle began
-const H_CYCLE_MAX = 21784      # the longest cycle from its start to final marks, in nanoseconds
-const H_CYCLE_GCT0 = 21792     # H_GCT_NS when the running cycle began
-const H_CYCLE_COST = 21800     # the pacer's measure of a cycle: nanoseconds from its start to the end of its sweep, per MiB of live data
-const H_THROTTLE_CALL = 21808  # nanoseconds the running collector step has slept to slow the program down
-const H_THROTTLE_NS = 21816    # nanoseconds slept in all steps
-const H_THROTTLE_N = 21824     # steps that slept
-const H_PAUSE_MAX_SLEEP = 21832  # of the longest pause, the nanoseconds that were the throttle's sleep
-const H_THROTTLE_MAX = 21840   # the longest single sleep
-const H_LAST_END = 21848      # when the last cycle ended
-const H_ALLOC_RATE = 21856     # the pacer's measure of the program: bytes allocated per millisecond
-const H_PRE = 21864            # the helper thread's block (calloc, so the collector never scans it); 0 when no helper runs
-const H_RS_ON = 21872           # 1 while the root ranges from unsafe code are being scanned in steps (program thread only)
-const H_RS_I = 21880           # the range being scanned
-const H_RS_POS = 21888         # where in that range the scan has reached
-const ROOT_STEP_WORDS = 32768  # words of root ranges scanned in one step of the collector (256 KB)
-const H_BS_ON = 21896           # 1 while the stacks of the blue threads that are away are being scanned in steps (program thread only)
-const H_BS_CUR = 21904          # the next thread whose stack is to be scanned
-const H_LOWMEM = 21912            # 1 for a program built with --gc=lowmem: the pacer allows far less garbage
-const HEAP_SIZE = 21920
-# The block: the chunks the helper has made ready (mapped, hinted and touched), and what the two threads share.
-const PRE_SLOTS = 16
-const PRE_RING = 0             # PRE_SLOTS chunk addresses
-const PRE_HEAD = 128           # next slot the program thread takes (written by the program thread only)
-const PRE_TAIL = 136           # next slot the helper fills (written by the helper only)
-const PRE_WANT = 144           # how many ready chunks the helper keeps; 0 until the program has asked for a second chunk
-const PRE_MUTEX = 152          # pthread_mutex_t: only guards the helper's sleep
-const PRE_COND = 192           # pthread_cond_t: wakes the helper when the program thread took a chunk
-const PRE_HITS = 240           # chunks taken ready
-const PRE_MISSES = 248         # times the ring was empty and the program thread had to make the chunk itself
-const PRE_HINT = 256           # 1 while new chunks ask for huge pages; the helper turns it off (written by the helper only)
-const PRE_MADE = 264           # chunks the helper has made
-const PRE_SPIKES = 272         # of those, the ones that took more than SPIKE_NS
-const PRE_OFF_AT = 280         # PRE_MADE when the hint went off; 0 while it is on
-const PRE_MAXNS = 288          # the longest time the helper took to make a chunk
-const PRE_SIZE = 296
-const SPIKE_NS = 1000000       # a chunk that takes longer than this to make is a spike (the pause goal is below a millisecond)
-const HINT_SPIKES = 3          # this many spikes switch the huge page hint off for the chunks made after them
-space("_heap0", HEAP_SIZE)
-space("lv_stack_low", 8)    # a copy of H_STACK_LOW for generated code, which does the stack test of a direct call itself
-
-# The collector state in use. Zero filled until _gc_setup sets the fields that start non-zero.
-func _heap() {
-    return addr_of("_heap0")
-}
-
-func _now_ns() {
-    let ts = stack_buf(16)
-    clock_gettime(1, ts)
-    return ld64(ts) * 1000000000 + ld64(ts + 8)
-}
-
-# Gives the memory of the oldest empty pages back to the OS. The newest ones stay, as many as the
-# program can allocate before the next collection; a recycled page is cleared when it is reused.
-# At most TRIM_BATCH pages per call, and it stops after TRIM_STEP_NS, so that a step of the collector stays short.
-# 1 when the pool holds empty pages beyond what is kept for reuse that have not been given back yet. Giving
-# them back used to happen only inside the steps of a cycle, so how much came back depended on how many steps
-# the sweep took; a sweep that does not touch dead objects takes few.
-func _pool_pending() {
-    let h = _heap()
-    let keep = ld64(h + H_THRESHOLD) / PAGE_SIZE
-    if (ld64(h + H_POOL_COUNT) > keep and ld64(h + H_POOL_COLD) < ld64(h + H_POOL_COUNT) - keep) {
-        return 1
-    }
-    if (ld64(h + H_MARKING) == 0 and ld64(h + H_POOL_COLD) > keep / 4) {
-        return 1
-    }
-    return 0
-}
-
-# A page in the pool whose memory has been given back (a cold one) still costs its descriptor, its two maps,
-# and its place in the page table and in the address space. The allocator does not take pooled pages while a
-# cycle marks (the GC thread may read them), so a program that allocates much during cycles makes new pages
-# while the pool fills with cold ones, and without this they pile up for as long as the program runs: a heap
-# of constant size grew by about 1.5 GiB over 600 million allocations. This gives the oldest cold pages beyond
-# a quarter of the pages kept ready up completely. It is done only when no cycle is marking, because only
-# then nothing reads the page table or the maps but the program thread. The descriptor stays in the list of
-# all pages, marked 3, and the next sweep drops it (see _sweep_page).
-func _pool_retire() {
-    let h = _heap()
-    if (ld64(h + H_MARKING) != 0) {
-        return 0
-    }
-    let cold_keep = ld64(h + H_THRESHOLD) / PAGE_SIZE / 4
-    let cold = ld64(h + H_POOL_COLD)
-    if (cold <= cold_keep) {
-        return 0
-    }
-    let n = cold - cold_keep
-    if (n > RETIRE_BATCH) {
-        n = RETIRE_BATCH
-    }
-    let pool = ld64(h + H_POOL)
-    let t_end = _now_ns() + TRIM_STEP_NS
-    let i = 0
-    while (i < n) {
-        if (ld64(h + H_VERIFY) != 0 and ld64(h + H_MARKING) != 0) {
-            _invariant_fail(cstr("a pooled page was given up while a cycle marks"))
-        }
-        let pg = ld64(pool + i * 8)
-        let base = ld64(pg + PG_BASE)
-        _table_insert(shr(base, PAGE_SHIFT), 0)
-        free(ld64(pg + PG_USED))
-        free(ld64(pg + PG_MARK))
-        st64(pg + PG_USED, 0)
-        st64(pg + PG_MARK, 0)
-        munmap(base, PAGE_SIZE)
-        st8(pg + PG_IN_LIST, 3)
-        i++
-        if (_now_ns() >= t_end) {
-            break
-        }
-    }
-    memmove(pool, pool + i * 8, (ld64(h + H_POOL_COUNT) - i) * 8)
-    st64(h + H_POOL_COUNT, ld64(h + H_POOL_COUNT) - i)
-    st64(h + H_POOL_COLD, ld64(h + H_POOL_COLD) - i)
-    return 0
-}
-
-func _pool_trim() {
-    _pool_retire()
-    let h = _heap()
-    let keep = ld64(h + H_THRESHOLD) / PAGE_SIZE
-    if (ld64(h + H_POOL_COUNT) > keep) {
-        let cold = ld64(h + H_POOL_COUNT) - keep
-        if (cold > ld64(h + H_POOL_COLD) + TRIM_BATCH) {
-            cold = ld64(h + H_POOL_COLD) + TRIM_BATCH
-        }
-        let t_end = _now_ns() + TRIM_STEP_NS
-        while (ld64(h + H_POOL_COLD) < cold) {
-            madvise(ld64(ld64(ld64(h + H_POOL) + ld64(h + H_POOL_COLD) * 8) + PG_BASE), PAGE_SIZE, 4)    # MADV_DONTNEED
-            st64(h + H_POOL_COLD, ld64(h + H_POOL_COLD) + 1)
-            if (_now_ns() >= t_end) {
-                break    # a call on a huge page splits it and can take a long time
+    let ep = ld64(h + H_EPOCH)
+    let l0 = bi * LINES_PER_BLOCK
+    let free_lines = 0
+    for (let l = l0; l < l0 + LINES_PER_BLOCK; l++) {
+        if (ld8(cd + CD_LINES + l) == ep and band(ld8(cd + CD_BLACK + shr(l, 3)), shl(1, band(l, 7))) == 0) {
+            let dead = band(ld8(cd + CD_START + l), bnot(ld8(cd + CD_MARK + l)))
+            if (dead != 0) {
+                _clear_dead(cd, l, dead)
             }
         }
     }
+    for (let l = l0; l < l0 + LINES_PER_BLOCK; l++) {
+        if (ld8(cd + CD_LINES + l) != ep) {
+            st8a(cd + CD_LINES + l, 0)
+            st8a(cd + CD_START + l, 0)
+            st8a(cd + CD_END + l, 0)
+            if (ld64(h + H_VERIFY) != 0) {
+                memset(ld64(cd + CD_BASE) + l * LINE, 221, LINE)
+            }
+            free_lines++
+        }
+    }
+    memset(cd + CD_MARK + l0, 0, LINES_PER_BLOCK)
+    memset(cd + CD_BLACK + shr(l0, 3), 0, LINES_PER_BLOCK / 8)
+    let info = _block_info(cd, bi)
+    st8(info + BI_ZERO, 0)
+    return free_lines
 }
 
-# After a sweep: the pacer. It measures how fast the program allocated and how long the cycle took for
-# the live data it had, and from them estimates what the program will allocate during the next cycle (a).
-# The heap goal is twice that, so the marker finishes before the program is slowed down, but never more
-# than the live size and never more than half of the free memory of the machine. The next cycle begins
-# when the rest of the goal (goal minus a) has been allocated. A heap this small has a floor,
-# MIN_THRESHOLD, so that it does not collect all the time.
+# Sweeps the large objects that existed when the sweep began: a dead one leaves the page table and its span is
+# given back after the mutex is let go. Mutex held at the start and at the end.
+func _sweep_large() {
+    let h = _heap()
+    let n = ld64(h + H_SW_LARGE)
+    let arr = ld64(h + H_LARGE)
+    let gone = calloc(n + 1, 8)
+    if (gone == 0) {
+        _die_oom()
+    }
+    let ngone = 0
+    let keep = 0
+    for (let i = 0; i < n; i++) {
+        let d = ld64(arr + i * 8)
+        if (ld8(d + LD_MARK) == 0 and ld8(d + LD_BLACK) == 0) {
+            let mem = ld64(d + LD_BASE)
+            for (let off = 0; off < ld64(d + LD_SPAN); off += PAGE_SIZE) {
+                _table_insert(shr(mem + off, PAGE_SHIFT), 0)
+            }
+            st64(h + H_LARGE_BYTES, ld64(h + H_LARGE_BYTES) - ld64(d + LD_SPAN))
+            st64(gone + ngone * 8, d)
+            ngone++
+        } else {
+            st8(d + LD_MARK, 0)
+            st8(d + LD_BLACK, 0)
+            st64(arr + keep * 8, d)
+            keep++
+        }
+    }
+    let total = ld64(h + H_LARGE_COUNT)
+    memmove(arr + keep * 8, arr + n * 8, (total - n) * 8)
+    st64(h + H_LARGE_COUNT, total - (n - keep))
+    _unlock()
+    for (let i = 0; i < ngone; i++) {
+        let d = ld64(gone + i * 8)
+        munmap(ld64(d + LD_BASE), ld64(d + LD_SPAN))
+        free(d)
+    }
+    free(gone)
+    _lock()
+    return 0
+}
+
+# The free blocks beyond what the program is expected to allocate before the next cycle give their memory
+# back to the system, off the program thread. A cold block is zero when it is taken again. Mutex held.
+func _trim_free() {
+    let h = _heap()
+    let keep = ld64(h + H_COLD_KEEP)
+    while (ld64(_list(L_FREE) + 8) > keep) {
+        let b = _arr_pop(_list(L_FREE))
+        let cd = _table_find(shr(b, PAGE_SHIFT))
+        let info = _block_info(cd, shr(b - ld64(cd + CD_BASE), BLOCK_SHIFT))
+        _unlock()
+        madvise(b, BLOCK, 4)    # MADV_DONTNEED
+        _lock()
+        st8(info + BI_COLD, 1)
+        st8(info + BI_ZERO, 1)
+        _arr_push(_list(L_COLD), b)
+    }
+}
+
+# The GC thread's sweep: blocks in claims of SWEEP_CLAIM, then the large objects, then the trim. Mutex held at
+# the start and at the end.
+func _gct_sweep() {
+    let h = _heap()
+    let t0 = _now_ns()
+    let got = stack_buf(SWEEP_CLAIM * 16)
+    while (1 == 1) {
+        let n = 0
+        while (n < SWEEP_CLAIM) {
+            let b = _sweep_claim()
+            if (b == 0) {
+                break
+            }
+            st64(got + n * 16, b)
+            n++
+        }
+        if (n == 0) {
+            break
+        }
+        _unlock()
+        for (let i = 0; i < n; i++) {
+            let b = ld64(got + i * 16)
+            let cd = _table_find(shr(b, PAGE_SHIFT))
+            st64(got + i * 16 + 8, _sweep_block(cd, shr(b - ld64(cd + CD_BASE), BLOCK_SHIFT)))
+        }
+        _lock()
+        for (let i = 0; i < n; i++) {
+            let b = ld64(got + i * 16)
+            let free_lines = ld64(got + i * 16 + 8)
+            let cd = _table_find(shr(b, PAGE_SHIFT))
+            let info = _block_info(cd, shr(b - ld64(cd + CD_BASE), BLOCK_SHIFT))
+            if (free_lines == LINES_PER_BLOCK) {
+                st8a(info + BI_KIND, 0)
+                _arr_push(_list(L_FREE), b)
+            } else if (free_lines != 0) {
+                _arr_push(_list(L_RECYC + ld8(info + BI_KIND) - 1), b)
+            }
+        }
+    }
+    _sweep_large()
+    _trim_free()
+    st64(h + H_SWEEP_NS, ld64(h + H_SWEEP_NS) + (_now_ns() - t0))
+    st64a(h + H_SW_DONE, 1)
+}
+
+# The marks are final: the sweep begins. The allocators let go of their blocks (the sweep has to see them), the
+# recyclable lists are emptied (their blocks are swept again), and the GC thread is woken to sweep. Mutex held.
+func _sweep_start() {
+    let h = _heap()
+    for (let i = 0; i < 4; i++) {
+        let a = h + H_ALLOC + i * AL_SIZE
+        st64(a + AL_BLOCK, 0)
+        st64(a + AL_LEFT, 0)
+        st64(a + AL_OFF, 0)
+    }
+    st64(_list(L_RECYC) + 8, 0)
+    st64(_list(L_RECYC + 1) + 8, 0)
+    let ep = ld64(h + H_SW_EPOCH) % 255 + 1
+    st64(h + H_SW_EPOCH, ep)
+    st64(h + H_SW_CHUNK, 0)
+    st64(h + H_SW_BLOCK, 0)
+    st64(h + H_SW_LARGE, ld64(h + H_LARGE_COUNT))
+    st64a(h + H_SW_DONE, 0)
+    st64(h + H_SWEEPING, 1)
+    st64(h + H_GCT_STATE, 3)
+    pthread_cond_signal(h + H_COND_GC)
+}
+
+# ZUE_RT_GC_STATS=3: after each sweep, where the heap's blocks are. Mutex held.
+func _census() {
+    let h = _heap()
+    let full = 0
+    let recyc = 0
+    let free_hot = ld64(_list(L_FREE) + 8)
+    let cold = ld64(_list(L_COLD) + 8)
+    let live_lines = 0
+    let used = 0
+    for (let c = 0; c < ld64(h + H_CHUNK_COUNT); c++) {
+        let cd = ld64(ld64(h + H_CHUNKS) + c * 8)
+        for (let bi = 0; bi < BLOCKS_PER_CHUNK; bi++) {
+            if (ld8(_block_info(cd, bi) + BI_KIND) == 0) {
+                continue
+            }
+            used++
+            let n = 0
+            for (let l = 0; l < LINES_PER_BLOCK; l++) {
+                if (ld8(cd + CD_LINES + bi * LINES_PER_BLOCK + l) != 0) {
+                    n++
+                }
+            }
+            live_lines += n
+            if (n == LINES_PER_BLOCK) {
+                full++
+            } else {
+                recyc++
+            }
+        }
+    }
+    let buf = stack_buf(320)
+    let pct = 0
+    if (used != 0) {
+        pct = live_lines * 100 / (used * LINES_PER_BLOCK)
+    }
+    let n2 = snprintf(buf, 320, cstr("ZUE_RT_GC_CENSUS,%llu chunks,%llu blocks in use (%llu full, %llu with holes),%llu%% of their lines live,%llu free blocks,%llu given back,%llu large objects (%llu MiB)\n"), ld64(h + H_CHUNK_COUNT), used, full, recyc, pct, free_hot, cold, ld64(h + H_LARGE_COUNT), ld64(h + H_LARGE_BYTES) / 1048576)
+    write(2, buf, n2)
+    return 0
+}
+
+# After a sweep: the pacer. It measures how fast the program allocated and how long the cycle took for the live
+# data it had, and from them estimates what the program will allocate during the next cycle (a). The heap goal
+# is four times that, so the marker finishes before the program is slowed down, but never more than twice the
+# live size and never more than the free memory of the machine allows. The next cycle begins when the rest of
+# the goal (goal minus a) has been allocated. A heap this small has a floor, MIN_THRESHOLD, so that it does not
+# collect all the time.
 func _after_sweep() {
     let h = _heap()
     let now = _now_ns()
+    # The bytes of the objects the cycle marked: what the program held at its start. What was allocated during
+    # the cycle survives it but is not counted, so the goal is a multiple of what the program really holds.
     let live = ld64(h + H_LIVE_BYTES)
     let since = ld64(h + H_BYTES_SINCE_GC)
-    # What was allocated while the cycle ran survives it, so it is counted as live. The goal is a multiple of
-    # what the program really holds, not of that: with it the goal grew with the garbage it was meant to bound.
-    let during = since - ld64(h + H_CYCLE_BYTES)
-    if (during > 0) {
-        live = live - during
-        if (live < ld64(h + H_LIVE_BYTES) / 2) {
-            live = ld64(h + H_LIVE_BYTES) / 2
-        }
-    }
     let elapsed = now - ld64(h + H_LAST_END)
     if (ld64(h + H_LAST_END) != 0 and elapsed > 0) {
         let rate = since * 1000000 / elapsed
@@ -1543,9 +1595,10 @@ func _after_sweep() {
         top = 2 * MIN_THRESHOLD
     }
     # The heap may grow until the free memory of the machine is nearly used up, not further: past that the
-    # kernel reclaims and compacts inside a page fault of the program (one run stalled 12 ms). The free
-    # pages shrink as this heap grows, so what the heap holds now is added back.
-    let room = (sysconf(86) * sysconf(30) + ld64(h + H_ALL_COUNT) * PAGE_SIZE) / 100 * 85 - live    # _SC_AVPHYS_PAGES
+    # kernel reclaims and compacts inside a page fault of the program. The free pages shrink as this heap
+    # grows, so what the heap holds now is added back.
+    let held = ld64(h + H_CHUNK_COUNT) * CHUNK_SIZE + ld64(h + H_LARGE_BYTES)
+    let room = (sysconf(86) * sysconf(30) + held) / 100 * 85 - live    # _SC_AVPHYS_PAGES
     # A limit on the address space (ulimit -v) bounds the heap too. Stacks, the GC thread, freed memory not
     # yet given back and the program itself take the rest, so the heap may use 70 percent of it.
     let rl = stack_buf(16)
@@ -1573,32 +1626,46 @@ func _after_sweep() {
         next = MIN_THRESHOLD
     }
     st64(h + H_THRESHOLD, next)
+    st64(h + H_COLD_KEEP, next / BLOCK)
     st64(h + H_BYTES_SINCE_GC, 0)
-    _pool_trim()
-    if (ld64(h + H_VERIFY) != 0) {
-        _check_pool()
-    }
 }
 
 func _count_pause(dt) {
     let h = _heap()
-    st64(h + H_PAUSE_TOTAL, ld64(h + H_PAUSE_TOTAL) + (dt))
+    st64(h + H_PAUSE_TOTAL, ld64(h + H_PAUSE_TOTAL) + dt)
     if (dt > ld64(h + H_PAUSE_MAX)) {
         st64(h + H_PAUSE_MAX, dt)
         st64(h + H_PAUSE_MAX_SLEEP, ld64(h + H_THROTTLE_CALL))
     }
 }
 
-# Incremental collection. A cycle begins by marking the roots (the stack, the registers, the data
-# segment and the root ranges), which is the snapshot. The program then runs between steps; each step
-# scans a bounded number of words. When nothing is left to scan the marks are final, the cycle ends
-# with a sweep, and the next cycle can begin.
-
+# A cycle begins by marking the roots (the stack, the registers, the data segment), which is the snapshot; the
+# root ranges and the stacks of the blue threads that are away follow in steps. The rest of each allocator's
+# hole, from the next line on, is black: what the program allocates there during the cycle survives it.
 func _gc_begin() {
     let h = _heap()
     st64(h + H_COLLECTIONS, ld64(h + H_COLLECTIONS) + 1)
+    st64(h + H_EPOCH, ld64(h + H_EPOCH) % 255 + 1)
     st64(h + H_MTOP, 0)
+    st64(h + H_SLOT_GC + 16, 0)
+    st64(h + H_SLOT + 16, 0)
     st64(h + H_MARKING, 1)
+    for (let i = 0; i < 4; i++) {
+        let a = h + H_ALLOC + i * AL_SIZE
+        if (ld64(a + AL_BLOCK) != 0 and ld64(a + AL_LEFT) != 0) {
+            # The rest of the line the cursor is in is given up: a black line holds only new objects.
+            let off = band(ld64(a + AL_OFF) + LINE - 1, -LINE)
+            let end = ld64(a + AL_OFF) + ld64(a + AL_LEFT)
+            if (off >= end) {
+                st64(a + AL_LEFT, 0)
+            } else {
+                st64(a + AL_OFF, off)
+                st64(a + AL_LEFT, end - off)
+                let l0 = shr(ld64(a + AL_G0), 3)
+                _blacken(ld64(a + AL_CD), l0 + shr(off, LINE_SHIFT), l0 + shr(end, LINE_SHIFT))
+            }
+        }
+    }
     _scan_static()
     if (ld64(h + H_ROOT_COUNT) != 0) {
         st64(h + H_RS_I, 0)
@@ -1611,15 +1678,15 @@ func _gc_begin() {
     st64(h + H_CYCLE_BYTES, ld64(h + H_BYTES_SINCE_GC))
     st64(h + H_CYCLE_T0, _now_ns())
     st64(h + H_CYCLE_GCT0, ld64(h + H_GCT_NS))
-    pthread_mutex_lock(h + H_MUTEX)
+    _lock()
     st64(h + H_GCT_STATE, 1)
     pthread_cond_signal(h + H_COND_GC)
-    pthread_mutex_unlock(h + H_MUTEX)
+    _unlock()
 }
 
-# The GC thread. It sleeps while no cycle runs. During a cycle it marks from its own mark stack, takes
-# the batches the program thread hands over (the objects the write barrier marked), and says so when it
-# has nothing left. The program thread then ends the cycle.
+# The GC thread. It sleeps while no cycle runs. During marking it marks from its own mark stack, takes the
+# batches the program thread hands over (the objects the write barrier marked), and says so when it has nothing
+# left; the program thread then ends the marking and wakes it again to sweep.
 func _gct_take() {
     let h = _heap()
     let n = ld64(h + H_SHARED_N)
@@ -1632,14 +1699,19 @@ func _gct_take() {
 
 func _gct_main(arg) {
     let h = _heap()
-    pthread_mutex_lock(h + H_MUTEX)
+    _lock()
     while (1 == 1) {
         while (ld64(h + H_GCT_STATE) == 0) {
             pthread_cond_wait(h + H_COND_GC, h + H_MUTEX)
         }
+        if (ld64(h + H_GCT_STATE) == 3) {
+            _gct_sweep()
+            st64(h + H_GCT_STATE, 0)
+            continue
+        }
         _gct_take()
         if (ld64(h + H_MTOP) != 0) {
-            pthread_mutex_unlock(h + H_MUTEX)
+            _unlock()
             let t0 = _now_ns()
             let work = 0
             while (ld64(h + H_MTOP) != 0 and work < GCT_BATCH) {
@@ -1649,7 +1721,7 @@ func _gct_main(arg) {
             if (ld64(h + H_SLOW_US) != 0) {
                 usleep(ld64(h + H_SLOW_US))
             }
-            pthread_mutex_lock(h + H_MUTEX)
+            _lock()
         } else {
             st64(h + H_GCT_STATE, 2)
             pthread_cond_broadcast(h + H_COND_DONE)
@@ -1669,28 +1741,26 @@ func _trace_cycle(wall) {
     write(2, buf, n)
 }
 
-# While the GC thread marks, asks whether it is done: returns 1 when the marks are final. The program
-# thread hands over its batch first, so a marked object it still holds is never left behind. A program
-# that allocates far more than the collector can keep up with is slowed down here, a little at a time,
+# While the GC thread marks, asks whether it is done: returns 1 when the marks are final, with the mutex held.
+# The program thread hands over its batch first, so a marked object it still holds is never left behind. A
+# program that allocates far more than the collector can keep up with is slowed down here, a little at a time,
 # so that no single step is long.
 func _cycle_poll() {
     let h = _heap()
-    pthread_mutex_lock(h + H_MUTEX)
+    _lock()
     _hand_over()
-    let done = 0
-    let slow = 0
     if (ld64(h + H_GCT_STATE) == 2 and ld64(h + H_SHARED_N) == 0 and ld64(h + H_RS_ON) == 0 and ld64(h + H_BS_ON) == 0) {
         st64(h + H_GCT_STATE, 0)    # the GC thread sleeps again, so the marks are the program thread's to use
-        done = 1
         if (ld64(h + H_VERIFY) != 0) {
             _check_marking_done()
         }
-    } else {
-        if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_EXTRA)) {
-            slow = 1
-        }
+        return 1
     }
-    pthread_mutex_unlock(h + H_MUTEX)
+    let slow = 0
+    if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_EXTRA)) {
+        slow = 1
+    }
+    _unlock()
     if (slow != 0) {
         # Spin instead of usleep: a sleep can overshoot by milliseconds, a spin takes what it is told.
         let t0 = _now_ns()
@@ -1706,44 +1776,46 @@ func _cycle_poll() {
             st64(h + H_THROTTLE_MAX, dt)
         }
     }
-    return done
+    return 0
 }
 
-# The marks are final: check them if asked, free the boxes of dead templates, and start the sweep.
+# The marks are final (mutex held): check them if asked, free the boxes of dead templates, and start the sweep.
 func _gc_finish() {
     let h = _heap()
     if (ld64(h + H_VERIFY) != 0) {
         _verify_marks()
     }
     st64(h + H_MARKING, 0)
+    st64(h + H_LIVE_BYTES, ld64(h + H_SLOT_GC + 16) + ld64(h + H_SLOT + 16))
+    _unlock()
     lv_data_gc_hook()
-    _sweep_begin()
+    _lock()
+    _sweep_start()
+    _unlock()
 }
 
-# One stop of the incremental collector. While sweeping it sweeps for a short time. Otherwise it begins
-# a cycle if none is running, scans one step, and ends the marking when nothing is left to scan.
+# One stop of the incremental collector. While the GC thread sweeps, it only looks whether the sweep is done,
+# and then runs the pacer. Otherwise it begins a cycle if none is running, scans one step of the roots, and ends
+# the marking when nothing is left to scan.
 func _gc_work() {
     let h = _heap()
     let t0 = _now_ns()
     st64(h + H_THROTTLE_CALL, 0)
     st64(h + H_GC_BUSY, 1)
-    _pool_trim()
     if (ld64(h + H_SWEEPING) != 0) {
-        let ns = SWEEP_STEP_NS
-        let pages = 0
-        if (ld64(h + H_STRESS_EVERY) != 0) {
-            ns = 0
-            pages = 1    # one page per step, to interleave the program with the sweep as much as possible
-        }
-        _cache_trim()
-        if (_sweep_some(ns, pages) != 0) {
-            _sweep_end()
-            _after_sweep()
-        }
-        let dt = _now_ns() - t0
-        st64(h + H_SWEEP_TOTAL, ld64(h + H_SWEEP_TOTAL) + (dt))
-        if (dt > ld64(h + H_SWEEPSTEP_MAX)) {
-            st64(h + H_SWEEPSTEP_MAX, dt)
+        if (ld64a(h + H_SW_DONE) != 0) {
+            _lock()
+            if (ld64(h + H_GCT_STATE) == 0) {
+                st64(h + H_SWEEPING, 0)
+                if (ld64(h + H_STATS) == 3) {
+                    _census()
+                }
+                _after_sweep()
+                if (ld64(h + H_VERIFY) != 0) {
+                    _check_lists()
+                }
+            }
+            _unlock()
         }
     } else {
         if (ld64(h + H_MARKING) == 0) {
@@ -1775,22 +1847,12 @@ func _gc_work() {
     _count_pause(_now_ns() - t0)
 }
 
-# The verifier. At the end of a cycle every object that can be reached from the roots must be marked.
-# It walks the heap again, with a second bit in the mark byte as the visited flag. A word on the stack
-# that points at an unmarked object is skipped: a stale word left in an unused stack slot can point at
-# an object that died before the cycle began, and the program cannot reach it through that word.
+# The verifier. At the end of a cycle every object that can be reached from the roots must be marked (or be
+# allocated during the cycle, in a black line). It walks the heap again with a second set of bits. A word on the
+# stack that points at an unmarked object is skipped: a stale word left in an unused stack slot can point at an
+# object that died before the cycle began, and the program cannot reach it through that word.
 
-# ZUE_RT_GC_VERIFY=1 also checks what the collector must hold true between its steps. A broken invariant ends the
-# program with this message, so a test that runs in verify mode fails where a wrong result might otherwise go unseen.
-func _invariant_fail(what) {
-    let buf = stack_buf(200)
-    let n = snprintf(buf, 200, cstr("Runtime Error: GC invariant broken: %s\n"), what)
-    write(2, buf, n)
-    exit(1)
-}
-
-# When the marks are final nothing may be left to scan: not on the GC thread's stack, not in the shared batch,
-# not in the program thread's batch.
+# When the marks are final nothing may be left to scan.
 func _check_marking_done() {
     let h = _heap()
     if (ld64(h + H_MTOP) != 0) {
@@ -1804,65 +1866,98 @@ func _check_marking_done() {
     }
 }
 
-# The pool of empty pages: every entry is marked as pooled, the counts agree, and no entry is a page that was
-# given up (_pool_retire).
-func _check_pool() {
+# Every block on a list is of the list's kind and swept, a free block has no live line and no object, and no
+# block is on two lists. Mutex held.
+func _check_lists() {
     let h = _heap()
-    let count = ld64(h + H_POOL_COUNT)
-    if (ld64(h + H_POOL_COLD) > count) {
-        _invariant_fail(cstr("more cold pages in the pool than pages"))
-    }
-    if (count > ld64(h + H_ALL_COUNT) + RETIRE_BATCH) {
-        _invariant_fail(cstr("more pages in the pool than pages tracked"))
-    }
-    for (let i = 0; i < count; i++) {
-        let pg = ld64(ld64(h + H_POOL) + i * 8)
-        if (ld8(pg + PG_IN_LIST) != 2) {
-            _invariant_fail(cstr("a page in the pool is not marked as pooled"))
-        }
-        if (ld64(pg + PG_USED) == 0 or ld64(pg + PG_MARK) == 0) {
-            _invariant_fail(cstr("a page in the pool has lost its maps"))
+    for (let k = 0; k < 4; k++) {
+        let p = _list(k)
+        for (let i = 0; i < ld64(p + 8); i++) {
+            let b = ld64(ld64(p) + i * 8)
+            let cd = _table_find(shr(b, PAGE_SHIFT))
+            if (cd == 0 or ld8(cd) != 1) {
+                _invariant_fail(cstr("a block on a list is not in a chunk"))
+            }
+            let bi = shr(b - ld64(cd + CD_BASE), BLOCK_SHIFT)
+            let info = _block_info(cd, bi)
+            if (k < 2 and ld8(info + BI_KIND) != k + 1) {
+                _invariant_fail(cstr("a recyclable block is of the wrong kind"))
+            }
+            if (k >= 2) {
+                if (ld8(info + BI_KIND) != 0) {
+                    _invariant_fail(cstr("a free block is in use"))
+                }
+                for (let l = 0; l < LINES_PER_BLOCK; l++) {
+                    let j = bi * LINES_PER_BLOCK + l
+                    if (ld8(cd + CD_LINES + j) != 0 or ld8(cd + CD_START + j) != 0 or ld8(cd + CD_END + j) != 0) {
+                        _invariant_fail(cstr("a free block holds a live line or an object"))
+                    }
+                }
+            }
         }
     }
 }
 
-func _verify_fail(pg, idx) {
-    let obj = ld64(pg + PG_BASE)
-    if (ld8(pg + PG_LARGE) == 0) {
-        obj = obj + idx * ld64(pg + PG_OBJ)
-    }
+func _verify_fail(p, n) {
     let buf = stack_buf(192)
-    let n = snprintf(buf, 192, cstr("Runtime Error: GC verify failed: the object at %p (%zu bytes) can be reached but was not marked\n"), obj, ld64(pg + PG_OBJ))
-    write(2, buf, n)
+    let k = snprintf(buf, 192, cstr("Runtime Error: GC verify failed: the object at %p (%zu bytes) can be reached but was not marked\n"), p, n)
+    write(2, buf, k)
     exit(1)
 }
 
-func _vmark(pg, idx) {
+func _vmark_large(d) {
     let h = _heap()
-    let m = ld64(pg + PG_MARK) + idx
-    let v = ld8(m)
-    if (band(v, 2) != 0) {
+    if (ld8(d + LD_VMARK) != 0) {
         return 0
     }
-    if (band(v, 1) == 0) {
+    if (ld8(d + LD_MARK) == 0 and ld8(d + LD_BLACK) == 0) {
         if (ld64(h + H_VSTACK) != 0) {
             return 0
         }
-        _verify_fail(pg, idx)
+        _verify_fail(ld64(d + LD_BASE), ld64(d + LD_OBJ))
     }
-    st8(m, v + 2)
-    if (ld8(pg + PG_ATOMIC) == 0) {
-        let obj = ld64(pg + PG_BASE)
-        if (ld8(pg + PG_LARGE) == 0) {
-            obj = obj + idx * ld64(pg + PG_OBJ)
+    st8(d + LD_VMARK, 1)
+    if (ld8(d + LD_ATOMIC) != 0) {
+        return 0
+    }
+    return ld64(d + LD_BASE)
+}
+
+func _vmark(cd, s, n) {
+    let h = _heap()
+    let vm = ld64(cd + CD_VMARK)
+    if (band(ld8(vm + shr(s, 3)), shl(1, band(s, 7))) != 0) {
+        return 0
+    }
+    if (band(ld8(cd + CD_MARK + shr(s, 3)), shl(1, band(s, 7))) == 0 and _line_black(cd, s) == 0) {
+        if (ld64(h + H_VSTACK) != 0) {
+            return 0
         }
-        _push(obj, ld64(pg + PG_OBJ))
+        _verify_fail(ld64(cd + CD_BASE) + s * GRAN, n)
     }
-    return 0
+    _bit_set(vm, s)
+    if (ld8(_block_info(cd, shr(s, 11)) + BI_KIND) == 2) {
+        return 0
+    }
+    return ld64(cd + CD_BASE) + s * GRAN
 }
 
 func _verify_marks() {
     let h = _heap()
+    for (let c = 0; c < ld64(h + H_CHUNK_COUNT); c++) {
+        let cd = ld64(ld64(h + H_CHUNKS) + c * 8)
+        if (ld64(cd + CD_VMARK) == 0) {
+            st64(cd + CD_VMARK, calloc(1, MAP_BYTES))
+            if (ld64(cd + CD_VMARK) == 0) {
+                _die_oom()
+            }
+        } else {
+            memset(ld64(cd + CD_VMARK), 0, MAP_BYTES)
+        }
+    }
+    for (let i = 0; i < ld64(h + H_LARGE_COUNT); i++) {
+        st8(ld64(ld64(h + H_LARGE) + i * 8) + LD_VMARK, 0)
+    }
     st64(h + H_VMODE, 1)
     st64(h + H_MTOP, 0)
     _scan_roots()
@@ -1877,7 +1972,7 @@ func _verify_marks() {
 func _gc_report() {
     let h = _heap()
     let buf = stack_buf(480)
-    let n = snprintf(buf, 480, cstr("ZUE_RT_GC_STATS,%llu collections,%zu live bytes,%zu pages,%llu total pause ns,%llu max pause ns,%llu mark ns,%llu sweep ns,%llu max cycle end ns,%llu max cycle start ns,%llu mark stack grows,%llu max sweep step ns,%llu longest cycle ns\n"), ld64(h + H_COLLECTIONS), ld64(h + H_LIVE_BYTES), ld64(h + H_ALL_COUNT), ld64(h + H_PAUSE_TOTAL), ld64(h + H_PAUSE_MAX), ld64(h + H_MARK_TOTAL) + ld64(h + H_GCT_NS), ld64(h + H_SWEEP_TOTAL), ld64(h + H_FINISH_MAX), ld64(h + H_BEGIN_MAX), ld64(h + H_MSTACK_GROW), ld64(h + H_SWEEPSTEP_MAX), ld64(h + H_CYCLE_MAX))
+    let n = snprintf(buf, 480, cstr("ZUE_RT_GC_STATS,%llu collections,%zu live bytes,%llu chunks,%llu total pause ns,%llu max pause ns,%llu mark ns,%llu sweep ns,%llu max cycle end ns,%llu max cycle start ns,%llu mark stack grows,%llu large object bytes,%llu longest cycle ns\n"), ld64(h + H_COLLECTIONS), ld64(h + H_LIVE_BYTES), ld64(h + H_CHUNK_COUNT), ld64(h + H_PAUSE_TOTAL), ld64(h + H_PAUSE_MAX), ld64(h + H_GCT_NS), ld64(h + H_SWEEP_NS), ld64(h + H_FINISH_MAX), ld64(h + H_BEGIN_MAX), ld64(h + H_MSTACK_GROW), ld64(h + H_LARGE_BYTES), ld64(h + H_CYCLE_MAX))
     write(2, buf, n)
     let buf2 = stack_buf(256)
     let n2 = snprintf(buf2, 256, cstr("ZUE_RT_GC_THROTTLE,%llu steps slept,%llu total sleep ns,%llu longest sleep ns,%llu of the longest pause was sleep ns\n"), ld64(h + H_THROTTLE_N), ld64(h + H_THROTTLE_NS), ld64(h + H_THROTTLE_MAX), ld64(h + H_PAUSE_MAX_SLEEP))
@@ -1902,12 +1997,12 @@ func _gc_report() {
     write(2, buf3, n3)
 }
 
-# Called once from the thread that runs the program.
 # Called first thing in main of a program built with --gc=lowmem.
 func lv_gc_set_lowmem() {
     st64(_heap() + H_LOWMEM, 1)
 }
 
+# Called once from the thread that runs the program.
 func lv_gc_start() {
     let h = _heap()
     if (ld64(h + H_SETUP_DONE) == 0) {
@@ -1956,7 +2051,7 @@ func lv_gc_start() {
     if (pre != 0) {
         st64(pre + PRE_HINT, 1)
         if (pthread_create(pth, 0, fn_addr("_pre_main"), pre) == 0) {
-            st64(h + H_PRE, pre)    # if the helper cannot start, chunks are made on the program thread as before
+            st64(h + H_PRE, pre)    # if the helper cannot start, chunks are made on the program thread
         }
     }
     st64(h + H_GC_READY, 1)

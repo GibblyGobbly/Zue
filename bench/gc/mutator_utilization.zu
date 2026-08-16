@@ -32,6 +32,7 @@ for (let i = 0; i < objects; i++) {
 # allocates nothing but the occasional growth of the lists.
 let starts = []
 let lengths = []
+let at = []
 let n = len(live)
 let sum = 0
 let begin = clock()
@@ -44,6 +45,7 @@ for (let i = 0; i < iterations; i++) {
     if (now - prev > resolution) {
         append(starts, prev - begin)
         append(lengths, now - prev)
+        append(at, i)
     }
     prev = now
 }
@@ -66,21 +68,124 @@ for (let d in lengths) {
 }
 
 # The smallest share of a window of w seconds left to the program. A window that holds a stop's start
-# counts the part of each stop that falls inside it; the worst window starts where a stop starts.
+# counts the part of each stop that falls inside it; the worst window starts where a stop starts. Stops do
+# not overlap, so the stops wholly inside the window are a run j0..j-1 that only moves forward.
 func mmu(starts, lengths, w) {
     let worst = 1.0
     let n = len(starts)
+    let inside = 0.0
+    let j = 0
     for (let i = 0; i < n; i++) {
+        if (j < i) {
+            j = i
+            inside = 0.0
+        }
         let end = starts[i] + w
-        let paused = 0.0
-        let j = i
-        while (j < n and starts[j] < end) {
-            paused += min(lengths[j], end - starts[j])
+        while (j < n and starts[j] + lengths[j] <= end) {
+            inside += lengths[j]
             j += 1
         }
+        let paused = inside
+        if (j < n and starts[j] < end) {
+            paused += end - starts[j]
+        }
         worst = min(worst, max(0.0, 1.0 - paused / w))
+        if (j > i) {
+            inside -= lengths[i]
+        }
     }
     return worst
+}
+
+# Metered latency (as in the DaCapo Chopin suite): request i arrives at i * t, the iterations arriving evenly
+# over the whole run, and waits while an earlier one is still running, so a stop delays every request that
+# arrives during it. Latency L of a request is its end minus its arrival: L = max(L_before - t, 0) + its own
+# time. Between two stops every iteration takes the same time v, so L moves in a straight line there; the
+# run is kept as pieces { first L, step per iteration, count } instead of one value per iteration.
+let pa = []
+let ps = []
+let pc = []
+func piece(a, step, c) {
+    if (c > 0) {
+        append(pa, a)
+        append(ps, step)
+        append(pc, c)
+    }
+}
+let t = run / float(iterations)
+let lat = 0.0
+let last_i = -1
+let last_end = 0.0
+func normal_run(m, time) {
+    if (m <= 0) {
+        return 0
+    }
+    let v = time / float(m)
+    let a = max(lat - t, 0.0) + v
+    if (v >= t) {
+        piece(a, v - t, m)
+        lat = a + float(m - 1) * (v - t)
+        return 0
+    }
+    let n1 = 1
+    if (a >= t) {
+        n1 = min(m, int((a - t) / (t - v)) + 2)
+    }
+    piece(a, v - t, n1)
+    lat = a + float(n1 - 1) * (v - t)
+    if (m > n1) {
+        piece(v, 0.0, m - n1)
+        lat = v
+    }
+    return 0
+}
+for (let k = 0; k < len(at); k++) {
+    normal_run(at[k] - last_i - 1, starts[k] - last_end)
+    lat = max(lat - t, 0.0) + lengths[k]
+    piece(lat, 0.0, 1)
+    last_i = at[k]
+    last_end = starts[k] + lengths[k]
+}
+normal_run(iterations - last_i - 1, run - last_end)
+
+# How many requests waited at least x.
+func count_at_least(x) {
+    let c = 0
+    for (let k = 0; k < len(pa); k++) {
+        let a = pa[k]
+        let step = ps[k]
+        let n = pc[k]
+        if (step == 0.0) {
+            if (a >= x) {
+                c += n
+            }
+        } else if (step > 0.0) {
+            let first = 0
+            if (a < x) {
+                first = min(n, int(ceil((x - a) / step)))
+            }
+            c += n - first
+        } else if (a >= x) {
+            c += min(n, int((a - x) / (0.0 - step)) + 1)
+        }
+    }
+    return c
+}
+
+# The smallest x that at most (1 - q) of the requests reach.
+func metered(q, top) {
+    let lo = 0.0
+    let hi = top
+    let allowed = int(float(iterations) * (1.0 - q))
+    for (let r = 0; r < 40; r++) {
+        let mid = (lo + hi) / 2.0
+        if (count_at_least(mid) > allowed) {
+            lo = mid
+        } else {
+            hi = mid
+        }
+    }
+    return hi
 }
 
 print("live_mib {live_mb}  iterations {iterations}  checksum {sum}")
@@ -91,8 +196,18 @@ if (count == 0) {
 }
 print("stops {count}  stopped_ms {fixed(stopped * 1000.0, 1)}  stopped_pct {fixed(100.0 * stopped / run, 1)}")
 # the windows first: sort below puts the lengths in order and breaks their pairing with the starts
-for (let w in [0.001, 0.01, 0.1]) {
-    print("mmu_{fixed(w * 1000.0, 0)}ms_pct {fixed(100.0 * mmu(starts, lengths, w), 1)}")
+for (let w in [0.0001, 0.001, 0.01, 0.1, 1.0]) {
+    print("mmu_{fixed(w * 1000.0, 1)}ms_pct {fixed(100.0 * mmu(starts, lengths, w), 1)}")
 }
+let top = 0.0
+for (let a in pa) {
+    top = max(top, a)
+}
+for (let k = 0; k < len(pa); k++) {
+    if (ps[k] > 0.0) {
+        top = max(top, pa[k] + float(pc[k] - 1) * ps[k])
+    }
+}
+print("metered_us p50 {fixed(metered(0.5, top) * 1000000.0, 1)}  p99 {fixed(metered(0.99, top) * 1000000.0, 1)}  p99.9 {fixed(metered(0.999, top) * 1000000.0, 1)}  p99.99 {fixed(metered(0.9999, top) * 1000000.0, 1)}  max {fixed(top * 1000000.0, 1)}")
 sort(lengths)
 print("longest_ms {fixed(longest * 1000.0, 2)}  p50_us {fixed(lengths[floor_div(count, 2)] * 1000000.0, 0)}  p99_us {fixed(lengths[floor_div(count * 99, 100)] * 1000000.0, 0)}  over_100us {over_100us}  over_1ms {over_1ms}")

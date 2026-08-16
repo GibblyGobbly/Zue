@@ -882,3 +882,107 @@ while the slices are on. Same runs after the change (test case 18 fails 3 of 3 w
 There are no safepoints to wait for: the program thread does its own collector steps, and the marker is a separate
 thread.
 
+
+## Replacing the collector: conservative Immix (decided 2026-11-04)
+
+The old collector (size-class pages, one marker, sweep in steps on the program thread) is replaced, not
+tuned. Baseline of the old collector, `bench/gc/mutator_utilization.zu <live MiB> 30000000`, one run each:
+
+| Live asked | Real live | Iterations/s | Stopped | p99 stop | Longest | MMU 1 ms | MMU 10 ms | MMU 1 s | Metered p99 | Peak / live | Marker share of CPU |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 256 MiB | 0.48 GB | 5.53 M | 16.6% | 108 us | 1.38 ms | 0% | 5.1% | 80% | 55 ms | 2.40 | 27% |
+| 1 GiB | 1.84 GB | 5.90 M | 11.3% | 72 us | 0.58 ms | 6.7% | 10.1% | 74% | 171 ms | 2.22 | 30% |
+| 4 GiB | 6.87 GB | 5.14 M | 15.3% | 101 us | 0.54 ms | 3.7% | 7.0% | 31% | 670 ms | 1.61 | 35% |
+| 10 GiB | 13.6 GB | 3.21 M | 24.3% | 110 us | 8.45 ms | 0% | 5.9% | 9.7% | 1.92 s | 1.44 | 44% |
+
+Where the program thread's stops went (256 MiB): clearing reused pages 538 ms, throttle spin 160 ms, sweep
+steps 148 ms, giving memory back 128 ms, new pages 46 ms. At 1 GiB the throttle spin was first (579 ms).
+
+### Stages
+
+| Stage | Work | Done when |
+|---|---|---|
+| I | Immix heap and sweep on the GC thread; marking as before (one marker, SATB barrier, throttle) | `make test`, verify mode and the race check pass; the table above is measured again |
+| II | Several markers, their number chosen from the measured mark and allocation rates; assists replace the throttle spin | MMU at 1 and 10 ms well above the old values at every size |
+| III | Exact heap scanning: an object header with its layout, filled by every allocation site | The heap is scanned by tags; stacks stay conservative |
+| IV | String space, opportunistic moving of objects not pointed to from stacks, young generation | Each measured against the stage before |
+
+The old `zue_gc.zu` is deleted in stage I: the new file has the same name and the same entry points, so the
+compiler and the rest of the runtime do not change.
+
+### Heap layout (stage I)
+
+| Unit | Size | Notes |
+|---|---|---|
+| Granule | 16 bytes | Objects start on a granule and take whole granules (request + 1 byte, rounded up) |
+| Line | 128 bytes | The unit of reuse: a line is free when no live object touches it |
+| Block | 32 KB, 256 lines | Holds normal objects or atomic objects (never scanned), not both |
+| Chunk | 2 MB, 64 blocks | Aligned to 2 MB; made ahead by the helper thread as before |
+| Medium object | 129 bytes to 8 KB | Bump allocated; one that does not fit the current hole goes to the overflow block |
+| Large object | over 8 KB | Its own span of 64 KB pages, as before |
+
+Each chunk has a descriptor (calloc, never scanned) with one bit per granule in three bitmaps (object start,
+object end, object mark), one byte per line (the epoch of the cycle that last saw it live, 0 when free), one bit
+per line for lines allocated during a cycle (black), and a few bytes per block (kind, sweep epoch, zeroed).
+That is 3.1 percent of the chunk. The page table maps each 64 KB of address space to a chunk or large-object
+descriptor, as before.
+
+A word is a pointer to an object when the page table knows its 64 KB, a start bit is found at or before it in
+the same block, and the first end bit after that start is at or after it.
+
+### Allocation
+
+The fast path is a bump: cursor plus size against the end of the hole, then the start and end bits. There is
+no clearing per object: a hole is cleared once when it is taken (fresh chunk memory and blocks given back to
+the system are already zero). While a cycle marks, every hole taken, and the rest of the current hole at the
+cycle's start, gets the cycle's epoch and the black bit, so nothing allocated during the cycle is freed by it.
+The collector's state holds the cursor and the bytes left in the hole, never the hole's end: the end is often
+the start of an object, and the conservative scan of the data segment would keep it alive.
+
+### Sweep
+
+After the marks are final the GC thread sweeps every block that was in use. The program thread can sweep a
+block itself when it needs one before the GC thread got to it; a block is claimed under the collector mutex.
+Sweeping a block: in each live line, clear the start and end bits of every unmarked object outside black lines;
+then clear the bits of every free line; clear the mark bits; count free lines. A block with no live line goes
+to the free list, one with holes to the recycle list of its kind. The GC thread then gives back the memory of
+free blocks beyond what the pacer expects the program to need before the next cycle (madvise), off the
+program thread.
+
+### What stays
+
+Snapshot-at-the-beginning barrier (`lv_wb_cell`, `lv_wb_word`, `lv_wb_range`), the local batch handed to the
+GC thread, root ranges scanned in steps, blue thread stacks scanned in steps, `lv_gc_note_external`, the box
+hook at the end of marking, `--gc=lowmem`, the pacer's measures, `ZUE_RT_GC_STATS`, `_STRESS`, `_SLOW` and
+`_VERIFY`. `lv_gc_is_marked` counts an object in a black line as marked.
+
+### Stage I result (measured 2026-11-04, one run each, same benchmark as the baseline)
+
+| Live asked | Iterations/s | Stopped | Stops | p99 stop | Longest | MMU 1 ms | MMU 10 ms | MMU 1 s | Peak | Throttle spin |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 256 MiB | 4.70 M | 1.1% | 2,704 | 143 us | 0.36 ms | 6.2% | 10.9% | 96.5% | 1.20 GB | 0.20 s |
+| 1 GiB | 4.81 M | 3.3% | 4,227 | 101 us | 0.42 ms | 5.7% | 10.0% | 83.3% | 4.80 GB | 0.91 s |
+| 4 GiB | 4.60 M | 11.2% | 9,675 | 101 us | 0.62 ms | 3.7% | 10.4% | 32.6% | 13.3 GB | 3.76 s |
+| 10 GiB | out of memory while the live heap was built (killed at 19.3 GB on a 23 GB machine) | | | | | | | | | |
+
+Against the old collector: 85 to 90 percent fewer stops and no long stalls, but 10 to 18 percent less
+throughput and 4 to 21 percent more memory. Two causes, measured:
+
+- Memory: the benchmark's garbage (the item arrays a growing list leaves behind) lies between live objects in
+  the same lines, so nearly every line stays live with about half of its bytes dead. Line reuse alone does not
+  get those bytes back.
+- Throughput: marking costs more per byte (the bitmap search), so the one marker falls further behind and the
+  throttle spins longer.
+
+Two fixes found on the way: the program thread sweeping blocks until it found room took up to 36 ms in one
+stop (it now sweeps at most one block per request), and the pacer counted live data in whole lines (2.78 GB
+for 1.84 GB of objects), which made it allow a larger heap (it now uses the bytes the cycle marked).
+
+### Next, in order
+
+| Step | Work |
+|---|---|
+| a | Allocate into the gaps between live objects, not only into free lines; an object made during a cycle gets its mark bit at birth instead of a black line |
+| b | Stage II: several markers and assists |
+| c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
+| d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |

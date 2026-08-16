@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 #
-# gc_race_pairs.py: reads ThreadSanitizer reports on standard input and sorts the data races into the two
-# kinds the concurrent collector has by design, and everything else. Exits 1 when anything else appears.
-#   expected 1: the GC thread scanning an object (_scan_range, called from _scan_top) while the program writes it
-#   expected 2: the GC thread looking up a page (_page_find, called from _mark_word) while _gc_alloc (or
-#               _slow_gc_alloc, its rarely taken part) hands out an object of it; the object is allocated black,
-#               so the lookup missing it does no harm
+# gc_race_pairs.py: reads ThreadSanitizer reports on standard input and sorts the data races into the one
+# kind the concurrent collector has by design, and everything else. Exits 1 when anything else appears.
+#   expected: the GC thread scanning an object (_scan_range, called from _scan_top) while the program writes it.
+#   The object bitmaps, line epochs and block kinds the GC thread reads while the program allocates are read and
+#   written with atomic loads and stores, so they make no report.
 import re
 import sys
 
@@ -21,12 +20,9 @@ for block in text.split("WARNING: ThreadSanitizer: data race")[1:]:
         bad[("unparsed", block[:200])] = bad.get(("unparsed", block[:200]), 0) + 1
         continue
     scan = [a for a in acc if a[1] == "_scan_range" and a[2] == "_scan_top" and a[0] == "read"]
-    find = [a for a in acc if a[1] == "_page_find" and a[2] == "_mark_word" and a[0] == "read"]
-    other = [a for a in acc if a not in scan and a not in find]
+    other = [a for a in acc if a not in scan]
     if scan and len(other) == 1 and other[0][0] == "write":
         seen["object contents"] = seen.get("object contents", 0) + 1
-    elif find and len(other) == 1 and other[0][0] == "write" and other[0][1] in ("_gc_alloc", "_slow_gc_alloc"):
-        seen["allocation bookkeeping"] = seen.get("allocation bookkeeping", 0) + 1
     else:
         bad[tuple(acc)] = bad.get(tuple(acc), 0) + 1
 for k, v in sorted(seen.items()):

@@ -1,0 +1,105 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Unit test for the object lookup of the collector (compiler/runtime/zue_gc.zu), compiled by test/native/run.sh.
+# Every allocation takes one byte more than asked, rounded up to whole 16-byte granules, so that a pointer just
+# past the end stays inside the object. Any address inside an object must find that object, and an address in
+# free space or past the last object must find none.
+
+extern("printf", "i32", "ptr,...")
+
+space("lv_frames", 2400072)    # the collector skips this area when it scans the data segment
+space("_slot", 16)
+
+let failures = 0
+let checks = 0
+
+func expect(label, got, want) {
+    checks += 1
+    if (got != want) {
+        failures += 1
+        printf(cstr("[FAIL] %s: got %ld, want %ld\n"), label, got, want)
+    }
+}
+
+# The collector calls into the data and blue thread runtimes; this test links only the collector, so these are
+# stand-ins for a program without those parts.
+func lv_data_gc_hook() {
+    return 0
+}
+
+func _blue_scan_parked() {
+    return 0
+}
+
+func _blue_begin_scan() {
+    return 0
+}
+
+func _blue_scan_step() {
+    return 0
+}
+
+# The start address of the object w points into, or 0.
+func start_of(w) {
+    let d = _find(w, addr_of("_slot"))
+    if (d == 0) {
+        return 0
+    }
+    if (ld8(d) == 2) {
+        return ld64(d + LD_BASE)
+    }
+    return ld64(d + CD_BASE) + ld64(addr_of("_slot")) * GRAN
+}
+
+func size_of(w) {
+    if (_find(w, addr_of("_slot")) == 0) {
+        return 0
+    }
+    return ld64(addr_of("_slot") + 8)
+}
+
+func main() {
+    lv_gc_start()
+    expect("0 bytes take one granule", size_of(lv_alloc(0)), 16)
+    expect("15 bytes take one granule", size_of(lv_alloc(15)), 16)
+    expect("16 bytes take two (the byte past the end)", size_of(lv_alloc(16)), 32)
+    expect("24 bytes (a list header)", size_of(lv_alloc(24)), 32)
+    expect("128 bytes (8 list items)", size_of(lv_alloc(128)), 144)
+    expect("8176 bytes, the largest medium object", size_of(lv_alloc(8176)), 8192)
+    let a = lv_alloc(40)
+    let b = lv_alloc(40)
+    expect("objects follow each other", b - a, 48)
+    expect("the first byte finds the object", start_of(a), a)
+    expect("the last byte finds the object", start_of(a + 47), a)
+    expect("one past the asked size finds the object", start_of(a + 40), a)
+    expect("the next granule is the next object", start_of(a + 48), b)
+    expect("free space after the last object finds nothing", start_of(b + 48), 0)
+    let m = lv_alloc(5000)
+    expect("a medium object from inside", start_of(m + 4321), m)
+    expect("a medium object's size", size_of(m + 4321), 5008)
+    let at = lv_alloc_atomic(100)
+    expect("an atomic object", start_of(at + 99), at)
+    let big = lv_alloc(100000)
+    expect("a large object from inside", start_of(big + 99999), big)
+    expect("a large object's size", size_of(big + 5), 100001)
+    expect("past a large object", start_of(big + 100001), 0)
+    expect("a large object is aligned to 64 KB", big % 65536, 0)
+    expect("a stack address is no object", start_of(frame_addr()), 0)
+    let z = lv_alloc(64)
+    let zero = 1
+    for (let i = 0; i < 64; i += 8) {
+        if (ld64(z + i) != 0) {
+            zero = 0
+        }
+    }
+    expect("new memory is zero", zero, 1)
+    let q = lv_realloc(a, 200)
+    expect("realloc gives a new object of the new size", size_of(q), 208)
+    if (failures != 0) {
+        printf(cstr("%ld of %ld checks failed\n"), failures, checks)
+        return 1
+    }
+    printf(cstr("[OK] %ld heap checks passed\n"), checks)
+    return 0
+}

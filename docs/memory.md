@@ -60,7 +60,7 @@ variable, and frees the rest.
 - Lists of numbers can be stored as `dense_list`s, which hold raw doubles and are never scanned,
   so they cost the collector nothing.
 
-Details of the collector (size classes, pages, roots, tuning) are in [gc](gc.md).
+Details of the collector (blocks and lines, roots, the pacer) are in [gc](gc.md).
 
 ### Watching and stressing the collector
 

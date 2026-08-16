@@ -22,7 +22,7 @@ done
 "$BUILD" -O1 -o "$TMP/atomics_unit" "$TMP/atomics_unit.ll" || exit 1
 "$TMP/atomics_unit"
 
-# The collector's size classes: a request of 16 * 2^k bytes lands in a class just above it.
-"$ZUEC" --native "$ROOT/compiler/runtime/zue_gc.zu" "$ROOT/test/native/gc_classes_unit.zu" -o "$TMP/gc_classes_unit.ll" || exit 1
-"$BUILD" -O1 -o "$TMP/gc_classes_unit" "$TMP/gc_classes_unit.ll" || exit 1
-"$TMP/gc_classes_unit"
+# The collector's object lookup: every address inside an object finds it, and none outside does.
+"$ZUEC" --native "$ROOT/compiler/runtime/zue_gc.zu" "$ROOT/test/native/gc_heap_unit.zu" -o "$TMP/gc_heap_unit.ll" || exit 1
+"$BUILD" -O1 -o "$TMP/gc_heap_unit" "$TMP/gc_heap_unit.ll" || exit 1
+"$TMP/gc_heap_unit"
