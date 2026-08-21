@@ -1,0 +1,9 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 1:
+  int() cannot be called with (char); use (float) or (int) or (string)
+
+   1 | print(int('A'))
+     |       ---^^^^^ no form takes (char)
+     |       |
+     |       int
+
+Hint: A char is not a number: code(c) gives the code of a character

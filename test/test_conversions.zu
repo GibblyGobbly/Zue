@@ -1,0 +1,173 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Conversions keep the value: x as int, x as float and x as string are int(x), float(x) and string(x);
+# 'else' after a let and 'if (let ...)' say what happens when a conversion fails.
+
+# CASE as and the call forms give the same values
+print("42" as int + 1)
+print(int("42") + 1)
+print(" -7 " as int)
+print(5 as float)
+print(float(5))
+print("2.5" as float)
+print(4.0 as int)
+print(3.5 as string)
+print(string(12) + "!")
+print([1, 2] as string)
+print(true as string)
+
+# CASE as binds tighter than the binary operators and looser than a unary minus
+print(1 + "2" as int * 3)
+print(-2 as float)
+print(not "1" as int == 2)
+
+# CASE a float with a fraction has no int
+func pass(v) { return [v, null][0] }
+print(int(pass(2.5)))
+
+# CASE a float with a fraction has no int, written with as
+func pass(v) { return [v, null][0] }
+print(pass(-0.5) as int)
+
+# CASE rounding is said with a function
+print(round(2.5))
+print(floor(2.5))
+print(ceil(2.5))
+print(trunc(-2.5))
+
+# CASE a char is not a number, found when the program is built
+print(int('A'))
+
+# CASE a char is not a number, found while the program runs
+func pass(v) { return [v, null][0] }
+print(int(pass('A')))
+
+# CASE a bool is not a number
+func pass(v) { return [v, null][0] }
+print(float(pass(true)))
+
+# CASE text that is not a whole number
+print("4x" as int)
+
+# CASE an int above 2^53 that has no exact float
+func pass(v) { return [v, null][0] }
+print(float(pass(9007199254740992)))
+print(float(pass(9007199254740993)))
+
+# CASE an int kept raw that has no exact float
+func f(n) {
+    let m = n + 1
+    return float(m)
+}
+print(f(9007199254740991))
+print(f(-9007199254740993))
+print(f(9007199254740992))
+
+# CASE code and char
+print(code('A'))
+print(char(97))
+print(char(code('a') + 1))
+
+# CASE char of a number that is not a byte
+print(char(256))
+
+# CASE the old names to_int and to_float are int and float
+print(to_int("12"))
+print(to_float("1e3"))
+
+# CASE else runs when the conversion fails
+func number(s) {
+    let n = s as int else {
+        print("'{s}' is not a whole number")
+        return 0
+    }
+    return n * 10
+}
+print(number("4"))
+print(number("4.5"))
+print(number("four"))
+
+# CASE else in a loop, with break and continue
+let total = 0
+for (let s in ["1", "x", "2", "stop", "3"]) {
+    if (s == "stop") {
+        break
+    }
+    let n = float(s) else {
+        continue
+    }
+    total += 1
+    print(n)
+}
+print(total)
+
+# CASE else at the top of a program leaves with exit
+let n = "seven" as int else {
+    print("need a number")
+    exit(3)
+}
+print(n)
+
+# CASE else also runs when the value is not text at all
+func pass(v) { return [v, null][0] }
+func f(v) {
+    let n = pass(v) as int else {
+        return "no int in {v}"
+    }
+    return n
+}
+print(f(3.0))
+print(f([1]))
+print(f(true))
+
+# CASE the else block must leave
+func f(s) {
+    let n = s as int else {
+        print("not a number")
+    }
+    return n
+}
+print(f("4"))
+
+# CASE else takes only a conversion that can fail
+let s = "a"
+let n = len(s) else {
+    exit(1)
+}
+
+# CASE if let gives the name in the first block only
+for (let s in ["12", "1.5", "x"]) {
+    if (let i = s as int) {
+        print("int {i}")
+    } else if (let f = s as float) {
+        print("float {f}")
+    } else {
+        print("text {s}")
+    }
+}
+
+# CASE the name of if let is not known after the if
+if (let n = "3" as int) {
+    print(n)
+}
+print(n)
+
+# CASE if let takes only a conversion that can fail
+if (let s = "a" as string) {
+    print(s)
+}
+
+# CASE a function made inside if let keeps the value
+let fs = []
+for (let s in ["1", "2"]) {
+    if (let n = s as int) {
+        append(fs, func() { return n * 100 })
+    }
+}
+for (let g in fs) {
+    print(g())
+}
+
+# CASE as takes int, float or string
+print("1" as bool)

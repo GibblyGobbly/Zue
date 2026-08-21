@@ -6,7 +6,7 @@ Type Error [E0201] in /tmp/zue_test_case.zu at line 1:
      |         |
      |         an int constant
 
-Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with to_string(x)
+Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with x as string
 
 Type Error [E0201] in /tmp/zue_test_case.zu at line 3:
   cannot use '+' on bool and an int constant

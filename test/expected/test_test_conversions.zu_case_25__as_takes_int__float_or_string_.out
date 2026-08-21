@@ -1,0 +1,7 @@
+Syntax Error [E0124] in /tmp/zue_test_case.zu at line 1:
+  Expected int, float or string after 'as'
+
+   1 | print("1" as bool)
+     |              ^^^^ unexpected name 'bool'
+
+Hint: 'as' converts a value: n as int, x as float, v as string

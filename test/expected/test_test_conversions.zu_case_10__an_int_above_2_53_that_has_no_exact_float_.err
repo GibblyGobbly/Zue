@@ -1,0 +1,7 @@
+Argument Error [E0414] in /tmp/zue_test_case.zu at line 3:
+  float() of 9007199254740993 has no exact float
+
+   3 | print(float(pass(9007199254740993)))
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Hint: Ints up to 9007199254740992 (2^53) all have an exact float; keep this value as an int.

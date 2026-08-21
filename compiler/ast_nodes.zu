@@ -29,7 +29,7 @@ export template NField { k, line, target, field, col, eline, ecol, fspan }
 export template NIncdec { k, line, name, op, prefix, col, eline, ecol, nspan }
 export template NBin { k, line, op, l, r, unary, kc, col, eline, ecol, ospan }
 export template NNot { k, line, e, col, eline, ecol }
-export template NLet { k, line, name, init, exported, const_decl, type, sty, stys, col, eline, ecol, nspan, tspan }
+export template NLet { k, line, name, init, exported, const_decl, type, sty, stys, orelse, col, eline, ecol, nspan, tspan }
 export template NGroup { k, line, items, col, eline, ecol }
 export template NIf { k, line, cond, then, els, col, eline, ecol }
 export template NForIn { k, line, name, iter, body, sty, stys, col, eline, ecol, nspan }
@@ -59,7 +59,7 @@ export const NODE_FIELDS = {
     "incdec": ["name", "op", "prefix"],
     "bin": ["op", "l", "r", "unary", "kc"],
     "not": ["e"],
-    "let": ["name", "init", "exported", "const_decl", "type", "sty", "stys"],
+    "let": ["name", "init", "exported", "const_decl", "type", "sty", "stys", "orelse"],
     "group": ["items"],
     "if": ["cond", "then", "els"],
     "forin": ["name", "iter", "body", "sty", "stys"],
@@ -76,7 +76,7 @@ export const NODE_FIELDS = {
 }
 
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
-export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad"]
+export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad", "orelse"]
 
 # The constructors take st and en, the first and the last token of the node (a node can stand for
 # either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and
@@ -154,7 +154,7 @@ export func mk_not(st, en, e) {
 }
 
 export func mk_let(st, en, name, init, exported, const_decl, type, nspan, tspan) {
-    return NLet("let", st.line, name, init, exported, const_decl, type, null, null, st.col, en.eline, en.ecol, nspan, tspan)
+    return NLet("let", st.line, name, init, exported, const_decl, type, null, null, null, st.col, en.eline, en.ecol, nspan, tspan)
 }
 
 export func mk_group(st, en, items) {

@@ -8,4 +8,4 @@ Type Error [E0204] in /tmp/zue_test_case.zu at line 5:
      | |
      | 's' is string
 
-Hint: A variable keeps the type of its first value. Convert a number to text with to_string(x), or write it inside a string: "{x}"
+Hint: A variable keeps the type of its first value. Convert a number to text with x as string, or write it inside a string: "{x}"

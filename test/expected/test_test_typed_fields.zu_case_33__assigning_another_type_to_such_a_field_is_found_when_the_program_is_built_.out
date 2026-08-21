@@ -1,0 +1,9 @@
+Type Error [E0210] in /tmp/zue_test_case.zu at line 6:
+  Template 'Pair<int,string>' field 'a' must be an int, got string
+
+   1 | template Pair { a, b }
+     |                 - field 'a' of Pair<int,string> is int
+...
+   6 | p.a = "three"
+     |       ^^^^^^^ expected int, found string
+

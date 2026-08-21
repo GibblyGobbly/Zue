@@ -127,7 +127,7 @@ func screen_width(text, n) {
         let ch = text[k]
         if (ch == '\t') {
             w += TAB_WIDTH
-        } else if (not is_cont(int(ch))) {
+        } else if (not is_cont(code(ch))) {
             w += 1
         }
     }

@@ -1,0 +1,7 @@
+Syntax Error [E0124] in /tmp/zue_test_case.zu at line 2:
+  The 'else' block of a 'let' must leave
+
+   2 |     let n = s as int else {
+     |                      ^^^^ can end without leaving
+
+Hint: End it with return, break or continue: after the 'let', 'n' must hold a value

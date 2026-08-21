@@ -235,9 +235,22 @@ export func tex(n) {
     }
     if (k == "call") {
         if (is_float_of_int(n)) {
+            # Exact for every int from -2^53 to 2^53; the runtime checks the others, which may have no float.
             let raw = tex(n.args[0])
             let r = ll_reg()
             ll("{r} = sitofp i64 {raw} to double")
+            let a = ll_reg()
+            let small = ll_reg()
+            ll("{a} = add i64 {raw}, 9007199254740992")
+            ll("{small} = icmp ule i64 {a}, 18014398509481984")
+            let big = ll_new_label("fbig")
+            let done = ll_new_label("fexact")
+            ll_condbr(small, done, big)
+            ll_label(big)
+            ll_mark(n)
+            ll("call i64 @lvv_int_to_float(i64 {raw})")
+            ll_br(done)
+            ll_label(done)
             return r
         }
         if (call_spec(n) != null) {

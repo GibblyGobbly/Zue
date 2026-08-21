@@ -13,7 +13,7 @@ let PRINTABLE = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\
 func escape_text(s) {
     let out = []
     for (let ch in s) {
-        let c = int(ch)
+        let c = code(ch)
         if (ch == '\\') {
             append(out, "\\\\")
         } else if (ch == '"') {
@@ -188,7 +188,7 @@ func expr(n) {
     return "<unknown {k}>"
 }
 
-func let_text(n) {
+func let_text(n, depth = 0) {
     let word = "let"
     if (n.const_decl == true) {
         word = "const"
@@ -204,6 +204,9 @@ func let_text(n) {
     if (n.init == null) {
         return "{head} {target}"
     }
+    if (n.orelse != null) {
+        return "{head} {target} = {expr(n.init)} else \{\n{block_text(n.orelse, depth + 1)}{pad(depth)}}"
+    }
     return "{head} {target} = {expr(n.init)}"
 }
 
@@ -216,7 +219,13 @@ func block_text(stmts, depth) {
 }
 
 func if_text(n, depth) {
-    let text = "if ({expr(n.cond)}) \{\n{block_text(n.then, depth + 1)}{pad(depth)}}"
+    let cond = ""
+    if (n.cond.k == "let") {
+        cond = "let {n.cond.name} = {expr(n.cond.init)}"
+    } else {
+        cond = expr(n.cond)
+    }
+    let text = "if ({cond}) \{\n{block_text(n.then, depth + 1)}{pad(depth)}}"
     if (len(n.els) == 0) {
         return text
     }
@@ -242,7 +251,7 @@ func simple_text(n) {
 func stmt_body(n, depth) {
     let k = n.k
     if (k == "let") {
-        return let_text(n)
+        return let_text(n, depth)
     }
     if (k == "group") {
         let names = []

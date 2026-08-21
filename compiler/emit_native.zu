@@ -142,7 +142,7 @@ func cfold(e) {
         if (len(e.v) > 18) {
             return null
         }
-        return to_int(e.v)
+        return e.v as int
     }
     if (e.k == "char") {
         return e.v

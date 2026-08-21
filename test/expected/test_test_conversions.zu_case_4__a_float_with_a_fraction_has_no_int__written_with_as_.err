@@ -1,0 +1,7 @@
+Argument Error [E0414] in /tmp/zue_test_case.zu at line 2:
+  int() of -0.5 is not a whole number
+
+   2 | print(pass(-0.5) as int)
+     |       ^^^^^^^^^^^^^^^^^
+
+Hint: Say how to round it: round(x), floor(x), ceil(x) or trunc(x).

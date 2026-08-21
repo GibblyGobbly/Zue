@@ -40,7 +40,21 @@ What a type may hold:
 A `box` stored in a `bloc` is a copy owned by the bloc and cannot be changed. Assigning a box with
 `let b = a` copies its bytes; passing it to a function lends it.
 
-Fields without a type still work, and then accept any value.
+A `template` field without a type takes the type of the value the template is made with, for each
+value: one template works for many types without a type parameter, and the compiler still checks each.
+
+```javascript
+template Stack { items }
+let a = Stack([1, 2])      // a.items is a list<int>
+let b = Stack(["x"])       // b.items is a list<string>
+append(a.items, "y")       // Type Error: cannot append string to list<int>
+```
+
+The checker writes the type of such a value with the field types after the name: `a` is a
+`Stack<list<int>>`, and `Pair(1, "a")` of `template Pair { a, b }` is a `Pair<int,string>`. A variable
+keeps the field types of its first value (`x = Box("s")` after `let x = Box(1)` is an error), and a
+function with an untyped parameter is checked for each kind of value it is given. An annotation such as
+`p: Stack` takes any `Stack`. At run time an untyped field is not checked, and a `data` field never is.
 
 ## data
 

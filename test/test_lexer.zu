@@ -35,16 +35,16 @@ print("{}")
 let p = {"x": 1, "y": 2}
 print("({p[\"x\"]}, {p[\"y\"]})")
 # CASE character literals
-print(int('a'))
-print(int('\n'))
-print(int('\t'))
-print(int('\r'))
-print(int('\\'))
-print(int('\''))
-print(int('"'))
-print(int('\0'))
-print(int('\{'))
-print(int('{'))
+print(code('a'))
+print(code('\n'))
+print(code('\t'))
+print(code('\r'))
+print(code('\\'))
+print(code('\''))
+print(code('"'))
+print(code('\0'))
+print(code('\{'))
+print(code('{'))
 # CASE unexpected dollar sign
 let x = 5 $ 3
 # CASE unexpected at sign

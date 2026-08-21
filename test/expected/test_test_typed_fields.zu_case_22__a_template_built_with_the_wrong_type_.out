@@ -6,4 +6,4 @@ Type Error [E0210] in /tmp/zue_test_case.zu at line 2:
    2 | let p = Player("Astra", 1.5)
      |                         ^^^ expected int, found a float constant
 
-Hint: A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)
+Hint: A float never becomes an int by itself: say how to round it with round(x), floor(x), ceil(x) or trunc(x)

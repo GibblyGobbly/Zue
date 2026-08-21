@@ -121,7 +121,9 @@ example to be sure it causes the error it claims to.
 | `E0120` | A field declaration is not allowed |
 | `E0121` | A use or export is not valid |
 | `E0122` | A switch has something other than case or default |
+| `E0124` | A conversion or its 'else' is written wrongly |
 | `E0123` | A token other than the expected one was found |
+| `E0124` | A conversion or its 'else' is written wrongly |
 | `E0420` | Two lists have different sizes |
 | `E0201` | An operator is used on values of the wrong types |
 | `E0202` | A function was given the wrong kind of value |
@@ -143,6 +145,8 @@ example to be sure it causes the error it claims to.
 | `E0411` | A float calculation went out of range or outside its domain |
 | `E0412` | A function was given a value it cannot work with |
 | `E0413` | Text cannot be read as a number |
+| `E0414` | A conversion would change the value |
+| `E0414` | A conversion would change the value |
 | `E0430` | A function was given a list or value of the wrong shape |
 | `E0440` | The program ran out of stack or memory |
 | `E0450` | A file operation failed |

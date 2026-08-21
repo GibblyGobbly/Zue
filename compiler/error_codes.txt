@@ -186,6 +186,22 @@ example:
     switch (x) { print(1) }
 fix: Put the statements under a case or default.
 
+== E0124
+title: A conversion or its 'else' is written wrongly
+match: after 'as' | needs a conversion that can fail | block of a 'let' must leave
+text: 'as' converts to int, float or string. 'else' after a let, and 'if (let ...)', take a
+    conversion that can fail (to int or to float), and the 'else' block of a let must leave with
+    return, break or continue, because after the let the name must hold a value.
+example:
+    func f(s) {
+        let n = s as int else {
+            print("not a number")
+        }
+        return n
+    }
+    print(f("4"))
+fix: Convert with s as int or float(s), and end the 'else' block with return, break or continue.
+
 == E0123
 title: A token other than the expected one was found
 match: Expected | statement outside loop | defer expects a call
@@ -212,7 +228,7 @@ text: Arithmetic needs two numbers of the same type (two ints or two floats); + 
 example:
     print(1 + "a")
     print(2 * 1.5)
-fix: Convert one side on purpose: to_string(x), float(x), int(x).
+fix: Convert one side on purpose: float(n), round(x), or x as string.
 
 == E0202
 title: A function was given the wrong kind of value
@@ -220,7 +236,7 @@ match: argument 1 must be | argument 2 must be | argument 3 must be | argument 4
 text: The function needs a value of a certain type for this argument and got another one.
 example:
     print(sqrt("a"))
-fix: Convert the value, as the hint says, for example with float(x) or to_int(s).
+fix: Convert the value, as the hint says, for example with float(n) or s as int.
 
 == E0203
 title: A function was called with the wrong number of arguments
@@ -381,10 +397,20 @@ fix: Pass a value in the range the function accepts; the hint says which.
 == E0413
 title: Text cannot be read as a number
 match: cannot read
-text: to_int, to_float, int and float need the whole text to be a number.
+text: s as int, s as float, int(s) and float(s) need the whole text to be a number.
 example:
-    print(to_int("12abc"))
-fix: Check the text first with is_digit(s), or fix the value.
+    print("12abc" as int)
+fix: Fix the text, or say what happens when it is not a number: let n = s as int else { ... }.
+
+== E0414
+title: A conversion would change the value
+match: is not a whole number | has no exact float | is not a character code
+text: A conversion keeps the value exactly. A float with a fraction has no int (rounding is a
+    choice, so it has its own functions), a very large int has no exact float, and a char holds
+    one byte, a code from 0 to 255.
+example:
+    print(int(2.5))
+fix: Round on purpose with round(x), floor(x), ceil(x) or trunc(x), or keep the value as it is.
 
 == E0430
 title: A function was given a list or value of the wrong shape

@@ -1,0 +1,7 @@
+Argument Error [E0414] in /tmp/zue_test_case.zu at line 1:
+  char() of 256 is not a character code
+
+   1 | print(char(256))
+     |       ^^^^^^^^^
+
+Hint: A char holds one byte: a code from 0 to 255.

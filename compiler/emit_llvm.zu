@@ -834,7 +834,7 @@ func ex(n) {
         let id = box_scope_id()
         # A box whose size is written as a number lives in the function's own stack frame.
         if (n.size.k == "num" and len(n.size.v) <= 4) {
-            let bytes = int(n.size.v)
+            let bytes = n.size.v as int
             if (bytes >= 1 and bytes <= 4096) {
                 let mem = ll_alloca("[{bytes} x i8]")
                 return ll_call_out("lvp_box_new_stack", "ptr {size}, i64 {id}, ptr {mem}")
@@ -1095,8 +1095,72 @@ func raw_kind(n) {
     return t
 }
 
+# A conversion that may fail, for 'else' and 'if (let ...)': the i1 that says it worked and the slot that
+# then holds the value.
+func try_convert(e) {
+    let v = ex(e.args[0])
+    ll_mark(e)
+    let out = ll_slot()
+    let kind = 1
+    if (e.callee.name == "float") {
+        kind = 2
+    }
+    let r = ll_reg()
+    ll("{r} = call i64 @lv_try_convert(ptr {out}, ptr {v}, i64 {kind})")
+    let flag = ll_reg()
+    ll("{flag} = icmp ne i64 {r}, 0")
+    return [flag, out]
+}
+
+# let n = s as int else { ... }: the block runs when the conversion fails, and it leaves (the parser checks).
+func st_let_else(n) {
+    let t = try_convert(n.init)
+    let ok = ll_new_label("letok")
+    let fail = ll_new_label("letelse")
+    ll_condbr(t[0], ok, fail)
+    ll_label(fail)
+    st_block(n.orelse)
+    if (not ST.ctx.dead) {
+        ll("unreachable")    # the block ends in a call of exit
+        ST.ctx.dead = true
+    }
+    ll_label(ok)
+    if (at_top()) {
+        ll_reg_global(n.name)
+        global_store_check(t[1], 0)
+        ll_copy(ll_gname(n.name), t[1])
+    } else {
+        declare(n.name, t[1])
+    }
+}
+
+# if (let n = s as int) { ... } else { ... }: n exists in the first block.
+func st_if_let(n) {
+    let t = try_convert(n.cond.init)
+    let yes = ll_new_label("then")
+    let no = ll_new_label("else")
+    let done = ll_new_label("endif")
+    ll_condbr(t[0], yes, no)
+    ll_label(yes)
+    push_scope()
+    declare(n.cond.name, t[1])
+    for (let s in n.then) {
+        st(s)
+    }
+    pop_scope()
+    ll_br(done)
+    ll_label(no)
+    st_block(n.els)
+    ll_br(done)
+    ll_label(done)
+}
+
 func st_let(n) {
     ll_mark_line(n)
+    if (n.orelse != null) {
+        st_let_else(n)
+        return null
+    }
     # A variable of the main program that no function uses and no module imports needs no global.
     if (n.init != null and (not at_top() or n.exported != true)) {
         let kind = raw_kind(n)
@@ -1229,6 +1293,10 @@ func cond_flag(e) {
 }
 
 func st_if(n) {
+    if (n.cond.k == "let") {
+        st_if_let(n)
+        return null
+    }
     let flag = cond_flag(n.cond)
     let yes = ll_new_label("then")
     let no = ll_new_label("else")
@@ -1839,6 +1907,8 @@ func declarations() {
     append(d, "declare %LV @lvv_binop_lit(i64, i64, i64, i64, i64, i64)")
     append(d, "declare void @lvp_num_like(ptr, ptr, ptr)")
     append(d, "declare void @lvv_return_check(i64, i64, ptr)")
+    append(d, "declare i64 @lv_try_convert(ptr, ptr, i64)")
+    append(d, "declare i64 @lvv_int_to_float(i64)")
     append(d, "declare %LV @lv_addr_invalid(i32)")
     append(d, "declare void @lv_arity(ptr, i32, i32, i32)")
     append(d, "declare void @lvv_unbox_fail(ptr, i64, i64, i64)")

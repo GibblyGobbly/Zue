@@ -38,7 +38,7 @@ assert(ch == 'A')
 assert(ch != 'B')
 
 # Char to ASCII conversion
-let ascii = int('A')
+let ascii = code('A')
 assert(ascii == 65)
 
 # String vs Char

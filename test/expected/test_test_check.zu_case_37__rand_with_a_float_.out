@@ -6,4 +6,4 @@ Type Error [E0202] in /tmp/zue_test_case.zu at line 1:
      |       |
      |       argument 1 of rand()
 
-Hint: A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)
+Hint: A float never becomes an int by itself: say how to round it with round(x), floor(x), ceil(x) or trunc(x)

@@ -131,7 +131,15 @@ print(agrees(random_ints(500, 255)))
 print(agrees(random_ints(500, 256)))
 print(agrees(random_ints(500, 65535)))
 print(agrees(random_ints(500, 4294967296)))
-print(agrees(random_ints(500, 9223372036854775807)))
+# Values over the whole 64-bit range (all 8 radix digits), as multiples of 1024 so each has an exact float.
+func random_wide(n) {
+    let l = []
+    for (let i = 0; i < n; i++) {
+        append(l, rand(0, 9223372036854775807) / 1024 * 1024)
+    }
+    return l
+}
+print(agrees(random_wide(500)))
 # CASE radix with the largest int and with zeros
 func ordered(l) {
     for (let i = 1; i < len(l); i++) {

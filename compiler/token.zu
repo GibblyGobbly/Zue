@@ -16,7 +16,7 @@ export const KEYWORDS = {
     "switch": "switch", "switch_balls": "switch", "case": "case", "default": "default",
     "true": "true", "false": "false",
     "use": "use", "export": "export", "import": "import",
-    "template": "template", "bloc": "bloc", "box": "box", "unsafe": "unsafe"
+    "template": "template", "bloc": "bloc", "box": "box", "unsafe": "unsafe", "as": "as"
 }
 
 export const TWO_CHAR = {

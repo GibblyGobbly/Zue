@@ -6,7 +6,7 @@ Type Error [E0201] in test/fixtures/error_type.zu at line 3:
      |       |
      |       int
 
-Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with to_string(x)
+Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with x as string
 
 Name Error [E0301] in test/fixtures/error_type.zu at line 4:
   Function 'lenn' is not defined

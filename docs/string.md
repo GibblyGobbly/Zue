@@ -84,7 +84,7 @@ characters (the lexer uses them).
 | Function | Returns | Notes |
 |---|---|---|
 | `to_string(v)` | string | Any value |
-| `to_int(s)`, `to_float(s)` | int, float | The whole text must be a number. Spaces around it are allowed. Anything else is an error |
+| `s as int`, `s as float` (also `int(s)`, `float(s)`, `to_int(s)`, `to_float(s)`) | int, float | The whole text must be a number. Spaces around it are allowed. Anything else is an error, or the `else` block of `let n = s as int else { ... }` |
 | `int(s)`, `float(s)` | int, float | The same rules for strings; they also take other types |
 
 ### Strings and lists

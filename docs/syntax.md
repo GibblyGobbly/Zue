@@ -72,6 +72,40 @@ a standalone `{ ... }` block is a scope of its own.
 `const` declares a binding that is meant to stay fixed; reassigning it is currently not
 rejected by the compiler.
 
+## Conversions
+
+A conversion keeps the value exactly, or it is an error. `x as int`, `x as float` and `x as string` are the
+same as `int(x)`, `float(x)` and `string(x)`; `as` binds tighter than any binary operator
+(`a + b as int` is `a + (b as int)`).
+
+| Conversion | Result |
+|---|---|
+| `"42" as int`, `int(4.0)` | `42`, `4` |
+| `"4x" as int`, `int(2.5)` | errors: text that is not a whole number, a float with a fraction (round it with `round`, `floor`, `ceil` or `trunc`) |
+| `5 as float`, `"2.5" as float` | `5.0`, `2.5`; an int above 2^53 that has no exact float is an error |
+| `x as string` | the text of any value |
+| char and int | `code('A')` is `65`, `char(66)` is `'B'`; `int('A')` is an error |
+
+When a conversion may fail, say what happens instead of stopping. After `let`, `else` takes a block that
+runs when the conversion fails, and it must leave with `return`, `break`, `continue` or `exit()`, so the
+name always holds a value after the line. `if (let ...)` gives the name only in its first block:
+
+```javascript
+let age = input("age? ") as int else {
+    print("please type a number")
+    return
+}
+
+if (let n = s as int) {
+    print(n * 2)
+} else {
+    print("not a number")
+}
+```
+
+Both take a conversion that can fail: `x as int`, `x as float`, `int(x)` or `float(x)`. The else
+branch runs for any value that has no int or float of the same value, text or not.
+
 ## Strings
 
 Double-quoted strings interpolate any expression inside `{ }`:
@@ -323,7 +357,7 @@ grab_balls area(w, h) {
 
 ## Names to avoid
 
-The words `template`, `bloc`, `box`, `unsafe`, `use`, `export`, `import`, `case` and `default`
+The words `template`, `bloc`, `box`, `unsafe`, `use`, `export`, `import`, `case`, `default` and `as`
 are keywords and cannot be used as variable or function names. `data`, `in` and `from` are
 keywords only where they mean something (`data Name {`, `for (let x in xs)`, `use {a} from`) and
 are ordinary names everywhere else. After a `.` any word is a field name: `m.data`, `m.in`.
@@ -367,7 +401,7 @@ a `Type Error` with the line, and the program is not built.
   and `mod(5.5, 2)` are fine (a builtin form the arguments fit as they are wins: `round(5, 2)` is the int
   form). A whole number adapts to a float only when the float is exact: `floor(9007199254740993)` is an
   error, since the nearest float is 9007199254740992. A variable never converts: with `let n = 16`,
-  `sqrt(n)` and `n + 1.5` are errors. Write `sqrt(float(n))` to convert on purpose.
+  `sqrt(n)` and `n + 1.5` are errors. Write `sqrt(float(n))` or `sqrt(n as float)` to convert on purpose.
 - In a function checked with several argument types, a number adapts per call: with
   `func f(v) { let x = v; x = 1; return x }`, `f(1.5)` gives `1.0` and `f(2)` gives `1`.
 - A variable declared `int`, `float` or `bool` cannot start as `null` (`let x: int = null` is an error).
@@ -397,7 +431,9 @@ a `Type Error` with the line, and the program is not built.
   `list` annotation keeps the items unchecked. Whole numbers in the source become floats where a
   float is wanted, so `let xs: list<float> = [1, 2]` holds floats.
 - Fields of a typed `bloc` or `template` have their declared types when read (`p.hp` is an int) and
-  when assigned (`p.hp = "a"` is an error).
+  when assigned (`p.hp = "a"` is an error). A `template` field without a type has the type of the value
+  the template was made with, per value: after `let a = Stack([1, 2])`, `append(a.items, "y")` is an error
+  (see [data-types](data-types.md#typed-fields)).
 - Builtins with a fixed result type give it: `len` is an int, `split` is a `list<string>`, `range` is a
   `list<int>`, `min`, `max` and `sum` of a `list<int>` are ints.
 - Imported modules are checked too, with the error naming the module's file.

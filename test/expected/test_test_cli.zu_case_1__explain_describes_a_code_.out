@@ -9,4 +9,4 @@ Example:
     print(2 * 1.5)
 
 How to fix it:
-  Convert one side on purpose: to_string(x), float(x), int(x).
+  Convert one side on purpose: float(n), round(x), or x as string.

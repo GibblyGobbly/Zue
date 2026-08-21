@@ -151,6 +151,15 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("appears twice in this switch")) != 0) {
         return cstr("E0122")
     }
+    if (strstr(msg, cstr("after 'as'")) != 0) {
+        return cstr("E0124")
+    }
+    if (strstr(msg, cstr("needs a conversion that can fail")) != 0) {
+        return cstr("E0124")
+    }
+    if (strstr(msg, cstr("block of a 'let' must leave")) != 0) {
+        return cstr("E0124")
+    }
     if (strstr(msg, cstr("Expected")) != 0) {
         return cstr("E0123")
     }
@@ -384,6 +393,15 @@ func lv_code_for(msg) {
     }
     if (strstr(msg, cstr("cannot read")) != 0) {
         return cstr("E0413")
+    }
+    if (strstr(msg, cstr("is not a whole number")) != 0) {
+        return cstr("E0414")
+    }
+    if (strstr(msg, cstr("has no exact float")) != 0) {
+        return cstr("E0414")
+    }
+    if (strstr(msg, cstr("is not a character code")) != 0) {
+        return cstr("E0414")
     }
     if (strstr(msg, cstr("needs a list")) != 0) {
         return cstr("E0430")

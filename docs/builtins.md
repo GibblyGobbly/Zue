@@ -20,9 +20,12 @@ as `sqrt() argument 1 must be a number, got string`.
 | `input(prompt)` | One line read from standard input, without the newline, as a string; `""` at end of input. The prompt is optional (`input()`), and `input` is a keyword like `print` |
 | `type(v)` | Type name: `"int"`, `"float"`, `"char"`, `"string"`, `"boolean"`, `"null"`, `"list"`, `"map"`, `"function"`, `"native_function"`, `"file"`, `"bloc"`, `"box"`, `"template"`, `"pointer"`, `"thread"`, `"channel"`. A dense list reports `"list"` and a `data` value reports `"map"` |
 | `shape(v)` | Constructor name of a `data` / `bloc` / `template` value, for example `"Vec2"`; `null` for other values |
-| `int(v)` | Integer from a float (truncated toward zero), char (its code), boolean (0 or 1) or string (the whole text must be a base-10 integer, otherwise an error). Also the only allowed pointer cast |
-| `float(v)` | Float from an int, char, boolean or string (the whole text must be a number such as `"3.5"` or `"1e3"`, otherwise an error) |
-| `to_string(v)`, `to_int(s)`, `to_float(s)` | Conversions (see [string](builtins.md#strings)) |
+| `int(v)`, `v as int` | The same value as an int: a whole float (`4.0` gives `4`; `2.5` is an error, round it with `round`, `floor`, `ceil` or `trunc`) or text that is a base-10 integer (`"42"`). A char or a bool is an error. Also the only allowed pointer cast |
+| `float(v)`, `v as float` | The same value as a float: an int (one above 2^53 with no exact float is an error) or text that is a number such as `"3.5"` or `"1e3"`. A char or a bool is an error |
+| `string(v)`, `v as string` | The text of any value, as `print` shows it |
+| `code(c)` | The code of a character, 0 to 255: `code('A')` is `65` |
+| `char(n)` | The character with code `n`, 0 to 255: `char(66)` is `'B'` |
+| `to_string(v)`, `to_int(s)`, `to_float(s)` | `to_string(v)` is `string(v)`, with `to_string(x, digits)` for floats; `to_int` and `to_float` are older names of `int` and `float` (see [string](builtins.md#strings)) |
 | `debug(v)` | Prints `value = <v>` and returns `v` unchanged, so it can wrap an expression |
 | `assert(cond)` | Stops the program with `Assertion failed` when `cond` is false |
 | `len(v)` | Length of a string, list, dense list, map or box; anything else is a `Type Error` |
@@ -181,7 +184,7 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 | `to_string(v)` | Text of any value | `to_string(12)` is `"12"` |
 | `to_string(x, digits)` | Text of a float with 1 to 17 significant digits instead of 6; another type or a count outside 1 to 17 is an error | `to_string(0.1 + 0.2, 17)` is `"0.30000000000000004"` |
 | `fixed(x, decimals)` | Text of a float with exactly that many places after the point (0 to 15); an int is a `Type Error`, and a tiny negative number gives `0.00`, not `-0.00` | `fixed(29814127.78, 1)` is `"29814127.8"` |
-| `to_int(s)`, `to_float(s)` | Parse the whole text as a number (spaces around it are allowed). Text that is not a number, a value outside the 64-bit range, and the names `nan`, `inf` and hex digits are errors | `to_int("12")` is `12` |
+| `s as int`, `s as float` (also `int(s)`, `float(s)`, and the older `to_int(s)`, `to_float(s)`) | Parse the whole text as a number (spaces around it are allowed). Text that is not a number, a value outside the 64-bit range, and the names `nan`, `inf` and hex digits are errors; `let n = s as int else { ... }` handles them | `"12" as int` is `12` |
 
 `replace` always replaces every match; there is no single-occurrence version. `+` joins two
 strings only: `"a" + 1` is a `Type Error`, so write `"a{1}"` or `"a" + to_string(1)`.

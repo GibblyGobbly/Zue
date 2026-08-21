@@ -1,0 +1,7 @@
+Type Error [E0211] in /tmp/zue_test_case.zu at line 2:
+  int() cannot convert a char
+
+   2 | print(int(pass('A')))
+     |       ^^^^^^^^^^^^^^
+
+Hint: A char is not a number: code(c) gives the code of a character.

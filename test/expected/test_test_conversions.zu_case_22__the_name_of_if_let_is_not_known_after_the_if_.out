@@ -1,0 +1,7 @@
+Name Error [E0301] in /tmp/zue_test_case.zu at line 4:
+  Variable 'n' is not defined
+
+   4 | print(n)
+     |       ^ not declared anywhere
+
+Hint: Did you mean 'ln'?

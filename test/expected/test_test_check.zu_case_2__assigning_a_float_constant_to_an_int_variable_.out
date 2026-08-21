@@ -8,4 +8,4 @@ Type Error [E0204] in /tmp/zue_test_case.zu at line 2:
      | |
      | 'x' is int
 
-Hint: A variable keeps the type of its first value. A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)
+Hint: A variable keeps the type of its first value. A float never becomes an int by itself: say how to round it with round(x), floor(x), ceil(x) or trunc(x)

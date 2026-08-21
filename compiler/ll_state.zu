@@ -35,13 +35,10 @@ func ll_hex_digit(n) {
 export func ll_escape(text) {
     let parts = []
     for (let ch in text) {
-        let code = int(ch)
-        if (code < 0) {
-            code += 256
-        }
-        if (ch == '"' or ch == '\\' or code < 32 or code > 126) {
-            let hi = ll_hex_digit(code / 16)
-            let lo = ll_hex_digit(code % 16)
+        let byte = code(ch)
+        if (ch == '"' or ch == '\\' or byte < 32 or byte > 126) {
+            let hi = ll_hex_digit(byte / 16)
+            let lo = ll_hex_digit(byte % 16)
             append(parts, "\\{hi}{lo}")
         } else {
             append(parts, "{ch}")

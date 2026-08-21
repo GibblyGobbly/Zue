@@ -1055,3 +1055,197 @@ are not built: with two markers the spin is 1 percent of the run or less.
 | b | Done (see above): several markers. Next: measure the program's allocation and barrier path for the throughput gap; assists only if the spin comes back |
 | c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
 | d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |
+
+## Zue 2: types, immutability and memory (plan, 2026-11-04; phase 1 and per-value templates done 2026-11-05)
+
+The language changes after the collector work. The aim: every type known when the program is built, values
+that cannot change unless they say so, conversions with one clear meaning, named arguments, and memory that
+is freed exactly, with no double free, no two names changing one value and no cycles. The language stays
+simple: no generics syntax, no classes or interfaces, no `?` types or operators.
+
+### Decided by the owner
+
+| Topic | Decision |
+|---|---|
+| Changing a variable | `let a = ...` never changes; `let mut a = ...` may |
+| How deep | Deep: nothing reachable through a `let` changes, not its items, not its fields. `let mut b = a` gives `b` its own value |
+| Loops | `for (let mut i = 0; i < n; i++)` stays; `for (let x in xs)` gives a fresh `x` each round |
+| Conversions | `x as T` and `T(x)` both valid, with the same strict meaning |
+| A conversion that may fail | `let n = s as int else { ...; return }`, or `if (let n = s as int) { ... } else { ... }` |
+| Named arguments | `greet("Ann", greeting: "Hi")`, `range(0, 10, step: 2)` |
+| Anything that may be missing | `else` and `if (let ...)` work for every value that may be missing: a conversion, a map key, `find`, `open`, a template field that may be empty |
+| Reusable templates | No generics syntax: a field without a type takes the type of the value the template is made with (`Stack([1])` holds ints, `Stack(["a"])` strings), as untyped parameters do per call |
+| One of several kinds | One template with a `kind` field that holds the fields of every kind (no union types) |
+| Left out, to keep the language simple | Generics syntax, union types, classes and interfaces, `?` types and operators (`int?`, `as?`, `??`, `?.`), enums with `match`, errors as values (`try`, `catch`), distinct types, method syntax, tuples, destructuring, short closures |
+
+### Taken as the default until the owner says otherwise
+
+| Topic | Default | Why |
+|---|---|---|
+| Types on functions | Optional. A typed parameter is checked against its type; an untyped one takes the type of the argument at each call, and the body is checked for those types (as the checker does today). The result type is inferred | Every type is still known when the program is built, and one function works for a list of ints and a list of strings without generics syntax |
+| Unknown types | None: a value whose type cannot be told is a compile error (strict mode today becomes the rule) | `any` is what keeps types unknown today |
+| `null` | A typed value is never `null`. Something that may be missing is handled where it happens, with `else` or `if (let ...)` | No `?` types needed |
+| Shadowing | Allowed with `let` only: `let age = age as int` declares a new `age` | Conversions read naturally and no variable needs `mut` for them |
+| Failures that are bugs | Overflow, index out of range, a failed `as` without `else`: the program stops, as today | A bug should not be ignored |
+
+### What exists to build on
+
+| Exists | Where |
+|---|---|
+| Type annotations on variables, parameters and fields; `list<T>`, `map<T>`, templates, blocs | `check.zu`, docs/syntax.md "Type checking" |
+| Per-call checking of untyped parameters | `check.zu` (MEMO, per list of argument types) |
+| Strict mode per file (`# strict`): unknown values are errors | `check.zu`; becomes the rule in phase 3 |
+| Raw values: an int, float or bool local the checker proves is kept as a machine value | `ll_typed.zu` |
+| Number literals that adapt (`sqrt(16)`) | `check.zu` (`int~`, `float~`) |
+| Default parameters (`func greet(name, greeting = "Hello")`) | parser, `emit_llvm.zu`; named arguments build on them |
+
+### Phase 1: conversions (done)
+
+Done as below, with one difference: `int(p)` stays the pointer cast (no `address(p)`), and `to_int` and
+`to_float` stay as older names of `int` and `float`. Templates typed per value (from phase 4) are done too.
+
+`x as T` and `T(x)` succeed only when the value means exactly the same as a `T`. Anything else is an error,
+and a compile error when the checker can see it can never work (`[1] as int`).
+
+| From, to | Result |
+|---|---|
+| int to float | `5 as float` is 5.0; an int above 2^53 that has no exact float is an error |
+| float to int | Only a whole float: `3.0 as int` is 3; `3.5 as int` is an error naming `round`, `floor`, `ceil` and `trunc` |
+| Rounding | `round(x)`, `floor(x)`, `ceil(x)`, `trunc(x)` give an int; the rounding is in the name |
+| string to int or float | The whole text must be the number: `"42" as int` is 42, `"4x" as int` is an error naming the text |
+| any value to string | `x as string` or `string(x)`; formatting with options stays a function (`fixed`, `to_string(x, digits)`) |
+| char and int | `code(c)` and `char(n)`; `c as int` is an error (a char is not a number) |
+| bool to int | Removed; write an `if` |
+| pointer to int | `address(p)`, inside `unsafe` |
+
+When a conversion may fail, the program says what happens instead of stopping:
+
+```javascript
+let age = input("age? ") as int else {     // the block must leave: return, break or continue
+    print("please type a number")
+    return
+}
+
+if (let n = input("n? ") as int) {         // n exists only here, and is an int
+    print(n * 2)
+} else {
+    print("not a number")
+}
+```
+
+`int(x)` and `float(x)` keep their names with the strict meaning (`int(3.7)` becomes an error: write
+`trunc(3.7)`). `to_int(s)` and `to_float(s)` go: they are `s as int` and `s as float`. The old forms stay one
+release with a message saying what to write.
+
+### Phase 2: everything that may be missing
+
+`else` and `if (let ...)` from phase 1 also take: a map read (`m[k]`), `find`, `index_of`, `open`, and a template
+field that may be empty. A field may be empty when the template was made without it or it was set to
+`null`; reading it without `if (let ...)` or `else` stops the program when it is empty, as today.
+
+```javascript
+if (let v = m["key"]) { print(v) } else { print("no key") }
+let f = open("data.txt") else { print("no file"); return }
+if (let l = node.left) { walk(l) }
+```
+
+### Phase 3: named arguments
+
+| Rule | Example |
+|---|---|
+| Any parameter can be named at the call | `greet("Ann", greeting: "Hi")` |
+| Named ones come after the positional ones | `greet(greeting: "Hi", "Ann")` is an error |
+| Each parameter is given once | `greet("Ann", name: "Bo")` is an error |
+| An unknown name is a compile error that lists the names | `greet("Ann", greting: "Hi")`: `greet has no parameter 'greting' (name, greeting)` |
+| Builtins have names too | `range(0, 10, step: 2)`, `to_string(x, digits: 3)`, `split(s, sep: ",")` |
+
+### Phase 4: every type known when the program is built
+
+| Rule | Example |
+|---|---|
+| Locals are inferred | `let n = 5` is an int, `let xs = [1.5]` a `list<float>` |
+| Parameter types may be written | `func area(w: float, h: float)`; untyped ones are checked per call |
+| A result type may be written | `func area(w: float, h: float) -> float` |
+| No unknown types | A list of mixed items, or a value the checker cannot tell, is a compile error |
+| An empty list needs its type | `let xs: list<int> = []` |
+| Typed values are never `null` | `let x: int = null` is an error (as today) |
+
+The checker becomes flow-sensitive where it matters for `if (let ...)` and `else` (a name exists only where
+the conversion worked). Strict mode is made the rule file by file, the compiler's own files first.
+
+A template field without a type takes the type of the value it is made with, per value: `Stack([1])` and
+`Stack(["a"])` are both Stacks, one of ints and one of strings, and each is checked as such. Values of one
+template with different field types can be mixed only where the field is not used.
+
+The compiler keeps nodes of different templates in one list (a block's statements). With no unknown types
+and no union types, they become one `Node` template with a `kind` field and the fields of every kind.
+
+### Phase 5: immutability
+
+| Rule | Example |
+|---|---|
+| `let` never changes | `let xs = [1]` then `append(xs, 2)`, `xs[0] = 5` or `xs = []` is a compile error |
+| `let mut` may | `let mut xs = [1]`, then `append(xs, 2)` |
+| Fields follow the variable | `let p = Player(...)`: `p.hp = 1` is an error; with `let mut p` it is allowed |
+| Parameters do not change | `func f(xs: list<int>)` cannot change `xs`; `func f(mut xs: list<int>)` changes the caller's variable, and the call says so: `f(mut xs)` |
+| One change at a time | While `xs` is passed as `mut`, the function cannot reach it another way |
+| Closures | Capture a copy; a closure cannot change an outer `let mut` |
+| `const` | A value known when the program is built: `const MAX = 100` |
+
+Until phase 6 makes copies automatic, `let mut b = a` with a list, map or template `a` is written
+`let mut b = copy(a)`, so a `let` value can never be changed through a second name.
+
+### Phase 6: values and memory
+
+| Rule | What it gives |
+|---|---|
+| Assignment copies: `let mut b = a` is a new value | No two names change one value |
+| Copy on write underneath: a count per object, and a copy only when a shared object is about to change; a value with one owner changes in place | Copies cost nothing until they are needed |
+| The last use of a variable hands its value over without a copy (found by the compiler, no keyword) | No cost for values that are passed on |
+| Values hold values, never references to variables | Cycles cannot be built, so counting frees everything exactly; graphs use ids (indexes into a list) |
+| `unsafe`: `free(p)` uses up `p`, and an `alloc` must be freed exactly once on every path | Double free and use after free are compile errors |
+| Files and boxes are freed or closed when their owner ends | `defer(close(f))` is not needed |
+
+The tracing collector is then needed only for what counting cannot see; how much of it stays is decided when
+phase 6 is measured.
+
+### Phase 7: speed
+
+Typed ints and floats as 8-byte machine values everywhere, not 16-byte cells.
+
+### Order and steps
+
+The compiler compiles itself, so every phase goes the same way: (1) the compiler accepts the new form and the
+old one still works, (2) `make seed`, (3) the compiler's own source moves to the new form, (4) `make seed`,
+(5) the old form becomes an error, tests are re-recorded on purpose, docs and error codes are updated, (6) a
+commit with all checks passing. A broken step goes back one commit.
+
+| Phase | Work | Size | Risk |
+|---|---|---|---|
+| 1 | Conversions: `as`, `T(x)`, `else`, `if (let ...)`, named rounding | Small | Low |
+| 2 | `else` and `if (let ...)` for map reads, `find`, `open` and empty fields | Small | Low |
+| 3 | Named arguments, for user functions and builtins | Small | Low |
+| 4 | Every type known; templates typed per value; one `Node` template in the compiler; strict mode as the rule | Largest | Medium: the compiler must check itself at each step |
+| 5 | `let` and `let mut`, `mut` parameters, shadowing; the compiler's 1,803 `let`s reviewed (a tool adds `mut` where the checker says) | Small to medium | Low |
+| 6 | Copying values with copy on write, no cycles, exact freeing, `unsafe` pointers checked when built; the collector reduced | Large | High: changes what programs mean |
+| 7 | 8-byte ints and floats | Large | Medium |
+
+A tool `zue migrate file.zu` rewrites old programs where the change is mechanical (adds `mut`, rewrites
+`int(x)` of a float as `trunc(x)`, `to_int(s)` as `s as int`), so user programs and the examples move with
+the language.
+
+Each phase is tested the usual way: a test file per feature with `# CASE` sections (and error cases with
+their messages), `make test`, `ZUE_RT_GC_VERIFY=1`, round-trip, fuzzers, `verify-ir`, `codes-check`, and
+`ast_unparse.zu` and `ast_dump.zu` taught each new form.
+
+### Sources
+
+Conversions: [Rust casts](https://cppcheatsheet.readthedocs.io/en/latest/notes/rust/rust_casting.html),
+[Swift Int(exactly:)](https://developer.apple.com/documentation/swift/int/init(exactly:)-7qdwf.md),
+[Go constants](https://go101.org/article/constants-and-variables.html). Static typing:
+[HM or bidirectional](https://thunderseethe.dev/posts/how-to-choose-between-hm-and-bidir),
+[flow typing](https://www.wikipedia.org/wiki/Flow-sensitive_typing). Memory:
+[Hylo](https://github.com/hylo-lang/hylo-lang.github.io/blob/main/index.md),
+[Swift exclusivity](https://github.com/apple/swift-evolution/blob/master/proposals/0176-enforce-exclusive-access-to-memory.md),
+[Perceus](https://www.microsoft.com/en-us/research/publication/perceus-garbage-free-reference-counting-with-reuse/),
+[Nim move on last use](https://nim-lang.org/docs/destructors.html).

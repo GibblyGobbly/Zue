@@ -1,0 +1,7 @@
+Type Error [E0211] in /tmp/zue_test_case.zu at line 2:
+  float() cannot convert a bool
+
+   2 | print(float(pass(true)))
+     |       ^^^^^^^^^^^^^^^^^
+
+Hint: A bool is not a number: choose the number with an if.

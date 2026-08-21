@@ -1,0 +1,12 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 5:
+  cannot assign Box<string> to 'x', which is Box<int>
+
+   2 | let x = Box(1)
+     |         ------ 'x' became Box<int> here
+...
+   5 | x = Box("s")
+     | -   ^^^^^^^^ this is Box<string>
+     | |
+     | 'x' is Box<int>
+
+Hint: A variable keeps the type of its first value. Use another variable for the new value

@@ -296,9 +296,9 @@ func lb_type(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-# The whole text of s as a base-10 int, with optional spaces around and an optional sign.
-# Anything else, or a value outside the 64-bit range, is an error naming the function.
-func _parse_int(self_p, s) {
+# Reads the whole text s as a base-10 int into out_p, with optional spaces around and an optional sign.
+# Returns 0, or why it cannot: 1 the text is not a whole number, 2 the value does not fit in 64 bits.
+func _read_int(s, out_p) {
     let p = s
     while (isspace(ld8(p)) != 0) {
         p += 1
@@ -311,16 +311,14 @@ func _parse_int(self_p, s) {
         p += 1
     }
     if (isdigit(ld8(p)) == 0) {
-        _errf(E_ARGUMENT, cstr("Use a string of digits such as \"42\" or \"-7\"."),
-              cstr("%s() cannot read \"%s\" as an integer"), _fname(self_p), s, 0)
+        return 1
     }
     # Digits are accumulated as a negative number so that -2^63 fits.
     let v = 0
     while (isdigit(ld8(p)) != 0) {
         let d = ld8(p) - 48
         if (mulof(v, 10) != 0 or subof(v * 10, d) != 0) {
-            _errf(E_RUNTIME, cstr("The value must fit in a 64-bit int."),
-                  cstr("%s() value \"%s\" does not fit in a 64-bit int"), _fname(self_p), s, 0)
+            return 2
         }
         v = v * 10 - d
         p += 1
@@ -329,49 +327,22 @@ func _parse_int(self_p, s) {
         p += 1
     }
     if (ld8(p) != 0) {
-        _errf(E_ARGUMENT, cstr("Use a string of digits such as \"42\" or \"-7\"."),
-              cstr("%s() cannot read \"%s\" as an integer"), _fname(self_p), s, 0)
+        return 1
     }
     if (neg == 0) {
         if (v == -9223372036854775807 - 1) {
-            _errf(E_RUNTIME, cstr("The value must fit in a 64-bit int."),
-                  cstr("%s() value \"%s\" does not fit in a 64-bit int"), _fname(self_p), s, 0)
+            return 2
         }
-        return 0 - v
+        v = 0 - v
     }
-    return v
+    st64(out_p, v)
+    return 0
 }
 
-func lb_int(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 1, 1)
-    let o = stack_buf(16)
-    let t = _tag(argv_p)
-    if (t == T_PTR and _is_pointer(argv_p) != 0) {
-        _int(o, _ptr_address(argv_p))
-    } else if (t == T_INT) {
-        _cp(o, argv_p)
-    } else if (t == T_FLOAT) {
-        let f = _val(argv_p)
-        if (fge(f, -9223372036854775808.0) == 0 or flt(f, 9223372036854775808.0) == 0) {
-            _errf(E_RUNTIME, cstr("The largest int is 9223372036854775807. Keep very large numbers as floats"),
-                  cstr("%s() of a float that does not fit in a 64-bit int"), _fname(self_p), 0, 0)
-        }
-        _int(o, f2i(f))
-    } else if (t == T_CHAR) {
-        _int(o, ld8(argv_p + 8))
-    } else if (t == T_BOOL) {
-        _int(o, ld32(argv_p + 8))
-    } else if (t == T_STR) {
-        _int(o, _parse_int(self_p, _number_text(self_p, argv_p)))
-    } else {
-        _errf(E_TYPE, cstr("int() takes a float, a char, a bool or text that is a whole number, such as int(\"42\")"), cstr("int() cannot convert %s"), _type_name(argv_p), 0, 0)
-    }
-    retp(o)
-}
-
-# The whole text of s as a float: digits with an optional sign, point and exponent, and optional
-# spaces around. Names such as nan and inf, hex digits and a result that is too large are errors.
-func _parse_float(self_p, s) {
+# Reads the whole text s as a float into out_p (its bits): digits with an optional sign, point and exponent,
+# and optional spaces around. Returns 0, or why it cannot: 1 the text is not a number (names such as nan and
+# inf and hex digits are not), 2 the value is too large for a float, 4 it is too small (it would read as 0.0).
+func _read_float(s, out_p) {
     let p = s
     while (isspace(ld8(p)) != 0) {
         p += 1
@@ -388,60 +359,262 @@ func _parse_float(self_p, s) {
         }
         p += 1
     }
-    let end = stack_buf(8)
-    let r = 0
-    let ok = digits
-    if (ok != 0) {
-        r = strtod(start, end)
-        let e = ld64(end)
-        while (isspace(ld8(e)) != 0) {
-            e += 1
-        }
-        if (ld8(e) != 0) {
-            ok = 0
-        }
+    if (digits == 0) {
+        return 1
     }
-    if (ok == 0) {
-        _errf(E_ARGUMENT, cstr("Use a number such as \"3.5\", \"-2\" or \"1e3\"."),
-              cstr("%s() cannot read \"%s\" as a float"), _fname(self_p), s, 0)
+    let end = stack_buf(8)
+    let r = strtod(start, end)
+    let e = ld64(end)
+    while (isspace(ld8(e)) != 0) {
+        e += 1
+    }
+    if (ld8(e) != 0) {
+        return 1
     }
     if (_is_finite(r) == 0) {
-        _errf(E_RUNTIME, cstr("Zue has no infinity: the value must fit in a 64-bit float."),
-              cstr("%s() value \"%s\" does not fit in a 64-bit float"), _fname(self_p), s, 0)
+        return 2
     }
-    # A value too small for a float would read as 0.0 without a word (to_float("1e-400")); it is an error
+    # A value too small for a float would read as 0.0 without a word (to_float("1e-400")); it is refused
     # unless the digits before the exponent are all zero.
     if (feq(r, 0.0)) {
         let q = start
         while (ld8(q) != 0 and ld8(q) != 101 and ld8(q) != 69) {
             if (ld8(q) >= 49 and ld8(q) <= 57) {
-                _errf(E_RUNTIME, cstr("The smallest float above 0 is about 4.9e-324."),
-                      cstr("%s() value \"%s\" does not fit in a 64-bit float"), _fname(self_p), s, 0)
+                return 4
             }
             q += 1
         }
     }
-    return r
+    st64(out_p, r)
+    return 0
+}
+
+# The error for text that cannot be read as an int (want 1) or a float (want 2), for the reason r of
+# _read_int or _read_float. name is the function the program called.
+func _conv_text_fail(name, s, r, want) {
+    if (r == 1 and want == 1) {
+        _errf(E_ARGUMENT, cstr("Use a string of digits such as \"42\" or \"-7\"."),
+              cstr("%s() cannot read \"%s\" as an integer"), name, s, 0)
+    }
+    if (r == 1) {
+        _errf(E_ARGUMENT, cstr("Use a number such as \"3.5\", \"-2\" or \"1e3\"."),
+              cstr("%s() cannot read \"%s\" as a float"), name, s, 0)
+    }
+    if (want == 1) {
+        _errf(E_RUNTIME, cstr("The value must fit in a 64-bit int."),
+              cstr("%s() value \"%s\" does not fit in a 64-bit int"), name, s, 0)
+    }
+    if (r == 2) {
+        _errf(E_RUNTIME, cstr("Zue has no infinity: the value must fit in a 64-bit float."),
+              cstr("%s() value \"%s\" does not fit in a 64-bit float"), name, s, 0)
+    }
+    _errf(E_RUNTIME, cstr("The smallest float above 0 is about 4.9e-324."),
+          cstr("%s() value \"%s\" does not fit in a 64-bit float"), name, s, 0)
+}
+
+# Whether the string v holds a NUL byte: read as a number, the text would end there and hide what follows.
+func _has_nul(v) {
+    return strlen(_val(v) + S_DATA) != ld64(_val(v))
+}
+
+# int(v) into o. Returns 0, or why v has no int of the same value: 1 and 2 as for _read_int (text), 3 text
+# with a NUL byte, 5 a float with a fraction, 6 a float outside the 64-bit range, 7 a char, 8 a bool, 9 any
+# other type. A pointer gives its address, the one cast unsafe code may make.
+func _conv_int(o, v) {
+    let t = _tag(v)
+    if (t == T_PTR and _is_pointer(v) != 0) {
+        _int(o, _ptr_address(v))
+        return 0
+    }
+    if (t == T_INT) {
+        _cp(o, v)
+        return 0
+    }
+    if (t == T_FLOAT) {
+        let f = _val(v)
+        if (fge(f, -9223372036854775808.0) == 0 or flt(f, 9223372036854775808.0) == 0) {
+            return 6
+        }
+        let i = f2i(f)
+        if (feq(i2f(i), f) == 0) {
+            return 5
+        }
+        _int(o, i)
+        return 0
+    }
+    if (t == T_STR) {
+        if (_has_nul(v) != 0) {
+            return 3
+        }
+        let b = stack_buf(8)
+        let r = _read_int(_val(v) + S_DATA, b)
+        if (r != 0) {
+            return r
+        }
+        _int(o, ld64(b))
+        return 0
+    }
+    if (t == T_CHAR) {
+        return 7
+    }
+    if (t == T_BOOL) {
+        return 8
+    }
+    return 9
+}
+
+# float(v) into o. Returns 0, or why v has no float of the same value: 1, 2 and 4 as for _read_float (text),
+# 3 text with a NUL byte, 5 an int that has no exact float, 7 a char, 8 a bool, 9 any other type.
+func _conv_float(o, v) {
+    let t = _tag(v)
+    if (t == T_INT) {
+        let i = _val(v)
+        let f = i2f(i)
+        if (fge(f, 9223372036854775808.0) != 0 or f2i(f) != i) {
+            return 5
+        }
+        _flt(o, f)
+        return 0
+    }
+    if (t == T_FLOAT) {
+        _cp(o, v)
+        return 0
+    }
+    if (t == T_STR) {
+        if (_has_nul(v) != 0) {
+            return 3
+        }
+        let b = stack_buf(8)
+        let r = _read_float(_val(v) + S_DATA, b)
+        if (r != 0) {
+            return r
+        }
+        _flt(o, ld64(b))
+        return 0
+    }
+    if (t == T_CHAR) {
+        return 7
+    }
+    if (t == T_BOOL) {
+        return 8
+    }
+    return 9
+}
+
+# The error for a conversion of v to an int (want 1) or a float (want 2) that failed for the reason r of
+# _conv_int or _conv_float. name is the function the program called.
+func _conv_fail(name, v, r, want) {
+    if (r == 1 or r == 2 or r == 4) {
+        _conv_text_fail(name, _val(v) + S_DATA, r, want)
+    }
+    if (r == 3) {
+        _errf(E_ARGUMENT, cstr("Text read as a number holds only digits, a sign, a point and an exponent."),
+              cstr("%s() cannot read text that holds a NUL byte as a number"), name, 0, 0)
+    }
+    if (r == 5 and want == 1) {
+        let tmp = stack_buf(64)
+        _float_text(tmp, _val(v), 17)
+        _errf(E_ARGUMENT, cstr("Say how to round it: round(x), floor(x), ceil(x) or trunc(x)."),
+              cstr("%s() of %s is not a whole number"), name, tmp, 0)
+    }
+    if (r == 5) {
+        _errf(E_ARGUMENT, cstr("Ints up to 9007199254740992 (2^53) all have an exact float; keep this value as an int."),
+              cstr("%s() of %lld has no exact float"), name, _val(v), 0)
+    }
+    if (r == 6) {
+        _errf(E_RUNTIME, cstr("The largest int is 9223372036854775807. Keep very large numbers as floats"),
+              cstr("%s() of a float that does not fit in a 64-bit int"), name, 0, 0)
+    }
+    if (r == 7 and want == 1) {
+        _errf(E_TYPE, cstr("A char is not a number: code(c) gives the code of a character."),
+              cstr("%s() cannot convert a char"), name, 0, 0)
+    }
+    if (r == 7) {
+        _errf(E_TYPE, cstr("A char is not a number: float(code(c)) gives the code of a character as a float."),
+              cstr("%s() cannot convert a char"), name, 0, 0)
+    }
+    if (r == 8) {
+        _errf(E_TYPE, cstr("A bool is not a number: choose the number with an if."),
+              cstr("%s() cannot convert a bool"), name, 0, 0)
+    }
+    if (want == 1) {
+        _errf(E_TYPE, cstr("int() takes a whole float, or text that is a whole number, such as int(\"42\")"),
+              cstr("%s() cannot convert %s"), name, _type_name(v), 0)
+    }
+    _errf(E_TYPE, cstr("float() takes an int, or text that is a number, such as float(\"2.5\")"),
+          cstr("%s() cannot convert %s"), name, _type_name(v), 0)
+}
+
+func lb_int(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let o = stack_buf(16)
+    let r = _conv_int(o, argv_p)
+    if (r != 0) {
+        _conv_fail(_fname(self_p), argv_p, r, 1)
+    }
+    retp(o)
 }
 
 func lb_float(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let o = stack_buf(16)
-    let t = _tag(argv_p)
     _ptr_cast_check(argv_p, 1)
-    if (t == T_INT) {
-        _flt(o, i2f(_val(argv_p)))
-    } else if (t == T_FLOAT) {
-        _cp(o, argv_p)
-    } else if (t == T_CHAR) {
-        _flt(o, i2f(ld8(argv_p + 8)))
-    } else if (t == T_BOOL) {
-        _flt(o, i2f(ld32(argv_p + 8)))
-    } else if (t == T_STR) {
-        _flt(o, _parse_float(self_p, _number_text(self_p, argv_p)))
-    } else {
-        _errf(E_TYPE, cstr("float() takes an int, a char, a bool or text that is a number, such as float(\"2.5\")"), cstr("float() cannot convert %s"), _type_name(argv_p), 0, 0)
+    let r = _conv_float(o, argv_p)
+    if (r != 0) {
+        _conv_fail(_fname(self_p), argv_p, r, 2)
     }
+    retp(o)
+}
+
+# For 'else' and 'if (let ...)': converts v to an int (kind 1) or a float (kind 2) into out_p and returns 1,
+# or returns 0 where int(v) or float(v) would be an error.
+func lv_try_convert(out_p, v_p, kind) {
+    if (kind == 1) {
+        return _conv_int(out_p, v_p) == 0
+    }
+    _ptr_cast_check(v_p, 1)
+    return _conv_float(out_p, v_p) == 0
+}
+
+# float(i) of an int the program keeps raw: the bits of the float, or an error when it has no exact float.
+func lvv_int_to_float(i) {
+    let f = i2f(i)
+    if (fge(f, 9223372036854775808.0) != 0 or f2i(f) != i) {
+        _errf(E_ARGUMENT, cstr("Ints up to 9007199254740992 (2^53) all have an exact float; keep this value as an int."),
+              cstr("%s() of %lld has no exact float"), cstr("float"), i, 0)
+    }
+    return f
+}
+
+# string(v): the text of any value, as to_string(v) gives it.
+func lb_string(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let o = stack_buf(16)
+    _to_string(o, argv_p)
+    retp(o)
+}
+
+# code(c): the code of a character, 0 to 255.
+func lb_code(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    if (_tag(argv_p) != T_CHAR) {
+        _arg_fail(self_p, argv_p, 0, cstr("char"))
+    }
+    let o = stack_buf(16)
+    _int(o, ld8(argv_p + 8))
+    retp(o)
+}
+
+# char(n): the character with code n, 0 to 255.
+func lb_char(self_p, argc_i, argv_p) {
+    lv_arity(self_p, argc_i, 1, 1)
+    let n = _arg_int(self_p, argv_p, 0)
+    if (n < 0 or n > 255) {
+        _errf(E_ARGUMENT, cstr("A char holds one byte: a code from 0 to 255."),
+              cstr("char() of %lld is not a character code"), n, 0, 0)
+    }
+    let o = stack_buf(16)
+    _chr(o, n)
     retp(o)
 }
 
@@ -503,25 +676,11 @@ func lb_fixed(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-# The C text of a string to be read as a number. A NUL byte would end the text early and hide what follows
-# (to_int("12\0xyz") read 12), so it is an error.
-func _number_text(self_p, v) {
-    let p = _val(v) + S_DATA
-    if (strlen(p) != ld64(_val(v))) {
-        _errf(E_ARGUMENT, cstr("Text read as a number holds only digits, a sign, a point and an exponent."),
-              cstr("%s() cannot read text that holds a NUL byte as a number"), _fname(self_p), 0, 0)
-    }
-    return p
-}
-
+# to_int and to_float: the old names of int and float.
 func lb_to_int(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let o = stack_buf(16)
-    if (_tag(argv_p) != T_STR) {
-        callv(o, lb_int, self_p, argc_i, argv_p)
-        retp(o)
-    }
-    _int(o, _parse_int(self_p, _number_text(self_p, argv_p)))
+    callv(o, lb_int, self_p, argc_i, argv_p)
     retp(o)
 }
 

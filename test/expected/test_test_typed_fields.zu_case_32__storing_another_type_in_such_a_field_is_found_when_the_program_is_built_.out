@@ -1,0 +1,8 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 3:
+  cannot append string to list<int>
+
+   3 | append(a.items, "y")
+     |        -------  ^^^ this is string
+     |        |
+     |        list<int>
+

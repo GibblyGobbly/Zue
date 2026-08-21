@@ -718,7 +718,7 @@ func p_expr_bp_inner(min_bp) {
         let operand = p_expr_bp(3)
         left = mk_not(st, P_prev, operand)
     } else {
-        left = p_unary()
+        left = p_as(p_unary(), st)
     }
     while (true) {
         let bp = map_get(BINARY, P_tk.t, null)
@@ -736,6 +736,52 @@ func p_expr_bp_inner(min_bp) {
 
 func p_expr() {
     return p_expr_bp(1)
+}
+
+# x as int, x as float and x as string are int(x), float(x) and string(x): the tree holds the call. 'as'
+# binds tighter than every binary operator (a + b as int is a + (b as int)) and looser than a unary minus.
+func p_as(left, st) {
+    while (P_kind == "as") {
+        p_next()
+        if (not (P_kind == "id") or (P_tk.v != "int" and P_tk.v != "float" and P_tk.v != "string")) {
+            let d = p_fail("Expected int, float or string after 'as'")
+            if (d != null) {
+                diag_hint(d, "'as' converts a value: n as int, x as float, v as string")
+            }
+            return left
+        }
+        let tt = p_next()
+        left = mk_call(st, tt, mk_id(tt, tt, tt.v), [left], span_at(tt.line, tt.col, tt.eline, tt.ecol))
+    }
+    return left
+}
+
+# Whether e is a conversion that can fail, the value 'else' and 'if (let ...)' take: int(x) or float(x),
+# also written x as int and x as float.
+func p_can_fail(e) {
+    return e.k == "call" and e.callee.k == "id" and (e.callee.name == "int" or e.callee.name == "float") and len(e.args) == 1
+}
+
+# The checks of the value of a 'let' with 'else' or of 'if (let ...)'; what names the construct.
+func p_check_can_fail(e, what) {
+    if (not p_can_fail(e)) {
+        let d = p_fail_at(span_at(e.line, e.col, e.eline, e.ecol), "{what} needs a conversion that can fail", "not a conversion to int or float")
+        if (d != null) {
+            diag_hint(d, "Write the value as a conversion, for example s as int or float(s)")
+        }
+    }
+}
+
+# Whether a block ends by leaving: its last statement is return, break or continue, or a call of exit.
+func p_leaves(stmts) {
+    if (len(stmts) == 0) {
+        return false
+    }
+    let last = stmts[len(stmts) - 1]
+    if (last.k == "return" or last.k == "break" or last.k == "continue") {
+        return true
+    }
+    return last.k == "call" and last.callee.k == "id" and last.callee.name == "exit"
 }
 
 func p_block() {
@@ -898,6 +944,22 @@ func p_declaration(st, is_const, is_export) {
         diag_hint(d, "Give one value for each name")
     }
     let end = P_prev
+    if (P_kind == "else" and len(names) == 1 and len(vals) == 1 and not is_const) {
+        # let n = s as int else { ... }: the block runs when the conversion fails, and must leave
+        let et = p_next()
+        p_check_can_fail(vals[0], "'else' after 'let'")
+        p_expect("\{", "Expected '\{' after 'else'")
+        let orelse = p_block()
+        if (not P_panic and not p_leaves(orelse)) {
+            let d = p_fail_at(span_at(et.line, et.col, et.eline, et.ecol), "The 'else' block of a 'let' must leave", "can end without leaving")
+            if (d != null) {
+                diag_hint(d, "End it with return, break or continue: after the 'let', '{names[0]}' must hold a value")
+            }
+        }
+        let n = mk_let(st, P_prev, names[0], vals[0], is_export, is_const, types[0], nspans[0], tspans[0])
+        n.orelse = orelse
+        return n
+    }
     if (len(names) == 1) {
         let init = null
         if (len(vals) > 0) {
@@ -924,10 +986,33 @@ func p_cond_paren(what) {
 }
 
 func p_if(st) {
-    let cond = p_cond_paren("if")
+    let cond = null
+    let bound = false
+    if (P_kind == "(" and P_toks[P_pos + 1].t == "let") {
+        # if (let n = s as int) { ... }: n exists in the first block only, where the conversion worked
+        p_open("(", "Expected '(' after if")
+        let lt = p_next()
+        if (not (P_kind == "id")) {
+            p_fail("Expected variable name after 'let'")
+        }
+        let nt = p_next()
+        p_expect("=", "Expected '=' after the name in 'if (let ...)'")
+        let e = p_expr()
+        p_close(")", "Expected ')' after condition")
+        p_check_can_fail(e, "'if (let ...)'")
+        cond = mk_let(lt, P_prev, nt.v, e, false, false, null, nt, null)
+        p_scope_push()
+        p_declare(nt.v, nt)
+        bound = true
+    } else {
+        cond = p_cond_paren("if")
+    }
     p_skip_nl()
     p_expect("\{", "Expected '\{'")
     let then_body = p_block()
+    if (bound) {
+        p_scope_pop()
+    }
     let els = []
     # else may come after blank lines; the line breaks read here also end the if statement (p_stmt_end)
     p_skip_nl()
