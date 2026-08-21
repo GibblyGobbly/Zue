@@ -32,3 +32,7 @@ system("bin/zue run --gc=lowmem examples/hello.zu")
 system("A=$(bin/zue run test/fixtures/peak_memory.zu); B=$(bin/zue run --gc=lowmem test/fixtures/peak_memory.zu); if [ $B -lt $A ]; then echo smaller; else echo not smaller $A $B; fi")
 # CASE an unknown --gc value is an error that names the one value
 system("bin/zue build --gc=fast examples/hello.zu -o C/gc_unknown 2>&1; echo status $?")
+# CASE the number of marking threads does not change what a program computes
+system("bin/zue build test/fixtures/gc_markers.zu -o C/gc_markers > /dev/null && for m in 1 3 8; do ZUE_RT_GC_MARKERS=$m C/gc_markers; done")
+# CASE a bad ZUE_RT_GC_MARKERS is an error
+system("bin/zue build examples/hello.zu -o C/gc_markers_hello > /dev/null; for m in 0 4x '' -2; do ZUE_RT_GC_MARKERS=$m C/gc_markers_hello 2>&1; echo status $?; done")

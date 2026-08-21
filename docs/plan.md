@@ -995,11 +995,63 @@ Peak memory is about 16 percent below stage I and back to the old collector's (1
 Throughput is about the same as stage I, still 10 to 20 percent below the old collector: that is step b.
 The longest stop stays under 0.6 ms. 10 GiB was not run (it needs about 20 GB on a 23 GB machine).
 
+### Stage II result: several markers (measured 2026-11-04, 8 cores / 16 threads)
+
+Marking threads with a mark stack each and a shared pool; a marker gives half its stack away when another
+waits. Default 2 markers (4 or more CPUs), `ZUE_RT_GC_MARKERS` to change it. Three runs each with 2 markers,
+one with 1:
+
+| Live asked | Markers | Iterations/s | Stopped | Longest | p99 stop | MMU 1 ms | MMU 10 ms | MMU 1 s | Throttle spin | Peak |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 GiB | 1 | 4.82 M | 0.6% | 0.13 ms | 100 us | 7.3% | 49.6% | 98.5% | 0.57 s | 3.99 GB |
+| 1 GiB | 2 | 4.86 to 4.87 M | 0.4% | 0.11 to 0.21 ms | 32 to 37 us | 76 to 85% | 91 to 92% | 98.8 to 98.9% | 0.02 to 0.05 s | 3.62 to 3.65 GB |
+| 4 GiB | 1 | 5.01 M | 1.5% | 0.22 ms | 101 us | 5.6% | 8.8% | 96.9% | 2.22 s | 11.4 GB |
+| 4 GiB | 2 | 4.35 to 4.72 M | 0.1 to 0.3% | 0.08 to 0.22 ms | 70 to 174 us | 76 to 86% | 93 to 97% | 99.4 to 99.6% | 0.02 to 0.12 s | 10.2 to 10.3 GB |
+
+What it gives: the throttle spin is nearly gone and the MMU for short windows goes from under 10 percent to
+about 80 percent; peak memory falls 9 to 10 percent (cycles end sooner). What it does not give: throughput.
+
+Throughput, measured round-robin (the builds take turns, so machine drift hits all of them), median
+iterations/s:
+
+| Live asked | Old collector | Stage I | Step a | Stage II, 1 marker | Stage II, 2 markers |
+|---|---|---|---|---|---|
+| 256 MiB | 5.64 M | 4.98 M | 4.85 M | 4.72 M | 4.84 M |
+| 1 GiB | 5.91 M | 5.11 M | 4.94 M | 4.84 M | 4.94 M |
+| 4 GiB | 5.47 M | 4.90 M | 4.81 M | 4.14 M | 4.18 M |
+
+Every Immix build is 10 to 16 percent slower than the old collector, although the program is stopped far
+less (4 GiB: 12 percent of the run with the old collector, 0.4 percent now); that gap is in the program's own
+allocation and barrier path. The extra loss of stage II at 4 GiB is a different thing: every slow run had
+twice the system time (4 s against 1.9 s) and a lower peak, which is the huge page hint switched off
+(`ZUE_RT_GC_CHUNKS` shows "chunks made when the hint went off"). The helper counted the time of the
+descriptor's `calloc` (up to 12 ms) as the cost of the chunk, so three slow descriptors switched huge pages
+off. It now times only the chunk. After that fix, 3 of 6 runs at 4 GiB were still slow in the same way
+(4.08 to 4.37 M against 4.57 to 4.76 M); the cause is not proven yet. The likely one is that the kernel's own
+slow chunk mappings switch the hint off, and that rule (three chunks over 1 ms switch it off for good) needs
+a better test.
+
+Found on the way, each measured with `ZUE_RT_GC_LOCK` or timing of the step:
+
+- With more than one marker the sweep never ran: the sweep start woke one waiting thread, often not the GC
+  thread. All markers are woken now.
+- One small allocation searched thousands of recycled blocks with only small gaps (15 ms). The sweep now
+  records each block's largest gap and sorts blocks into two lists (step a's flaw; the sweep takes 0.7 s more
+  of the GC thread's time at 4 GiB, none of the program's).
+- `calloc` of a chunk descriptor on the program thread, with the mutex held, took up to 8 ms while other
+  threads allocated. The helper makes the descriptors now.
+- A thread woken while the waker held the mutex delayed the waker; a program thread sleeping on the mutex
+  waited up to 2.2 ms. Wakes come after the mutex is let go, and the program thread spins for it.
+
+Open: with 4 markers, half the runs still had one stop of 1.5 to 2 ms (the program thread waiting for the
+mutex), and 4 GiB throughput fell to 4.1 to 4.7 M. Assists (the program marking instead of the throttle spin)
+are not built: with two markers the spin is 1 percent of the run or less.
+
 ### Next, in order
 
 | Step | Work |
 |---|---|
 | a | Done (see above): allocate into the gaps between live objects; an object made during a cycle gets its mark bit at birth instead of a black line |
-| b | Stage II: several markers and assists |
+| b | Done (see above): several markers. Next: measure the program's allocation and barrier path for the throughput gap; assists only if the spin comes back |
 | c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
 | d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |

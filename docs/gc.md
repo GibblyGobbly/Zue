@@ -2,7 +2,7 @@
 
 Every compiled Zue program carries a garbage collector. It is part of the runtime, written in
 Zue: `compiler/runtime/zue_gc.zu`. It is a conservative, non-moving Immix collector with a write barrier.
-A GC thread marks while the program runs, and then sweeps. It does not need type maps from the
+Marking threads (two by default) mark while the program runs; the first of them, the GC thread, then sweeps. It does not need type maps from the
 compiler: it treats every aligned word it scans as a possible pointer.
 
 ## Memory domains
@@ -30,8 +30,10 @@ compiler: it treats every aligned word it scans as a possible pointer.
   and never scanned for pointers.
 - **Allocation** is a bump of a cursor through a gap, the space between two live objects (a free line is
   part of a gap). When the gap is used up the allocator looks for the next gap in its block, then takes
-  another block: a block with room, then a free block, then a free block whose memory was given back, then
-  a new block cut from a chunk. An object over one line that does not fit the current gap goes to a second
+  another block: a block with a gap of at least a line, then a block whose largest gap fits the request,
+  then a free block, then a free block whose memory was given back, then a new block cut from a chunk. The
+  sweep records each block's largest gap and sorts the blocks into those two lists, so taking a block never
+  searches it. An object over one line that does not fit the current gap goes to a second
   allocator that only takes free blocks, so the gaps of a block are not skipped for it.
 - **New memory is zero.** Fresh chunks come zeroed from the kernel, and a gap is cleared when it is taken,
   not each object.
@@ -70,7 +72,8 @@ object alive longer than needed. It can never free a live object, as long as eve
 kept in a scanned location (the stack, registers, the data segment, a registered range, or a
 reachable heap object).
 
-Only one thread runs Zue code. One more thread, the GC thread, marks and sweeps (see [Threads](#threads)).
+Only one thread runs Zue code. The marking threads mark, the first of them also sweeps, and a helper thread
+makes chunks ahead of time (see [Threads](#threads)).
 
 ## The pacer
 
@@ -90,25 +93,29 @@ percentages.
 ## How a cycle runs
 
 1. **Start.** The program thread marks the data segment (without `lv_frames`, which never holds heap
-   pointers) and its own stack and registers. This is the snapshot. It then wakes the GC thread. The root
+   pointers) and its own stack and registers. This is the snapshot. What they point to goes to a shared pool,
+and the marking threads are woken. The root
    ranges (the `alloc()` buffers) are part of the snapshot too, but they are scanned in slices of 256 KB,
    one slice per collector step on the program thread, and the cycle cannot end before the last slice. A
    store into a buffer shades the value it overwrites (the barrier in `_cp`). A buffer that is freed, or
    moved in the table of ranges, before its scan reached it is scanned to the end first.
-2. **Marking.** The GC thread scans from its mark stack while the program keeps running. An object the
+2. **Marking.** Each marking thread scans from its own mark stack while the program keeps running. A marker
+   whose stack is empty takes its share of the pool (the items divided by the number of markers); a marker
+   with work gives the top half of its stack to the pool when another marker waits and the pool is empty.
+   The mark bit is set with a compare-and-swap, so an object is scanned by one marker only. An object the
    program makes during the cycle gets a bit in a second map, the map of new objects, and its lines are live
    in this cycle: it counts as marked and is not scanned (what it points to was reachable at the snapshot
    or is new too). A large object made during the cycle is marked when it is made.
 3. **Write barrier.** While a cycle marks, any code that is about to overwrite a pointer inside a heap
    object first marks the object it points to (snapshot at the beginning) and puts it in a batch. The
-   batch goes to the GC thread when it holds 256 objects and at every step. Without this an object that
+   batch goes to the pool when it holds 256 objects, and when the markers have run dry. Without this an object that
    the program moves out of a heap location, and holds only in a local, could be freed.
-4. **Steps.** After every 8 KB of allocation the program thread hands over its batch and asks whether the
-   GC thread has run dry. A program that has allocated past the pacer's goal is held back for 100
+4. **Steps.** After every 8 KB of allocation the program thread looks whether every marker has run dry (one
+   atomic load; it takes the mutex only then, and hands over its batch). A program that has allocated past the pacer's goal is held back for 100
    microseconds per step (a spin, not a sleep: a sleep can overshoot by milliseconds, and `sched_yield` can
-   hand the core to another thread for a whole time slice) until the GC thread catches up.
-5. **End of marking.** When the GC thread has nothing left and nothing was handed over, the marks are
-   final. The boxes of dead templates are freed. The allocators let go of their blocks, and the GC thread is
+   hand the core to another thread for a whole time slice) until the markers catch up.
+5. **End of marking.** When every marker waits with an empty stack, the pool is empty and the program's
+   batch was handed over, the marks are final. The boxes of dead templates are freed. The allocators let go of their blocks, and the GC thread is
    woken to sweep.
 6. **Sweep.** The GC thread sweeps the blocks in groups of 64 that it claims under the collector's mutex.
    When the program needs a block before the GC thread got to it, it claims and sweeps one itself. A block
@@ -141,8 +148,9 @@ Read once at program start, by the compiled program itself:
 | Variable | Effect |
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
-| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<n> chunks,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max cycle end ns,<ns> max cycle start ns,<n> mark stack grows,<bytes> large object bytes,<ns> longest cycle ns` to standard error. A pause is one stop of the program thread in a collector step. `mark ns` and `sweep ns` are the GC thread's time. Live bytes count whole lines. A second line, `ZUE_RT_GC_THROTTLE`, gives how many steps were held back, the total and longest hold, and how much of the longest pause was that hold. A third line, `ZUE_RT_GC_CHUNKS`, gives how many 2 MB chunks the helper thread had ready and how many the program thread had to make itself. `ZUE_RT_GC_STATS=2` also prints a `ZUE_RT_GC_CYCLE` line per cycle (wall time, GC thread time, bytes allocated during and before the cycle). `ZUE_RT_GC_STATS=3` instead prints a `ZUE_RT_GC_CENSUS` line after each sweep: chunks, blocks in use (full and with room), the share of their lines that is live, free blocks, blocks whose memory was given back, and large objects. The collector's pause counter does not see time the program waits inside the write barrier; `bench/gc/stalls.zu` times every loop iteration and shows what the program itself sees, and `bench/gc/mutator_utilization.zu` records every stop over 10 microseconds and prints the minimum mutator utilization (MMU, the smallest share of any 0.1 ms to 1 s window in which the program ran) and the metered latency (how far requests arriving at an even rate fall behind) |
-| `ZUE_RT_GC_SLOW=N` | The GC thread sleeps N microseconds after each piece of marking. For tests: it widens the time the program and the GC thread overlap |
+| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<n> chunks,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max cycle end ns,<ns> max cycle start ns,<n> mark stack grows,<bytes> large object bytes,<ns> longest cycle ns` to standard error. A pause is one stop of the program thread in a collector step. `mark ns` is the time of all marking threads added up, `sweep ns` the GC thread's. Live bytes count whole lines. A second line, `ZUE_RT_GC_THROTTLE`, gives how many steps were held back, the total and longest hold, and how much of the longest pause was that hold. A third line, `ZUE_RT_GC_CHUNKS`, gives how many 2 MB chunks the helper thread had ready and how many the program thread had to make itself. A fourth line, `ZUE_RT_GC_LOCK`, gives the program thread's longest wait for the collector's mutex, its longest hold of it, and the longest hold by a collector thread, each with the function that took it. `ZUE_RT_GC_STATS=2` also prints a `ZUE_RT_GC_CYCLE` line per cycle (wall time, GC thread time, bytes allocated during and before the cycle). `ZUE_RT_GC_STATS=3` instead prints a `ZUE_RT_GC_CENSUS` line after each sweep: chunks, blocks in use (full and with room), the share of their lines that is live, free blocks, blocks whose memory was given back, and large objects. The collector's pause counter does not see time the program waits inside the write barrier; `bench/gc/stalls.zu` times every loop iteration and shows what the program itself sees, and `bench/gc/mutator_utilization.zu` records every stop over 10 microseconds and prints the minimum mutator utilization (MMU, the smallest share of any 0.1 ms to 1 s window in which the program ran) and the metered latency (how far requests arriving at an even rate fall behind) |
+| `ZUE_RT_GC_MARKERS=N` | The number of marking threads, from 1 up. The default is 2 on a machine with 4 or more CPUs, else 1. Any other value is an error (`Runtime Error: ZUE_RT_GC_MARKERS must be a whole number from 1 up`) |
+| `ZUE_RT_GC_SLOW=N` | Each marking thread sleeps N microseconds after each piece of marking. For tests: it widens the time the program and the GC thread overlap |
 | `ZUE_RT_GC_VERIFY=1` | At the end of each marking walk the heap again and stop with an error if a reachable object is neither marked nor new in the cycle. A free line that still holds a start or end bit is an error too. Dead objects and free lines are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it. After each sweep the block lists are checked |
 
 ```bash
@@ -153,19 +161,26 @@ ZUE_RT_GC_VERIFY=1 ZUE_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_barrier
 
 ## Threads
 
-The GC thread is created when the program starts. It sleeps on a condition variable between cycles, so an
-idle program uses no CPU for it. If the thread cannot be created the program stops with
-`Runtime Error: cannot start the garbage collector thread`; there is no other way to collect. A helper
-thread makes 2 MB chunks ahead of time, so that the first touch of a huge page is not paid by the program.
+The marking threads are created when the program starts; the first is the GC thread, which also sweeps. They
+sleep on a condition variable between cycles, so an idle program uses no CPU for them. If one cannot be
+created the program stops with `Runtime Error: cannot start the garbage collector thread`; there is no other
+way to collect. A helper thread makes 2 MB chunks and their descriptors ahead of time, so that the program
+pays neither the first touch of a huge page nor a `calloc` (which took up to 8 ms with the mutex held while
+other threads allocated).
+
+The program thread takes the collector's mutex by spinning, never by sleeping, and every thread wakes another
+only after letting the mutex go: a woken thread often runs at once on the waker's core, and a thread that
+sleeps on the mutex can wait for a whole time slice of whatever runs where it wakes. The holders keep the
+mutex for microseconds (`ZUE_RT_GC_LOCK` shows the longest).
 
 | State | Who uses it | How it is shared |
 |---|---|---|
-| Mark stack | The GC thread during a cycle; the program thread at the start of a cycle and in the verifier | The program thread touches it only while the GC thread waits |
-| Batches of marked objects | The program thread fills a local batch; the GC thread takes the shared one | Handed over under a mutex |
-| Mark bits | Both threads | `cas8` on the byte, so an object is queued once |
-| Start and end bits, line epochs, block kinds | The program thread writes them while allocating; the GC thread reads them while marking | Atomic loads and stores |
+| Mark stacks | One per marking thread, and one for the program thread at the start of a cycle and in the verifier | Each is used by its owner only; the program's while the markers wait |
+| The pool of mark items | The program thread's batches, the roots, and the half stacks markers give away | Under the mutex; its size and the number of waiting markers are also read without it (atomic) |
+| Mark bits | All marking threads and the program thread | `cas8` on the byte, so an object is queued once |
+| Start and end bits, line epochs, block kinds | The program thread writes them while allocating; the markers read them while marking | Atomic loads and stores |
 | Block lists, the sweep's cursor, the page table, the lists of chunks and large objects | Both threads | Under the mutex; the page table is also read without it (release stores, acquire loads; a descriptor is complete before the table shows it) |
-| Object contents | The GC thread reads them while the program may change them | Not synchronised, on purpose (see below) |
+| Object contents | The markers read them while the program may change them | Not synchronised, on purpose (see below) |
 
 The scan reads object contents while the program writes them. That is safe: the snapshot is taken at the
 start, the write barrier marks what the program overwrites, and an object allocated during a cycle is marked
@@ -186,8 +201,11 @@ collector: the compiler compiles itself twice, and the two outputs must be ident
 
 ## Known limits
 
-- One GC thread marks. A program that allocates faster than it marks is held back by the throttle (stage II
-  of the plan replaces it with several markers and assists, see [plan](plan.md)).
+- A program that allocates faster than the markers mark is still held back by the throttle; with two
+  markers that is rare (see [plan](plan.md)). Four or more markers gave occasional stops of 1 to 2 ms on an
+  8-core machine, which is not understood yet.
+- A block whose largest gap is smaller than a line is used only when its gap fits the request at the top of
+  its list; its small gaps may wait for the next cycle.
 - No compaction. A block with a few live objects stays in use; the gaps between them are reused.
 - Chunks are never unmapped; the memory of their free blocks is given back.
 - Freed large spans are unmapped, not kept for reuse.
