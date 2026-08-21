@@ -915,16 +915,16 @@ compiler and the rest of the runtime do not change.
 | Unit | Size | Notes |
 |---|---|---|
 | Granule | 16 bytes | Objects start on a granule and take whole granules (request + 1 byte, rounded up) |
-| Line | 128 bytes | The unit of reuse: a line is free when no live object touches it |
+| Line | 128 bytes | A line is free when no live object touches it; the allocator also reuses gaps inside live lines |
 | Block | 32 KB, 256 lines | Holds normal objects or atomic objects (never scanned), not both |
 | Chunk | 2 MB, 64 blocks | Aligned to 2 MB; made ahead by the helper thread as before |
-| Medium object | 129 bytes to 8 KB | Bump allocated; one that does not fit the current hole goes to the overflow block |
+| Medium object | 129 bytes to 8 KB | Bump allocated; one that does not fit the current gap goes to the overflow block |
 | Large object | over 8 KB | Its own span of 64 KB pages, as before |
 
-Each chunk has a descriptor (calloc, never scanned) with one bit per granule in three bitmaps (object start,
-object end, object mark), one byte per line (the epoch of the cycle that last saw it live, 0 when free), one bit
-per line for lines allocated during a cycle (black), and a few bytes per block (kind, sweep epoch, zeroed).
-That is 3.1 percent of the chunk. The page table maps each 64 KB of address space to a chunk or large-object
+Each chunk has a descriptor (calloc, never scanned) with one bit per granule in four bitmaps (object start,
+object end, object mark, object made during the cycle), one byte per line (the epoch of the cycle that last saw
+it live, 0 when free), and a few bytes per block (kind, sweep epoch, zeroed, gaps). That is 3.9 percent of the
+chunk. The page table maps each 64 KB of address space to a chunk or large-object
 descriptor, as before.
 
 A word is a pointer to an object when the page table knows its 64 KB, a start bit is found at or before it in
@@ -932,20 +932,23 @@ the same block, and the first end bit after that start is at or after it.
 
 ### Allocation
 
-The fast path is a bump: cursor plus size against the end of the hole, then the start and end bits. There is
-no clearing per object: a hole is cleared once when it is taken (fresh chunk memory and blocks given back to
-the system are already zero). While a cycle marks, every hole taken, and the rest of the current hole at the
-cycle's start, gets the cycle's epoch and the black bit, so nothing allocated during the cycle is freed by it.
-The collector's state holds the cursor and the bytes left in the hole, never the hole's end: the end is often
+The fast path is a bump: cursor plus size against the end of the gap, then the start and end bits. A gap is
+the space from the end of one live object to the start of the next (found in the start bitmap). There is no
+clearing per object: a gap is cleared once when it is taken (fresh chunk memory and blocks given back to the
+system are already zero). While a cycle marks, each new object also gets its bit in the map of new objects and
+its lines get the cycle's epoch, so nothing allocated during the cycle is freed by it. Only the program thread
+writes that map. The collector's state holds the cursor and the bytes left in the gap, never the gap's end: the end is often
 the start of an object, and the conservative scan of the data segment would keep it alive.
 
 ### Sweep
 
 After the marks are final the GC thread sweeps every block that was in use. The program thread can sweep a
 block itself when it needs one before the GC thread got to it; a block is claimed under the collector mutex.
-Sweeping a block: in each live line, clear the start and end bits of every unmarked object outside black lines;
-then clear the bits of every free line; clear the mark bits; count free lines. A block with no live line goes
-to the free list, one with holes to the recycle list of its kind. The GC thread then gives back the memory of
+Sweeping a block: clear the start and end bits of every object that is neither marked nor new, in every line
+(an object that starts in a line that becomes free can end in a live one); then clear the epoch of every free
+line; clear the mark bits and the map of new objects; count free lines, and note whether a line that stays live
+lost an object (BI_GAPS). A block with no live line goes to the free list, one with free lines or gaps to the
+recycle list of its kind. The GC thread then gives back the memory of
 free blocks beyond what the pacer expects the program to need before the next cycle (madvise), off the
 program thread.
 
@@ -954,7 +957,7 @@ program thread.
 Snapshot-at-the-beginning barrier (`lv_wb_cell`, `lv_wb_word`, `lv_wb_range`), the local batch handed to the
 GC thread, root ranges scanned in steps, blue thread stacks scanned in steps, `lv_gc_note_external`, the box
 hook at the end of marking, `--gc=lowmem`, the pacer's measures, `ZUE_RT_GC_STATS`, `_STRESS`, `_SLOW` and
-`_VERIFY`. `lv_gc_is_marked` counts an object in a black line as marked.
+`_VERIFY`. `lv_gc_is_marked` counts an object made during the cycle as marked.
 
 ### Stage I result (measured 2026-11-04, one run each, same benchmark as the baseline)
 
@@ -978,11 +981,25 @@ Two fixes found on the way: the program thread sweeping blocks until it found ro
 stop (it now sweeps at most one block per request), and the pacer counted live data in whole lines (2.78 GB
 for 1.84 GB of objects), which made it allow a larger heap (it now uses the bytes the cycle marked).
 
+### Step a result (measured 2026-11-04, one run each, same benchmark)
+
+Allocation into the gaps between live objects; an object made during a cycle is marked from birth.
+
+| Live asked | Iterations/s | Stopped | Stops | p99 stop | Longest | MMU 1 ms | MMU 10 ms | MMU 1 s | Peak | Throttle spin |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 256 MiB | 4.61 M | 2.3% | 4,825 | 101 us | 0.36 ms | 6.3% | 10.5% | 94.7% | 1.01 GB | 0.17 s |
+| 1 GiB | 4.70 M | 2.8% | 6,095 | 101 us | 0.43 ms | 6.4% | 10.6% | 87.8% | 4.05 GB | 0.71 s |
+| 4 GiB | 4.53 M | 8.4% | 10,839 | 101 us | 0.59 ms | 3.8% | 10.1% | 52.2% | 11.1 GB | 2.94 s |
+
+Peak memory is about 16 percent below stage I and back to the old collector's (1.15, 4.08 and 11.1 GB).
+Throughput is about the same as stage I, still 10 to 20 percent below the old collector: that is step b.
+The longest stop stays under 0.6 ms. 10 GiB was not run (it needs about 20 GB on a 23 GB machine).
+
 ### Next, in order
 
 | Step | Work |
 |---|---|
-| a | Allocate into the gaps between live objects, not only into free lines; an object made during a cycle gets its mark bit at birth instead of a black line |
+| a | Done (see above): allocate into the gaps between live objects; an object made during a cycle gets its mark bit at birth instead of a black line |
 | b | Stage II: several markers and assists |
 | c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
 | d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |

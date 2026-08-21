@@ -28,17 +28,17 @@ compiler: it treats every aligned word it scans as a possible pointer.
   (128 bytes) take 144.
 - **Atomic objects** (strings, doubles, byte buffers, dense list data) are allocated in blocks of their own
   and never scanned for pointers.
-- **Allocation** is a bump of a cursor through a hole, a run of free lines. When the hole is used up the
-  allocator looks for the next hole in its block, then takes another block: a block with holes, then a
-  free block, then a free block whose memory was given back, then a new block cut from a chunk. An object
-  over one line that does not fit the current hole goes to a second allocator that only takes free blocks,
-  so the holes of a block are not skipped for it.
-- **New memory is zero.** Fresh chunks come zeroed from the kernel, and a hole is cleared when it is taken,
+- **Allocation** is a bump of a cursor through a gap, the space between two live objects (a free line is
+  part of a gap). When the gap is used up the allocator looks for the next gap in its block, then takes
+  another block: a block with room, then a free block, then a free block whose memory was given back, then
+  a new block cut from a chunk. An object over one line that does not fit the current gap goes to a second
+  allocator that only takes free blocks, so the gaps of a block are not skipped for it.
+- **New memory is zero.** Fresh chunks come zeroed from the kernel, and a gap is cleared when it is taken,
   not each object.
 - **Chunk descriptors** live outside the heap (allocated with `calloc`, never scanned). For each granule
-  they keep three bits: an object starts here, an object ends here, and the mark. For each line they keep
-  the number of the cycle that last found it live (0 when free), and one bit for lines allocated during a
-  cycle. That is 3.1 percent of the chunk.
+  they keep four bits: an object starts here, an object ends here, the mark, and made during the cycle. For
+  each line they keep the number of the cycle that last found it live (0 when free). That is 3.9 percent of
+  the chunk.
 - **Finding an object.** A page table (two levels, indexed by bits 32 to 47 and 16 to 31 of the address)
   maps each 64 KB of address space to a chunk or a large object. Inside a chunk, a word points into an
   object when a start bit is found at or before it in the same block, and the first end bit after that
@@ -62,7 +62,8 @@ last collection exceed a threshold: 16 MiB at the start, then the value the pace
    scanned.
 3. **Data hook.** Boxes owned by templates that were not marked are freed.
 4. **Sweep.** In every block, unmarked objects lose their start and end bits, and lines no live object
-   touches become free. A block with no live line is free; one with free lines can be allocated into again.
+   touches become free. A block with no live line is free; one with free lines, or with a dead object in a
+   line that stays live, can be allocated into again.
 
 Because the collector is conservative, a stale integer that looks like an address can keep an
 object alive longer than needed. It can never free a live object, as long as every pointer is
@@ -94,10 +95,10 @@ percentages.
    one slice per collector step on the program thread, and the cycle cannot end before the last slice. A
    store into a buffer shades the value it overwrites (the barrier in `_cp`). A buffer that is freed, or
    moved in the table of ranges, before its scan reached it is scanned to the end first.
-2. **Marking.** The GC thread scans from its mark stack while the program keeps running. Every hole the
-   program takes during the cycle, and the rest of the current hole from the next line on, is black: its
-   lines are live in this cycle, and the objects in it count as marked and are not scanned (what they point
-   to was reachable at the snapshot or is new too). A large object made during the cycle is black too.
+2. **Marking.** The GC thread scans from its mark stack while the program keeps running. An object the
+   program makes during the cycle gets a bit in a second map, the map of new objects, and its lines are live
+   in this cycle: it counts as marked and is not scanned (what it points to was reachable at the snapshot
+   or is new too). A large object made during the cycle is marked when it is made.
 3. **Write barrier.** While a cycle marks, any code that is about to overwrite a pointer inside a heap
    object first marks the object it points to (snapshot at the beginning) and puts it in a batch. The
    batch goes to the GC thread when it holds 256 objects and at every step. Without this an object that
@@ -140,9 +141,9 @@ Read once at program start, by the compiled program itself:
 | Variable | Effect |
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
-| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<n> chunks,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max cycle end ns,<ns> max cycle start ns,<n> mark stack grows,<bytes> large object bytes,<ns> longest cycle ns` to standard error. A pause is one stop of the program thread in a collector step. `mark ns` and `sweep ns` are the GC thread's time. Live bytes count whole lines. A second line, `ZUE_RT_GC_THROTTLE`, gives how many steps were held back, the total and longest hold, and how much of the longest pause was that hold. A third line, `ZUE_RT_GC_CHUNKS`, gives how many 2 MB chunks the helper thread had ready and how many the program thread had to make itself. `ZUE_RT_GC_STATS=2` also prints a `ZUE_RT_GC_CYCLE` line per cycle (wall time, GC thread time, bytes allocated during and before the cycle). `ZUE_RT_GC_STATS=3` instead prints a `ZUE_RT_GC_CENSUS` line after each sweep: chunks, blocks in use (full and with holes), the share of their lines that is live, free blocks, blocks whose memory was given back, and large objects. The collector's pause counter does not see time the program waits inside the write barrier; `bench/gc/stalls.zu` times every loop iteration and shows what the program itself sees, and `bench/gc/mutator_utilization.zu` records every stop over 10 microseconds and prints the minimum mutator utilization (MMU, the smallest share of any 0.1 ms to 1 s window in which the program ran) and the metered latency (how far requests arriving at an even rate fall behind) |
+| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<n> chunks,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max cycle end ns,<ns> max cycle start ns,<n> mark stack grows,<bytes> large object bytes,<ns> longest cycle ns` to standard error. A pause is one stop of the program thread in a collector step. `mark ns` and `sweep ns` are the GC thread's time. Live bytes count whole lines. A second line, `ZUE_RT_GC_THROTTLE`, gives how many steps were held back, the total and longest hold, and how much of the longest pause was that hold. A third line, `ZUE_RT_GC_CHUNKS`, gives how many 2 MB chunks the helper thread had ready and how many the program thread had to make itself. `ZUE_RT_GC_STATS=2` also prints a `ZUE_RT_GC_CYCLE` line per cycle (wall time, GC thread time, bytes allocated during and before the cycle). `ZUE_RT_GC_STATS=3` instead prints a `ZUE_RT_GC_CENSUS` line after each sweep: chunks, blocks in use (full and with room), the share of their lines that is live, free blocks, blocks whose memory was given back, and large objects. The collector's pause counter does not see time the program waits inside the write barrier; `bench/gc/stalls.zu` times every loop iteration and shows what the program itself sees, and `bench/gc/mutator_utilization.zu` records every stop over 10 microseconds and prints the minimum mutator utilization (MMU, the smallest share of any 0.1 ms to 1 s window in which the program ran) and the metered latency (how far requests arriving at an even rate fall behind) |
 | `ZUE_RT_GC_SLOW=N` | The GC thread sleeps N microseconds after each piece of marking. For tests: it widens the time the program and the GC thread overlap |
-| `ZUE_RT_GC_VERIFY=1` | At the end of each marking walk the heap again and stop with an error if a reachable object is neither marked nor black. Dead objects and free lines are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it. After each sweep the block lists are checked |
+| `ZUE_RT_GC_VERIFY=1` | At the end of each marking walk the heap again and stop with an error if a reachable object is neither marked nor new in the cycle. A free line that still holds a start or end bit is an error too. Dead objects and free lines are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it. After each sweep the block lists are checked |
 
 ```bash
 ZUE_RT_GC_STATS=1 ./prog
@@ -167,7 +168,8 @@ thread makes 2 MB chunks ahead of time, so that the first touch of a huge page i
 | Object contents | The GC thread reads them while the program may change them | Not synchronised, on purpose (see below) |
 
 The scan reads object contents while the program writes them. That is safe: the snapshot is taken at the
-start, the write barrier marks what the program overwrites, and an object allocated during a cycle is black.
+start, the write barrier marks what the program overwrites, and an object allocated during a cycle is marked
+from birth.
 `tools/gc_race_check.sh` builds programs with ThreadSanitizer and fails on any other race.
 
 ## Testing the collector
@@ -186,6 +188,6 @@ collector: the compiler compiles itself twice, and the two outputs must be ident
 
 - One GC thread marks. A program that allocates faster than it marks is held back by the throttle (stage II
   of the plan replaces it with several markers and assists, see [plan](plan.md)).
-- No compaction. A block with a few live lines stays in use; its free lines are reused.
+- No compaction. A block with a few live objects stays in use; the gaps between them are reused.
 - Chunks are never unmapped; the memory of their free blocks is given back.
 - Freed large spans are unmapped, not kept for reuse.

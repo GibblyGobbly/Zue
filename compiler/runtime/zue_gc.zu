@@ -7,8 +7,8 @@
 #
 # Objects are bump allocated into 32 KB blocks of 128-byte lines; a block is cut from a 2 MB chunk. A
 # collection marks everything reachable from the stack, the registers, the program's static data and any
-# registered root ranges, treating every aligned word as a possible pointer (interior pointers count). A
-# line no live object touches is free, and the allocator reuses free lines (holes) in place. Objects that
+# registered root ranges, treating every aligned word as a possible pointer (interior pointers count). The
+# allocator reuses the gaps between live objects in place; a line no live object touches is free. Objects that
 # hold no pointers (strings, doubles, bytes) are allocated "atomic", in blocks of their own that are never
 # scanned. Objects over MAX_MEDIUM bytes get a span of their own.
 #
@@ -80,38 +80,38 @@ const CD_START = 64            # bit per granule: an object starts here
 const CD_END = 16448           # bit per granule: an object ends here (its last granule)
 const CD_MARK = 32832          # bit per granule, at an object's start: marked in the cycle
 const CD_LINES = 49216         # byte per line: the epoch of the cycle that last found the line live, 0 when free
-const CD_BLACK = 65600         # bit per line: allocated while the cycle marks
-const CD_BLK = 67648           # BlockInfo[64]
-const CD_SIZE = 68672
+const CD_NEW = 65600           # bit per granule, at an object's start: allocated while the cycle marks (program thread only)
+const CD_BLK = 81984           # BlockInfo[64]
+const CD_SIZE = 83008
 const MAP_BYTES = 16384        # bytes of one granule bitmap of a chunk
 # struct BlockInfo (16 bytes)
 const BI_KIND = 0              # u8: 0 free, 1 normal objects, 2 atomic objects
 const BI_SWEPT = 1             # u8: the sweep epoch that last swept the block, or in which it was taken
 const BI_ZERO = 2              # u8: 1 while every byte of the block is zero
 const BI_COLD = 3              # u8: 1 when its memory was given back to the system
+const BI_GAPS = 4              # u8: 1 when the last sweep freed an object in a line that stays live
 const BI_SIZE = 16
 
 # struct Large, the descriptor of an object over MAX_MEDIUM (calloc). Kind 2.
 const LD_KIND = 0              # u8: 2
 const LD_MARK = 1              # u8
 const LD_ATOMIC = 2            # u8
-const LD_BLACK = 3             # u8: allocated while the cycle marks
 const LD_VMARK = 4             # u8: visited by the verifier
 const LD_BASE = 8
 const LD_OBJ = 16              # the object's size
 const LD_SPAN = 24             # bytes mapped
 const LD_SIZE = 32
 
-# struct Allocator: bump allocation into one hole. The block is kept as its number (address >> BLOCK_SHIFT)
+# struct Allocator: bump allocation into one gap. The block is kept as its number (address >> BLOCK_SHIFT)
 # and the cursor as an offset: the collector's state is in the data segment, which is scanned, and an
 # address there would keep whatever object starts at it alive.
 const AL_BLOCK = 0             # block number, 0 when there is none
 const AL_OFF = 8               # where the next object goes, from the block's start
-const AL_LEFT = 16             # bytes left in the hole
+const AL_LEFT = 16             # bytes left in the gap
 const AL_CD = 24               # the block's chunk descriptor
 const AL_G0 = 32               # the block's first granule, counted from the chunk's start
 const AL_SIZE = 40
-# Four allocators: [atomic][overflow]. The overflow allocator takes medium objects that do not fit the hole.
+# Four allocators: [atomic][overflow]. The overflow allocator takes medium objects that do not fit the gap.
 
 # State of the collector: one block of 64-bit fields that the functions reach through _heap(). A field's
 # offset is its constant H_NAME. The fields named in zue_rt_blue.zu and zue_rt_ops.zu keep their names.
@@ -580,11 +580,6 @@ func _find(w, slot) {
     return d
 }
 
-func _line_black(cd, g) {
-    let l = shr(g, 3)
-    return band(ld8a(cd + CD_BLACK + shr(l, 3)), shl(1, band(l, 7)))
-}
-
 # Sets the mark bit of the object at granule s; 0 when it was set already (by this or another thread).
 func _mark_bit(cd, s) {
     let p = cd + CD_MARK + shr(s, 3)
@@ -612,6 +607,19 @@ func _mark_lines(cd, s, n) {
             st8a(cd + CD_LINES + l, ep)
         }
     }
+}
+
+# An object allocated while a cycle marks survives it: its bit in the map of new objects counts as a mark, and
+# its lines are live in the cycle. The marker never scans it: what it points to was reachable at the snapshot or
+# is new too. Only the program thread writes this map, so the bit needs no compare-and-swap.
+func _born_marked(cd, g, n) {
+    _bit_set(cd + CD_NEW, g)
+    _mark_lines(cd, g, n)
+}
+
+# Whether the object at granule s survives the cycle: marked, or allocated during it.
+func _is_live(cd, s) {
+    return band(bor(ld8a(cd + CD_MARK + shr(s, 3)), ld8a(cd + CD_NEW + shr(s, 3))), shl(1, band(s, 7)))
 }
 
 # Allocation
@@ -647,9 +655,9 @@ func _gc_check() {
     }
 }
 
-# The allocation that almost every call is: an object that fits the hole of its allocator, and no collector
-# work due. A hole is cleared when it is taken, so the object is already zero. It is kept short on purpose:
-# _slow_gc_alloc takes holes and blocks, runs collector steps and allocates large objects.
+# The allocation that almost every call is: an object that fits the gap of its allocator, and no collector
+# work due. A gap is cleared when it is taken, so the object is already zero. It is kept short on purpose:
+# _slow_gc_alloc takes gaps and blocks, runs collector steps and allocates large objects.
 func _gc_alloc(size, atomic) {
     let h = _heap()
     let n = band(size + GRAN, -GRAN)    # one byte more than asked (a pointer just past the end stays inside), whole granules
@@ -664,6 +672,9 @@ func _gc_alloc(size, atomic) {
             let g = ld64(a + AL_G0) + shr(off, 4)
             _bit_set(cd + CD_START, g)
             _bit_set(cd + CD_END, g + shr(n, 4) - 1)
+            if (ld64(h + H_MARKING) != 0) {
+                _born_marked(cd, g, n)
+            }
             st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
             return shl(ld64(a + AL_BLOCK), BLOCK_SHIFT) + off
         }
@@ -698,10 +709,10 @@ func _take_block(k, free_only) {
             st8a(info + BI_KIND, 0)
             return _block_ready(b, k)
         }
-        if (free_only == 0 and free_lines != 0 and ld8(info + BI_KIND) == k) {
+        if (free_only == 0 and _has_room(cd, bi, free_lines) != 0 and ld8(info + BI_KIND) == k) {
             return b
         }
-        if (free_lines != 0) {
+        if (_has_room(cd, bi, free_lines) != 0) {
             _arr_push(_list(L_RECYC + ld8(info + BI_KIND) - 1), b)
         }
     }
@@ -739,58 +750,65 @@ func _block_ready(b, k) {
     return b
 }
 
-# Moves allocator a to the next hole of its block at or after line `from`, that is at least n bytes: returns
-# 1 when it found one. A hole is a run of free lines; it is cleared here unless the block is still all zero,
-# and while a cycle marks it is live in this cycle and black.
-func _next_hole(a, from, n) {
-    let h = _heap()
+# The first object start at or after granule p and before hi (granules of a chunk), or hi when there is none.
+func _next_start(cd, p, hi) {
+    let map = cd + CD_START
+    let i = shr(p, 3)
+    let last = shr(hi, 3)
+    let b = band(ld8a(map + i), bnot(shl(1, band(p, 7)) - 1))
+    if (b != 0) {
+        return i * 8 + ld8(addr_of("_lobit") + b)
+    }
+    i++
+    while (i < last) {
+        if (band(i, 7) == 0 and i + 8 <= last and ld64a(map + i) == 0) {
+            i += 8
+            continue
+        }
+        b = ld8a(map + i)
+        if (b != 0) {
+            return i * 8 + ld8(addr_of("_lobit") + b)
+        }
+        i++
+    }
+    return hi
+}
+
+# Moves allocator a to the next gap of its block, from granule p of the chunk on, that holds at least n bytes:
+# returns 1 when it found one. A gap is the space between two live objects (the sweep took the bits of the
+# dead ones away). It is cleared here unless the block is still all zero.
+func _next_gap(a, p, n) {
     let cd = ld64(a + AL_CD)
-    let bi = shr(ld64(a + AL_G0), 11)
-    let lines = cd + CD_LINES + bi * LINES_PER_BLOCK
-    let i = from
-    while (i < LINES_PER_BLOCK) {
-        while (i < LINES_PER_BLOCK and ld8a(lines + i) != 0) {
-            i++
-        }
-        let j = i
-        while (j < LINES_PER_BLOCK and ld8a(lines + j) == 0) {
-            j++
-        }
-        if (j > i and (j - i) * LINE >= n) {
-            let base = shl(ld64(a + AL_BLOCK), BLOCK_SHIFT)
-            let info = _block_info(cd, bi)
+    let g0 = ld64(a + AL_G0)
+    let hi = g0 + GRANS_PER_BLOCK
+    while (p < hi) {
+        let q = _next_start(cd, p, hi)
+        if ((q - p) * GRAN >= n) {
+            let info = _block_info(cd, shr(g0, 11))
+            let off = (p - g0) * GRAN
             if (ld8(info + BI_ZERO) == 0) {
-                memset(base + i * LINE, 0, (j - i) * LINE)
+                memset(shl(ld64(a + AL_BLOCK), BLOCK_SHIFT) + off, 0, (q - p) * GRAN)
             }
             st8(info + BI_ZERO, 0)
-            st64(a + AL_OFF, i * LINE)
-            st64(a + AL_LEFT, (j - i) * LINE)
-            if (ld64(h + H_MARKING) != 0) {
-                _blacken(cd, bi * LINES_PER_BLOCK + i, bi * LINES_PER_BLOCK + j)
-            }
+            st64(a + AL_OFF, off)
+            st64(a + AL_LEFT, (q - p) * GRAN)
             return 1
         }
-        i = j
+        if (q >= hi) {
+            return 0
+        }
+        p = _obj_end(cd, q) + 1
     }
     return 0
 }
 
-# Lines lo to hi - 1 of a chunk hold what the program allocates during this cycle: live in it, and black.
-func _blacken(cd, lo, hi) {
-    let ep = ld64(_heap() + H_EPOCH)
-    for (let l = lo; l < hi; l++) {
-        st8a(cd + CD_LINES + l, ep)
-        let p = cd + CD_BLACK + shr(l, 3)
-        st8a(p, bor(ld8(p), shl(1, band(l, 7))))
-    }
-}
-
-# Gives allocator a (kind k) a hole of at least n bytes.
+# Gives allocator a (kind k) a gap of at least n bytes. The search goes on after the end of the current gap,
+# which is the start of an object or the end of the block.
 func _refill(a, k, n, free_only) {
     let h = _heap()
     if (ld64(a + AL_BLOCK) != 0) {
-        let from = shr(ld64(a + AL_OFF) + ld64(a + AL_LEFT) + LINE - 1, LINE_SHIFT)
-        if (_next_hole(a, from, n) != 0) {
+        let from = ld64(a + AL_G0) + shr(ld64(a + AL_OFF) + ld64(a + AL_LEFT), 4)
+        if (_next_gap(a, from, n) != 0) {
             return 0
         }
     }
@@ -804,7 +822,7 @@ func _refill(a, k, n, free_only) {
         st64(a + AL_G0, shr(b - ld64(cd + CD_BASE), 4))
         st64(a + AL_OFF, 0)
         st64(a + AL_LEFT, 0)
-        if (_next_hole(a, 0, n) != 0) {
+        if (_next_gap(a, ld64(a + AL_G0), n) != 0) {
             return 0
         }
     }
@@ -829,7 +847,7 @@ func _slow_gc_alloc(size, atomic) {
     let a = h + H_ALLOC + atomic * (2 * AL_SIZE)
     if (ugt(n, ld64(a + AL_LEFT))) {
         if (n > LINE) {
-            # A medium object that does not fit the hole: the overflow allocator takes it, so the holes of
+            # A medium object that does not fit the gap: the overflow allocator takes it, so the gaps of
             # the block are not skipped for it.
             a = a + AL_SIZE
             if (ugt(n, ld64(a + AL_LEFT))) {
@@ -846,6 +864,9 @@ func _slow_gc_alloc(size, atomic) {
     let g = ld64(a + AL_G0) + shr(off, 4)
     _bit_set(cd + CD_START, g)
     _bit_set(cd + CD_END, g + shr(n, 4) - 1)
+    if (ld64(h + H_MARKING) != 0) {
+        _born_marked(cd, g, n)
+    }
     st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
     return shl(ld64(a + AL_BLOCK), BLOCK_SHIFT) + off
 }
@@ -870,7 +891,7 @@ func _alloc_large(n, atomic) {
     }
     st8(d + LD_KIND, 2)
     st8(d + LD_ATOMIC, atomic)
-    st8(d + LD_BLACK, ld64(h + H_MARKING))    # allocated during a cycle: survives it
+    st8(d + LD_MARK, ld64(h + H_MARKING))    # allocated during a cycle: survives it
     st64(d + LD_BASE, mem)
     st64(d + LD_OBJ, n)
     st64(d + LD_SPAN, span)
@@ -967,7 +988,7 @@ func _mark_find(w, slot) {
             return _vmark_large(d)
         }
         let m = d + LD_MARK
-        if (ld8(d + LD_BLACK) != 0 or ld8a(m) != 0 or cas8(m, 0, 1) == 0) {
+        if (ld8a(m) != 0 or cas8(m, 0, 1) == 0) {
             return 0
         }
         st64(slot + 16, ld64(slot + 16) + ld64(d + LD_OBJ))
@@ -981,9 +1002,7 @@ func _mark_find(w, slot) {
     if (ld64(h + H_VMODE) != 0) {
         return _vmark(d, s, n)
     }
-    # An object in a black line was allocated during this cycle: it survives it, and what it points to was
-    # reachable at the snapshot or is new too, so it is not scanned.
-    if (_line_black(d, s) != 0 or _mark_bit(d, s) == 0) {
+    if (band(ld8a(d + CD_NEW + shr(s, 3)), shl(1, band(s, 7))) != 0 or _mark_bit(d, s) == 0) {
         return 0
     }
     _mark_lines(d, s, n)
@@ -1216,7 +1235,7 @@ func lv_gc_root_remove(lo) {
     }
 }
 
-# Whether the object at p survived the marking that just ended: marked, or allocated during it. A value
+# Whether the object at p survived the marking that just ended (an object allocated during it is marked). A value
 # that is not a heap object counts as marked. Program thread, after the marks are final.
 func lv_gc_is_marked(p) {
     let h = _heap()
@@ -1225,13 +1244,10 @@ func lv_gc_is_marked(p) {
         return 1
     }
     if (ld8(d) == 2) {
-        if (ld8(d + LD_MARK) != 0 or ld8(d + LD_BLACK) != 0) {
-            return 1
-        }
-        return 0
+        return ld8(d + LD_MARK)
     }
     let s = ld64(h + H_SLOT)
-    if (band(ld8(d + CD_MARK + shr(s, 3)), shl(1, band(s, 7))) != 0 or _line_black(d, s) != 0) {
+    if (_is_live(d, s) != 0) {
         return 1
     }
     return 0
@@ -1349,39 +1365,52 @@ func _clear_dead(cd, i, dead) {
     }
 }
 
-# Sweeps block bi of a chunk and returns its free lines. In each live line the objects that were not marked
-# lose their start and end bits (not in black lines: they hold what was allocated during the cycle). Then every
-# line not live in this cycle is free: its epoch and its bits are cleared. The marks and black bits are cleared
-# for the next cycle. Nothing else of a dead object is touched: a hole is cleared when the allocator takes it.
+# Sweeps block bi of a chunk and returns its free lines. Every object that was neither marked nor new loses its start and
+# end bits, also one that starts in a line that becomes free and ends in a live one (a stale end bit there would
+# make a new object in the gap look shorter than it is). Then every line not live in this cycle is free and its
+# epoch is cleared. The marks and the bits of new objects are cleared for the next cycle. Nothing else of a dead object is touched: a gap is
+# cleared when the allocator takes it. BI_GAPS tells whether a line that stays live lost an object.
 func _sweep_block(cd, bi) {
     let h = _heap()
     let ep = ld64(h + H_EPOCH)
     let l0 = bi * LINES_PER_BLOCK
     let free_lines = 0
+    let gaps = 0
     for (let l = l0; l < l0 + LINES_PER_BLOCK; l++) {
-        if (ld8(cd + CD_LINES + l) == ep and band(ld8(cd + CD_BLACK + shr(l, 3)), shl(1, band(l, 7))) == 0) {
-            let dead = band(ld8(cd + CD_START + l), bnot(ld8(cd + CD_MARK + l)))
-            if (dead != 0) {
-                _clear_dead(cd, l, dead)
+        let dead = band(ld8(cd + CD_START + l), bnot(bor(ld8(cd + CD_MARK + l), ld8(cd + CD_NEW + l))))
+        if (dead != 0) {
+            _clear_dead(cd, l, dead)
+            if (ld8(cd + CD_LINES + l) == ep) {
+                gaps = 1
             }
         }
     }
     for (let l = l0; l < l0 + LINES_PER_BLOCK; l++) {
         if (ld8(cd + CD_LINES + l) != ep) {
             st8a(cd + CD_LINES + l, 0)
-            st8a(cd + CD_START + l, 0)
-            st8a(cd + CD_END + l, 0)
             if (ld64(h + H_VERIFY) != 0) {
+                if (ld8(cd + CD_START + l) != 0 or ld8(cd + CD_END + l) != 0) {
+                    _invariant_fail(cstr("a free line still holds an object"))
+                }
                 memset(ld64(cd + CD_BASE) + l * LINE, 221, LINE)
             }
             free_lines++
         }
     }
     memset(cd + CD_MARK + l0, 0, LINES_PER_BLOCK)
-    memset(cd + CD_BLACK + shr(l0, 3), 0, LINES_PER_BLOCK / 8)
+    memset(cd + CD_NEW + l0, 0, LINES_PER_BLOCK)
     let info = _block_info(cd, bi)
     st8(info + BI_ZERO, 0)
+    st8(info + BI_GAPS, gaps)
     return free_lines
+}
+
+# Whether a swept block that is not free has room for the allocator: free lines, or gaps where objects died.
+func _has_room(cd, bi, free_lines) {
+    if (free_lines != 0 or ld8(_block_info(cd, bi) + BI_GAPS) != 0) {
+        return 1
+    }
+    return 0
 }
 
 # Sweeps the large objects that existed when the sweep began: a dead one leaves the page table and its span is
@@ -1398,7 +1427,7 @@ func _sweep_large() {
     let keep = 0
     for (let i = 0; i < n; i++) {
         let d = ld64(arr + i * 8)
-        if (ld8(d + LD_MARK) == 0 and ld8(d + LD_BLACK) == 0) {
+        if (ld8(d + LD_MARK) == 0) {
             let mem = ld64(d + LD_BASE)
             for (let off = 0; off < ld64(d + LD_SPAN); off += PAGE_SIZE) {
                 _table_insert(shr(mem + off, PAGE_SHIFT), 0)
@@ -1408,7 +1437,6 @@ func _sweep_large() {
             ngone++
         } else {
             st8(d + LD_MARK, 0)
-            st8(d + LD_BLACK, 0)
             st64(arr + keep * 8, d)
             keep++
         }
@@ -1479,7 +1507,7 @@ func _gct_sweep() {
             if (free_lines == LINES_PER_BLOCK) {
                 st8a(info + BI_KIND, 0)
                 _arr_push(_list(L_FREE), b)
-            } else if (free_lines != 0) {
+            } else if (_has_room(cd, shr(b - ld64(cd + CD_BASE), BLOCK_SHIFT), free_lines) != 0) {
                 _arr_push(_list(L_RECYC + ld8(info + BI_KIND) - 1), b)
             }
         }
@@ -1640,8 +1668,8 @@ func _count_pause(dt) {
 }
 
 # A cycle begins by marking the roots (the stack, the registers, the data segment), which is the snapshot; the
-# root ranges and the stacks of the blue threads that are away follow in steps. The rest of each allocator's
-# hole, from the next line on, is black: what the program allocates there during the cycle survives it.
+# root ranges and the stacks of the blue threads that are away follow in steps. From here every new object is
+# born marked (_born_marked).
 func _gc_begin() {
     let h = _heap()
     st64(h + H_COLLECTIONS, ld64(h + H_COLLECTIONS) + 1)
@@ -1650,22 +1678,6 @@ func _gc_begin() {
     st64(h + H_SLOT_GC + 16, 0)
     st64(h + H_SLOT + 16, 0)
     st64(h + H_MARKING, 1)
-    for (let i = 0; i < 4; i++) {
-        let a = h + H_ALLOC + i * AL_SIZE
-        if (ld64(a + AL_BLOCK) != 0 and ld64(a + AL_LEFT) != 0) {
-            # The rest of the line the cursor is in is given up: a black line holds only new objects.
-            let off = band(ld64(a + AL_OFF) + LINE - 1, -LINE)
-            let end = ld64(a + AL_OFF) + ld64(a + AL_LEFT)
-            if (off >= end) {
-                st64(a + AL_LEFT, 0)
-            } else {
-                st64(a + AL_OFF, off)
-                st64(a + AL_LEFT, end - off)
-                let l0 = shr(ld64(a + AL_G0), 3)
-                _blacken(ld64(a + AL_CD), l0 + shr(off, LINE_SHIFT), l0 + shr(end, LINE_SHIFT))
-            }
-        }
-    }
     _scan_static()
     if (ld64(h + H_ROOT_COUNT) != 0) {
         st64(h + H_RS_I, 0)
@@ -1847,8 +1859,7 @@ func _gc_work() {
     _count_pause(_now_ns() - t0)
 }
 
-# The verifier. At the end of a cycle every object that can be reached from the roots must be marked (or be
-# allocated during the cycle, in a black line). It walks the heap again with a second set of bits. A word on the
+# The verifier. At the end of a cycle every object that can be reached from the roots must be marked. It walks the heap again with a second set of bits. A word on the
 # stack that points at an unmarked object is skipped: a stale word left in an unused stack slot can point at an
 # object that died before the cycle began, and the program cannot reach it through that word.
 
@@ -1910,7 +1921,7 @@ func _vmark_large(d) {
     if (ld8(d + LD_VMARK) != 0) {
         return 0
     }
-    if (ld8(d + LD_MARK) == 0 and ld8(d + LD_BLACK) == 0) {
+    if (ld8(d + LD_MARK) == 0) {
         if (ld64(h + H_VSTACK) != 0) {
             return 0
         }
@@ -1929,7 +1940,7 @@ func _vmark(cd, s, n) {
     if (band(ld8(vm + shr(s, 3)), shl(1, band(s, 7))) != 0) {
         return 0
     }
-    if (band(ld8(cd + CD_MARK + shr(s, 3)), shl(1, band(s, 7))) == 0 and _line_black(cd, s) == 0) {
+    if (_is_live(cd, s) == 0) {
         if (ld64(h + H_VSTACK) != 0) {
             return 0
         }
