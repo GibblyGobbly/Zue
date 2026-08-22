@@ -1056,7 +1056,7 @@ are not built: with two markers the spin is 1 percent of the run or less.
 | c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
 | d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |
 
-## Zue 2: types, immutability and memory (plan, 2026-11-04; phase 1 and per-value templates done 2026-11-05)
+## Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 and 2 and per-value templates done 2026-11-05)
 
 The language changes after the collector work. The aim: every type known when the program is built, values
 that cannot change unless they say so, conversions with one clear meaning, named arguments, and memory that
@@ -1137,7 +1137,11 @@ if (let n = input("n? ") as int) {         // n exists only here, and is an int
 `trunc(3.7)`). `to_int(s)` and `to_float(s)` go: they are `s as int` and `s as float`. The old forms stay one
 release with a message saying what to write.
 
-### Phase 2: everything that may be missing
+### Phase 2: everything that may be missing (done)
+
+Done as below, with these additions: a list or string index out of range (`xs[i]`) and `last_index_of`
+are missing values too, a value that is `null` counts as missing (a map key holding `null` as well as
+an empty field), and a function of the program's own named `find` or `open` counts `null` as missing.
 
 `else` and `if (let ...)` from phase 1 also take: a map read (`m[k]`), `find`, `index_of`, `open`, and a template
 field that may be empty. A field may be empty when the template was made without it or it was set to

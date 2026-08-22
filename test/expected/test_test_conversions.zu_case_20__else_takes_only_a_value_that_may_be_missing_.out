@@ -1,0 +1,7 @@
+Syntax Error [E0124] in /tmp/zue_test_case.zu at line 2:
+  'else' after 'let' needs a value that may be missing
+
+   2 | let n = len(s) else {
+     |         ^^^^^^ this cannot be missing
+
+Hint: Use a conversion (s as int), a read (m[key], p.field), find, index_of, last_index_of or open

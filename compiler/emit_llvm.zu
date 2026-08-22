@@ -1095,26 +1095,69 @@ func raw_kind(n) {
     return t
 }
 
-# A conversion that may fail, for 'else' and 'if (let ...)': the i1 that says it worked and the slot that
-# then holds the value.
-func try_convert(e) {
-    let v = ex(e.args[0])
-    ll_mark(e)
-    let out = ll_slot()
-    let kind = 1
-    if (e.callee.name == "float") {
-        kind = 2
+# The searches that 'else' and 'if (let ...)' take, by the number lv_try_search uses for each.
+let TRY_SEARCH = {"find": 1, "index_of": 2, "last_index_of": 3}
+
+# A value that may be missing, for 'else' and 'if (let ...)': the i1 that says it is there and the slot
+# that then holds it. The parser allows a conversion, an index or field read, a search and open.
+func try_value(e) {
+    if (e.k == "index") {
+        let t = ex(e.target)
+        let i = ex(e.index)
+        ll_mark(e)
+        return try_flag(e, "lv_try_index", "ptr {t}, ptr {i}")
     }
+    if (e.k == "field") {
+        let t = ex(e.target)
+        ll_mark(e)
+        return try_flag(e, "lv_try_field", "ptr {t}, ptr {ll_kstr(e.field)}, ptr {ll_ic()}")
+    }
+    let name = e.callee.name
+    if (resolve(name).kind != "builtin") {
+        # A function of the program's own with a builtin's name: missing means it returned null.
+        return try_not_null(generic_call(e))
+    }
+    if (name == "int" or name == "float") {
+        let v = ex(e.args[0])
+        ll_mark(e)
+        let kind = 1
+        if (name == "float") {
+            kind = 2
+        }
+        return try_flag(e, "lv_try_convert", "ptr {v}, i64 {kind}")
+    }
+    let argv = ex_list(e.args)
+    ll_mark(e)
+    if (map_has(TRY_SEARCH, name)) {
+        ll_use_native(name)
+        let arr = ll_args_array(argv)
+        return try_flag(e, "lv_try_search", "ptr @nf_{name}, i64 {TRY_SEARCH[name]}, i32 {len(argv)}, ptr {arr}")
+    }
+    return try_not_null(call_builtin(name, argv))
+}
+
+# A call of fn(out, args) that returns nonzero when the value is there.
+func try_flag(e, fn, args) {
+    let out = ll_slot()
     let r = ll_reg()
-    ll("{r} = call i64 @lv_try_convert(ptr {out}, ptr {v}, i64 {kind})")
+    ll("{r} = call i64 @{fn}(ptr {out}, {args})")
     let flag = ll_reg()
     ll("{flag} = icmp ne i64 {r}, 0")
     return [flag, out]
 }
 
+# A value that is there unless it is null.
+func try_not_null(v) {
+    let tag = ll_reg()
+    ll("{tag} = load i64, ptr {v}")
+    let flag = ll_reg()
+    ll("{flag} = icmp ne i64 {tag}, 0")
+    return [flag, v]
+}
+
 # let n = s as int else { ... }: the block runs when the conversion fails, and it leaves (the parser checks).
 func st_let_else(n) {
-    let t = try_convert(n.init)
+    let t = try_value(n.init)
     let ok = ll_new_label("letok")
     let fail = ll_new_label("letelse")
     ll_condbr(t[0], ok, fail)
@@ -1136,7 +1179,7 @@ func st_let_else(n) {
 
 # if (let n = s as int) { ... } else { ... }: n exists in the first block.
 func st_if_let(n) {
-    let t = try_convert(n.cond.init)
+    let t = try_value(n.cond.init)
     let yes = ll_new_label("then")
     let no = ll_new_label("else")
     let done = ll_new_label("endif")
@@ -1908,6 +1951,9 @@ func declarations() {
     append(d, "declare void @lvp_num_like(ptr, ptr, ptr)")
     append(d, "declare void @lvv_return_check(i64, i64, ptr)")
     append(d, "declare i64 @lv_try_convert(ptr, ptr, i64)")
+    append(d, "declare i64 @lv_try_index(ptr, ptr, ptr)")
+    append(d, "declare i64 @lv_try_field(ptr, ptr, ptr, ptr)")
+    append(d, "declare i64 @lv_try_search(ptr, ptr, i64, i32, ptr)")
     append(d, "declare i64 @lvv_int_to_float(i64)")
     append(d, "declare %LV @lv_addr_invalid(i32)")
     append(d, "declare void @lv_arity(ptr, i32, i32, i32)")

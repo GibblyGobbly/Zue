@@ -42,7 +42,7 @@ Floats print exactly: the shortest text that reads back as the same number (`pri
 |---|---|
 | `append(list, v)` / `list_append(list, v)` | Add to the end; returns the same list, so `print(append(x, 1))` shows it |
 | `remove(list, i)` | Remove and return the element at `i` (negative counts from the end); an index out of range is an `Index Error` |
-| `find(list, v)` | Index of the first equal element; an `Argument Error` if there is none (check with `contains` first). Lists only |
+| `find(list, v)` | Index of the first equal element; an `Argument Error` if there is none (check with `contains` first, or use `if (let i = find(xs, v))`). Lists only |
 | `slice(list, a, b)` | New list of the elements at positions `a` to `b`, counting from 0 and including both ends; same as `list[a:b]`. A position outside the list, or `a` after `b`, is an `Index Error`. Also works on strings |
 | `range(end)`, `range(start, end)`, `range(start, end, step)` | List of integers; `step` may be negative and must not be 0 |
 | `map(list, fn)`, `filter(list, fn)`, `reduce(list, fn, init)` | Higher-order helpers; return new values. `reduce` needs all three arguments |
@@ -161,7 +161,7 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 | Function | Description | Example |
 |---|---|---|
 | `contains(s, sub)` | `true` if `sub` is found in `s`; also works on a list | `contains("Team", "ea")` is `true` |
-| `index_of(s, sub)` | Index of the first occurrence; an `Argument Error` if there is none (check with `contains` first) | `index_of("banana", "nan")` is `2` |
+| `index_of(s, sub)` | Index of the first occurrence; an `Argument Error` if there is none (check with `contains` first, or use `if (let i = index_of(s, sub))`) | `index_of("banana", "nan")` is `2` |
 | `index_of(s, sub, start)` | The same, looking only from index `start` (0 to `len(s)`) | `index_of("banana", "an", 2)` is `3` |
 | `index_of_any(s, set)` | Index of the first byte that is in the string `set`, or `len(s)` (the end) if none, as `skip_chars` gives; takes an optional `start` | `index_of_any("a, b", ", ")` is `1` |
 | `skip_chars(s, set)` | Index of the first byte that is not in `set`, `len(s)` if there is none; takes an optional `start` | `skip_chars("  x", " ")` is `2` |
@@ -468,7 +468,7 @@ directory of the running program, not to the source file.
 
 | Function | Description |
 |---|---|
-| `open(path, mode)` | Opens a file in mode `"r"`, `"w"` or `"a"`. Returns a file handle, or `null` if it cannot be opened (a directory cannot be opened). Any other mode is an `Argument Error` |
+| `open(path, mode)` | Opens a file in mode `"r"`, `"w"` or `"a"`. Returns a file handle, or `null` if it cannot be opened (a directory cannot be opened); `let f = open(p, "r") else { ... }` handles that. Any other mode is an `Argument Error` |
 | `close(handle)` | Flushes and closes the file. Closing twice is a runtime error, and so is a failed flush (`close() failed: No space left on device`) |
 | `write(handle, text)` | Writes a string to the file and returns `null`. `text` must be a string. A failed write is an error with the system's reason (`write() failed: Bad file descriptor` for a file opened with `"r"`) |
 | `read(handle)` | Reads the rest of the file into one string. A read error is an error (`read() failed: ...`), not an empty string |

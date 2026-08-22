@@ -1,0 +1,7 @@
+Type Error [E0206] in /tmp/zue_test_case.zu at line 3:
+  map key must be a string, got int
+
+   3 | if (let x = m[pass(0)]) { print(x) } else { print("missing") }
+     |             ^^^^^^^^^^
+
+Hint: Maps use string keys

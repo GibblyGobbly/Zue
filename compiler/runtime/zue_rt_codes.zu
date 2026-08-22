@@ -154,7 +154,7 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("after 'as'")) != 0) {
         return cstr("E0124")
     }
-    if (strstr(msg, cstr("needs a conversion that can fail")) != 0) {
+    if (strstr(msg, cstr("needs a value that may be missing")) != 0) {
         return cstr("E0124")
     }
     if (strstr(msg, cstr("block of a 'let' must leave")) != 0) {

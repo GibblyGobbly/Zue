@@ -1,0 +1,7 @@
+Syntax Error [E0124] in /tmp/zue_test_case.zu at line 1:
+  'if (let ...)' needs a value that may be missing
+
+   1 | if (let s = "a" as string) {
+     |             ^^^^^^^^^^^^^ this cannot be missing
+
+Hint: Use a conversion (s as int), a read (m[key], p.field), find, index_of, last_index_of or open

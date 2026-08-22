@@ -103,8 +103,25 @@ if (let n = s as int) {
 }
 ```
 
-Both take a conversion that can fail: `x as int`, `x as float`, `int(x)` or `float(x)`. The else
-branch runs for any value that has no int or float of the same value, text or not.
+Both take any value that may be missing. The `else` branch runs when it is missing:
+
+| Value | Missing when |
+|---|---|
+| `x as int`, `x as float`, `int(x)`, `float(x)` | the value has no int or float of the same value, text or not |
+| `m[key]`, `m.key` | the map has no such key, or the key holds `null` |
+| `xs[i]`, `s[i]` | the index is out of range, or the item is `null` |
+| `p.field` | the field is empty (`null`) |
+| `find(xs, v)`, `index_of(s, sub)`, `last_index_of(s, sub)` | nothing is found |
+| `open(path, mode)` | the file cannot be opened |
+
+```javascript
+if (let v = m["key"]) { print(v) } else { print("no key") }
+let f = open("data.txt", "r") else { print("no file"); return }
+if (let l = node.left) { walk(l) }
+```
+
+A wrong kind of value is still an error, missing or not: `xs["0"]`, a map key that is not a string,
+`find` of a string. Anything else after `else` or in `if (let ...)` is a syntax error (`E0124`).
 
 ## Strings
 

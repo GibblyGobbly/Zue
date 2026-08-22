@@ -130,7 +130,7 @@ func f(s) {
 }
 print(f("4"))
 
-# CASE else takes only a conversion that can fail
+# CASE else takes only a value that may be missing
 let s = "a"
 let n = len(s) else {
     exit(1)
@@ -153,7 +153,7 @@ if (let n = "3" as int) {
 }
 print(n)
 
-# CASE if let takes only a conversion that can fail
+# CASE if let takes only a value that may be missing
 if (let s = "a" as string) {
     print(s)
 }

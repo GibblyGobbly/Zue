@@ -756,18 +756,30 @@ func p_as(left, st) {
     return left
 }
 
-# Whether e is a conversion that can fail, the value 'else' and 'if (let ...)' take: int(x) or float(x),
-# also written x as int and x as float.
+# The calls whose value may be missing, besides the conversions int(x) and float(x).
+let P_MAY_MISS = ["find", "index_of", "last_index_of", "open"]
+
+# Whether e is a value that may be missing, the value 'else' and 'if (let ...)' take: a conversion int(x)
+# or float(x) (also written x as int and x as float), an index or field read, a search or open.
 func p_can_fail(e) {
-    return e.k == "call" and e.callee.k == "id" and (e.callee.name == "int" or e.callee.name == "float") and len(e.args) == 1
+    if (e.k == "index" or e.k == "field") {
+        return true
+    }
+    if (e.k != "call" or e.callee.k != "id") {
+        return false
+    }
+    if (e.callee.name == "int" or e.callee.name == "float") {
+        return len(e.args) == 1
+    }
+    return contains(P_MAY_MISS, e.callee.name)
 }
 
 # The checks of the value of a 'let' with 'else' or of 'if (let ...)'; what names the construct.
 func p_check_can_fail(e, what) {
     if (not p_can_fail(e)) {
-        let d = p_fail_at(span_at(e.line, e.col, e.eline, e.ecol), "{what} needs a conversion that can fail", "not a conversion to int or float")
+        let d = p_fail_at(span_at(e.line, e.col, e.eline, e.ecol), "{what} needs a value that may be missing", "this cannot be missing")
         if (d != null) {
-            diag_hint(d, "Write the value as a conversion, for example s as int or float(s)")
+            diag_hint(d, "Use a conversion (s as int), a read (m[key], p.field), find, index_of, last_index_of or open")
         }
     }
 }

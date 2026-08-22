@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# 'else' after a let and 'if (let ...)' take any value that may be missing: a map read, an index out of
+# range, a field that is empty, find, index_of, last_index_of and open.
+
+# CASE a map read
+let m = {"a": 1}
+if (let v = m["a"]) {
+    print(v + 1)
+} else {
+    print("no a")
+}
+if (let v = m["b"]) {
+    print(v)
+} else {
+    print("no b")
+}
+func get(k) {
+    let v = m[k] else {
+        return -1
+    }
+    return v * 10
+}
+print(get("a"))
+print(get("z"))
+
+# CASE a map key that holds null counts as missing
+let m = {"a": null}
+if (let v = m["a"]) {
+    print("found")
+} else {
+    print("empty")
+}
+
+# CASE a list or string index out of range
+let xs = [10, 20]
+if (let x = xs[1]) { print(x) }
+if (let x = xs[2]) { print(x) } else { print("no item 2") }
+if (let x = xs[-1]) { print(x) }
+if (let x = xs[-3]) { print(x) } else { print("no item -3") }
+if (let c = "hi"[0]) { print(c) }
+if (let c = ""[0]) { print(c) } else { print("empty string") }
+
+# CASE a wrong kind of index is still an error
+func pass(v) { return [v, null][0] }
+let xs = [1]
+if (let x = xs[pass("0")]) { print(x) } else { print("missing") }
+
+# CASE a map key that is not a string is still an error
+func pass(v) { return [v, null][0] }
+let m = {"a": 1}
+if (let x = m[pass(0)]) { print(x) } else { print("missing") }
+
+# CASE a field that is empty
+template Node { value, left }
+let leaf = Node(1, null)
+let root = Node(2, leaf)
+func walk(n) {
+    print(n.value)
+    if (let l = n.left) {
+        walk(l)
+    } else {
+        print("end")
+    }
+}
+walk(root)
+
+# CASE a field of a map, written with a dot
+let cfg = {"port": 80}
+let port = cfg.port else { exit(1) }
+print(port)
+if (let h = cfg.host) { print(h) } else { print("no host") }
+
+# CASE find, index_of and last_index_of
+let xs = [3, 5, 7]
+if (let i = find(xs, 5)) { print(i) }
+if (let i = find(xs, 9)) { print(i) } else { print("no 9") }
+if (let i = index_of("banana", "an")) { print(i) }
+if (let i = index_of("banana", "an", 4)) { print(i) } else { print("no an after 4") }
+if (let i = last_index_of("banana", "a")) { print(i) }
+let j = last_index_of("banana", "x") else {
+    print("no x")
+    exit(0)
+}
+print(j)
+
+# CASE a search with a wrong argument is still an error
+func pass(v) { return [v, null][0] }
+if (let i = find(pass("abc"), "b")) { print(i) } else { print("missing") }
+
+# CASE open
+let f = open("/nonexistent/zue-test/file.txt", "r") else {
+    print("cannot open")
+    exit(0)
+}
+print("opened")
+
+# CASE an index read inside a loop with break and continue
+let ages = {"ann": 30, "bo": 25}
+let total = 0
+for (let name in ["ann", "cy", "bo"]) {
+    let a = ages[name] else {
+        continue
+    }
+    total += a
+}
+print(total)
+
+# CASE a function of the program's own named like a search counts null as missing
+func find(xs, v) {
+    return null
+}
+if (let i = find([1], 1)) { print(i) } else { print("own find gave null") }
+
+# CASE the name keeps the type of the map's values
+let m: map<int> = {"a": 1}
+if (let v = m["a"]) {
+    print(v + "x")
+}

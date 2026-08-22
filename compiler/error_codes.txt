@@ -188,10 +188,11 @@ fix: Put the statements under a case or default.
 
 == E0124
 title: A conversion or its 'else' is written wrongly
-match: after 'as' | needs a conversion that can fail | block of a 'let' must leave
-text: 'as' converts to int, float or string. 'else' after a let, and 'if (let ...)', take a
-    conversion that can fail (to int or to float), and the 'else' block of a let must leave with
-    return, break or continue, because after the let the name must hold a value.
+match: after 'as' | needs a value that may be missing | block of a 'let' must leave
+text: 'as' converts to int, float or string. 'else' after a let, and 'if (let ...)', take a value
+    that may be missing: a conversion that can fail (to int or to float), an index or field read,
+    find, index_of, last_index_of or open. The 'else' block of a let must leave with return, break
+    or continue, because after the let the name must hold a value.
 example:
     func f(s) {
         let n = s as int else {
@@ -200,7 +201,8 @@ example:
         return n
     }
     print(f("4"))
-fix: Convert with s as int or float(s), and end the 'else' block with return, break or continue.
+fix: Give a value that may be missing, such as s as int or m[key], and end the 'else' block with
+    return, break or continue.
 
 == E0123
 title: A token other than the expected one was found

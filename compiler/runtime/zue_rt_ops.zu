@@ -1037,6 +1037,52 @@ func lvp_index(o, t, idx) {
     _errf(E_TYPE, cstr("Index lists and strings with ints, maps with strings"), cstr("cannot index %s"), _type_name(t), 0, 0)
 }
 
+# For 'else' and 'if (let ...)': t[idx] into o and 1, or 0 when nothing is there (a key the map does not
+# have, an index out of range) or the value is null. A wrong kind of index is still an error.
+func lv_try_index(o, t, idx) {
+    let tt = _tag(t)
+    if (tt == T_MAP and _tag(idx) == T_STR) {
+        _map_get(o, t, _val(idx))
+        if (g_found == 0) {
+            return 0
+        }
+        return _tag(o) != T_NULL
+    }
+    let n = -1
+    if (tt == T_LIST) {
+        n = ld64(_val(t) + L_COUNT)
+    } else if (tt == T_DENSE) {
+        n = ld64(_val(t) + D_COUNT)
+    } else if (tt == T_STR) {
+        n = ld64(_val(t))
+    }
+    if (n >= 0 and _tag(idx) == T_INT) {
+        let i = _val(idx)
+        if (i < 0) {
+            i += n
+        }
+        if (i < 0 or i >= n) {
+            return 0
+        }
+    }
+    lvp_index(o, t, idx)
+    return _tag(o) != T_NULL
+}
+
+# For 'else' and 'if (let ...)': target.name into o and 1, or 0 when a map has no such key or the field
+# is empty (null).
+func lv_try_field(o, t, key, ic) {
+    if (_tag(t) == T_MAP) {
+        _map_get(o, t, _val(key))
+        if (g_found == 0) {
+            return 0
+        }
+    } else {
+        lvp_field_ic(o, t, key, ic)
+    }
+    return _tag(o) != T_NULL
+}
+
 # target.name
 func lvp_field(o, t, key) {
     let tt = _tag(t)

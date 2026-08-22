@@ -1,7 +1,0 @@
-Syntax Error [E0124] in /tmp/zue_test_case.zu at line 2:
-  'else' after 'let' needs a conversion that can fail
-
-   2 | let n = len(s) else {
-     |         ^^^^^^ not a conversion to int or float
-
-Hint: Write the value as a conversion, for example s as int or float(s)

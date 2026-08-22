@@ -1006,17 +1006,26 @@ func _not_found(self_p, v, where, hint) {
     _errf4(E_ARGUMENT, hint, cstr("%s() did not find %s in the %s"), _fname(self_p), ld64(b + B_BUF), where, 0)
 }
 
-func lb_find(self_p, argc_i, argv_p) {
+# find(list, v): the index of the first equal item, or -1 when there is none.
+func _find_item(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let l = _arg_list(self_p, argv_p, 0)
-    let o = stack_buf(16)
     for (let i = 0; i < ld64(l + L_COUNT); i++) {
         if (lvp_equal(ld64(l + L_ITEMS) + 16 * i, argv_p + 16) != 0) {
-            _int(o, i)
-            retp(o)
+            return i
         }
     }
-    _not_found(self_p, argv_p + 16, cstr("list"), cstr("Check with contains(list, value) first."))
+    return -1
+}
+
+func lb_find(self_p, argc_i, argv_p) {
+    let i = _find_item(self_p, argc_i, argv_p)
+    if (i < 0) {
+        _not_found(self_p, argv_p + 16, cstr("list"), cstr("Check with contains(list, value) first."))
+    }
+    let o = stack_buf(16)
+    _int(o, i)
+    retp(o)
 }
 
 func lb_slice(self_p, argc_i, argv_p) {
@@ -1327,15 +1336,20 @@ func _start_arg(self_p, argc_i, argv_p, i, n) {
     return frm
 }
 
-func lb_index_of(self_p, argc_i, argv_p) {
+# index_of(s, sub, start): the index of the first occurrence, or -1 when there is none.
+func _index_of_sub(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 3)
     let tmp = stack_buf(16)
     let s = _arg_str(self_p, argv_p, 0)
     let sub = _text_str(self_p, argv_p + 16, 1, tmp)
-    let frm = _start_arg(self_p, argc_i, argv_p, 2, ld64(s))
+    return _find_sub(s, sub, _start_arg(self_p, argc_i, argv_p, 2, ld64(s)))
+}
+
+func lb_index_of(self_p, argc_i, argv_p) {
+    let at = _index_of_sub(self_p, argc_i, argv_p)
     let o = stack_buf(16)
-    let at = _find_sub(s, sub, frm)
     if (at < 0) {
+        let frm = _start_arg(self_p, argc_i, argv_p, 2, ld64(_val(argv_p)))
         if (frm > 0) {
             let where = stack_buf(64)
             snprintf(where, 64, cstr("string after position %lld"), frm)
@@ -1414,21 +1428,48 @@ func lb_skip_chars(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-func lb_last_index_of(self_p, argc_i, argv_p) {
+# last_index_of(s, sub): the index of the last occurrence, or -1 when there is none.
+func _last_index_of_sub(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 2, 2)
     let tmp = stack_buf(16)
     let s = _arg_str(self_p, argv_p, 0)
     let t = _text_str(self_p, argv_p + 16, 1, tmp)
-    let o = stack_buf(16)
     let i = ld64(s) - ld64(t)
     while (i >= 0) {
         if (memcmp(s + S_DATA + i, t + S_DATA, ld64(t)) == 0) {
-            _int(o, i)
-            retp(o)
+            return i
         }
         i -= 1
     }
-    _not_found(self_p, argv_p + 16, cstr("string"), cstr("Check with contains(s, sub) first."))
+    return -1
+}
+
+func lb_last_index_of(self_p, argc_i, argv_p) {
+    let i = _last_index_of_sub(self_p, argc_i, argv_p)
+    if (i < 0) {
+        _not_found(self_p, argv_p + 16, cstr("string"), cstr("Check with contains(s, sub) first."))
+    }
+    let o = stack_buf(16)
+    _int(o, i)
+    retp(o)
+}
+
+# For 'else' and 'if (let ...)': find (which 1), index_of (2) or last_index_of (3) into out and 1, or 0
+# when nothing is found. Wrong arguments are still errors.
+func lv_try_search(out_p, self_p, which, argc_i, argv_p) {
+    let i = -1
+    if (which == 1) {
+        i = _find_item(self_p, argc_i, argv_p)
+    } else if (which == 2) {
+        i = _index_of_sub(self_p, argc_i, argv_p)
+    } else {
+        i = _last_index_of_sub(self_p, argc_i, argv_p)
+    }
+    if (i < 0) {
+        return 0
+    }
+    _int(out_p, i)
+    return 1
 }
 
 func lb_contains(self_p, argc_i, argv_p) {

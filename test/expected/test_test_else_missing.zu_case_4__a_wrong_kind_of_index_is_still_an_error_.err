@@ -1,0 +1,7 @@
+Type Error [E0206] in /tmp/zue_test_case.zu at line 3:
+  list index must be an int, got string
+
+   3 | if (let x = xs[pass("0")]) { print(x) } else { print("missing") }
+     |             ^^^^^^^^^^^^^
+
+Hint: Use an int index
