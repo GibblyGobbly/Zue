@@ -22,7 +22,7 @@ export template NList { k, line, items, col, eline, ecol }
 export template NMap { k, line, keys, vals, col, eline, ecol }
 export template NFunc { k, line, name, params, defaults, ptypes, body, exported, col, eline, ecol, nspan, pspans, tspans }
 export template NBox { k, line, size, col, eline, ecol }
-export template NCall { k, line, callee, args, spec, col, eline, ecol, aspan }
+export template NCall { k, line, callee, args, spec, col, eline, ecol, aspan, names, nspans }
 export template NIndex { k, line, target, index, col, eline, ecol }
 export template NSlice { k, line, target, lo, hi, col, eline, ecol }
 export template NField { k, line, target, field, col, eline, ecol, fspan }
@@ -52,7 +52,8 @@ export const NODE_FIELDS = {
     "map": ["keys", "vals"],
     "func": ["name", "params", "defaults", "ptypes", "body", "exported"],
     "box": ["size"],
-    "call": ["callee", "args", "spec"],
+    "call": ["callee", "args", "spec", "names"],
+    "absent": [],
     "index": ["target", "index"],
     "slice": ["target", "lo", "hi"],
     "field": ["target", "field"],
@@ -76,7 +77,7 @@ export const NODE_FIELDS = {
 }
 
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
-export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad", "orelse"]
+export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad", "orelse", "names"]
 
 # The constructors take st and en, the first and the last token of the node (a node can stand for
 # either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and
@@ -119,7 +120,7 @@ export func mk_box(st, en, size) {
 
 # aspan is the argument list with its brackets.
 export func mk_call(st, en, callee, args, aspan) {
-    return NCall("call", st.line, callee, args, null, st.col, en.eline, en.ecol, aspan)
+    return NCall("call", st.line, callee, args, null, st.col, en.eline, en.ecol, aspan, null, null)
 }
 
 export func mk_index(st, en, target, index) {

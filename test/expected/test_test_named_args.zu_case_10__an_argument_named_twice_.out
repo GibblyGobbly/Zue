@@ -1,0 +1,9 @@
+Syntax Error [E0125] in /tmp/zue_test_case.zu at line 4:
+  Argument 'greeting' is named twice
+
+   4 | print(greet("Ann", greeting: "Hi", greeting: "Yo"))
+     |                    --------        ^^^^^^^^ named again here
+     |                    |
+     |                    first named here
+
+Hint: Give each argument once

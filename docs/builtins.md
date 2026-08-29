@@ -9,7 +9,14 @@ Builtins are always available and need no import. The compiler knows their names
 [string](builtins.md#strings), [math](builtins.md#math), [file](builtins.md#files).
 
 A call with the wrong number of arguments is an `Argument Error` such as
-`min() expects 2 arguments, but got 1`. An argument of the wrong type is a `Type Error` such
+`min() expects 2 arguments, but got 1`.
+
+Arguments can be named with the names shown on this page: `range(0, 10, step: 2)`,
+`split(s, sep: ",")`, `to_string(x, digits: 3)`. A builtin's arguments fill its parameters in order, so
+a named one cannot skip one before it (`index_of(s, start: 2)` is an error: give `sub`). Builtins that
+take different lists of arguments (`min`, `max`, `rand`, `trand`, `slice`, `contains`), any number of
+them (`print`, `spawn`) or work inside `unsafe` take no named arguments. See
+[syntax](syntax.md#named-arguments). An argument of the wrong type is a `Type Error` such
 as `sqrt() argument 1 must be a number, got string`.
 
 ### Values and types
@@ -61,7 +68,7 @@ Maps use string keys. `m["k"]` and `m.k` read a key; `m["k"] = v` and `m.k = v` 
 | Function | Effect |
 |---|---|
 | `map_set(m, key, v)` | Insert or replace |
-| `map_get(m, key)` / `map_get(m, key, default)` | Value for `key`. A missing key is a `Name Error`, like `m[key]`, unless a default is given, which is then the result |
+| `map_get(m, key)` / `map_get(m, key, fallback)` | Value for `key`. A missing key is a `Name Error`, like `m[key]`, unless a fallback is given, which is then the result |
 | `map_has(m, key)` | `true` if present |
 | `map_delete(m, key)` | Remove; returns `true` if the key existed |
 | `map_keys(m)`, `map_values(m)` | Lists of keys or values |
@@ -193,8 +200,8 @@ strings only: `"a" + 1` is a `Type Error`, so write `"a{1}"` or `"a" + to_string
 
 | Function | Description | Example |
 |---|---|---|
-| `split(s, delim)` | Splits into a list of strings. Every character of `delim` separates (`split("a-b,c", "-,")` gives three pieces), and empty pieces are dropped. An empty delimiter splits into characters | `split("a,b,c", ",")` is `["a", "b", "c"]` |
-| `join(list, delim)` | Joins list items (converted to text) with the delimiter | `join(["a", "b", "c"], "-")` is `"a-b-c"` |
+| `split(s, sep)` | Splits into a list of strings. Every character of `sep` separates (`split("a-b,c", "-,")` gives three pieces), and empty pieces are dropped. An empty separator splits into characters | `split("a,b,c", ",")` is `["a", "b", "c"]` |
+| `join(list, sep)` | Joins list items (converted to text) with the separator | `join(["a", "b", "c"], "-")` is `"a-b-c"` |
 
 ### Interpolation
 
@@ -398,7 +405,7 @@ list, and its size is fixed: `append` does not accept it.
 
 | Function | Description |
 |---|---|
-| `dense_list(size, fill)` | `dense_list(3, 1.5)` is `d[1.5, 1.5, 1.5]` |
+| `dense_list(n, fill)` | `dense_list(3, 1.5)` is `d[1.5, 1.5, 1.5]` |
 | `vec_add(a, b)`, `vec_sub(a, b)`, `vec_mul(a, b)`, `vec_div(a, b)` | Element-wise operation on two lists of numbers of the same length; returns a new dense list. Different lengths, a non-number element, a division by zero and a float overflow are errors |
 | `vec_mul_inline(a, b)` | Multiplies dense list `a` by dense list `b` in place, without allocating; both must have the same length |
 | `mat_mul(a, b)` | Matrix product of two lists of rows (lists or dense lists); returns a list of dense rows |

@@ -1,0 +1,7 @@
+Argument Error [E0125] in /tmp/zue_test_case.zu at line 4:
+  Named arguments go in the order of the parameters
+
+   4 | print(greet("Ann", mark: "?", greeting: "Hi"))
+     |                               ^^^^^^^^ 'greeting' comes before 'mark'
+
+Hint: Usage: greet(name, greeting, mark)

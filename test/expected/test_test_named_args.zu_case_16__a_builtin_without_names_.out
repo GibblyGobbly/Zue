@@ -1,0 +1,7 @@
+Argument Error [E0125] in /tmp/zue_test_case.zu at line 1:
+  print() takes no named arguments
+
+   1 | print("a", b: 1)
+     |            ^ a named argument
+
+Hint: Pass the arguments of print() by position

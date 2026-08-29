@@ -306,6 +306,32 @@ let doubled = map([1, 2, 3], func(x) { return x * 2 })
 let total = reduce(doubled, func(acc, x) { return acc + x }, 0)
 ```
 
+### Named arguments
+
+A call can name its arguments with the names of the parameters:
+
+```javascript
+func greet(name, greeting = "Hello", mark = "!") {
+    return "{greeting}, {name}{mark}"
+}
+greet("Ann", mark: "?")                   # "Hello, Ann?": greeting keeps its default
+greet(name: "Bo", greeting: "Hi")
+let p = Point(x: 1, y: 2)                 # the fields of a template
+range(0, 10, step: 2)                     # builtins have names too
+```
+
+| Rule | Example of the error |
+|---|---|
+| Named arguments come after the positional ones | `greet(greeting: "Hi", "Ann")` |
+| They go in the order of the parameters, so they run in the order they are written | `greet("Ann", mark: "?", greeting: "Hi")` |
+| Each parameter is given once | `greet("Ann", name: "Bo")` |
+| A parameter without a default gets a value | `greet(greeting: "Hi")` |
+| An unknown name is an error that lists the names | `greet("Ann", greting: "Hi")`: `greet() has no parameter 'greting'` |
+| The function is known when the program is built: declared with `func` here or in an imported file (and not assigned elsewhere), a template or bloc, or a builtin | `let f = greet` then `f("Ann", mark: "?")` |
+
+A parameter with a default can be left out before a named one; the function then uses its default.
+These errors have the code `E0125`.
+
 If the file defines a zero-argument `main()`, it runs automatically after the top level.
 
 Recursion is limited to 100000 nested calls; beyond that the program stops with

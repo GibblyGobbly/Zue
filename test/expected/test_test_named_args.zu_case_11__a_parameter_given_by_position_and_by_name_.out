@@ -1,0 +1,9 @@
+Argument Error [E0125] in /tmp/zue_test_case.zu at line 4:
+  'name' is given by position and by name
+
+   4 | print(greet("Ann", name: "Bo"))
+     |             -----  ^^^^ given again here
+     |             |
+     |             given by position here
+
+Hint: Give each argument once

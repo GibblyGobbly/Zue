@@ -1083,6 +1083,15 @@ func lv_try_field(o, t, key, ic) {
     return _tag(o) != T_NULL
 }
 
+# Whether an argument is the absent value: a call with named arguments passes it for a parameter with a
+# default that it leaves out. It is a null with payload 1; every other null has payload 0.
+func lvp_is_absent(v) {
+    if (_tag(v) == T_NULL and ld64(v + 8) == 1) {
+        return 1
+    }
+    return 0
+}
+
 # target.name
 func lvp_field(o, t, key) {
     let tt = _tag(t)

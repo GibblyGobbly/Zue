@@ -1,0 +1,7 @@
+Argument Error [E0125] in /tmp/zue_test_case.zu at line 1:
+  range() has no parameter 'by'
+
+   1 | print(range(0, 10, by: 2))
+     |                    ^^ not a parameter
+
+Hint: The parameters are: start, end, step

@@ -1,0 +1,7 @@
+Syntax Error [E0125] in /tmp/zue_test_case.zu at line 4:
+  A positional argument cannot come after a named one
+
+   4 | print(greet(greeting: "Hi", "Ann"))
+     |                             ^^^^^ positional, after a named argument
+
+Hint: Put the positional arguments first, or name this one too

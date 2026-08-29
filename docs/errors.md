@@ -122,6 +122,7 @@ example to be sure it causes the error it claims to.
 | `E0121` | A use or export is not valid |
 | `E0122` | A switch has something other than case or default |
 | `E0124` | A conversion or its 'else' is written wrongly |
+| `E0125` | A named argument does not fit the call |
 | `E0123` | A token other than the expected one was found |
 | `E0420` | Two lists have different sizes |
 | `E0201` | An operator is used on values of the wrong types |

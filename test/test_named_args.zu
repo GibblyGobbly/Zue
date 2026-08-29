@@ -1,0 +1,129 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Named arguments: a call can name any parameter, after the positional arguments and in the order of the
+# parameters. A parameter with a default can be left out before a named one.
+
+# CASE named arguments after positional ones
+func greet(name, greeting = "Hello", mark = "!") {
+    return "{greeting}, {name}{mark}"
+}
+print(greet("Ann"))
+print(greet("Ann", greeting: "Hi"))
+print(greet("Ann", mark: "?"))
+print(greet(name: "Bo", greeting: "Hey", mark: "."))
+print(greet("Cy", "Yo", mark: "..."))
+
+# CASE a parameter left out in the middle keeps its default
+func volume(w, h = 2, depth = 1) {
+    return w * h * depth
+}
+print(volume(2, depth: 5))
+print(volume(3, h: 1))
+
+# CASE a nested function
+func area(w, h) {
+    func half(v, by = 2.0) {
+        return v / by
+    }
+    return half(w * h, by: 1.0)
+}
+print(area(w: 2.0, h: 3.0))
+
+# CASE a function value called later still uses its defaults
+func tag(text, open = "<", close = ">") {
+    return open + text + close
+}
+print(tag("b", close: "]"))
+let f = tag
+print(f("i"))
+
+# CASE named fields of a template
+template Point { x, y }
+let p = Point(x: 1, y: 2)
+print(p.x + p.y)
+let q = Point(5, y: 6)
+print(q.y)
+
+# CASE builtins take names too
+print(range(0, 10, step: 3))
+print(split("a,b", sep: ","))
+print(to_string(3.14159, digits: 2))
+print(join(["x", "y"], sep: "-"))
+print(index_of("banana", "an", start: 2))
+let t = map_get({"a": 1}, "b", fallback: 0)
+print(t)
+
+# CASE an unknown name lists the parameters
+func greet(name, greeting = "Hello") {
+    return greeting + name
+}
+print(greet("Ann", greting: "Hi"))
+
+# CASE an unknown name of a builtin
+print(range(0, 10, by: 2))
+
+# CASE a positional argument after a named one
+func greet(name, greeting = "Hello") {
+    return greeting + name
+}
+print(greet(greeting: "Hi", "Ann"))
+
+# CASE an argument named twice
+func greet(name, greeting = "Hello") {
+    return greeting + name
+}
+print(greet("Ann", greeting: "Hi", greeting: "Yo"))
+
+# CASE a parameter given by position and by name
+func greet(name, greeting = "Hello") {
+    return greeting + name
+}
+print(greet("Ann", name: "Bo"))
+
+# CASE named arguments out of the order of the parameters
+func greet(name, greeting = "Hello", mark = "!") {
+    return greeting + name + mark
+}
+print(greet("Ann", mark: "?", greeting: "Hi"))
+
+# CASE a parameter without a default must be given
+func line(a, b, c = 0) {
+    return a + b + c
+}
+print(line(1, c: 2))
+
+# CASE too many positional arguments
+func one(a, b = 1) {
+    return a + b
+}
+print(one(1, 2, 3, b: 4))
+
+# CASE a builtin cannot skip a parameter
+print(index_of("banana", start: 2))
+
+# CASE a builtin without names
+print("a", b: 1)
+
+# CASE a variable cannot take named arguments
+let g = func(a, b = 2) {
+    return a + b
+}
+print(g(1, b: 3))
+
+# CASE a function that is assigned elsewhere cannot take named arguments
+func h(a, b = 2) {
+    return a + b
+}
+func other(a, b = 0) {
+    return a
+}
+h = other
+print(h(1, b: 3))
+
+# CASE an absent value is never seen by the program
+func show(a = 1, b = 2) {
+    return [a, b]
+}
+print(show(b: 5))
+print(show(a: null, b: 3))

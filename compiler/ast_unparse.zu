@@ -148,7 +148,18 @@ func expr(n) {
         return func_text(n, 0)
     }
     if (k == "call") {
-        return "{expr(n.callee)}({exprs(n.args)})"
+        if (n.names == null) {
+            return "{expr(n.callee)}({exprs(n.args)})"
+        }
+        let parts = []
+        for (let i = 0; i < len(n.args); i++) {
+            if (n.names[i] == null) {
+                append(parts, expr(n.args[i]))
+            } else {
+                append(parts, "{n.names[i]}: {expr(n.args[i])}")
+            }
+        }
+        return "{expr(n.callee)}({join(parts, ", ")})"
     }
     if (k == "index") {
         return "{expr(n.target)}[{expr(n.index)}]"

@@ -1428,7 +1428,7 @@ func ck_user_call(name, fn, idx, argtypes, call) {
         if (fn.ptypes != null and fn.ptypes[i] != null) {
             want = annot(fn.ptypes[i], span_or(ptype_span(fn, i), fn), true)
         }
-        if (i < len(argtypes)) {
+        if (i < len(argtypes) and argtypes[i] != "absent") {
             let at = argtypes[i]
             if (want != null) {
                 strict_known(at, argnodes[i], "argument {i + 1} of {name}()")
@@ -1651,6 +1651,10 @@ func ck_func(n) {
 
 func ck_expr(n) {
     let k = n.k
+    if (k == "absent") {
+        # a parameter with a default that a call with named arguments leaves out (named_args.zu)
+        return "absent"
+    }
     if (k == "num") {
         if (len(CALLS) > 0 and n.ads != null and map_get(n.ads, call_key(), null) == "float") {
             return "float"

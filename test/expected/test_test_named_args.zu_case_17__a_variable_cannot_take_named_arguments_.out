@@ -1,0 +1,7 @@
+Argument Error [E0125] in /tmp/zue_test_case.zu at line 4:
+  Named arguments need a function known when the program is built
+
+   4 | print(g(1, b: 3))
+     |       ^ 'g' is a variable
+
+Hint: Pass the arguments by position, or call a function declared with func by its name

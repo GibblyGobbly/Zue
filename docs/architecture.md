@@ -7,6 +7,7 @@ This page describes how a program becomes a binary. The only external pieces are
 prog.zu
   |  compiler/lexer.zu        tokens
   |  compiler/parser.zu       AST (node templates and lists)
+  |  compiler/named_args.zu   named arguments put in the places of their parameters
   |  compiler/check.zu        compile-time type check
   |  compiler/analysis.zu     names used, exports, closure captures
   |  compiler/emit_llvm.zu    LLVM IR text
@@ -36,6 +37,7 @@ compiler in detail.
 | `error_codes.zu` | Generated from `error_codes.txt` by `tools/gen_error_codes.py`: the error codes with their explanations, and `code_for(message)`. The runtime has the matching `zue_rt_codes.zu` |
 | `parser.zu` | Recursive descent with precedence climbing; produces the AST. `x[a:b]` becomes an `NSlice` node, `x[i]` an `NIndex` node. After an error it skips to the next statement (panic mode) so that one run reports every syntax error without false follow-up errors |
 | `ast_nodes.zu` | The AST node types: one `template` per kind of node (`NBin`, `NLet`, ...) with its `mk_*` constructor, and `NODE_FIELDS`, the fields of each kind. A node always has `k` (the kind) and `line`, then the fields of its kind, then `col`, `eline` and `ecol`, its place in the source. Some kinds also hold the places of a name, an operator or a type for the checker. Reading a field its kind does not have is an error |
+| `named_args.zu` | Turns named arguments into positional ones before the checker runs, from the parameters of the function (this file or an imported one), the fields of a template, or the names of a builtin; a parameter with a default that is left out gets an absent value (a null with payload 1) |
 | `check.zu` | The compile-time type checker for the main program and imported modules: variable types, operators, conditions, the signatures of the math builtins, and names that are declared nowhere. It reports every error it can prove, in source order. See [syntax](syntax.md#type-checking) and [errors](errors.md) |
 | `analysis.zu` | Which names a function reads and writes, exports, and which variables closures capture |
 | `emit_llvm.zu`, `ll_state.zu`, `ll_scope.zu` | The LLVM IR backend: expressions, statements, functions, modules, scopes and deferred calls |

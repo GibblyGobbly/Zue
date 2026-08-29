@@ -1056,7 +1056,7 @@ are not built: with two markers the spin is 1 percent of the run or less.
 | c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
 | d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |
 
-## Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 and 2 and per-value templates done 2026-11-05)
+## Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 to 3 and per-value templates done 2026-11-05)
 
 The language changes after the collector work. The aim: every type known when the program is built, values
 that cannot change unless they say so, conversions with one clear meaning, named arguments, and memory that
@@ -1153,7 +1153,17 @@ let f = open("data.txt") else { print("no file"); return }
 if (let l = node.left) { walk(l) }
 ```
 
-### Phase 3: named arguments
+### Phase 3: named arguments (done)
+
+Done as below, with these choices: named arguments go in the order of the parameters (so they run in the
+order they are written; this can be relaxed later without breaking programs), a parameter with a default
+can be left out before a named one (the call passes an absent value, a null with payload 1, and the
+function uses its default), template and bloc fields take names, and the callee must be known when the
+program is built (a function declared with func here or in an imported file and never assigned, a
+template, or a builtin). Builtins that take different argument lists (`min`, `max`, `rand`, `trand`,
+`slice`, `contains`), any number (`print`, `spawn`) or work inside `unsafe` take no names. `default` is a
+keyword, so `map_get`'s third parameter is named `fallback`. The pass is `compiler/named_args.zu`, run
+before the checker; errors are `E0125`.
 
 | Rule | Example |
 |---|---|

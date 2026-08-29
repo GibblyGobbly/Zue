@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Named arguments for a function of an imported file.
+
+use { greet } from "fixtures/named_greet.zu"
+
+print(greet("Ann", mark: "?"))
+print(greet(name: "Bo", greeting: "Hi"))

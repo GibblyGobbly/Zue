@@ -1,0 +1,7 @@
+Name Error [E0301] in /tmp/zue_test_case.zu at line 1:
+  Variable 'area' is not defined
+
+   1 | print(area(w: 2.0, h: 3.0))
+     |       ^^^^
+
+Hint: Declare variables with 'let' before using them

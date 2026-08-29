@@ -1,0 +1,7 @@
+Argument Error [E0125] in /tmp/zue_test_case.zu at line 4:
+  line() needs a value for 'b'
+
+   4 | print(line(1, c: 2))
+     |           ^^^^^^^^^ 'b' is not given
+
+Hint: Usage: line(a, b, c)

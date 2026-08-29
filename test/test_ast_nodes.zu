@@ -25,6 +25,7 @@ let lines = [
     "}",
     "let bx = box[8]",
     "let r = add(1)[0].v",
+    "let named = add(1, q: 3)",
     "a++",
     "--b",
     "a += 1",
@@ -89,9 +90,14 @@ func visit(x) {
 }
 visit(tree)
 
+# Kinds that only a pass after the parser makes: absent (named_args.zu).
+let made_later = ["absent"]
 let kinds = map_keys(NODE_FIELDS)
 sort(kinds)
 for (let kind in kinds) {
+    if (contains(made_later, kind)) {
+        continue
+    }
     if (seen[kind] == null) {
         print("the program has no {kind} node")
     }

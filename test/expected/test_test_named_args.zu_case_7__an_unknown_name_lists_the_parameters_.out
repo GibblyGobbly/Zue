@@ -1,0 +1,7 @@
+Argument Error [E0125] in /tmp/zue_test_case.zu at line 4:
+  greet() has no parameter 'greting'
+
+   4 | print(greet("Ann", greting: "Hi"))
+     |                    ^^^^^^^ not a parameter
+
+Hint: Did you mean 'greeting'? The parameters are: name, greeting

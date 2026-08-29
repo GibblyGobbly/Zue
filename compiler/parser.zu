@@ -561,17 +561,60 @@ func p_primary() {
     return mk_lit("num", tk, tk, "0")
 }
 
+# The arguments of a call: [values, names, name tokens]. A named argument is written name: value and
+# comes after the positional ones; names is null when no argument is named, else it holds the name of
+# each argument (null for a positional one).
 func p_args(closer, msg) {
     p_enter()
     let args = []
+    let names = []
+    let ntoks = []
+    let named = false
     while (not p_at(closer) and not p_at("eof")) {
+        let nt = null
+        if (P_kind == "id" and P_toks[P_pos + 1].t == ":") {
+            nt = p_next()
+            p_next()
+            for (let i = 0; i < len(names); i++) {
+                if (names[i] == nt.v) {
+                    let d = p_fail_at(nt, "Argument '{nt.v}' is named twice", "named again here")
+                    if (d != null) {
+                        diag_label(d, ntoks[i], "first named here")
+                        diag_hint(d, "Give each argument once")
+                    }
+                }
+            }
+            named = true
+        } else if (named) {
+            let d = p_fail_at(P_tk, "A positional argument cannot come after a named one", "positional, after a named argument")
+            if (d != null) {
+                diag_hint(d, "Put the positional arguments first, or name this one too")
+            }
+        }
         append(args, p_expr())
+        if (nt == null) {
+            append(names, null)
+        } else {
+            append(names, nt.v)
+        }
+        append(ntoks, nt)
         if (not p_eat(",")) {
             break
         }
     }
     p_close(closer, msg)
-    return args
+    if (not named) {
+        return [args, null, null]
+    }
+    return [args, names, ntoks]
+}
+
+# A call node with the arguments p_args gave.
+func p_mk_call(st, callee, a, open) {
+    let c = mk_call(st, P_prev, callee, a[0], span_at(open.line, open.col, P_prev.eline, P_prev.ecol))
+    c.names = a[1]
+    c.nspans = a[2]
+    return c
 }
 
 func p_postfix() {
@@ -581,13 +624,11 @@ func p_postfix() {
         if ((P_kind == "(")) {
             let open = P_tk
             p_next()
-            let args = p_args(")", "Expected ')' after arguments")
-            e = mk_call(st, P_prev, e, args, span_at(open.line, open.col, P_prev.eline, P_prev.ecol))
+            e = p_mk_call(st, e, p_args(")", "Expected ')' after arguments"), open)
         } else if ((P_kind == "\{") and e.k == "id") {
             let open = P_tk
             p_next()
-            let args = p_args("}", "Expected '}' after typed constructor arguments")
-            e = mk_call(st, P_prev, e, args, span_at(open.line, open.col, P_prev.eline, P_prev.ecol))
+            e = p_mk_call(st, e, p_args("}", "Expected '}' after typed constructor arguments"), open)
         } else if ((P_kind == "[")) {
             p_next()
             p_enter()

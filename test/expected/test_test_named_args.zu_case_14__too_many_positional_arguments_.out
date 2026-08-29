@@ -1,0 +1,7 @@
+Argument Error [E0125] in /tmp/zue_test_case.zu at line 4:
+  one() has only 2 parameters
+
+   4 | print(one(1, 2, 3, b: 4))
+     |                 ^ one argument too many
+
+Hint: Usage: one(a, b)

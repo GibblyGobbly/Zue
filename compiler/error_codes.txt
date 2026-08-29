@@ -204,6 +204,20 @@ example:
 fix: Give a value that may be missing, such as s as int or m[key], and end the 'else' block with
     return, break or continue.
 
+== E0125
+title: A named argument does not fit the call
+match: is named twice | cannot come after a named one | has no parameter | by position and by name | Named arguments go in the order | needs a value for | has only | cannot skip | takes no named arguments | Named arguments need a function
+text: A call can name its arguments, greet("Ann", greeting: "Hi"). The named ones come after the
+    positional ones and in the order of the parameters, each parameter is given once, and every
+    parameter without a default gets a value. The function must be known when the program is built:
+    one declared with func (and not assigned elsewhere), a template, or a builtin that has names.
+example:
+    func greet(name, greeting = "Hello") {
+        return greeting + name
+    }
+    print(greet("Ann", greting: "Hi"))
+fix: Use the names the message lists, in their order, or pass the arguments by position.
+
 == E0123
 title: A token other than the expected one was found
 match: Expected | statement outside loop | defer expects a call

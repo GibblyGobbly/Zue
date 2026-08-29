@@ -160,6 +160,36 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("block of a 'let' must leave")) != 0) {
         return cstr("E0124")
     }
+    if (strstr(msg, cstr("is named twice")) != 0) {
+        return cstr("E0125")
+    }
+    if (strstr(msg, cstr("cannot come after a named one")) != 0) {
+        return cstr("E0125")
+    }
+    if (strstr(msg, cstr("has no parameter")) != 0) {
+        return cstr("E0125")
+    }
+    if (strstr(msg, cstr("by position and by name")) != 0) {
+        return cstr("E0125")
+    }
+    if (strstr(msg, cstr("Named arguments go in the order")) != 0) {
+        return cstr("E0125")
+    }
+    if (strstr(msg, cstr("needs a value for")) != 0) {
+        return cstr("E0125")
+    }
+    if (strstr(msg, cstr("has only")) != 0) {
+        return cstr("E0125")
+    }
+    if (strstr(msg, cstr("cannot skip")) != 0) {
+        return cstr("E0125")
+    }
+    if (strstr(msg, cstr("takes no named arguments")) != 0) {
+        return cstr("E0125")
+    }
+    if (strstr(msg, cstr("Named arguments need a function")) != 0) {
+        return cstr("E0125")
+    }
     if (strstr(msg, cstr("Expected")) != 0) {
         return cstr("E0123")
     }

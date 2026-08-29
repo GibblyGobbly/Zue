@@ -1,0 +1,7 @@
+Argument Error [E0125] in /tmp/zue_test_case.zu at line 1:
+  index_of() cannot skip 'sub'
+
+   1 | print(index_of("banana", start: 2))
+     |                          ^^^^^ 'sub' is not given before this
+
+Hint: Give 'sub' too: the arguments of index_of() fill its parameters in order
