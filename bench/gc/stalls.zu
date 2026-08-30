@@ -7,8 +7,8 @@
 # for the GC thread, page faults and the scheduler.
 #   stalls.zu <live MiB> <churn iterations>
 let a = args()
-let live_mb = to_int(a[0])
-let churn = to_int(a[1])
+let live_mb = int(a[0])
+let churn = int(a[1])
 
 let live = []
 let objects = floor_div(live_mb * 1048576, 200)

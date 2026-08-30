@@ -72,9 +72,8 @@ print(char(code('a') + 1))
 # CASE char of a number that is not a byte
 print(char(256))
 
-# CASE the old names to_int and to_float are int and float
+# CASE to_int was removed and the error says what to write
 print(to_int("12"))
-print(to_float("1e3"))
 
 # CASE else runs when the conversion fails
 func number(s) {

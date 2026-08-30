@@ -31,7 +31,7 @@ func add_params(text) {
     }
 }
 
-add_params("len v; str_len s; append list v; list_append list v; type v; int v; float v; string v; code c; char n; to_string x digits; fixed x decimals; to_int s; to_float s; assert cond; input prompt; debug v; range start end step; args; exit code; system cmd; clock")
+add_params("len v; str_len s; append list v; list_append list v; type v; int v; float v; string v; code c; char n; to_string x digits; fixed x decimals; assert cond; input prompt; debug v; range start end step; args; exit code; system cmd; clock")
 add_params("map_set m key v; map_get m key fallback; map_has m key; map_delete m key; map_keys m; map_values m; map_items m; remove list i; find list v; sort list; map list fn; filter list fn; reduce list fn init; is_empty s")
 add_params("concat s1 s2; substring s start n; char_at s i; index_of s sub start; index_of_any s set start; skip_chars s set start; last_index_of s sub; starts_with s pre; ends_with s suf; to_upper s; to_lower s; trim s; trim_left s; trim_right s; replace s old new; reverse s; repeat s n; pad_left s w ch; pad_right s w ch; split s sep; join list sep; is_digit s; is_alpha s; is_alnum s; is_space s")
 add_params("abs x; clamp x lo hi; sign x; pow base exp; sqrt x; cbrt x; exp x; ln x; log10 x; sin x; cos x; tan x; asin x; acos x; atan x; atan2 y x; sinh x; cosh x; tanh x; floor x; ceil x; round x digits; trunc x; fract x; mod x y; floor_div x y; divmod x y; sum list; mean list; gcd a b; lcm a b; isqrt n; lerp a b t; deg_to_rad d; rad_to_deg r")

@@ -12,8 +12,8 @@
 #   aged    like mutate, after the live set was rebuilt in rounds with objects of random sizes, so that
 #           the heap is fragmented
 let a = args()
-let live_mb = to_int(a[0])
-let seconds = to_int(a[1])
+let live_mb = int(a[0])
+let seconds = int(a[1])
 let mode = a[2]
 
 let seed = 12345

@@ -8,7 +8,7 @@ func status_kib(name) {
     for (let line in split(text, "\n")) {
         if (starts_with(line, name)) {
             let parts = split(trim(substring(line, len(name), len(line))), " ")
-            return to_int(parts[0])
+            return int(parts[0])
         }
     }
     print("no {name} line")

@@ -25,10 +25,10 @@ let z = to_string('\0')
 let a = "a" + z + "b"
 let parts = split(a + ",x,,y", ",")
 print(len(parts), len(parts[0]), parts[1], parts[2])
-# CASE to_int of text with a NUL byte
-print(to_int("12" + to_string('\0') + "xyz"))
-# CASE to_float of text with a NUL byte
-print(to_float("1.5" + to_string('\0') + "x"))
+# CASE int of text with a NUL byte
+print(int("12" + to_string('\0') + "xyz"))
+# CASE float of text with a NUL byte
+print(float("1.5" + to_string('\0') + "x"))
 # CASE chars above 127 order the same in sort and in comparisons
 let hi = "é"[0]
 let cs = [hi, 'a']

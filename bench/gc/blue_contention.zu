@@ -6,10 +6,10 @@
 # every cycle, so the cost grows with their number and their depth.
 #   blue_contention.zu <threads> <stack depth> <seconds> <live MiB>
 let a = args()
-let nthreads = to_int(a[0])
-let depth = to_int(a[1])
-let seconds = to_int(a[2])
-let live_mb = to_int(a[3])
+let nthreads = int(a[0])
+let depth = int(a[1])
+let seconds = int(a[2])
+let live_mb = int(a[3])
 
 func park(n, ch) {
     if (n > 0) {

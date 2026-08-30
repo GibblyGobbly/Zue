@@ -83,7 +83,7 @@ func _number_list(self_p, argv_p) {
     for (let i = 0; i < n; i++) {
         lvp_iter_at(item, argv_p, i)
         if (_is_num(item) == 0) {
-            _errf(E_TYPE, cstr("Every item must be an int or a float; convert text with to_int() or to_float()"), cstr("%s() list items must be numbers, got %s"), _fname(self_p), _type_name(item), 0)
+            _errf(E_TYPE, cstr("Every item must be an int or a float; convert text with s as int or s as float"), cstr("%s() list items must be numbers, got %s"), _fname(self_p), _type_name(item), 0)
         }
         if (_tag(item) != _tag(first)) {
             _errf(E_TYPE, cstr("Convert the items with int() or float() so that all have the same type."),

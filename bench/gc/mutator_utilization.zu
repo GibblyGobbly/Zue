@@ -11,11 +11,11 @@
 # Many short stops close together give a low MMU even when every single stop is short.
 #   mutator_utilization.zu <live MiB> <iterations> [resolution microseconds]
 let a = args()
-let live_mb = to_int(a[0])
-let iterations = to_int(a[1])
+let live_mb = int(a[0])
+let iterations = int(a[1])
 let resolution = 0.00001
 if (len(a) > 2) {
-    resolution = to_float(a[2]) / 1000000.0
+    resolution = float(a[2]) / 1000000.0
 }
 
 let live = []

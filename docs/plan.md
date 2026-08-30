@@ -1102,7 +1102,8 @@ simple: no generics syntax, no classes or interfaces, no `?` types or operators.
 ### Phase 1: conversions (done)
 
 Done as below, with one difference: `int(p)` stays the pointer cast (no `address(p)`), and `to_int` and
-`to_float` stay as older names of `int` and `float`. Templates typed per value (from phase 4) are done too.
+`to_float` stayed as older names of `int` and `float` until 2026-11-05, when they were removed (using one
+is an error that says what to write). Templates typed per value (from phase 4) are done too.
 
 `x as T` and `T(x)` succeed only when the value means exactly the same as a `T`. Anything else is an error,
 and a compile error when the checker can see it can never work (`[1] as int`).

@@ -8,8 +8,8 @@
 # With a third argument the live data is a few large lists instead of many small ones.
 
 let a = args()
-let live_mb = to_int(a[0])
-let churn = to_int(a[1])
+let live_mb = int(a[0])
+let churn = int(a[1])
 let big = len(a) > 2
 
 let t0 = clock()

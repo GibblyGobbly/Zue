@@ -13,6 +13,6 @@ let status = read(f)
 close(f)
 for (let line in split(status, "\n")) {
     if (starts_with(line, "VmHWM:")) {
-        print(to_int(trim(replace(replace(line, "VmHWM:", ""), "kB", ""))))
+        print(int(trim(replace(replace(line, "VmHWM:", ""), "kB", ""))))
     }
 }

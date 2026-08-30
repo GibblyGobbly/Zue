@@ -118,12 +118,8 @@ func ck_init_sigs() {
     sig("trand", [[[], "int"], [["int"], "int"], [["int", "int"], "int"]])
     # Conversions keep the value: an int from a whole float or from text, a float from an int or from text.
     # A char or a bool is not a number (code(c) gives a character's code).
-    for (let nm in ["float", "to_float"]) {
-        sig(nm, [[["int"], "float"], [["float"], "float"], [["string"], "float"]])
-    }
-    for (let nm in ["int", "to_int"]) {
-        sig(nm, [[["float"], "int"], [["int"], "int"], [["string"], "int"]])
-    }
+    sig("float", [[["int"], "float"], [["float"], "float"], [["string"], "float"]])
+    sig("int", [[["float"], "int"], [["int"], "int"], [["string"], "int"]])
     sig("to_string", [[["any"], "string"], [["float", "int"], "string"]])
     sig("string", [[["any"], "string"]])
     sig("code", [[["char"], "int"]])
@@ -645,6 +641,9 @@ func check_name(n, what) {
     return true
 }
 
+# Builtins that were removed, and what to write instead.
+let REMOVED_NAMES = {"to_int": "s as int, or int(s)", "to_float": "s as float, or float(s)"}
+
 func undefined_error(span, name, what, scopes) {
     let d = fail_at(span, "{what} '{name}' is not defined", "Name Error")
     diag_text(d, "not declared anywhere")
@@ -652,6 +651,10 @@ func undefined_error(span, name, what, scopes) {
         diag_hint(d, "Define it with func {name}(...) before calling it, or check the spelling of a builtin")
     } else {
         diag_hint(d, "Declare variables with 'let' before using them")
+    }
+    if (map_has(REMOVED_NAMES, name)) {
+        diag_hint(d, "{name} was removed: write {REMOVED_NAMES[name]}")
+        return null
     }
     # the "did you mean" replaces the hint later, if the error is printed (fill_guesses)
     if (d != null) {
@@ -1083,7 +1086,7 @@ func ck_builtin_call(n, name, alts, argtypes) {
     let d = fail_at(args_span(n), "{name}() cannot be called with ({join(got, sep)}); use {join(forms, or_text)}")
     diag_text(d, "no form takes ({join(got, sep)})")
     diag_label(d, node_span(n.callee), name)
-    if ((name == "int" or name == "float" or name == "to_int" or name == "to_float") and len(got) == 1) {
+    if ((name == "int" or name == "float") and len(got) == 1) {
         if (got[0] == "char") {
             diag_hint(d, "A char is not a number: code(c) gives the code of a character")
         } else if (got[0] == "bool") {

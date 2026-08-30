@@ -1,7 +1,0 @@
-Argument Error [E0413] in /tmp/zue_test_case.zu at line 1:
-  to_int() cannot read text that holds a NUL byte as a number
-
-   1 | print(to_int("12" + to_string('\0') + "xyz"))
-     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Hint: Text read as a number holds only digits, a sign, a point and an exponent.

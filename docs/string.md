@@ -12,7 +12,7 @@ explains it.
 | Strings never change | Every function returns a new string. `s[0] = "x"` is an error |
 | `s[i]` gives a `char` | `"Zue"[0]` is `'Z'`; `"Zue"[-1]` is `'e'`. A `char` and a one-letter string are different: `'a' == "a"` is an error |
 | `+` joins strings only | `"a" + 1` is a `Type Error`. Write `"a{1}"` or `"a" + to_string(1)` |
-| No hidden conversion | `to_int`, `to_float` and `to_string` do it on purpose, and a bad text is an error, never `0` |
+| No hidden conversion | `as int`, `as float` and `as string` do it on purpose, and a bad text is an error, never `0` |
 | Positions in `s[a:b]` start at 0 | Like indexes. Both ends are included |
 
 ### Interpolation
@@ -84,7 +84,7 @@ characters (the lexer uses them).
 | Function | Returns | Notes |
 |---|---|---|
 | `to_string(v)` | string | Any value |
-| `s as int`, `s as float` (also `int(s)`, `float(s)`, `to_int(s)`, `to_float(s)`) | int, float | The whole text must be a number. Spaces around it are allowed. Anything else is an error, or the `else` block of `let n = s as int else { ... }` |
+| `s as int`, `s as float` (also `int(s)`, `float(s)`) | int, float | The whole text must be a number. Spaces around it are allowed. Anything else is an error, or the `else` block of `let n = s as int else { ... }` |
 | `int(s)`, `float(s)` | int, float | The same rules for strings; they also take other types |
 
 ### Strings and lists
@@ -399,7 +399,7 @@ print(index_of_any("name@host.com", "@."))
 print(last_index_of("a.b.c", "."))
 print(ends_with("photo.png", ".png"))
 print(split("2026-10-26", "-"))
-print(to_int("2026") + 1)
+print("2026" as int + 1)
 ```
 
 Output:
@@ -423,4 +423,4 @@ How it works:
 - `substring(src, i, n)` takes `n` bytes from `i`, and `slice(src, a, b)` takes positions `a` to `b`, counting from 0 and including both. `substring` takes a start and a length instead.
 - `index_of(line, "=")` splits `mode = fast` into the key and the value, and `trim` removes the spaces around each.
 - `word[0:3]` is `lang`: positions start at 0 and both ends are included. `word[4:]` runs to the end and `word[:2]` starts at the first character.
-- `index_of_any("name@host.com", "@.")` finds the first of several characters, `last_index_of` finds the last match, and `split("2026-10-26", "-")` gives a list of text pieces that `to_int` can read.
+- `index_of_any("name@host.com", "@.")` finds the first of several characters, `last_index_of` finds the last match, and `split("2026-10-26", "-")` gives a list of text pieces that `as int` can read.

@@ -130,7 +130,7 @@ func case_sort() {
                 print("sort round {round} damaged element {k}")
                 exit(1)
             }
-            got += to_int(s)
+            got += int(s)
             prev = s
         }
         if (got != want) {

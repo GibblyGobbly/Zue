@@ -35,8 +35,8 @@ print(d[1:], slice(d, 0, 1), d[3:])
 # CASE map keys with quotes print escaped
 print({"a\"b": "x", "c\\d": 1})
 # CASE text too small for a float
-print(to_float("0.0e-400"), to_float("1e-300"))
-print(to_float("1e-400"))
+print(float("0.0e-400"), float("1e-300"))
+print(float("1e-400"))
 # CASE read_line drops a CRLF ending
 let f = open("test_details_tmp.txt", "w")
 write(f, "a\r\nb\n")

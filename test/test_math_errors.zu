@@ -18,8 +18,8 @@ print(int("-9223372036854775808"))
 print(int("9223372036854775808"))
 # CASE int of text that is not a number
 print(int("12abc"))
-# CASE to_int of an empty string
-print(to_int(""))
+# CASE int of an empty string
+print(int(""))
 # CASE int of text with spaces and a sign
 print(int("  -42  "))
 print(int("+7"))

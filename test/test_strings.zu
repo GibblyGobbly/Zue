@@ -53,7 +53,7 @@ let joined = join(list, " | ")
 assert(joined == "apple | banana | cherry")
 
 print("Testing conversions...")
-assert(to_int("123") == 123)
+assert(int("123") == 123)
 assert(is_digit("123") == true)
 assert(is_alpha("abc") == true)
 

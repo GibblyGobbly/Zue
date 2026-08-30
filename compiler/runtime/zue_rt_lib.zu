@@ -56,7 +56,7 @@ func _convert_hint(want, got) {
             return cstr("A float never becomes an int by itself: use int(x), floor(x), ceil(x) or round(x)")
         }
         if (_is(got, cstr("string"))) {
-            return cstr("Convert text to a number with to_int(s)")
+            return cstr("Convert text to a number with s as int")
         }
         return cstr("Pass a whole number such as 3")
     }
@@ -65,13 +65,13 @@ func _convert_hint(want, got) {
             return cstr("An int never becomes a float by itself: convert it with float(x), or write 2.0")
         }
         if (_is(got, cstr("string"))) {
-            return cstr("Convert text to a number with to_float(s)")
+            return cstr("Convert text to a number with s as float")
         }
         return cstr("Pass a number with a decimal point such as 2.5")
     }
     if (_is(want, cstr("number"))) {
         if (_is(got, cstr("string"))) {
-            return cstr("Convert text to a number with to_int(s) or to_float(s)")
+            return cstr("Convert text to a number with s as int or s as float")
         }
         return cstr("Pass an int such as 3 or a float such as 2.5")
     }
@@ -374,7 +374,7 @@ func _read_float(s, out_p) {
     if (_is_finite(r) == 0) {
         return 2
     }
-    # A value too small for a float would read as 0.0 without a word (to_float("1e-400")); it is refused
+    # A value too small for a float would read as 0.0 without a word (float("1e-400")); it is refused
     # unless the digits before the exponent are all zero.
     if (feq(r, 0.0)) {
         let q = start
@@ -673,21 +673,6 @@ func lb_fixed(self_p, argc_i, argv_p) {
     }
     let o = stack_buf(16)
     _str_n(o, tmp + start, strlen(tmp) - start)
-    retp(o)
-}
-
-# to_int and to_float: the old names of int and float.
-func lb_to_int(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 1, 1)
-    let o = stack_buf(16)
-    callv(o, lb_int, self_p, argc_i, argv_p)
-    retp(o)
-}
-
-func lb_to_float(self_p, argc_i, argv_p) {
-    lv_arity(self_p, argc_i, 1, 1)
-    let o = stack_buf(16)
-    callv(o, lb_float, self_p, argc_i, argv_p)
     retp(o)
 }
 

@@ -1,0 +1,7 @@
+Name Error [E0301] in /tmp/zue_test_case.zu at line 1:
+  Function 'to_int' is not defined
+
+   1 | print(to_int("12"))
+     |       ^^^^^^ not declared anywhere
+
+Hint: to_int was removed: write s as int, or int(s)

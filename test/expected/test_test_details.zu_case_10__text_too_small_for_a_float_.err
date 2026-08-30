@@ -1,7 +1,7 @@
 Runtime Error [E0411] in /tmp/zue_test_case.zu at line 2:
-  to_float() value "1e-400" does not fit in a 64-bit float
+  float() value "1e-400" does not fit in a 64-bit float
 
-   2 | print(to_float("1e-400"))
-     |       ^^^^^^^^^^^^^^^^^^
+   2 | print(float("1e-400"))
+     |       ^^^^^^^^^^^^^^^
 
 Hint: The smallest float above 0 is about 4.9e-324.

@@ -1,7 +1,7 @@
 Argument Error [E0413] in /tmp/zue_test_case.zu at line 1:
-  to_int() cannot read "" as an integer
+  int() cannot read "" as an integer
 
-   1 | print(to_int(""))
-     |       ^^^^^^^^^^
+   1 | print(int(""))
+     |       ^^^^^^^
 
 Hint: Use a string of digits such as "42" or "-7".

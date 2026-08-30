@@ -62,7 +62,7 @@ func peak_kib() {
     close(f)
     for (let line in split(text, "\n")) {
         if (starts_with(line, "VmHWM:")) {
-            return to_int(split(trim(substring(line, 6, len(line))), " ")[0])
+            return int(split(trim(substring(line, 6, len(line))), " ")[0])
         }
     }
     return 0
