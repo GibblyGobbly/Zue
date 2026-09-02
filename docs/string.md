@@ -399,7 +399,8 @@ print(index_of_any("name@host.com", "@."))
 print(last_index_of("a.b.c", "."))
 print(ends_with("photo.png", ".png"))
 print(split("2026-10-26", "-"))
-print("2026" as int + 1)
+let year = split("2026-10-26", "-")[0]   # the text "2026"
+print(year as int + 1)
 ```
 
 Output:

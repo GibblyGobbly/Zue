@@ -74,6 +74,22 @@ rejected by the compiler.
 
 ## Conversions
 
+A number you write in the code is already a number: `let n = 42` needs no conversion. Convert when a
+value arrives as the wrong type, most often text from `input()`, a file or `split`:
+
+```javascript
+let line = input("how many? ")   # the user types 42; line is the text "42"
+let n = line as int              # n is the number 42
+print(n + 1)                     # 43 (line + 1 is an error: no math on text)
+```
+
+| You have | Write |
+|---|---|
+| A number written in the code | `let n = 42` |
+| Text that holds a number | `let n = text as int` |
+| Text that might not be a number | `let n = text as int else { ... }` |
+| A number you want as text | `let s = n as string` |
+
 A conversion keeps the value exactly, or it is an error. `x as int`, `x as float` and `x as string` are the
 same as `int(x)`, `float(x)` and `string(x)`; `as` binds tighter than any binary operator
 (`a + b as int` is `a + (b as int)`).
