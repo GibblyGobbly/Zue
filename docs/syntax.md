@@ -324,26 +324,60 @@ let total = reduce(doubled, func(acc, x) { return acc + x }, 0)
 
 ### Named arguments
 
-A call can name its arguments with the names of the parameters:
+A call can name its arguments. This helps when a function has defaults and you want to change only one
+of them. Here `food` must be given, and `drink` and `size` have defaults:
 
 ```javascript
-func greet(name, greeting = "Hello", mark = "!") {
-    return "{greeting}, {name}{mark}"
+func order(food, drink = "water", size = "medium") {
+    print("{food}, {drink}, {size}")
 }
-greet("Ann", mark: "?")                   # "Hello, Ann?": greeting keeps its default
-greet(name: "Bo", greeting: "Hi")
-let p = Point(x: 1, y: 2)                 # the fields of a template
-range(0, 10, step: 2)                     # builtins have names too
+
+order("pizza")
+order("pizza", "cola")
+order("pizza", size: "large")
+order("pizza", drink: "tea", size: "small")
 ```
 
-| Rule | Example of the error |
+Output:
+
+```
+pizza, water, medium
+pizza, cola, medium
+pizza, water, large
+pizza, tea, small
+```
+
+The third call changes only the size. Without names it would be `order("pizza", "water", "large")`,
+repeating the default drink just to reach the size.
+
+Templates and builtins take names too: `Point(x: 1, y: 2)`, `range(0, 10, step: 2)`.
+
+A wrong name stops the build and says what to write:
+
+```javascript
+order("pizza", sise: "large")
+```
+
+Output:
+
+```
+Argument Error [E0125] in shop.zu at line 9:
+  order() has no parameter 'sise'
+
+   9 | order("pizza", sise: "large")
+     |                ^^^^ not a parameter
+
+Hint: Did you mean 'size'? The parameters are: food, drink, size
+```
+
+| Rule | A call that breaks it |
 |---|---|
-| Named arguments come after the positional ones | `greet(greeting: "Hi", "Ann")` |
-| They go in the order of the parameters, so they run in the order they are written | `greet("Ann", mark: "?", greeting: "Hi")` |
-| Each parameter is given once | `greet("Ann", name: "Bo")` |
-| A parameter without a default gets a value | `greet(greeting: "Hi")` |
-| An unknown name is an error that lists the names | `greet("Ann", greting: "Hi")`: `greet() has no parameter 'greting'` |
-| The function is known when the program is built: declared with `func` here or in an imported file (and not assigned elsewhere), a template or bloc, or a builtin | `let f = greet` then `f("Ann", mark: "?")` |
+| Named arguments come after the positional ones | `order(size: "large", "pizza")` |
+| They go in the order of the parameters, so they run in the order they are written | `order("pizza", size: "large", drink: "tea")` |
+| Each parameter is given once | `order("pizza", food: "soup")` |
+| A parameter without a default gets a value | `order(drink: "tea")` |
+| The name must be a parameter | `order("pizza", sise: "large")` |
+| The function is known when the program is built: declared with `func` here or in an imported file (and not assigned elsewhere), a template or bloc, or a builtin | `let f = order` then `f("pizza", size: "large")` |
 
 A parameter with a default can be left out before a named one; the function then uses its default.
 These errors have the code `E0125`.
