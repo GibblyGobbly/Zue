@@ -370,14 +370,14 @@ Argument Error [E0125] in shop.zu at line 9:
 Hint: Did you mean 'size'? The parameters are: food, drink, size
 ```
 
-| Rule | A call that breaks it |
-|---|---|
-| Named arguments come after the positional ones | `order(size: "large", "pizza")` |
-| They go in the order of the parameters, so they run in the order they are written | `order("pizza", size: "large", drink: "tea")` |
-| Each parameter is given once | `order("pizza", food: "soup")` |
-| A parameter without a default gets a value | `order(drink: "tea")` |
-| The name must be a parameter | `order("pizza", sise: "large")` |
-| The function is known when the program is built: declared with `func` here or in an imported file (and not assigned elsewhere), a template or bloc, or a builtin | `let f = order` then `f("pizza", size: "large")` |
+| Rule | A call that breaks it | The error |
+|---|---|---|
+| Named arguments come after the positional ones | `order(size: "large", "pizza")` | `A positional argument cannot come after a named one` |
+| They go in the order of the parameters, so they run in the order they are written | `order("pizza", size: "large", drink: "tea")` | `Named arguments go in the order of the parameters` |
+| Each parameter is given once | `order("pizza", food: "soup")` | `'food' is given by position and by name` |
+| A parameter without a default gets a value | `order(drink: "tea")` | `order() needs a value for 'food'` |
+| The name must be a parameter | `order("pizza", sise: "large")` | `order() has no parameter 'sise'` |
+| The function is known when the program is built: declared with `func` here or in an imported file (and not assigned elsewhere), a template or bloc, or a builtin | `let f = order` then `f("pizza", size: "large")` | `Named arguments need a function known when the program is built` |
 
 A parameter with a default can be left out before a named one; the function then uses its default.
 These errors have the code `E0125`.
