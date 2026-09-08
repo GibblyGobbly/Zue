@@ -1056,7 +1056,7 @@ are not built: with two markers the spin is 1 percent of the run or less.
 | c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
 | d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |
 
-## Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 to 3 and per-value templates done 2026-11-05)
+## Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 to 3, per-value templates and phase 4 step 1 done 2026-11-05)
 
 The language changes after the collector work. The aim: every type known when the program is built, values
 that cannot change unless they say so, conversions with one clear meaning, named arguments, and memory that
@@ -1181,7 +1181,9 @@ before the checker; errors are `E0125`.
 | Locals are inferred | `let n = 5` is an int, `let xs = [1.5]` a `list<float>` |
 | Parameter types may be written | `func area(w: float, h: float)`; untyped ones are checked per call |
 | A result type may be written | `func area(w: float, h: float) -> float` |
-| No unknown types | A list of mixed items, or a value the checker cannot tell, is a compile error |
+| No unknown types | A value the checker cannot tell is a compile error where its type matters |
+| Mixed lists stay (owner, 2026-11-05) | `["Ann", 30, true]` is allowed; an item read from it has no type until it is converted: `person[1] as int` (or `as int else { ... }`). `person[1] + 1` is a compile error that says to convert first. A list of one type keeps its element type |
+| Types cross files | A function, template or constant brought in with `use` keeps its types; a call of an imported function is checked for its argument types in its own file's context; each error names its file |
 | An empty list needs its type | `let xs: list<int> = []` |
 | Typed values are never `null` | `let x: int = null` is an error (as today) |
 
@@ -1194,6 +1196,20 @@ template with different field types can be mixed only where the field is not use
 
 The compiler keeps nodes of different templates in one list (a block's statements). With no unknown types
 and no union types, they become one `Node` template with a `kind` field and the fields of every kind.
+
+Steps, each its own commit:
+
+| Step | Work | State |
+|---|---|---|
+| 1 | Types cross files: the checker checks each imported file in its own context and calls of its exported functions per argument types | Done 2026-11-05 |
+| 2 | The checker infers more by itself (results of functions, element types), so fewer values are unknown | |
+| 3 | Result types may be written: `func area(w: float, h: float) -> float` | |
+| 4 | One `Node` template in the compiler (`any_node` in `ast_nodes.zu` marks where a variable holds nodes of several kinds until then) | |
+| 5 | The compiler's files pass strict mode, small files first, a seed after each group | |
+| 6 | Strict is the rule; mixed-list items need `as`. Tests that hide a type to reach a run-time error (`[v, null][0]`) become compile-error tests, or get their value from `input()` where the run-time check itself is what is tested | |
+
+Step 1 found two calls of `die` in `emit_llvm.zu` with one argument instead of three (they would have
+crashed instead of reporting an internal error); they are fixed.
 
 ### Phase 5: immutability
 

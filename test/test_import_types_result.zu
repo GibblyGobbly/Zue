@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# The result type of an imported function is known: an int result used as a string is an error.
+
+use { twice } from "fixtures/typed_shapes.zu"
+
+let n = twice(3)
+print(n + "x")

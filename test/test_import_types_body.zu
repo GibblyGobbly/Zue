@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# A call that makes the body of a function in another file go wrong is an error in that file, and the
+# trace names the file and line of the call.
+
+use { label } from "fixtures/typed_shapes.zu"
+
+print("not printed: the program does not build")
+print(label("hi"))

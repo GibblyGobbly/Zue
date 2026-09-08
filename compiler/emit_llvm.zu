@@ -55,6 +55,14 @@ let LL_INT_COMPARE = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt
 # Constant operands are folded by LLVM because their tags are known.
 # alit or blit is the float constant of a whole-number literal operand that the checker could not decide
 # (ad "dyn", see adapt_to in check.zu): next to a float it is that float, next to anything else the int.
+# x when it is set, else y.
+func first_set(x, y) {
+    if (x != null) {
+        return x
+    }
+    return y
+}
+
 func ll_binop(op, a, b, pos, alit = null, blit = null) {
     let arith = map_get(LL_INT_ARITH, op, null)
     let compare = map_get(LL_INT_COMPARE, op, null)
@@ -154,14 +162,8 @@ func ll_binop(op, a, b, pos, alit = null, blit = null) {
         } else {
             ll("{fboth} = and i1 {fa}, {fb}")
         }
-        let fa_src = a
-        let fb_src = b
-        if (alit != null) {
-            fa_src = alit
-        }
-        if (blit != null) {
-            fb_src = blit
-        }
+        let fa_src = first_set(alit, a)
+        let fb_src = first_set(blit, b)
         let ffast = ll_new_label("ffast")
         ll_condbr(fboth, ffast, slow)
         ll_label(ffast)
@@ -1254,7 +1256,7 @@ func compile_spec_function(n, key, entry) {
     for (let nm in used_names(n)) {
         let r = resolve(nm)
         if (r.kind == "local" or r.kind == "cap") {
-            die("internal error: the function {n.name} was specialized but uses the variable {nm} of an enclosing function")
+            die("Compile Error", n.line, "internal error: the function {n.name} was specialized but uses the variable {nm} of an enclosing function")
         }
     }
     clear_kc(n.body)
@@ -1561,7 +1563,7 @@ func st_return_raw(n) {
     ll_mark_line(n)
     let want = ST.ctx.spec.res
     if (n.e == null) {
-        die("internal error: a specialized function returns nothing")
+        die("Compile Error", n.line, "internal error: a specialized function returns nothing")
     }
     let raw = null
     if (skind(n.e) == want) {
@@ -1823,7 +1825,7 @@ func compile_module(canon) {
     decl_module_source(m, ST.src_lines)
     let stmts = parse_source(text)
     resolve_named_args(stmts, canon)
-    check_program(stmts)
+    check_program(stmts, canon)
     collect_exports(stmts, m.exports)
     compile_module_body(m, stmts, "mod_{m.id}_run")
     m.state = "done"
@@ -1985,7 +1987,7 @@ export func compile_program_ll(stmts) {
     ST.mod = m
     decl_module_source(m, ST.src_lines)
     resolve_named_args(stmts, m.canon)
-    check_program(stmts)
+    check_program(stmts, m.canon)
     collect_exports(stmts, m.exports)
     compile_module_body(m, stmts, "entry")
 

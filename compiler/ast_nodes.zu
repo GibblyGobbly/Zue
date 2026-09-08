@@ -150,6 +150,13 @@ export func mk_neg(st, en, zero, r, ospan) {
     return NBin("bin", st.line, "-", zero, r, true, null, st.col, en.eline, en.ecol, ospan)
 }
 
+# A node whose kind is not fixed where it is stored (a variable that holds a not node, then a binary
+# node). Until the compiler has one Node template for every kind, the value goes through a list of
+# mixed items, so the checker takes its type as unknown.
+export func any_node(n) {
+    return [n, null][0]
+}
+
 export func mk_not(st, en, e) {
     return NNot("not", st.line, e, st.col, en.eline, en.ecol)
 }

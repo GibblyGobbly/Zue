@@ -51,6 +51,10 @@ in the importing file, even with `use "file.zu"`.
   that was never imported is `Variable 'name' is not defined`.
 - **Circular imports are reported** as a compile error (`Circular import detected: 'a.zu' is already
   loading`) instead of recursing.
+- **Types cross files.** The type checker reads each imported file too. A call of an imported function
+  is checked for the types it is called with, so `area("big", 2.0)` with `area(w: float, h: float)` in
+  another file is an error when the program is built. Each error names the file it is in (see
+  [syntax](syntax.md#type-checking)).
 - `import "util.zu"` is an older spelling of `use "util.zu"`: it brings in the exported names
   only.
 - An imported name is a copy of the module's binding made when `use` runs. Exported constants

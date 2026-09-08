@@ -17,6 +17,9 @@ use { BUILTINS } from "shared.zu"
 use { diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, node_span, suggest } from "diag.zu"
 use { cut } from "ranges.zu"
 use { node_children } from "ast_nodes.zu"
+use { parse_source } from "parser.zu"
+use { resolve_named_args } from "named_args.zu"
+use { path_dir, path_join, path_norm, split_lines } from "util.zu"
 
 let SCOPES = []
 
@@ -695,9 +698,9 @@ func fail_at(span, msg, kind = "Type Error") {
         QUIET_HITS += 1
         return null
     }
-    let key = "{span.line}:{span.col}"
+    let key = "{ST.src_file}:{span.line}:{span.col}"
     if (span.col == 0) {
-        key = "{span.line}:{msg}"
+        key = "{ST.src_file}:{span.line}:{msg}"
     }
     if (map_has(REPORTED, key)) {
         return null
@@ -708,7 +711,11 @@ func fail_at(span, msg, kind = "Type Error") {
     while (i >= 0) {
         let c = CALLS[i]
         let sep = ", "
-        diag_trace(d, "  in {c.name}({join(c.types, sep)}), called at line {c.line}")
+        let at = "line {c.line}"
+        if (c.file != ST.src_file) {
+            at = "{c.file} line {c.line}"
+        }
+        diag_trace(d, "  in {c.name}({join(c.types, sep)}), called at {at}")
         i -= 1
     }
     return d
@@ -1279,7 +1286,12 @@ func ck_call(n) {
         let fkey = "fn:{name}"
         let fidx = scope_index(fkey)
         if (fidx >= 0 and fidx == scope_index(name)) {
-            return ck_user_call(name, SCOPES[fidx][fkey], fidx, argtypes, n)
+            let home = null
+            let hkey = "home:{name}"
+            if (scope_index(hkey) == fidx) {
+                home = SCOPES[fidx][hkey]
+            }
+            return ck_user_call(name, SCOPES[fidx][fkey], fidx, argtypes, n, home)
         }
     }
     if (known == null and map_has(BUILTIN_NAMES, name)) {
@@ -1400,7 +1412,7 @@ func param_span(fn, i) {
     return fn.pspans[i]
 }
 
-func ck_user_call(name, fn, idx, argtypes, call) {
+func ck_user_call(name, fn, idx, argtypes, call, home = null) {
     let argnodes = call.args
     let line = call.line
     let np = len(fn.params)
@@ -1421,8 +1433,12 @@ func ck_user_call(name, fn, idx, argtypes, call) {
         }
         let d = fail_at(args_span(call), "{name}() expects {wanted} argument{plural}, but got {len(argtypes)}")
         diag_text(d, "found {len(argtypes)}")
-        diag_label(d, fn.nspan, "{name} is defined here with {np} parameter{s_if(np)}")
-        diag_hint(d, "Usage: {name}({join(fn.params, ", ")})")
+        if (home == null) {
+            diag_label(d, fn.nspan, "{name} is defined here with {np} parameter{s_if(np)}")
+            diag_hint(d, "Usage: {name}({join(fn.params, ", ")})")
+        } else {
+            diag_hint(d, "Usage: {name}({join(fn.params, ", ")}), defined in {home.canon} at line {fn.line}")
+        }
         return "any"
     }
     let types = []
@@ -1439,8 +1455,16 @@ func ck_user_call(name, fn, idx, argtypes, call) {
                 if (not fits_slot(at, want)) {
                     let d = fail_node(argnodes[i], "{name}() argument {i + 1} must be {article(want)} {want}, got {describe(at)}")
                     diag_text(d, "expected {want}, found {describe(at)}")
-                    diag_label(d, ptype_span(fn, i), "parameter '{fn.params[i]}' is {want}")
-                    diag_hint(d, convert_hint(want, at, argnodes[i]))
+                    if (home == null) {
+                        diag_label(d, ptype_span(fn, i), "parameter '{fn.params[i]}' is {want}")
+                        diag_hint(d, convert_hint(want, at, argnodes[i]))
+                    } else {
+                        let ch = convert_hint(want, at, argnodes[i])
+                        if (ch != "") {
+                            ch = "{ch}. "
+                        }
+                        diag_hint(d, "{ch}{name} is defined in {home.canon} at line {fn.line}, with '{fn.params[i]}' a {want}")
+                    }
                 }
                 at = want
             }
@@ -1453,30 +1477,39 @@ func ck_user_call(name, fn, idx, argtypes, call) {
     }
     let sep = ","
     let mkey = "{name}({join(types, sep)})"
+    if (home != null) {
+        mkey = "{home.canon}:{mkey}"
+    }
     if (map_has(MEMO, mkey)) {
-        spec_site(call, fn, idx, types, MEMO[mkey])
+        if (home == null) {
+            spec_site(call, fn, idx, types, MEMO[mkey])
+        }
         return MEMO[mkey]
     }
     if (map_has(INPROG, mkey)) {
         RECURSIVE[mkey] = true
         if (map_has(ASSUME, mkey)) {
-            spec_site(call, fn, idx, types, ASSUME[mkey])
+            if (home == null) {
+                spec_site(call, fn, idx, types, ASSUME[mkey])
+            }
             return ASSUME[mkey]
         }
         return "any"
     }
     INPROG[mkey] = true
-    let rets1 = check_body(name, fn, idx, types, line)
+    let rets1 = check_body(name, fn, idx, types, line, home)
     let result = join_returns(rets1)
     if (map_has(RECURSIVE, mkey) and not is_scalar(result)) {
-        result = try_assume(name, fn, idx, types, line, mkey, rets1, result)
+        result = try_assume(name, fn, idx, types, line, mkey, rets1, result, home)
     }
     MEMO[mkey] = result
     if (MEMOLOG != null) {
         append(MEMOLOG, mkey)
     }
     map_delete(INPROG, mkey)
-    spec_site(call, fn, idx, types, result)
+    if (home == null) {
+        spec_site(call, fn, idx, types, result)
+    }
     return result
 }
 
@@ -1531,16 +1564,22 @@ func is_scalar(t) {
 }
 
 # Checks the body of fn with its parameters bound to types, and returns the types of its return statements.
-func check_body(name, fn, idx, types, line) {
+func check_body(name, fn, idx, types, line, home = null) {
+    let caller_file = ST.src_file
     let saved = SCOPES
     let saved_origins = ORIGINS
-    SCOPES = cut(saved, 0, idx + 1)
-    ORIGINS = cut(saved_origins, 0, idx + 1)
+    let saved_ctx = null
+    if (home == null) {
+        SCOPES = cut(saved, 0, idx + 1)
+        ORIGINS = cut(saved_origins, 0, idx + 1)
+    } else {
+        saved_ctx = enter_file(home)
+    }
     push_scope()
     for (let i = 0; i < len(fn.params); i++) {
         declare(fn.params[i], types[i], param_span(fn, i))
     }
-    let body = "{fn.line}:{fn.col}:{name}"
+    let body = "{ST.src_file}:{fn.line}:{fn.col}:{name}"
     let key = join(types, ",")
     if (not map_has(BODY_SIGS, body)) {
         BODY_SIGS[body] = []
@@ -1548,7 +1587,7 @@ func check_body(name, fn, idx, types, line) {
     if (not contains(BODY_SIGS[body], key)) {
         append(BODY_SIGS[body], key)
     }
-    append(CALLS, {"name": name, "types": types, "line": line, "body": body})
+    append(CALLS, {"name": name, "types": types, "line": line, "body": body, "file": caller_file})
     append(RETS, [])
     ck_block(fn.body)
     let rets = remove(RETS, len(RETS) - 1)
@@ -1557,6 +1596,9 @@ func check_body(name, fn, idx, types, line) {
         append(rets, "null")
     }
     remove(CALLS, len(CALLS) - 1)
+    if (saved_ctx != null) {
+        leave_file(saved_ctx)
+    }
     SCOPES = saved
     ORIGINS = saved_origins
     return rets
@@ -1583,7 +1625,7 @@ func common_scalar(rets) {
 
 # The second pass of a recursive function: checks the body again with the recursive calls typed as the
 # type its other returns have. Returns that type if every return has it, else first (the first pass).
-func try_assume(name, fn, idx, types, line, mkey, rets1, first) {
+func try_assume(name, fn, idx, types, line, mkey, rets1, first, home = null) {
     let cand = common_scalar(rets1)
     if (cand == null) {
         return first
@@ -1595,7 +1637,7 @@ func try_assume(name, fn, idx, types, line, mkey, rets1, first) {
     ASSUME[mkey] = cand
     QUIET += 1
     let hits = QUIET_HITS
-    let rets = check_body(name, fn, idx, types, line)
+    let rets = check_body(name, fn, idx, types, line, home)
     QUIET -= 1
     map_delete(ASSUME, mkey)
     if (QUIET_HITS == hits and join_returns(rets) == cand) {
@@ -2056,12 +2098,7 @@ func ck_stmt(n) {
         declare(n.name, "type")
         TYPEDEFS[n.name] = n
     } else if (k == "use") {
-        if (len(n.names) == 0) {
-            OPEN_IMPORT = true
-        }
-        for (let nm in n.names) {
-            declare(nm, "any")
-        }
+        bind_use(n)
     } else if (k == "break" or k == "continue") {
         return null
     } else {
@@ -2082,11 +2119,8 @@ func ck_hoist(stmts) {
             TYPEDEFS[s.name] = s
             HOISTED[s.name] = true
         } else if (k == "use") {
-            if (len(s.names) == 0) {
-                OPEN_IMPORT = true
-            }
+            bind_use(s)
             for (let nm in s.names) {
-                declare(nm, "any")
                 HOISTED[nm] = true
             }
         } else if (k == "let") {
@@ -2213,8 +2247,171 @@ func report_undefined() {
     fill_guesses()
 }
 
+# Files and imports. Each imported file is checked once, in its own context, when a use statement
+# names it. A function it exports keeps that context (its file, its top-level names and types), and a
+# call of it is checked there for the argument types of the call, as a function of the same file is.
+# So a wrong type passed across files is an error when the program is built, at the call, and an
+# error inside the other file names that file.
+template CkFile { canon, lines, scopes, origins, typedefs, assigned, hoisted, strict, exports, done }
+
+# Canonical path -> CkFile, or null for a file that cannot be read.
+let FILES = {}
+
+# The canonical path of the file being checked, or null when it is not known.
+let CUR_CANON = null
+
+# The checker state that belongs to one file, so that another file can be checked in between.
+func save_file_state() {
+    return {"scopes": SCOPES, "origins": ORIGINS, "typedefs": TYPEDEFS, "assigned": ASSIGNED,
+        "hoisted": HOISTED, "pending": PENDING, "open": OPEN_IMPORT, "strict": STRICT,
+        "file": ST.src_file, "lines": ST.src_lines, "canon": CUR_CANON, "calls": CALLS, "rets": RETS}
+}
+
+func restore_file_state(st) {
+    SCOPES = st["scopes"]
+    ORIGINS = st["origins"]
+    TYPEDEFS = st["typedefs"]
+    ASSIGNED = st["assigned"]
+    HOISTED = st["hoisted"]
+    PENDING = st["pending"]
+    OPEN_IMPORT = st["open"]
+    STRICT = st["strict"]
+    ST.src_file = st["file"]
+    ST.src_lines = st["lines"]
+    CUR_CANON = st["canon"]
+    CALLS = st["calls"]
+    RETS = st["rets"]
+}
+
+# Switches to the context of file cf to check a body of it; leave_file puts the caller's back. The
+# calls being checked stay, so an error inside the body shows where it was called from. Names the
+# body reads that nothing declares were reported when the file itself was checked.
+func enter_file(cf) {
+    let saved = save_file_state()
+    SCOPES = cut(cf.scopes, 0, len(cf.scopes))
+    ORIGINS = cut(cf.origins, 0, len(cf.origins))
+    TYPEDEFS = cf.typedefs
+    ASSIGNED = cf.assigned
+    HOISTED = cf.hoisted
+    PENDING = []
+    OPEN_IMPORT = true
+    STRICT = cf.strict
+    ST.src_file = cf.canon
+    ST.src_lines = cf.lines
+    CUR_CANON = cf.canon
+    return saved
+}
+
+func leave_file(saved) {
+    let calls = CALLS
+    let rets = RETS
+    restore_file_state(saved)
+    CALLS = calls
+    RETS = rets
+}
+
+# The names a file exports: functions, types and variables, also inside groups.
+func collect_file_exports(stmts, out) {
+    for (let s in stmts) {
+        let k = s.k
+        if ((k == "func" or k == "typedef" or k == "let") and s.name != null and s.exported == true) {
+            out[s.name] = true
+        } else if (k == "group") {
+            collect_file_exports(s.items, out)
+        }
+    }
+}
+
+# Checks the file at canon once and returns its CkFile, or null when it cannot be read. While the file is
+# being checked its CkFile is not done, so a file that imports it back gets its names as unknown.
+func check_file(canon) {
+    if (map_has(FILES, canon)) {
+        return FILES[canon]
+    }
+    let f = open(canon, "r")
+    if (f == null) {
+        FILES[canon] = null
+        return null
+    }
+    let text = read(f)
+    close(f)
+    let saved = save_file_state()
+    let lines = split_lines(text)
+    ST.src_file = canon
+    ST.src_lines = lines
+    let stmts = parse_source(text)
+    resolve_named_args(stmts, canon)
+    let cf = CkFile(canon, lines, [], [], {}, {}, {}, file_is_strict(lines), {}, false)
+    FILES[canon] = cf
+    collect_file_exports(stmts, cf.exports)
+    SCOPES = []
+    ORIGINS = []
+    TYPEDEFS = {}
+    ASSIGNED = {}
+    HOISTED = {}
+    PENDING = []
+    OPEN_IMPORT = false
+    STRICT = cf.strict
+    CUR_CANON = canon
+    CALLS = []
+    RETS = []
+    collect_assigned(stmts)
+    push_scope()
+    ck_block(stmts)
+    report_undefined()
+    cf.scopes = SCOPES
+    cf.origins = ORIGINS
+    cf.typedefs = TYPEDEFS
+    cf.assigned = ASSIGNED
+    cf.hoisted = HOISTED
+    cf.done = true
+    restore_file_state(saved)
+    return cf
+}
+
+# Declares the names a use statement brings in, with what their file says about them: a function keeps
+# its declaration and its file, a type its definition, a variable its type. A name the file does not
+# export, or a file that cannot be read or is still being checked, gives unknown names (the code
+# generator reports a bad import).
+func bind_use(n) {
+    let cf = null
+    if (CUR_CANON != null) {
+        cf = check_file(path_norm(path_join(path_dir(CUR_CANON), n.path)))
+    }
+    let names = n.names
+    if (len(names) == 0) {
+        OPEN_IMPORT = true
+        if (cf == null or not cf.done) {
+            return null
+        }
+        names = map_keys(cf.exports)
+    }
+    for (let nm in names) {
+        if (cf == null or not cf.done or not map_has(cf.exports, nm)) {
+            declare(nm, "any")
+            continue
+        }
+        let top = cf.scopes[0]
+        let t = map_get(top, nm, "any")
+        if (t == "function") {
+            declare(nm, "function")
+            declare("fn:{nm}", top["fn:{nm}"])
+            declare("home:{nm}", cf)
+        } else if (t == "type" and map_has(cf.typedefs, nm)) {
+            declare(nm, "type")
+            TYPEDEFS[nm] = cf.typedefs[nm]
+        } else {
+            declare(nm, t)
+        }
+    }
+}
+
 # Reports every Type Error it can prove, in source order, and ends the run if there is one.
-export func check_program(stmts) {
+export func check_program(stmts, canon = null) {
+    CUR_CANON = canon
+    if (canon != null and not map_has(FILES, canon)) {
+        FILES[canon] = CkFile(canon, ST.src_lines, [], [], {}, {}, {}, false, {}, false)
+    }
     STRICT = file_is_strict(ST.src_lines)
     SCOPES = []
     TYPEDEFS = {}

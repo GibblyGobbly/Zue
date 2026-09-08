@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# A wrong type passed to a function of another file is an error when the program is built, at the call,
+# and the hint names the file and line where the function is defined.
+
+use { area } from "fixtures/typed_shapes.zu"
+
+print("not printed: the program does not build")
+print(area("big", 2.0))

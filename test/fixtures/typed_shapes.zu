@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# A module for the test_import_types_*.zu tests: exported functions, a template and a variable whose
+# types the importing file's checker sees.
+
+export template Size { w: float, h: float }
+
+export const UNIT = 1.5
+
+export func area(w: float, h: float) {
+    return w * h
+}
+
+export func twice(x) {
+    return x + x
+}
+
+export func label(s) {
+    return s + 1
+}

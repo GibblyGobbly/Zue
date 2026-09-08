@@ -529,9 +529,37 @@ a `Type Error` with the line, and the program is not built.
   (see [data-types](data-types.md#typed-fields)).
 - Builtins with a fixed result type give it: `len` is an int, `split` is a `list<string>`, `range` is a
   `list<int>`, `min`, `max` and `sum` of a `list<int>` are ints.
-- Imported modules are checked too, with the error naming the module's file.
+- Types cross files. A function, template or constant brought in with `use` keeps its types, and a call
+  of an imported function is checked for the types it is called with, as a function of the same file is.
+  A wrong argument is an error at the call, with a hint that names the file and line of the function; a
+  call that makes the function's body go wrong is an error in that file, with a line saying where it was
+  called from:
+
+  ```javascript
+  # shapes.zu
+  export func area(w: float, h: float) {
+      return w * h
+  }
+
+  # main.zu
+  use { area } from "shapes.zu"
+  print(area("big", 2.0))
+  ```
+
+  Output:
+
+  ```
+  Type Error [E0202] in main.zu at line 2:
+    area() argument 1 must be a float, got string
+
+     2 | print(area("big", 2.0))
+       |            ^^^^^ expected float, found string
+
+  Hint: area is defined in shapes.zu at line 1, with 'w' a float
+  ```
+
 - Where the checker cannot tell a type (items of a plain list, the result of a function whose returns
-  differ, function values, values from imported modules), it says nothing and the runtime checks
+  differ, function values, files that import each other in a circle), it says nothing and the runtime checks
   still apply. The element types are not checked at run time: a list that was handed over by code the
   checker cannot see may hold other items.
 

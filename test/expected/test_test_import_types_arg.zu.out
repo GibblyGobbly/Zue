@@ -1,0 +1,7 @@
+Type Error [E0202] in test/test_import_types_arg.zu at line 10:
+  area() argument 1 must be a float, got string
+
+  10 | print(area("big", 2.0))
+     |            ^^^^^ expected float, found string
+
+Hint: area is defined in test/fixtures/typed_shapes.zu at line 11, with 'w' a float
