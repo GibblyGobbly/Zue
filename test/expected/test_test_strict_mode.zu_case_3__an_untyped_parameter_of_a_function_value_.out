@@ -1,6 +1,7 @@
 Type Error [E0208] in /tmp/zue_test_case.zu at line 2:
-  strict mode: parameter 'x' of this function needs a type, for example x: int
+  strict mode: parameter 'x' of this function value needs a type, for example x: int
 
    2 | let f = func(x) {
      |              ^ needs a type
 
+Hint: A function declared with a name is checked for the types of each call; a function value is not

@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# A module for test_import_types_two_files.zu: a function with a type error.
+
+export func one() {
+    return 1 + "a"
+}

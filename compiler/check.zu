@@ -31,6 +31,15 @@ let ORIGINS = []
 # checker cannot tell into an error where it is used, and every untyped parameter into an error.
 let STRICT = false
 
+# Above 0 while the body of a named function with an untyped parameter is checked once with that
+# parameter unknown. Such a body is checked again for the argument types of every call, and those
+# checks report what strict mode finds; the pass with unknown parameters reports only proven errors.
+let GENERIC = 0
+
+func strict_on() {
+    return STRICT and GENERIC == 0
+}
+
 # Per-call checking of user functions. A function body is checked once for each distinct list of
 # argument types, with the parameters bound to those types.
 # The typed bloc and template definitions of the program, by name.
@@ -759,7 +768,7 @@ func convert_hint(want, got, n = null) {
 
 # In strict mode a value of type any may not be used where its type matters.
 func strict_known(t, n, what) {
-    if (STRICT and t == "any") {
+    if (strict_on() and t == "any") {
         let d = fail_node(n, "strict mode: the type of {what} is not known. Give it a type, for example let x: int = ...")
         diag_text(d, "type not known")
     }
@@ -832,7 +841,7 @@ func ck_bin(n) {
             lit_mark_any(n.r)
         }
     }
-    if (STRICT and (op != "==" and op != "!=" or (a != "null" and b != "null"))) {
+    if (strict_on() and (op != "==" and op != "!=" or (a != "null" and b != "null"))) {
         strict_known(a, n.l, "the left operand of '{op}'")
         strict_known(b, n.r, "the right operand of '{op}'")
     }
@@ -1329,7 +1338,7 @@ func ck_builtin(n, name, argtypes) {
     }
     let result = "any"
     if (map_has(SIGS, name)) {
-        if (STRICT) {
+        if (strict_on()) {
             ck_strict_args(n, name, SIGS[name], argtypes)
         }
         result = ck_builtin_call(n, name, SIGS[name], argtypes)
@@ -1479,6 +1488,10 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
     let mkey = "{name}({join(types, sep)})"
     if (home != null) {
         mkey = "{home.canon}:{mkey}"
+    }
+    # A check made while strict mode is silent (GENERIC) does not stand for one that reports.
+    if (GENERIC > 0) {
+        mkey = "{mkey}|generic"
     }
     if (map_has(MEMO, mkey)) {
         if (home == null) {
@@ -1664,18 +1677,23 @@ func try_assume(name, fn, idx, types, line, mkey, rets1, first, home = null) {
     return first
 }
 
+# A named function is checked for the argument types of each call, so an untyped parameter of it is
+# known where the function is used. A function value (func without a name) is called through
+# variables the checker does not follow, so in strict mode its parameters need types.
 func ck_func(n) {
-    if (STRICT) {
-        for (let i = 0; i < len(n.params); i++) {
-            if (n.ptypes == null or n.ptypes[i] == null) {
-                let who = "this function"
-                if (n.name != null) {
-                    who = n.name
-                }
-                let d = fail_at(span_or(param_span(n, i), n), "strict mode: parameter '{n.params[i]}' of {who} needs a type, for example {n.params[i]}: int")
+    let untyped = false
+    for (let i = 0; i < len(n.params); i++) {
+        if (n.ptypes == null or n.ptypes[i] == null) {
+            untyped = true
+            if (strict_on() and n.name == null) {
+                let d = fail_at(span_or(param_span(n, i), n), "strict mode: parameter '{n.params[i]}' of this function value needs a type, for example {n.params[i]}: int")
                 diag_text(d, "needs a type")
+                diag_hint(d, "A function declared with a name is checked for the types of each call; a function value is not")
             }
         }
+    }
+    if (untyped and n.name != null) {
+        GENERIC += 1
     }
     append(RETS, [])
     push_scope()
@@ -1692,6 +1710,9 @@ func ck_func(n) {
     ck_block(n.body)
     pop_scope()
     remove(RETS, len(RETS) - 1)
+    if (untyped and n.name != null) {
+        GENERIC -= 1
+    }
 }
 
 func ck_expr(n) {

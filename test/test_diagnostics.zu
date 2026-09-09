@@ -165,7 +165,7 @@ for (let i = 0; i < 3; i++) {
 }
 # CASE typed function parameters in strict mode
 # strict
-func add(a, b) {
+let add = func(a, b) {
     return a + b
 }
 # CASE errors in two functions are both reported

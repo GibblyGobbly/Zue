@@ -475,6 +475,11 @@ export func diag_print_all() {
 }
 
 # Ends the run with status 1 if any error is recorded.
+# How many errors are recorded so far.
+export func diag_count() {
+    return len(DIAGS)
+}
+
 export func diag_exit_if_errors() {
     if (len(DIAGS) > 0) {
         diag_print_all()

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Type errors in two imported files are both reported, each with its file.
+
+use { one } from "fixtures/typed_bad_one.zu"
+use { two } from "fixtures/typed_bad_two.zu"
+
+print(one())
+print(two())

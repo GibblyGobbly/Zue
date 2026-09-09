@@ -1,14 +1,18 @@
 Type Error [E0208] in /tmp/zue_test_case.zu at line 2:
-  strict mode: parameter 'a' of add needs a type, for example a: int
+  strict mode: parameter 'a' of this function value needs a type, for example a: int
 
-   2 | func add(a, b) {
-     |          ^ needs a type
+   2 | let add = func(a, b) {
+     |                ^ needs a type
+
+Hint: A function declared with a name is checked for the types of each call; a function value is not
 
 Type Error [E0208] in /tmp/zue_test_case.zu at line 2:
-  strict mode: parameter 'b' of add needs a type, for example b: int
+  strict mode: parameter 'b' of this function value needs a type, for example b: int
 
-   2 | func add(a, b) {
-     |             ^ needs a type
+   2 | let add = func(a, b) {
+     |                   ^ needs a type
+
+Hint: A function declared with a name is checked for the types of each call; a function value is not
 
 Type Error [E0208] in /tmp/zue_test_case.zu at line 3:
   strict mode: the type of the left operand of '+' is not known. Give it a type, for example let x: int = ...

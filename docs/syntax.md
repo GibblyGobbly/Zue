@@ -566,10 +566,25 @@ a `Type Error` with the line, and the program is not built.
 ### Strict mode
 
 A file whose first lines, before any code, include the comment `# strict` is checked more strictly.
-Every parameter needs a type, and a value whose type the checker cannot tell is an error where it is
-used: as an operand, in a condition, as an argument of a builtin or of a typed parameter, as the value
+A value whose type the checker cannot tell is an error where it is used: as an operand, in a condition, as an argument of a builtin or of a typed parameter, as the value
 given to an untyped `let`, or as the target of an index or a field read. Writing the type
 (`let y: int = xs[0]`) is the way to say what the value is. Comparing with `null` is allowed.
+
+A parameter of a named function may stay untyped: the body is checked for the argument types of each
+call, and strict mode reports what is unknown in those checks. The parameters of a function value
+(`let f = func(x) { ... }`) need types, because the checker does not follow calls made through a variable:
+
+```javascript
+# strict
+func twice(x) {
+    return x + x
+}
+print(twice(4))        # checked with x an int
+print(twice("ab"))     # checked with x a string
+let f = func(x) {      # error: parameter 'x' of this function value needs a type
+    return x
+}
+```
 
 ### Raw values
 

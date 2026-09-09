@@ -1202,11 +1202,16 @@ Steps, each its own commit:
 | Step | Work | State |
 |---|---|---|
 | 1 | Types cross files: the checker checks each imported file in its own context and calls of its exported functions per argument types | Done 2026-11-05 |
-| 2 | The checker infers more by itself (results of functions, element types), so fewer values are unknown | |
+| 2a | Strict mode follows the rule for parameters: an untyped parameter of a named function is checked per call, so only function values need typed parameters; the pass with unknown parameters reports only proven errors. Parsing and the named-argument pass stop only on their own errors, so the checker reports errors in every imported file | Done 2026-11-06 |
+| 2b | The checker infers more by itself (builtin results such as `open` and `read`, fields that start as `null`, recursive results), so fewer values are unknown | |
 | 3 | Result types may be written: `func area(w: float, h: float) -> float` | |
 | 4 | One `Node` template in the compiler (`any_node` in `ast_nodes.zu` marks where a variable holds nodes of several kinds until then) | |
 | 5 | The compiler's files pass strict mode, small files first, a seed after each group | |
 | 6 | Strict is the rule; mixed-list items need `as`. Tests that hide a type to reach a run-time error (`[v, null][0]`) become compile-error tests, or get their value from `input()` where the run-time check itself is what is tested | |
+
+Measured after 2a, with `# strict` in every compiler file and the compiler checked from `zuec.zu`: 3,418 uses
+of a value of unknown type. 1,775 are field reads, most on syntax-tree nodes of mixed kinds (step 4); the
+rest follow from them (a node's kind, its name) or from builtins and fields whose type is not known (2b).
 
 Step 1 found two calls of `die` in `emit_llvm.zu` with one argument instead of three (they would have
 crashed instead of reporting an internal error); they are fixed.

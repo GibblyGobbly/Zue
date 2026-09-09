@@ -1,0 +1,20 @@
+Type Error [E0201] in test/fixtures/typed_bad_one.zu at line 7:
+  cannot use '+' on an int constant and string
+
+   7 |     return 1 + "a"
+     |            - ^ --- string
+     |            |
+     |            an int constant
+
+Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with x as string
+
+Type Error [E0201] in test/fixtures/typed_bad_two.zu at line 7:
+  cannot use '+' on an int constant and string
+
+   7 |     return 2 + "b"
+     |            - ^ --- string
+     |            |
+     |            an int constant
+
+Hint: '+' joins two strings. Build text with interpolation, "{x} and {y}", or convert with x as string
+2 errors found.

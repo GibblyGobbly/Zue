@@ -17,11 +17,14 @@ for (let x in xs) {
     total += x
 }
 print(total)
-# CASE an untyped parameter
+# CASE an untyped parameter takes the type of each call
 # strict
 func add(a, b: int) {
-    return b
+    return a + b
 }
+print(add(1, 2))
+let xs = [1, "two"]
+print(add(xs[0], 2))
 # CASE an untyped parameter of a function value
 # strict
 let f = func(x) {
@@ -113,3 +116,13 @@ print(take(B{1}))
 template Player { name: string, hp: int }
 let p = Player("Ana", 10)
 let z: int = p.mana
+# CASE a function first checked inside another body is still checked for its calls
+# strict
+func inner(a) {
+    let ys = [1, "two"]
+    return ys[0] + a
+}
+func outer(x) {
+    return inner(1)
+}
+print(inner(1))

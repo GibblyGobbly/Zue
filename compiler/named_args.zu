@@ -9,7 +9,7 @@
 # which the called function reads as not given.
 
 use { mk_jump, node_children, node_kind } from "ast_nodes.zu"
-use { diag_new, diag_text, diag_label, diag_hint, diag_exit_if_errors, suggest } from "diag.zu"
+use { diag_new, diag_text, diag_label, diag_hint, diag_exit_if_errors, diag_count, suggest } from "diag.zu"
 use { parse_source } from "parser.zu"
 use { BUILTINS } from "shared.zu"
 use { ST } from "state.zu"
@@ -44,11 +44,16 @@ let IMPORTED = {}
 # map from name to what it is: {kind, node} or {kind: "import", path, name}).
 template Pass { canon, assigned, scopes }
 
+# Stops the run when this pass found an error. Errors found before it (the type checker reads imported
+# files while it checks the main one) are left to be reported with the rest.
 export func resolve_named_args(stmts, canon) {
+    let before = diag_count()
     let ps = Pass(canon, {}, [])
     collect_assigned(stmts, ps.assigned)
     walk(stmts, ps)
-    diag_exit_if_errors()
+    if (diag_count() > before) {
+        diag_exit_if_errors()
+    }
 }
 
 # Names that an assignment or ++/-- changes somewhere: a function name among them may hold another
