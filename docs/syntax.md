@@ -586,6 +586,44 @@ let f = func(x) {      # error: parameter 'x' of this function value needs a typ
 }
 ```
 
+The same function can be used with ints and with floats, and each call is checked with its own types:
+
+```javascript
+# strict
+func area(w, h) {
+    return w * h
+}
+
+print(area(3, 4))
+print(area(2.5, 2.0))
+```
+
+Output:
+
+```
+12
+5.0
+```
+
+A call with a wrong type stops the build, and the error says which call caused it:
+
+```javascript
+print(area("big", 2))
+```
+
+Output:
+
+```
+Type Error [E0201] in area.zu at line 3:
+  cannot use '*' on string and int
+  in area(string, int), called at line 8
+
+   3 |     return w * h
+     |            - ^ - int
+     |            |
+     |            string
+```
+
 ### Raw values
 
 A local variable that the checker proves to be an `int`, `float` or `bool`, and that no nested function
