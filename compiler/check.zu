@@ -1184,6 +1184,10 @@ func ck_typed_construct(n, name, argtypes) {
         if (want == "any" or got == "any") {
             continue
         }
+        # A field of a template may be empty; reading it is then a missing value (p.f else { ... }).
+        if (got == "null" and td.is_bloc != true) {
+            continue
+        }
         got = adapt_expr(n.args[i], got, want)
         if (not fits_slot(got, want)) {
             let hint = ""
@@ -2080,7 +2084,8 @@ func ck_stmt(n) {
             if (fi >= 0) {
                 let want = object_field_type(od, tt, fi)
                 et = adapt_expr(n.e, et, want)
-                if (want != "any" and et != "any" and not fits_slot(et, want)) {
+                let empty_ok = et == "null" and od.is_bloc != true
+                if (want != "any" and et != "any" and not empty_ok and not fits_slot(et, want)) {
                     let kind = "Template"
                     if (od.is_bloc == true) {
                         kind = "Bloc"

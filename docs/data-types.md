@@ -29,6 +29,28 @@ and when a field is assigned: `Template 'Player' field 'hp' must be an int, got 
 number written in the source adapts to a float field (`Vec{1, 2}` has floats); a variable never
 does. A `bloc` types all its fields or none. `data` fields have no types.
 
+A typed field of a `template` may be empty (`null`), so a template can point to more of itself, as a tree
+does. Reading an empty field is a missing value: `else` handles it, and using it without a check is an
+error when the program runs. A `bloc` field is never empty.
+
+```javascript
+template Node { k: string, l: Node, r: Node }
+let leaf = Node("id", null, null)
+let sum = Node("bin", leaf, leaf)
+print(sum.l.k)
+let right = leaf.r else {
+    print("leaf has no right child")
+    return
+}
+```
+
+Output:
+
+```
+id
+leaf has no right child
+```
+
 What a type may hold:
 
 | Type | Holds |

@@ -294,12 +294,17 @@ func _field_error(kind, tname, fname, code, extra, v) {
     lv_error(E_TYPE, msg, cstr("Give the field a value of its declared type. A whole number written in the source is an int; write 2.0 for a float."))
 }
 
-# Checks argc values against the declared field types.
-func _fk_check_values(kind, tname, fields, codes, extras, argc, argv) {
+# Checks argc values against the declared field types. A template field may be empty (null) when
+# empty_ok is 1; a bloc field may not.
+func _fk_check_values(kind, tname, fields, codes, extras, argc, argv, empty_ok) {
     for (let i = 0; i < argc; i++) {
         let code = ld8(codes + i)
-        if (code != FK_ANY) {
-            let v = argv + 16 * i
+        let v = argv + 16 * i
+        let empty = 0
+        if (empty_ok == 1 and _tag(v) == T_NULL) {
+            empty = 1
+        }
+        if (code != FK_ANY and empty == 0) {
             let extra = ld64(extras + i * 8)
             if (_fk_matches(code, extra, v) == 0) {
                 _field_error(kind, tname, ld64(fields + i * 8), code, extra, v)
@@ -574,7 +579,7 @@ func _bloc_construct(o, type, argc, argv) {
             snprintf(msg, 256, cstr("Bloc '%s' expects %d field value(s), but got %d"), ld64(d + BD_NAME), ld32(d + BD_NFIELDS), argc)
             lv_error(E_TYPE, msg, _bloc_hint())
         }
-        _fk_check_values(cstr("Bloc"), ld64(d + BD_NAME), ld64(d + BD_FIELDS), codes, ld64(d + BD_FEXTRA), argc, argv)
+        _fk_check_values(cstr("Bloc"), ld64(d + BD_NAME), ld64(d + BD_FIELDS), codes, ld64(d + BD_FEXTRA), argc, argv, 0)
     } else if (_bloc_validate(d, argc, argv, msg) == 0) {
         lv_error(E_TYPE, msg, cstr("Bloc values must stay inline and only use int, float, bool, char, string, or nested blocs"))
     }
@@ -754,7 +759,7 @@ func _data_construct(o, type, argc, argv) {
     if (ld32(t + DT_TEMPLATE) != 0) {
         let codes = ld64(t + DT_FTYPES)
         if (codes != 0) {
-            _fk_check_values(cstr("Template"), ld64(t + DT_NAME), ld64(t + DT_FIELDS), codes, ld64(t + DT_FEXTRA), argc, argv)
+            _fk_check_values(cstr("Template"), ld64(t + DT_NAME), ld64(t + DT_FIELDS), codes, ld64(t + DT_FEXTRA), argc, argv, 1)
         }
         let n = argc
         if (n == 0) {
@@ -1270,11 +1275,11 @@ func _data_index_set(t, idx, val) {
     return 0
 }
 
-# Checks val against the declared type of field i of the template object tp.
+# Checks val against the declared type of field i of the template object tp. The field may be emptied.
 func _tpl_check_field(tp, i, val) {
     let dt = ld64(tp + TP_DT)
     let codes = ld64(dt + DT_FTYPES)
-    if (codes != 0 and ld8(codes + i) != FK_ANY) {
+    if (codes != 0 and ld8(codes + i) != FK_ANY and _tag(val) != T_NULL) {
         let extra = ld64(ld64(dt + DT_FEXTRA) + i * 8)
         if (_fk_matches(ld8(codes + i), extra, val) == 0) {
             _field_error(cstr("Template"), ld64(dt + DT_NAME), ld64(ld64(dt + DT_FIELDS) + i * 8), ld8(codes + i), extra, val)

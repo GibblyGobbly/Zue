@@ -189,3 +189,37 @@ x = Box(2)
 print(x.v)
 x = Box("s")
 
+
+# CASE a typed template field may be empty
+template Node { k: string, l: Node, r: Node }
+let leaf = Node("id", null, null)
+let both = Node("bin", leaf, leaf)
+let one = Node("not", both, null)
+let n = leaf
+n = both
+n = one
+print(n.l.l.k)
+print(n.r == null)
+one.l = null
+print(one.l == null)
+
+# CASE an empty field is missing for else
+template Node { k: string, l: Node }
+let leaf = Node("id", null)
+let left = leaf.l else {
+    print("no left child")
+    exit(0)
+}
+print(left.k)
+
+# CASE using an empty field is an error when the program runs
+template Node { k: string, l: Node }
+func pass(v) {
+    return [v, null][0]
+}
+let leaf = pass(Node("id", null))
+print(leaf.l.k)
+
+# CASE a bloc field may not be empty
+bloc P { x: int, y: int }
+let p = P{1, null}

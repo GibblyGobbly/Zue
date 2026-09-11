@@ -1,0 +1,8 @@
+Type Error [E0210] in /tmp/zue_test_case.zu at line 2:
+  Bloc 'P' field 'y' must be an int, got null
+
+   1 | bloc P { x: int, y: int }
+     |                  - field 'y' of P is int
+   2 | let p = P{1, null}
+     |              ^^^^ expected int, found null
+

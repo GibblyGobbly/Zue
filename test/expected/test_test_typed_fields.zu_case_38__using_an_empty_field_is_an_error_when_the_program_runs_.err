@@ -1,0 +1,7 @@
+Type Error [E0211] in /tmp/zue_test_case.zu at line 6:
+  cannot read field 'k' of null
+
+   6 | print(leaf.l.k)
+     |       ^^^^^^^^
+
+Hint: Dot access works on maps
