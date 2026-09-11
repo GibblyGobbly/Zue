@@ -752,10 +752,10 @@ func ex(n) {
         return ll_kstr(n.v)
     }
     if (k == "char") {
-        return ll_char(n.v)
+        return ll_char(n.v as int)
     }
     if (k == "bool") {
-        return ll_bool(n.v)
+        return ll_bool(n.v == "true")
     }
     if (k == "id") {
         return ex_id(n)

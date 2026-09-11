@@ -1,6 +1,8 @@
-// A node has only the fields of its kind: an identifier has no operator.
+// Every node is one Node template: it has the fields of every kind, and those its kind does not use are
+// empty. A name that is no field of Node is an error.
 use { mk_id_line } from "../compiler/ast_nodes.zu"
 
 let n = mk_id_line(1, "x")
 print(n.name)
-print(n.op)
+print(n.op == null)
+print(n.nope)

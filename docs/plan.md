@@ -1205,9 +1205,26 @@ Steps, each its own commit:
 | 2a | Strict mode follows the rule for parameters: an untyped parameter of a named function is checked per call, so only function values need typed parameters; the pass with unknown parameters reports only proven errors. Parsing and the named-argument pass stop only on their own errors, so the checker reports errors in every imported file | Done 2026-11-06 |
 | 2b | The checker infers more by itself (builtin results such as `open` and `read`, fields that start as `null`, recursive results), so fewer values are unknown | |
 | 3 | Result types may be written: `func area(w: float, h: float) -> float` | |
-| 4 | One `Node` template in the compiler (`any_node` in `ast_nodes.zu` marks where a variable holds nodes of several kinds until then) | |
+| 4a | A typed template field may be empty (null) | Done 2026-11-06 |
+| 4 | One `Node` template in the compiler, 63 typed fields; literal values kept as text; places kept as `Span` | Done 2026-11-06 |
 | 5 | The compiler's files pass strict mode, small files first, a seed after each group | |
 | 6 | Strict is the rule; mixed-list items need `as`. Tests that hide a type to reach a run-time error (`[v, null][0]`) become compile-error tests, or get their value from `input()` where the run-time check itself is what is tested | |
+
+Step 4 uses one wide `Node`: a field for every field of every kind (63), the unused ones empty. It keeps the
+compiler's code as it reads today (`n.cond`, `n.target`). Its cost is memory: every field is a 16-byte value,
+also when empty. Measured: compiling the compiler went from 151 MB to about 205 MB of memory and from 0.85 s to about 0.92 s.
+The count of unknown uses went only from 3,418 to 3,303: the nodes have one type now, but the lists that hold
+them are made empty (`let stmts = []`), so their items are unknown. Typed empty lists are step 2b.
+
+Possible improvement later, a compact node as in Zig's compiler: every node has only a kind, the place of its
+main token and two small slots (`lhs`, `rhs`) whose meaning depends on the kind; a node with more parts keeps
+them in one shared list (`extra_data`), and nodes live in one array and point to each other by index. It
+uses far less memory and is faster to walk, but the code reads `n.lhs` where it reads `n.cond` now, so it
+needs a reading function per kind and part. A middle way is about 25 to 30 fields shared by kinds of close
+meaning. Sources: Zig's `lib/std/zig/Ast.zig` (github.com/ziglang/zig), the Ziggit thread "What is the state
+of AST processing?", r/ProgrammingLanguages "Flat AST and state machines over recursion" (claims Zig's
+compiler went from about 10 GB to 3 GB; not confirmed). Phase 7 (8-byte ints and floats) shrinks every
+value, so it is measured first.
 
 Measured after 2a, with `# strict` in every compiler file and the compiler checked from `zuec.zu`: 3,418 uses
 of a value of unknown type. 1,775 are field reads, most on syntax-tree nodes of mixed kinds (step 4); the

@@ -145,10 +145,10 @@ func cfold(e) {
         return e.v as int
     }
     if (e.k == "char") {
-        return e.v
+        return e.v as int
     }
     if (e.k == "bool") {
-        if (e.v) {
+        if (e.v == "true") {
             return 1
         }
         return 0
@@ -696,7 +696,7 @@ func nx(n) {
         return "{n.v}"
     }
     if (k == "bool") {
-        if (n.v) {
+        if (n.v == "true") {
             return "1"
         }
         return "0"

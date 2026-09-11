@@ -114,7 +114,7 @@ func expr(n) {
         return "{n.v}"
     }
     if (k == "char") {
-        return char_literal(n.v)
+        return char_literal(n.v as int)
     }
     if (k == "str") {
         return "\"{escape_text(n.v)}\""

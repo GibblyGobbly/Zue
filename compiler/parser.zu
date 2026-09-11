@@ -17,7 +17,7 @@
 use { diag_new, diag_text, diag_hint, diag_label, diag_on_line, diag_exit_if_errors, diag_count, span_at, span_line, node_span } from "diag.zu"
 use { lex } from "lexer.zu"
 use { KEYWORDS } from "token.zu"
-use { mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_slice, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_typedef, mk_use, mk_block, mk_return, mk_jump, mk_neg, any_node } from "ast_nodes.zu"
+use { mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_slice, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_typedef, mk_use, mk_block, mk_return, mk_jump, mk_neg } from "ast_nodes.zu"
 use { cut } from "ranges.zu"
 
 let P_toks = []
@@ -504,11 +504,11 @@ func p_primary() {
     }
     if (t == "char") {
         p_next()
-        return mk_lit("char", tk, tk, tk.v)
+        return mk_lit("char", tk, tk, "{tk.v}")
     }
     if (t == "true" or t == "false") {
         p_next()
-        return mk_lit("bool", tk, tk, t == "true")
+        return mk_lit("bool", tk, tk, t)
     }
     if (t == "id") {
         p_next()
@@ -757,7 +757,7 @@ func p_expr_bp_inner(min_bp) {
         # not binds looser than a comparison and tighter than and: not a == b is not (a == b).
         p_next()
         let operand = p_expr_bp(3)
-        left = any_node(mk_not(st, P_prev, operand))
+        left = mk_not(st, P_prev, operand)
     } else {
         left = p_as(p_unary(), st)
     }
@@ -1094,7 +1094,7 @@ func p_for_header(st) {
         let lt = p_next()
         if (not (P_kind == "id")) {
             p_fail("Expected loop variable name in for loop")
-            return mk_while(st, st, mk_lit("bool", st, st, false), [])
+            return mk_while(st, st, mk_lit("bool", st, st, "false"), [])
         }
         let nt = p_next()
         let name = nt.v

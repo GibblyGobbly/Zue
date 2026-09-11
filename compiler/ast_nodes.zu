@@ -1,48 +1,54 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 #
-# ast_nodes.zu: the syntax tree node types and the functions that build them.
+# ast_nodes.zu: the syntax tree node type and the functions that build them.
 #
-# Every node is a template whose first two fields are k (the kind, a string) and line. After the fields
-# of its kind come col, eline and ecol: with line they are the place of the node in the source, the
-# line and column of its first byte and the line and column just after its last byte (columns count
-# bytes from 1). They come last because the tree walkers read fields by name, and a name near the
-# front is found faster. The parser fills them
-# in after the node is built; a node made by the compiler itself keeps col 0, which means "no place
-# known beyond the line". A template keeps its fields at fixed places, so a node costs less memory
-# than a map and is built in one call. A field a kind does not use is not declared; a field it may
-# leave empty holds null. The checker adds sty to let and for-in nodes (and stys, the same per signature of the function that holds them) and spec to call nodes (the signature of a direct call, see check.zu), and ads and ad to whole-number literals (what the literal becomes per signature, see adapt_to in check.zu), and the emitter caches the raw kind of a binary node in kc. NODE_FIELDS lists the fields of
-# each kind after k and line, in the order of the template; ast_dump.zu and the tree walkers read it. Fields that end in span hold a Span from diag.zu, or null: they say where a name, an
-# operator, a type or an argument list is, so the checker can point at exactly that text.
+# Every node is one template, Node, whatever its kind: k (the kind, a string) says which of its fields
+# the node uses, and the other fields stay empty (null). One type for every node lets a variable or a
+# list hold nodes of any kind with its type known. line, col, eline and ecol are the place of the node in
+# the source: the line and column of its first byte and the line and column just after its last byte
+# (columns count bytes from 1). A node made by the compiler itself keeps col 0, which means "no place
+# known beyond the line". The fields read most come first, because a field is found by its name.
+# Fields that end in span hold a Span, the place of a name, an operator, a type or an argument list, so
+# the checker can point at exactly that text; the spans lists hold a Span or null per item.
+# The checker adds sty to let and for-in nodes (and stys, the same per signature of the function that
+# holds them) and spec to call nodes (the signature of a direct call, see check.zu), and ads and ad to
+# whole-number literals (what the literal becomes per signature, see adapt_to in check.zu), and the
+# emitter caches the raw kind of a binary node in kc. A literal keeps its value as text in v: digits for
+# num and float, the text for str, "true" or "false" for bool, the character code for char.
+# NODE_FIELDS lists the fields each kind uses besides k, line and the places; ast_dump.zu and the tree
+# walkers read it. A possible later form, smaller in memory, is in docs/plan.md (phase 4).
 
-export template NLit { k, line, v, ads, ad, col, eline, ecol }
-export template NId { k, line, name, col, eline, ecol }
-export template NTmpl { k, line, parts, col, eline, ecol }
-export template NList { k, line, items, col, eline, ecol }
-export template NMap { k, line, keys, vals, col, eline, ecol }
-export template NFunc { k, line, name, params, defaults, ptypes, body, exported, col, eline, ecol, nspan, pspans, tspans }
-export template NBox { k, line, size, col, eline, ecol }
-export template NCall { k, line, callee, args, spec, col, eline, ecol, aspan, names, nspans }
-export template NIndex { k, line, target, index, col, eline, ecol }
-export template NSlice { k, line, target, lo, hi, col, eline, ecol }
-export template NField { k, line, target, field, col, eline, ecol, fspan }
-export template NIncdec { k, line, name, op, prefix, col, eline, ecol, nspan }
-export template NBin { k, line, op, l, r, unary, kc, col, eline, ecol, ospan }
-export template NNot { k, line, e, col, eline, ecol }
-export template NLet { k, line, name, init, exported, const_decl, type, sty, stys, orelse, col, eline, ecol, nspan, tspan }
-export template NGroup { k, line, items, col, eline, ecol }
-export template NIf { k, line, cond, then, els, col, eline, ecol }
-export template NForIn { k, line, name, iter, body, sty, stys, col, eline, ecol, nspan }
-export template NFor { k, line, init, cond, incr, body, col, eline, ecol }
-export template NWhile { k, line, cond, body, col, eline, ecol }
-export template NSwitch { k, line, e, cases, dflt, col, eline, ecol }
-export template NAssign { k, line, name, e, col, eline, ecol, nspan }
-export template NSetidx { k, line, target, index, e, op, col, eline, ecol }
-export template NTypedef { k, line, exported, name, is_template, is_bloc, fields, ftypes, col, eline, ecol, nspan, fspans }
-export template NUse { k, line, names, path, col, eline, ecol, pspan, nspans }
-export template NBlock { k, line, body, col, eline, ecol }
-export template NReturn { k, line, e, col, eline, ecol }
-export template NJump { k, line, col, eline, ecol }
+use { Span, span_at } from "diag.zu"
+
+export template Node {
+    k: string, line: int, name: string, v: string, op: string, l: Node, r: Node, e: Node, callee: Node,
+    args: list<Node>, target: Node, index: Node, field: string, body: list<Node>, cond: Node, then: list<Node>,
+    els: list<Node>, items: list<Node>, init: Node, iter: Node, incr: Node, params: list<string>,
+    defaults: list, ptypes: list, exported: bool, type: string, sty: string, stys: map<string>, spec: string,
+    kc: string, ads: map<string>, ad: string, unary: bool, prefix: bool, const_decl: bool, orelse: list<Node>,
+    keys: list<string>, vals: list<Node>, parts: list, size: Node, lo: Node, hi: Node, cases: list,
+    dflt: list<Node>, is_template: bool, is_bloc: bool, fields: list<string>, ftypes: list, path: string,
+    names: list, col: int, eline: int, ecol: int, nspan: Span, ospan: Span, aspan: Span, fspan: Span,
+    pspan: Span, tspan: Span, nspans: list, pspans: list, tspans: list, fspans: list
+}
+
+# A node of kind k from token (or node) st to en, every other field empty.
+func node(k, st, en) {
+    return Node(k, st.line, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, st.col, en.eline, en.ecol, null, null, null, null, null, null, null, null, null,
+        null)
+}
+
+# The place of a token, a Span or a node as a Span, or null.
+func sp(x) {
+    if (x == null) {
+        return null
+    }
+    return span_at(x.line, x.col, x.eline, x.ecol)
+}
 
 export const NODE_FIELDS = {
     "num": ["v", "ads", "ad"], "float": ["v"], "str": ["v"], "char": ["v"], "bool": ["v"],
@@ -85,140 +91,251 @@ export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "
 # Evaluate the children before reading the parser's last token for en: arguments are read in order.
 
 export func mk_lit(k, st, en, v) {
-    return NLit(k, st.line, v, null, null, st.col, en.eline, en.ecol)
+    let n = node(k, st, en)
+    n.v = v
+    return n
 }
 
 export func mk_id(st, en, name) {
-    return NId("id", st.line, name, st.col, en.eline, en.ecol)
+    let n = node("id", st, en)
+    n.name = name
+    return n
 }
 
 # An id node for a name made by the compiler, with no place in the source but its line.
 export func mk_id_line(line, name) {
-    return NId("id", line, name, 0, line, 0)
+    let at = span_at(line, 0, line, 0)
+    let n = node("id", at, at)
+    n.name = name
+    return n
 }
 
 export func mk_tmpl(st, en, parts) {
-    return NTmpl("tmpl", st.line, parts, st.col, en.eline, en.ecol)
+    let n = node("tmpl", st, en)
+    n.parts = parts
+    return n
 }
 
 export func mk_list(st, en, items) {
-    return NList("list", st.line, items, st.col, en.eline, en.ecol)
+    let n = node("list", st, en)
+    n.items = items
+    return n
 }
 
 export func mk_map(st, en, keys, vals) {
-    return NMap("map", st.line, keys, vals, st.col, en.eline, en.ecol)
+    let n = node("map", st, en)
+    n.keys = keys
+    n.vals = vals
+    return n
 }
 
 # nspan is the name of a named function; pspans the parameter names, tspans their type annotations.
 export func mk_func(st, en, name, params, defaults, ptypes, body, exported, nspan, pspans, tspans) {
-    return NFunc("func", st.line, name, params, defaults, ptypes, body, exported, st.col, en.eline, en.ecol, nspan, pspans, tspans)
+    let n = node("func", st, en)
+    n.name = name
+    n.params = params
+    n.defaults = defaults
+    n.ptypes = ptypes
+    n.body = body
+    n.exported = exported
+    n.nspan = sp(nspan)
+    n.pspans = pspans
+    n.tspans = tspans
+    return n
 }
 
 export func mk_box(st, en, size) {
-    return NBox("box", st.line, size, st.col, en.eline, en.ecol)
+    let n = node("box", st, en)
+    n.size = size
+    return n
 }
 
 # aspan is the argument list with its brackets.
 export func mk_call(st, en, callee, args, aspan) {
-    return NCall("call", st.line, callee, args, null, st.col, en.eline, en.ecol, aspan, null, null)
+    let n = node("call", st, en)
+    n.callee = callee
+    n.args = args
+    n.aspan = sp(aspan)
+    return n
 }
 
 export func mk_index(st, en, target, index) {
-    return NIndex("index", st.line, target, index, st.col, en.eline, en.ecol)
+    let n = node("index", st, en)
+    n.target = target
+    n.index = index
+    return n
 }
 
 # target[lo:hi]: positions from lo to hi, counting from 0, both included. lo or hi is null when left out.
 export func mk_slice(st, en, target, lo, hi) {
-    return NSlice("slice", st.line, target, lo, hi, st.col, en.eline, en.ecol)
+    let n = node("slice", st, en)
+    n.target = target
+    n.lo = lo
+    n.hi = hi
+    return n
 }
 
 export func mk_field(st, en, target, field, fspan) {
-    return NField("field", st.line, target, field, st.col, en.eline, en.ecol, fspan)
+    let n = node("field", st, en)
+    n.target = target
+    n.field = field
+    n.fspan = sp(fspan)
+    return n
 }
 
 export func mk_incdec(st, en, name, op, prefix, nspan) {
-    return NIncdec("incdec", st.line, name, op, prefix, st.col, en.eline, en.ecol, nspan)
+    let n = node("incdec", st, en)
+    n.name = name
+    n.op = op
+    n.prefix = prefix
+    n.nspan = sp(nspan)
+    return n
 }
 
 # ospan is the operator.
 export func mk_bin(st, en, op, l, r, ospan) {
-    return NBin("bin", st.line, op, l, r, null, null, st.col, en.eline, en.ecol, ospan)
+    let n = node("bin", st, en)
+    n.op = op
+    n.l = l
+    n.r = r
+    n.ospan = sp(ospan)
+    return n
 }
 
 # Unary minus is stored as 0 - r, with unary set.
 export func mk_neg(st, en, zero, r, ospan) {
-    return NBin("bin", st.line, "-", zero, r, true, null, st.col, en.eline, en.ecol, ospan)
-}
-
-# A node whose kind is not fixed where it is stored (a variable that holds a not node, then a binary
-# node). Until the compiler has one Node template for every kind, the value goes through a list of
-# mixed items, so the checker takes its type as unknown.
-export func any_node(n) {
-    return [n, null][0]
+    let n = node("bin", st, en)
+    n.op = "-"
+    n.l = zero
+    n.r = r
+    n.unary = true
+    n.ospan = sp(ospan)
+    return n
 }
 
 export func mk_not(st, en, e) {
-    return NNot("not", st.line, e, st.col, en.eline, en.ecol)
+    let n = node("not", st, en)
+    n.e = e
+    return n
 }
 
 export func mk_let(st, en, name, init, exported, const_decl, type, nspan, tspan) {
-    return NLet("let", st.line, name, init, exported, const_decl, type, null, null, null, st.col, en.eline, en.ecol, nspan, tspan)
+    let n = node("let", st, en)
+    n.name = name
+    n.init = init
+    n.exported = exported
+    n.const_decl = const_decl
+    n.type = type
+    n.nspan = sp(nspan)
+    n.tspan = sp(tspan)
+    return n
 }
 
 export func mk_group(st, en, items) {
-    return NGroup("group", st.line, items, st.col, en.eline, en.ecol)
+    let n = node("group", st, en)
+    n.items = items
+    return n
 }
 
 export func mk_if(st, en, cond, then, els) {
-    return NIf("if", st.line, cond, then, els, st.col, en.eline, en.ecol)
+    let n = node("if", st, en)
+    n.cond = cond
+    n.then = then
+    n.els = els
+    return n
 }
 
 export func mk_forin(st, en, name, iter, body, nspan) {
-    return NForIn("forin", st.line, name, iter, body, null, null, st.col, en.eline, en.ecol, nspan)
+    let n = node("forin", st, en)
+    n.name = name
+    n.iter = iter
+    n.body = body
+    n.nspan = sp(nspan)
+    return n
 }
 
 export func mk_for(st, en, init, cond, incr, body) {
-    return NFor("for", st.line, init, cond, incr, body, st.col, en.eline, en.ecol)
+    let n = node("for", st, en)
+    n.init = init
+    n.cond = cond
+    n.incr = incr
+    n.body = body
+    return n
 }
 
 export func mk_while(st, en, cond, body) {
-    return NWhile("while", st.line, cond, body, st.col, en.eline, en.ecol)
+    let n = node("while", st, en)
+    n.cond = cond
+    n.body = body
+    return n
 }
 
 export func mk_switch(st, en, e, cases, dflt) {
-    return NSwitch("switch", st.line, e, cases, dflt, st.col, en.eline, en.ecol)
+    let n = node("switch", st, en)
+    n.e = e
+    n.cases = cases
+    n.dflt = dflt
+    return n
 }
 
 export func mk_assign(st, en, name, e, nspan) {
-    return NAssign("assign", st.line, name, e, st.col, en.eline, en.ecol, nspan)
+    let n = node("assign", st, en)
+    n.name = name
+    n.e = e
+    n.nspan = sp(nspan)
+    return n
 }
 
 export func mk_setidx(st, en, target, index, e, op) {
-    return NSetidx("setidx", st.line, target, index, e, op, st.col, en.eline, en.ecol)
+    let n = node("setidx", st, en)
+    n.target = target
+    n.index = index
+    n.e = e
+    n.op = op
+    return n
 }
 
 # nspan is the name; fspans the field names.
 export func mk_typedef(st, en, exported, name, is_template, is_bloc, fields, ftypes, nspan, fspans) {
-    return NTypedef("typedef", st.line, exported, name, is_template, is_bloc, fields, ftypes, st.col, en.eline, en.ecol, nspan, fspans)
+    let n = node("typedef", st, en)
+    n.exported = exported
+    n.name = name
+    n.is_template = is_template
+    n.is_bloc = is_bloc
+    n.fields = fields
+    n.ftypes = ftypes
+    n.nspan = sp(nspan)
+    n.fspans = fspans
+    return n
 }
 
 # pspan is the path string; nspans the imported names.
 export func mk_use(st, en, names, path, pspan, nspans) {
-    return NUse("use", st.line, names, path, st.col, en.eline, en.ecol, pspan, nspans)
+    let n = node("use", st, en)
+    n.names = names
+    n.path = path
+    n.pspan = sp(pspan)
+    n.nspans = nspans
+    return n
 }
 
 # k is "block" for a bare { } block and "unsafe" for an unsafe block.
 export func mk_block(k, st, en, body) {
-    return NBlock(k, st.line, body, st.col, en.eline, en.ecol)
+    let n = node(k, st, en)
+    n.body = body
+    return n
 }
 
 export func mk_return(st, en, e) {
-    return NReturn("return", st.line, e, st.col, en.eline, en.ecol)
+    let n = node("return", st, en)
+    n.e = e
+    return n
 }
 
 # k is "break" or "continue".
 export func mk_jump(k, st, en) {
-    return NJump(k, st.line, st.col, en.eline, en.ecol)
+    let n = node(k, st, en)
+    return n
 }
 
 export func is_node(x) {

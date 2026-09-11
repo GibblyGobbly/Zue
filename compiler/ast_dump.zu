@@ -68,7 +68,12 @@ func dump_node(n) {
         if (key != "k" and key != "line") {
             let value = n[key]
             if (not (is_tree_node and value == null and is_optional(key))) {
-                append(parts, ":{key} {dump_value(value)}")
+                if (key == "v" and (kind == "bool" or kind == "char")) {
+                    # kept as text in the node; shown as the value it stands for
+                    append(parts, ":v {value}")
+                } else {
+                    append(parts, ":{key} {dump_value(value)}")
+                }
             }
         }
     }
