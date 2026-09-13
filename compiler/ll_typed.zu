@@ -329,7 +329,7 @@ func tex_math_call(n) {
     let rt = machine_type(ms.res)
     let out = ll_temp_alloca(rt)
     let raws = []
-    let kinds = []
+    let kinds: list<string> = []
     for (let a in n.args) {
         if (a.k == "num" and ms.kind != "abs") {
             append(raws, ll_float_text(a.v))
@@ -440,7 +440,7 @@ func tex_math_call(n) {
     if (needs_slow) {
         ll_label(slow)
         ll_mark(n)
-        let argv = []
+        let argv: list<string> = []
         for (let i = 0; i < len(raws); i++) {
             append(argv, box_raw(kinds[i], raws[i]))
         }
@@ -506,7 +506,7 @@ func tex_spec_call(n) {
     let done = ll_new_label("sdone")
     ll_condbr(ok, fast, slow)
     ll_label(fast)
-    let args = []
+    let args: list<string> = []
     for (let i = 0; i < len(raws); i++) {
         append(args, "{machine_type(sp.sig.args[i])} {raws[i]}")
     }
@@ -568,7 +568,7 @@ func tex_spec_call(n) {
     let callee_p = ll_reg()
     ll("{callee_p} = getelementptr inbounds i8, ptr {callee}, i64 8")
     ll("store i64 {held}, ptr {callee_p}")
-    let argv = []
+    let argv: list<string> = []
     for (let i = 0; i < len(raws); i++) {
         append(argv, box_raw(sp.sig.args[i], raws[i]))
     }

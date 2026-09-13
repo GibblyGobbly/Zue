@@ -516,7 +516,15 @@ a `Type Error` with the line, and the program is not built.
 - A list or map literal whose items all have one type has that element type: `[1, 2, 3]` is a
   `list<int>` and `{"a": 1.5}` is a `map<float>`. Reading an item gives the element type, and storing
   or appending another type is an error: after `let xs = [1, 2]`, `xs[0] = "a"` and `append(xs, "a")`
-  fail. A list of mixed items, or an empty list, is a plain `list` whose items are not checked.
+  fail. A list of mixed items is a plain `list` whose items are not checked.
+- A list that starts empty takes the type of the first value appended to it: after `let xs = []` and
+  `append(xs, 1)`, `xs` is a `list<int>`. A value of another type appended or stored later makes it a list
+  of mixed items. Write the type (`let xs: list<int> = []`) to have such a value rejected instead.
+- A test of `type(x)` against a name, when the type of `x` is known, leaves out the branch that cannot run:
+  a function with `if (type(x) == "string") { return "text" }` called with a list does not count that
+  return.
+- A function that returns values of one template type, and maybe `null` (an empty value), has that
+  template type, also when it calls itself.
 - A type can be written after a colon on a variable, a parameter or a field: `let xs: list<float> = [1, 2]`,
   `func total(v: list<int>, n: int = 0)`, `template Bag { items: list<int> }`. `list` and `map` take an
   element type in angle brackets and may nest (`map<list<int>>`). The type names are `int`, `float`,
@@ -527,8 +535,9 @@ a `Type Error` with the line, and the program is not built.
   when assigned (`p.hp = "a"` is an error). A `template` field without a type has the type of the value
   the template was made with, per value: after `let a = Stack([1, 2])`, `append(a.items, "y")` is an error
   (see [data-types](data-types.md#typed-fields)).
-- Builtins with a fixed result type give it: `len` is an int, `split` is a `list<string>`, `range` is a
-  `list<int>`, `min`, `max` and `sum` of a `list<int>` are ints.
+- Builtins with a fixed result type give it: `len` is an int, `split` and `args` are a `list<string>`,
+  `range` is a `list<int>`, `read` is a string, `min`, `max` and `sum` of a `list<int>` are ints, and
+  `map_get` of a `map<int>` is an int.
 - Types cross files. A function, template or constant brought in with `use` keeps its types, and a call
   of an imported function is checked for the types it is called with, as a function of the same file is.
   A wrong argument is an error at the call, with a hint that names the file and line of the function; a

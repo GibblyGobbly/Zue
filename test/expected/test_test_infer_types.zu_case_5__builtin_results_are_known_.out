@@ -1,0 +1,8 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 5:
+  cannot assign list<string> to 'wrong', which is int
+
+   5 | let wrong: int = a
+     |            ---   ^ this is list<string>
+     |            |
+     |            'wrong' is declared int
+

@@ -21,7 +21,7 @@ use { parse_source } from "parser.zu"
 use { resolve_named_args } from "named_args.zu"
 use { path_dir, path_join, path_norm, split_lines } from "util.zu"
 
-let SCOPES = []
+let SCOPES: list<map> = []
 
 # Beside each scope, where each of its variables got its type: a node (the first value) or a span
 # (a type annotation or a parameter). Used only to label an error.
@@ -36,6 +36,69 @@ let STRICT = false
 # checks report what strict mode finds; the pass with unknown parameters reports only proven errors.
 let GENERIC = 0
 
+# zue check --list-types: for each list that starts empty (let xs = []), the types of the values appended
+# to it, so that a tool can write the element type: "file:line" -> {"name", "types"}.
+export const LIST_TYPES_ON = [false]
+let LIST_TYPES = {}
+
+# Notes that a value of type t is appended to the list a names, when a starts empty.
+func note_list_type(a, t) {
+    if (a.k != "id") {
+        return null
+    }
+    let ekey = "empty:{a.name}"
+    let idx = scope_index(a.name)
+    if (idx < 0 or idx != scope_index(ekey)) {
+        return null
+    }
+    let ln = SCOPES[idx][ekey]
+    if (ln == null) {
+        return null
+    }
+    let key = "{ST.src_file}:{ln.line}"
+    if (not map_has(LIST_TYPES, key)) {
+        LIST_TYPES[key] = {"name": a.name, "types": {}}
+    }
+    # unknown while a recursive function is still being checked; its second pass gives the type
+    let st = settle(t)
+    if (st != "any") {
+        LIST_TYPES[key]["types"][st] = true
+    }
+}
+
+# A list that starts empty (let xs = []) takes the type of the first value appended to it: xs is a
+# list<int> after append(xs, 1). A value of another type appended later makes it a list of mixed items.
+# Returns true when a is such a list, so the append needs no other check.
+func grow_list(a, t, vt) {
+    if (a.k != "id") {
+        return false
+    }
+    let ekey = "empty:{a.name}"
+    let idx = scope_index(a.name)
+    if (idx < 0 or idx != scope_index(ekey) or SCOPES[idx][ekey] == null) {
+        return false
+    }
+    let v = settle(vt)
+    if (SCOPES[idx][a.name] == "list" and v != "any" and v != "null" and v != "unset") {
+        SCOPES[idx][a.name] = "list<{v}>"
+    } else if (SCOPES[idx][a.name] != "list<{v}>") {
+        # a second type, or a value of unknown type: a list of mixed items from here on
+        SCOPES[idx][a.name] = "list"
+        SCOPES[idx][ekey] = null
+    }
+    return true
+}
+
+# Prints "file:line: name: list<T>" for every list that starts empty and gets values of one known type.
+func print_list_types() {
+    for (let key in sort(map_keys(LIST_TYPES))) {
+        let ts = map_keys(LIST_TYPES[key]["types"])
+        if (len(ts) == 1 and ts[0] != "null" and ts[0] != "unset") {
+            print("{key}: {LIST_TYPES[key]["name"]}: list<{ts[0]}>")
+        }
+    }
+}
+
 func strict_on() {
     return STRICT and GENERIC == 0
 }
@@ -47,8 +110,8 @@ let TYPEDEFS = {}
 
 let MEMO = {}
 let INPROG = {}
-let CALLS = []
-let RETS = []
+let CALLS: list<map> = []
+let RETS: list<list> = []
 
 # Recursion. The result type of a function that calls itself is unknown while its body is checked, so
 # the first pass takes it as any. When the other returns agree on one scalar type, the body is checked
@@ -89,6 +152,17 @@ func ck_init_results() {
     RESULTS["map_keys"] = "list<string>"
     RESULTS["range"] = "list<int>"
     RESULTS["dense_list"] = "list<float>"
+    RESULTS["args"] = "list<string>"
+    RESULTS["map_items"] = "list<list>"
+    for (let nm in split("read char_at concat to_string fixed string", " ")) {
+        RESULTS[nm] = "string"
+    }
+    for (let nm in split("code system find", " ")) {
+        RESULTS[nm] = "int"
+    }
+    RESULTS["char"] = "char"
+    RESULTS["clock"] = "float"
+    RESULTS["file_exists"] = "bool"
 }
 
 ck_init_results()
@@ -612,12 +686,12 @@ func lookup(name) {
 # check, when every declaration has been seen: it is a typo only if nothing in the program declares
 # it, and it is not a builtin. When a use brings in a whole file without naming its names, any name
 # may come from it.
-let PENDING = []
+let PENDING: list<map> = []
 let OPEN_IMPORT = false
 
 # The names a typo could have meant: those in scope, those declared anywhere, then the builtins.
 func name_candidates(scopes) {
-    let out = []
+    let out: list<string> = []
     let seen = {}
     for (let sc in scopes) {
         for (let key in map_keys(sc)) {
@@ -1037,7 +1111,7 @@ func ck_builtin_call(n, name, alts, argtypes) {
         }
     }
     if (len(same_count) == 0) {
-        let counts = []
+        let counts: list<string> = []
         for (let alt in alts) {
             append(counts, "{len(alt[0])}")
         }
@@ -1054,7 +1128,7 @@ func ck_builtin_call(n, name, alts, argtypes) {
         let d = fail_at(args_span(n), "{name}() expects {wanted} argument{plural}, but got {len(argtypes)}")
         diag_text(d, "found {len(argtypes)}")
         diag_label(d, node_span(n.callee), "{name} takes {wanted}")
-        let forms = []
+        let forms: list<string> = []
         for (let alt in alts) {
             append(forms, "{name}{alt_text(alt)}")
         }
@@ -1089,7 +1163,7 @@ func ck_builtin_call(n, name, alts, argtypes) {
         diag_hint(d, convert_hint(first_miss[1], argtypes[idx], n.args[idx]))
         return "any"
     }
-    let forms = []
+    let forms: list<string> = []
     for (let alt in same_count) {
         append(forms, alt_text(alt))
     }
@@ -1205,7 +1279,7 @@ func ck_typed_construct(n, name, argtypes) {
     if (td.is_template != true) {
         return name
     }
-    let args = []
+    let args: list<string> = []
     let known = false
     for (let i = 0; i < len(td.fields); i++) {
         if (td.ftypes[i] == null) {
@@ -1322,6 +1396,12 @@ func ck_builtin(n, name, argtypes) {
     }
     let el = elem_of(first)
     if ((name == "append" or name == "list_append") and len(argtypes) == 2) {
+        if (LIST_TYPES_ON[0]) {
+            note_list_type(n.args[0], argtypes[1])
+        }
+        if (grow_list(n.args[0], first, argtypes[1])) {
+            return lookup(n.args[0].name)
+        }
         if (kind_of(first) == "list" and el != null) {
             let vt = adapt_expr(n.args[1], argtypes[1], el)
             if (not fits_slot(vt, el)) {
@@ -1339,6 +1419,18 @@ func ck_builtin(n, name, argtypes) {
     }
     if (name == "sort" and len(argtypes) == 1 and kind_of(first) == "list") {
         return first
+    }
+    # Results that follow the element type of the first argument.
+    if (el != null and kind_of(first) == "map" and (name == "map_get" or name == "map_values")) {
+        if (name == "map_values") {
+            return "list<{el}>"
+        }
+        if (len(argtypes) == 2 or (len(argtypes) == 3 and settle(argtypes[2]) == el)) {
+            return el
+        }
+    }
+    if (el != null and kind_of(first) == "list" and name == "remove" and len(argtypes) == 2) {
+        return el
     }
     let result = "any"
     if (map_has(SIGS, name)) {
@@ -1385,6 +1477,11 @@ func scope_index(key) {
 func join_returns(rets) {
     if (len(rets) == 0) {
         return "null"
+    }
+    # A template value may be empty: returns of one template type and of null give that type.
+    let tt = template_or_null(rets)
+    if (tt != null) {
+        return tt
     }
     let t = rets[0]
     for (let r in rets) {
@@ -1622,13 +1719,15 @@ func check_body(name, fn, idx, types, line, home = null) {
 }
 
 # The scalar type all the returns that do not depend on the recursion agree on, or null.
-func common_scalar(rets) {
+# The one template type of rets when every other item is null, or null.
+func template_or_null(rets) {
     let t = null
     for (let r in rets) {
-        if (r == "any") {
+        if (r == "null") {
             continue
         }
-        if (not is_scalar(r)) {
+        let od = object_def(r)
+        if (od == null or od.is_template != true) {
             return null
         }
         if (t == null) {
@@ -1638,6 +1737,40 @@ func common_scalar(rets) {
         }
     }
     return t
+}
+
+# The type all the returns that do not depend on the recursion agree on, or null. A template type
+# may come with null returns (an empty value).
+func common_scalar(rets) {
+    let tt = template_or_null(without_any(rets))
+    if (tt != null) {
+        return tt
+    }
+    let t = null
+    for (let r in rets) {
+        if (r == "any") {
+            continue
+        }
+        if (r == "null" or r == "unset") {
+            return null
+        }
+        if (t == null) {
+            t = r
+        } else if (t != r) {
+            return null
+        }
+    }
+    return t
+}
+
+func without_any(rets) {
+    let out = []
+    for (let r in rets) {
+        if (r != "any") {
+            append(out, r)
+        }
+    }
+    return out
 }
 
 # The second pass of a recursive function: checks the body again with the recursive calls typed as the
@@ -1765,7 +1898,7 @@ func ck_expr(n) {
         return t
     }
     if (k == "list") {
-        let ts = []
+        let ts: list<string> = []
         for (let item in n.items) {
             append(ts, ck_expr(item))
         }
@@ -1776,7 +1909,7 @@ func ck_expr(n) {
         return "list<{e}>"
     }
     if (k == "map") {
-        let ts = []
+        let ts: list<string> = []
         for (let v in n.vals) {
             append(ts, ck_expr(v))
         }
@@ -1982,6 +2115,11 @@ func ck_stmt(n) {
                 it = "unset"
             }
             declare(n.name, it, n.init)
+            if (n.init.k == "list" and len(n.init.items) == 0) {
+                declare("empty:{n.name}", n)
+            } else if (scope_index("empty:{n.name}") == len(SCOPES) - 1) {
+                declare("empty:{n.name}", null)
+            }
             mark_sty(n, it)
         }
     } else if (k == "group") {
@@ -2008,13 +2146,18 @@ func ck_stmt(n) {
         ck_block(n.els)
         pop_scope()
     } else if (k == "if") {
+        let dead = dead_branch(n.cond)
         ck_cond(n.cond, "'if'")
-        push_scope()
-        ck_block(n.then)
-        pop_scope()
-        push_scope()
-        ck_block(n.els)
-        pop_scope()
+        if (dead != "then") {
+            push_scope()
+            ck_block(n.then)
+            pop_scope()
+        }
+        if (dead != "else") {
+            push_scope()
+            ck_block(n.els)
+            pop_scope()
+        }
     } else if (k == "while") {
         ck_cond(n.cond, "'while'")
         push_scope()
@@ -2099,6 +2242,10 @@ func ck_stmt(n) {
                 }
             }
         }
+        if (el != null and n.op == null and kind_of(tt) == "list" and grow_list(n.target, tt, et)) {
+            # a list that started empty: a value of another type makes it a list of mixed items
+            return null
+        }
         if (el != null and n.op == null) {
             et = adapt_expr(n.e, et, el)
             if (not fits_slot(et, el)) {
@@ -2164,6 +2311,59 @@ func ck_block(stmts) {
     for (let s in stmts) {
         ck_stmt(s)
     }
+}
+
+# The name type(v) gives for a value of checker type t, or null when t does not tell.
+func runtime_name(t) {
+    let k = kind_of(t)
+    if (k == "int" or k == "float" or k == "bool" or k == "string" or k == "char" or k == "list" or k == "map" or k == "function") {
+        return k
+    }
+    let od = object_def(t)
+    if (od != null and od.is_template == true) {
+        return "template"
+    }
+    if (od != null and od.is_bloc == true) {
+        return "bloc"
+    }
+    return null
+}
+
+# For if (type(x) == "string") with the type of x known: "then" when that branch cannot run, "else" when
+# the other cannot, else null. A function checked for a list argument then does not count a return
+# meant for a string. Also with != and the two sides swapped.
+func dead_branch(c) {
+    if (c.k != "bin" or (c.op != "==" and c.op != "!=")) {
+        return null
+    }
+    let call = c.l
+    let lit = c.r
+    if (call.k == "str") {
+        call = c.r
+        lit = c.l
+    }
+    if (lit.k != "str" or call.k != "call" or call.callee.k != "id" or call.callee.name != "type") {
+        return null
+    }
+    if (len(call.args) != 1 or call.args[0].k != "id" or lookup("type") != null) {
+        return null
+    }
+    let t = lookup(call.args[0].name)
+    if (t == null) {
+        return null
+    }
+    let rn = runtime_name(t)
+    if (rn == null) {
+        return null
+    }
+    let same = rn == lit.v
+    if (c.op == "!=") {
+        same = not same
+    }
+    if (same) {
+        return "else"
+    }
+    return "then"
 }
 
 # Records on a let or for-in node the scalar type of its variable, for the code generator to keep
@@ -2457,6 +2657,11 @@ export func check_program(stmts, canon = null) {
     push_scope()
     ck_block(stmts)
     pop_scope()
+    if (LIST_TYPES_ON[0]) {
+        # the main program is checked first, and its check covers the files it imports
+        print_list_types()
+        LIST_TYPES_ON[0] = false
+    }
     report_undefined()
     diag_exit_if_errors()
     settle_literals()

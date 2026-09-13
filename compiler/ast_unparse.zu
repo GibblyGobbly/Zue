@@ -11,7 +11,7 @@ let PRINTABLE = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\
 
 # The text of a string value with the escapes the lexer reads back.
 func escape_text(s) {
-    let out = []
+    let out: list<string> = []
     for (let ch in s) {
         let c = code(ch)
         if (ch == '\\') {
@@ -73,7 +73,7 @@ func exprs(list) {
 }
 
 func params_text(n) {
-    let parts = []
+    let parts: list<string> = []
     for (let i = 0; i < len(n.params); i++) {
         let pname = n.params[i]
         if (n.ptypes != null and n.ptypes[i] != null) {
@@ -138,7 +138,7 @@ func expr(n) {
         return "[{exprs(n.items)}]"
     }
     if (k == "map") {
-        let parts = []
+        let parts: list<string> = []
         for (let i = 0; i < len(n.keys); i++) {
             append(parts, "\"{escape_text(n.keys[i])}\": {expr(n.vals[i])}")
         }
@@ -151,7 +151,7 @@ func expr(n) {
         if (n.names == null) {
             return "{expr(n.callee)}({exprs(n.args)})"
         }
-        let parts = []
+        let parts: list<string> = []
         for (let i = 0; i < len(n.args); i++) {
             if (n.names[i] == null) {
                 append(parts, expr(n.args[i]))
@@ -265,7 +265,7 @@ func stmt_body(n, depth) {
         return let_text(n, depth)
     }
     if (k == "group") {
-        let names = []
+        let names: list<string> = []
         let vals = []
         for (let item in n.items) {
             if (item.type != null) {
@@ -369,7 +369,7 @@ func stmt_body(n, depth) {
         if (n.exported == true) {
             head = "export {word}"
         }
-        let fields = []
+        let fields: list<string> = []
         for (let i = 0; i < len(n.fields); i++) {
             if (n.ftypes[i] == null) {
                 append(fields, n.fields[i])

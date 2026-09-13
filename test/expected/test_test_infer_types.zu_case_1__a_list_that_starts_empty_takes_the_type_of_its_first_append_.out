@@ -1,0 +1,9 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 5:
+  cannot assign int to 's', which is string
+
+   5 | let s: string = xs[0]
+     |        ------   ^^^^^ this is int
+     |        |
+     |        's' is declared string
+
+Hint: Convert a number to text with x as string, or write it inside a string: "{x}"

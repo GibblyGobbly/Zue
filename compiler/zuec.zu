@@ -28,6 +28,7 @@ use { dump_program } from "ast_dump.zu"
 use { unparse_program } from "ast_unparse.zu"
 use { GC_LOWMEM, dbg_enable } from "ll_state.zu"
 use { SPEC_ON } from "ll_spec.zu"
+use { LIST_TYPES_ON } from "check.zu"
 use { diag_set_format } from "diag.zu"
 use { ERROR_CODES } from "error_codes.zu"
 use { cut } from "ranges.zu"
@@ -80,6 +81,7 @@ func usage() {
     print("  run    build into C/run/ and run it with the given arguments")
     print("  emit   write LLVM IR only (default C/<name>.ll)")
     print("  check  parse and type-check only; print every error found, nothing when there is none")
+    print("  --list-types  with check: print a list<T> for each list that starts empty and gets values of one type")
     print("  explain [code]  describe an error code such as E0201; without a code, list them all")
     print("  ast    print the parsed syntax tree, one statement per line (--spans adds the places)")
     print("  unparse  print the parsed program as source again")
@@ -269,7 +271,7 @@ func unparse_main(a) {
 
 # zue --native a.zu b.zu ... -o out.ll: compiles runtime files (emit_native.zu).
 func native_main(a) {
-    let files = []
+    let files: list<map> = []
     let out_path = ""
     let i = 1
     while (i < len(a)) {
@@ -332,6 +334,9 @@ func main() {
                 exit(1)
             }
             GC_LOWMEM[0] = true
+            rest = cut(rest, 1, len(rest))
+        } else if (rest[0] == "--list-types" and cmd == "check") {
+            LIST_TYPES_ON[0] = true
             rest = cut(rest, 1, len(rest))
         } else if (rest[0] == "--no-spec" and (cmd == "run" or cmd == "build" or cmd == "emit")) {
             SPEC_ON[0] = false

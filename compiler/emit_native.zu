@@ -346,7 +346,7 @@ func arg_value(a, ty) {
 }
 
 func call_text(args) {
-    let parts = []
+    let parts: list<string> = []
     for (let a in args) {
         append(parts, "{a.ty} {a.v}")
     }
@@ -547,7 +547,7 @@ func nx_special(n, name) {
 # call_ptr(f, args...): an indirect call of a word function.
 func nx_call_ptr(n) {
     let vals = nx_list(n.args)
-    let parts = []
+    let parts: list<string> = []
     for (let i = 1; i < len(vals); i++) {
         append(parts, "i64 {vals[i]}")
     }
@@ -568,7 +568,7 @@ func nx_callv(n) {
     if (not direct) {
         fv = nx(callee)
     }
-    let parts = []
+    let parts: list<string> = []
     for (let i = 2; i < len(n.args); i++) {
         let w = nx(n.args[i])
         if (direct) {
@@ -648,7 +648,7 @@ func nx_call(n) {
         if (info.lv) {
             nfail(n, "{name} returns an LV; call it with callv")
         }
-        let parts = []
+        let parts: list<string> = []
         for (let i = 0; i < len(n.args); i++) {
             let ty = ntype(info.kinds[i])
             append(parts, "{ty} {to_type(nx(n.args[i]), ty)}")
@@ -663,7 +663,7 @@ func nx_call(n) {
         if (len(n.args) < fixed or (len(n.args) > fixed and not ext.variadic)) {
             nfail(n, "{name} takes {fixed} argument(s), not {len(n.args)}")
         }
-        let vals = []
+        let vals: list<map> = []
         for (let i = 0; i < len(n.args); i++) {
             let ty = "i64"
             if (i < fixed) {
@@ -992,7 +992,7 @@ func compile_func(n) {
     let info = NS.funcs[n.name]
     ST.ctx = ll_new_ctx(false)
     ST.ctx.lv = info.lv
-    let params = []
+    let params: list<string> = []
     for (let i = 0; i < len(n.params); i++) {
         let ty = ntype(info.kinds[i])
         append(params, "{ty} %p{i}")
@@ -1047,9 +1047,9 @@ func register_extern(n) {
     if (len(a) != 3 or a[0].k != "str" or a[1].k != "str" or a[2].k != "str") {
         nfail(n, "extern takes a name, a return type and a parameter list as strings")
     }
-    let params = []
+    let params: list<string> = []
     let variadic = false
-    let ptys = []
+    let ptys: list<string> = []
     if (a[2].v != "") {
         for (let p in split(a[2].v, ",")) {
             if (p == "...") {
@@ -1096,7 +1096,7 @@ func register_table(n) {
         nfail(n, "table takes a name, an element type and constant values")
     }
     let ty = a[1].v
-    let items = []
+    let items: list<string> = []
     for (let i = 2; i < len(a); i++) {
         let v = cfold(a[i])
         if (v == null) {
@@ -1117,7 +1117,7 @@ func register_table(n) {
 func scan_file(stmts) {
     for (let s in stmts) {
         if (s.k == "func") {
-            let kinds = []
+            let kinds: list<string> = []
             for (let p in s.params) {
                 append(kinds, param_kind(p))
             }

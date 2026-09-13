@@ -199,7 +199,7 @@ func lex_string(src, i, start_line) {
     let q_at = i
     let ls0 = LS
     let q_col = col_of(i)
-    let parts = []
+    let parts: list<map> = []
     let cur = []
     i += 1
     let seg = i
@@ -576,7 +576,7 @@ func build_two_table(want_kind) {
 # # comment, 8 is / (a comment when another / follows, an operator otherwise), 0 is an operator
 # byte or an error.
 func build_classes() {
-    let table = []
+    let table: list<int> = []
     for (let k = 0; k < 256; k++) {
         if ((k >= 65 and k <= 90) or (k >= 97 and k <= 122) or k == 95) {
             append(table, 1)

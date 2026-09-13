@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Types the checker works out without annotations: a list that starts empty, a branch on type(x), a
+# recursive function that returns a template, and the results of builtins.
+
+# CASE a list that starts empty takes the type of its first append
+let xs = []
+append(xs, 1)
+append(xs, 2)
+print(xs[0] + xs[1])
+let s: string = xs[0]
+
+# CASE a value of another type makes it a list of mixed items
+let xs = []
+append(xs, 1)
+append(xs, "two")
+xs[0] = true
+print(xs)
+
+# CASE a branch on type(x) that cannot run is not counted
+func size(x) {
+    if (type(x) == "string") {
+        return "text"
+    }
+    return len(x)
+}
+let n = size([1, 2, 3])
+print(n + 1)
+let t: string = size([1])
+
+# CASE a recursive function that returns a template or null has the template type
+template Tree { v: int, l: Tree }
+func build(n) {
+    if (n == 0) {
+        return null
+    }
+    return Tree(n, build(n - 1))
+}
+let tree = build(3)
+print(tree.l.v)
+let bad: int = tree
+
+# CASE builtin results are known
+let a = args()
+let m = {"x": 1, "y": 2}
+print(map_get(m, "x") + 1)
+print(len(map_values(m)))
+let wrong: int = a

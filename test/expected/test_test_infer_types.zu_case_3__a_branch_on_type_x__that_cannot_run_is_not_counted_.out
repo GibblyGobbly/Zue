@@ -1,0 +1,9 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 9:
+  cannot assign int to 't', which is string
+
+   9 | let t: string = size([1])
+     |        ------   ^^^^^^^^^ this is int
+     |        |
+     |        't' is declared string
+
+Hint: Convert a number to text with x as string, or write it inside a string: "{x}"

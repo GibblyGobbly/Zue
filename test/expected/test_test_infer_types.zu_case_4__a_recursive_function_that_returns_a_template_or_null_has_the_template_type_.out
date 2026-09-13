@@ -1,0 +1,8 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 10:
+  cannot assign Tree to 'bad', which is int
+
+  10 | let bad: int = tree
+     |          ---   ^^^^ this is Tree
+     |          |
+     |          'bad' is declared int
+

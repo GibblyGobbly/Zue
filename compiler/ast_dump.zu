@@ -21,7 +21,7 @@ func dump_value(x) {
         return dump_node(x)
     }
     if (t == "list") {
-        let items = []
+        let items: list<string> = []
         for (let item in x) {
             append(items, dump_value(item))
         }
@@ -86,7 +86,7 @@ let SHOW_SPANS = false
 
 export func dump_program(stmts, spans = false) {
     SHOW_SPANS = spans
-    let lines = []
+    let lines: list<string> = []
     for (let s in stmts) {
         append(lines, dump_value(s))
     }

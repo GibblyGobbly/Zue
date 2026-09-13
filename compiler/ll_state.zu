@@ -33,7 +33,7 @@ func ll_hex_digit(n) {
 
 # Text for an LLVM c"..." constant (without the surrounding quotes).
 export func ll_escape(text) {
-    let parts = []
+    let parts: list<string> = []
     for (let ch in text) {
         let byte = code(ch)
         if (ch == '"' or ch == '\\' or byte < 32 or byte > 126) {

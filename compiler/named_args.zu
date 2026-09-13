@@ -8,7 +8,7 @@
 # still run in the order they are written. A parameter left out that has a default gets an "absent" node,
 # which the called function reads as not given.
 
-use { mk_jump, node_children, node_kind } from "ast_nodes.zu"
+use { Node, mk_jump, node_children, node_kind } from "ast_nodes.zu"
 use { diag_new, diag_text, diag_label, diag_hint, diag_exit_if_errors, diag_count, suggest } from "diag.zu"
 use { parse_source } from "parser.zu"
 use { BUILTINS } from "shared.zu"
@@ -23,7 +23,7 @@ let BUILTIN_PARAMS = {}
 func add_params(text) {
     for (let entry in split(text, ";")) {
         let parts = split(trim(entry), " ")
-        let names = []
+        let names: list<string> = []
         for (let i = 1; i < len(parts); i++) {
             append(names, parts[i])
         }
@@ -338,7 +338,7 @@ func place(c, name, params, defaults, ps) {
             last = pos
         }
     }
-    let args = []
+    let args: list<Node> = []
     for (let p = 0; p < np; p++) {
         if (slots[p] != null) {
             append(args, slots[p])

@@ -234,7 +234,7 @@ func bars_row(marks) {
 # The rows drawn under one source line, without the gutter.
 func mark_rows(marks) {
     let sorted = sort_marks(marks)
-    let rows = []
+    let rows: list<string> = []
     let n = len(sorted)
     let last = sorted[n - 1]
     let first_row = underline_row(sorted)
@@ -287,7 +287,7 @@ func excerpt_rows(d) {
         }
     }
     sort(lines)
-    let out = []
+    let out: list<string> = []
     let prev = 0
     for (let ln in lines) {
         if (ln < 1 or ln > len(d.lines)) {
@@ -322,7 +322,7 @@ func code_text(msg) {
 
 # The printed form of one error, as a list of lines.
 export func render(d) {
-    let out = []
+    let out: list<string> = []
     append(out, "{d.kind}{code_text(d.msg)} in {d.file} at line {d.span.line}:")
     append(out, "  {d.msg}")
     for (let t in d.trace) {
@@ -408,7 +408,7 @@ func json_span(sp) {
 }
 
 func json_list(items) {
-    let out = []
+    let out: list<string> = []
     for (let x in items) {
         append(out, json_str(x))
     }
@@ -417,7 +417,7 @@ func json_list(items) {
 
 # One error as a JSON object on one line.
 func render_json(d) {
-    let labels = []
+    let labels: list<string> = []
     for (let lb in d.labels) {
         append(labels, "\{{json_span(lb.span)}, \"text\": {json_str(lb.text)}}")
     }
@@ -561,9 +561,9 @@ export func suggest(word, candidates) {
     let best = null
     let best_d = limit + 1
     # a candidate within limit edits is at most len(word) + limit long
-    let rows = []
+    let rows: list<list> = []
     for (let k = 0; k < 3; k++) {
-        let r = []
+        let r: list<int> = []
         for (let j = 0; j <= len(word) + limit; j++) {
             append(r, 0)
         }
