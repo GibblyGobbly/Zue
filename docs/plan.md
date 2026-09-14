@@ -1204,7 +1204,7 @@ Steps, each its own commit:
 | 1 | Types cross files: the checker checks each imported file in its own context and calls of its exported functions per argument types | Done 2026-11-05 |
 | 2a | Strict mode follows the rule for parameters: an untyped parameter of a named function is checked per call, so only function values need typed parameters; the pass with unknown parameters reports only proven errors. Parsing and the named-argument pass stop only on their own errors, so the checker reports errors in every imported file | Done 2026-11-06 |
 | 2b | The checker infers more by itself: a list that starts empty takes its first appended type (another type makes it mixed); a `type(x)` test leaves out the branch that cannot run; recursive functions returning a template (or null); builtin results (`args`, `read`, `map_get`, ...). `zue check --list-types` prints the element type of lists that start empty | Done 2026-11-06 |
-| 3 | Result types may be written: `func area(w: float, h: float) -> float` | |
+| 3 | Result types may be written: `func area(w: float, h: float) -> float`; checked at every return and on every path (E0212); a call has that type | Done 2026-11-06 |
 | 4a | A typed template field may be empty (null) | Done 2026-11-06 |
 | 4 | One `Node` template in the compiler, 63 typed fields; literal values kept as text; places kept as `Span` | Done 2026-11-06 |
 | 5 | The compiler's files pass strict mode, small files first, a seed after each group | |

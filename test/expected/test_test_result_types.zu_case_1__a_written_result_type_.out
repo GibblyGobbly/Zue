@@ -1,0 +1,9 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 6:
+  cannot assign float to 's', which is string
+
+   6 | let s: string = a
+     |        ------   ^ this is float
+     |        |
+     |        's' is declared string
+
+Hint: Convert a number to text with x as string, or write it inside a string: "{x}"

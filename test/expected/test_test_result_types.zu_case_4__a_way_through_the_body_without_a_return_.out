@@ -1,0 +1,7 @@
+Type Error [E0212] in /tmp/zue_test_case.zu at line 1:
+  sign_of() must return an int on every path
+
+   1 | func sign_of(n: int) -> int {
+     |                         ^^^ a way through the body ends without a return
+
+Hint: Add a return at the end of the function, or remove the result type

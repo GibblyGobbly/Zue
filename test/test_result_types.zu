@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# A result type written after -> is checked at every return, and a call has that type.
+
+# CASE a written result type
+func area(w: float, h: float) -> float {
+    return w * h
+}
+print(area(2.0, 3.5))
+let a = area(1.0, 1.0)
+let s: string = a
+
+# CASE a return of another type
+func label(n: int) -> int {
+    return "n is {n}"
+}
+print(label(4))
+
+# CASE a whole-number literal returned as a float
+func one() -> float {
+    return 1
+}
+print(one())
+
+# CASE a way through the body without a return
+func sign_of(n: int) -> int {
+    if (n > 0) {
+        return 1
+    }
+}
+print(sign_of(1))
+
+# CASE a template result may be empty
+template Node { v: int, next: Node }
+func find_v(n: Node, v: int) -> Node {
+    if (n == null) {
+        return null
+    }
+    if (n.v == v) {
+        return n
+    }
+    return find_v(n.next, v)
+}
+let list = Node(1, Node(2, Node(3, null)))
+print(find_v(list, 2).v)
+print(find_v(list, 9) == null)
+
+# CASE a recursive function with a result type
+func fact(n: int) -> int {
+    if (n < 2) {
+        return 1
+    }
+    return n * fact(n - 1)
+}
+print(fact(10))
+

@@ -380,9 +380,9 @@ func p_map_literal(st) {
 
 # A type annotation after ':' on a variable, a parameter or a field: a type name, and for list and
 # map an element type in angle brackets, as in list<int> or map<list<float>>. Returned as text.
-func p_type(what) {
+func p_type(what, after = ":") {
     if (not (P_kind == "id")) {
-        p_fail("Expected a type after ':' in {what}")
+        p_fail("Expected a type after '{after}' in {what}")
         return "any"
     }
     let name = p_next().v
@@ -475,6 +475,15 @@ func p_func_rest(name, nt, st, is_export) {
         }
     }
     p_close(")", "Expected ')'")
+    # func area(w: float, h: float) -> float: the type of the result
+    let rtype = null
+    let rspan = null
+    if (P_kind == "->") {
+        p_next()
+        let ts = P_tk
+        rtype = p_type("a function", "->")
+        rspan = p_type_span(ts)
+    }
     p_skip_nl()
     p_expect("\{", "Expected '\{'")
     let declared = null
@@ -483,7 +492,7 @@ func p_func_rest(name, nt, st, is_export) {
     }
     let body = p_block_body()
     p_scope_pop()
-    return mk_func(st, P_prev, name, params, defaults, declared, body, is_export, nt, pspans, tspans)
+    return mk_func(st, P_prev, name, params, defaults, declared, body, is_export, nt, pspans, tspans, rtype, rspan)
 }
 
 func p_primary() {

@@ -93,7 +93,11 @@ func func_text(n, depth) {
     if (n.name != null) {
         head = "func {n.name}"
     }
-    return "{head}({params_text(n)}) \{\n{block_text(n.body, depth + 1)}{pad(depth)}}"
+    let result = ""
+    if (n.rtype != null) {
+        result = " -> {n.rtype}"
+    }
+    return "{head}({params_text(n)}){result} \{\n{block_text(n.body, depth + 1)}{pad(depth)}}"
 }
 
 func expr(n) {

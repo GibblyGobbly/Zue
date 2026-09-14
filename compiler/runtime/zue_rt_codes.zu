@@ -337,6 +337,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("cannot convert")) != 0) {
         return cstr("E0211")
     }
+    if (strstr(msg, cstr("must return")) != 0) {
+        return cstr("E0212")
+    }
     if (strstr(msg, cstr("is not defined")) != 0) {
         return cstr("E0301")
     }

@@ -15,7 +15,8 @@
 # holds them) and spec to call nodes (the signature of a direct call, see check.zu), and ads and ad to
 # whole-number literals (what the literal becomes per signature, see adapt_to in check.zu), and the
 # emitter caches the raw kind of a binary node in kc. A literal keeps its value as text in v: digits for
-# num and float, the text for str, "true" or "false" for bool, the character code for char.
+# num and float, the text for str, "true" or "false" for bool, the character code for char. A func node
+# keeps the result type written after -> in rtype (null when none), and its place in rspan.
 # NODE_FIELDS lists the fields each kind uses besides k, line and the places; ast_dump.zu and the tree
 # walkers read it. A possible later form, smaller in memory, is in docs/plan.md (phase 4).
 
@@ -30,7 +31,7 @@ export template Node {
     keys: list<string>, vals: list<Node>, parts: list, size: Node, lo: Node, hi: Node, cases: list,
     dflt: list<Node>, is_template: bool, is_bloc: bool, fields: list<string>, ftypes: list, path: string,
     names: list, col: int, eline: int, ecol: int, nspan: Span, ospan: Span, aspan: Span, fspan: Span,
-    pspan: Span, tspan: Span, nspans: list, pspans: list, tspans: list, fspans: list
+    pspan: Span, tspan: Span, nspans: list, pspans: list, tspans: list, fspans: list, rtype: string, rspan: Span
 }
 
 # A node of kind k from token (or node) st to en, every other field empty.
@@ -39,7 +40,7 @@ func node(k, st, en) {
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
         null, null, st.col, en.eline, en.ecol, null, null, null, null, null, null, null, null, null,
-        null)
+        null, null, null)
 }
 
 # The place of a token, a Span or a node as a Span, or null.
@@ -56,7 +57,7 @@ export const NODE_FIELDS = {
     "tmpl": ["parts"],
     "list": ["items"],
     "map": ["keys", "vals"],
-    "func": ["name", "params", "defaults", "ptypes", "body", "exported"],
+    "func": ["name", "params", "defaults", "ptypes", "body", "exported", "rtype"],
     "box": ["size"],
     "call": ["callee", "args", "spec", "names"],
     "absent": [],
@@ -83,7 +84,7 @@ export const NODE_FIELDS = {
 }
 
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
-export const OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad", "orelse", "names"]
+export const OPTIONAL_FIELDS = ["rtype", "ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad", "orelse", "names"]
 
 # The constructors take st and en, the first and the last token of the node (a node can stand for
 # either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and
@@ -130,7 +131,7 @@ export func mk_map(st, en, keys, vals) {
 }
 
 # nspan is the name of a named function; pspans the parameter names, tspans their type annotations.
-export func mk_func(st, en, name, params, defaults, ptypes, body, exported, nspan, pspans, tspans) {
+export func mk_func(st, en, name, params, defaults, ptypes, body, exported, nspan, pspans, tspans, rtype = null, rspan = null) {
     let n = node("func", st, en)
     n.name = name
     n.params = params
@@ -141,6 +142,8 @@ export func mk_func(st, en, name, params, defaults, ptypes, body, exported, nspa
     n.nspan = sp(nspan)
     n.pspans = pspans
     n.tspans = tspans
+    n.rtype = rtype
+    n.rspan = sp(rspan)
     return n
 }
 

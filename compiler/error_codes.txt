@@ -337,6 +337,18 @@ example:
     n()
 fix: Check the type of the value; the message names it.
 
+== E0212
+title: A function does not return its written result type
+match: must return
+text: A function with a result type after -> (func area(w: float, h: float) -> float) must return a value of
+    that type from every return, and must not end without a return unless its result is a template, which
+    may be empty.
+example:
+    func label(n: int) -> int {
+        return "n is {n}"
+    }
+fix: Return a value of the written type, convert the value, or change the result type.
+
 == E0301
 title: A name is not defined
 match: is not defined

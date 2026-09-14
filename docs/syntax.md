@@ -531,6 +531,18 @@ a `Type Error` with the line, and the program is not built.
   `bool`, `char`, `string`, `list`, `map`, `function` and the name of a `bloc` or `template`. A plain
   `list` annotation keeps the items unchecked. Whole numbers in the source become floats where a
   float is wanted, so `let xs: list<float> = [1, 2]` holds floats.
+- A function may write its result type after `->`. Every return must give that type, a function whose
+  result is not a template must return on every path, and a call has that type:
+
+  ```javascript
+  func area(w: float, h: float) -> float {
+      return w * h
+  }
+  let a = area(2.0, 3.5)     # a is a float, 7.0
+  ```
+
+  A return of another type is an error that points at the written type:
+  `area() must return a float, got string`. A template result may be empty (`return null`).
 - Fields of a typed `bloc` or `template` have their declared types when read (`p.hp` is an int) and
   when assigned (`p.hp = "a"` is an error). A `template` field without a type has the type of the value
   the template was made with, per value: after `let a = Stack([1, 2])`, `append(a.items, "y")` is an error

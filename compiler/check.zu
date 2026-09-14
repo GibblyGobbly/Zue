@@ -1600,6 +1600,9 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
         }
         return MEMO[mkey]
     }
+    if (map_has(INPROG, mkey) and fn.rtype != null) {
+        return annot(fn.rtype, span_or(fn.rspan, fn), true)
+    }
     if (map_has(INPROG, mkey)) {
         RECURSIVE[mkey] = true
         if (map_has(ASSUME, mkey)) {
@@ -1613,6 +1616,9 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
     INPROG[mkey] = true
     let rets1 = check_body(name, fn, idx, types, line, home)
     let result = join_returns(rets1)
+    if (fn.rtype != null) {
+        result = annot(fn.rtype, span_or(fn.rspan, fn), true)
+    }
     if (map_has(RECURSIVE, mkey) and not is_scalar(result)) {
         result = try_assume(name, fn, idx, types, line, mkey, rets1, result, home)
     }
@@ -1703,7 +1709,9 @@ func check_body(name, fn, idx, types, line, home = null) {
     }
     append(CALLS, {"name": name, "types": types, "line": line, "body": body, "file": caller_file})
     append(RETS, [])
+    push_result_type(fn)
     ck_block(fn.body)
+    remove(RESULT_TYPES, len(RESULT_TYPES) - 1)
     let rets = remove(RETS, len(RETS) - 1)
     # A way through the body that does not end in a return gives null.
     if (not always_returns(fn.body)) {
@@ -1832,6 +1840,7 @@ func ck_func(n) {
     if (untyped and n.name != null) {
         GENERIC += 1
     }
+    push_result_type(n)
     append(RETS, [])
     push_scope()
     for (let i = 0; i < len(n.params); i++) {
@@ -1847,6 +1856,8 @@ func ck_func(n) {
     ck_block(n.body)
     pop_scope()
     remove(RETS, len(RETS) - 1)
+    remove(RESULT_TYPES, len(RESULT_TYPES) - 1)
+    check_result_paths(n)
     if (untyped and n.name != null) {
         GENERIC -= 1
     }
@@ -2209,6 +2220,7 @@ func ck_stmt(n) {
         if (n.e != null) {
             rt = settle(ck_expr(n.e))
         }
+        rt = check_result(n, rt)
         if (len(RETS) > 0) {
             append(RETS[len(RETS) - 1], rt)
         }
@@ -2311,6 +2323,67 @@ func ck_block(stmts) {
     for (let s in stmts) {
         ck_stmt(s)
     }
+}
+
+# The result types written after -> of the functions being checked, innermost last: [type, name, span]
+# or null for a function without one.
+let RESULT_TYPES = []
+
+func push_result_type(fn) {
+    if (fn.rtype == null) {
+        append(RESULT_TYPES, null)
+        return null
+    }
+    let who = "this function"
+    if (fn.name != null) {
+        who = "{fn.name}()"
+    }
+    append(RESULT_TYPES, [annot(fn.rtype, span_or(fn.rspan, fn), true), who, fn.rspan])
+}
+
+# A return in a function with a written result type: the value must fit it; a template result may be
+# empty (null). Returns the type the return gives.
+func check_result(n, rt) {
+    if (len(RESULT_TYPES) == 0 or RESULT_TYPES[len(RESULT_TYPES) - 1] == null) {
+        return rt
+    }
+    let r = RESULT_TYPES[len(RESULT_TYPES) - 1]
+    let want = r[0]
+    if (n.e != null) {
+        rt = adapt_expr(n.e, rt, want)
+    }
+    let od = object_def(want)
+    let empty_ok = rt == "null" and od != null and od.is_template == true
+    if (rt != "any" and want != "any" and not empty_ok and not fits_slot(rt, want)) {
+        let at = node_span(n)
+        if (n.e != null) {
+            at = node_span(n.e)
+        }
+        let d = fail_at(at, "{r[1]} must return {article(want)} {want}, got {describe(rt)}")
+        diag_text(d, "this is {describe(rt)}")
+        diag_label(d, r[2], "the result is {want}")
+        diag_hint(d, convert_hint(want, rt, n.e))
+    }
+    return want
+}
+
+# A function with a written result type that is not a template must return on every way through its body.
+func check_result_paths(fn) {
+    if (fn.rtype == null or always_returns(fn.body)) {
+        return null
+    }
+    let want = annot(fn.rtype, span_or(fn.rspan, fn), true)
+    let od = object_def(want)
+    if (want == "any" or want == "null" or (od != null and od.is_template == true)) {
+        return null
+    }
+    let who = "this function"
+    if (fn.name != null) {
+        who = "{fn.name}()"
+    }
+    let d = fail_at(span_or(fn.rspan, fn), "{who} must return {article(want)} {want} on every path")
+    diag_text(d, "a way through the body ends without a return")
+    diag_hint(d, "Add a return at the end of the function, or remove the result type")
 }
 
 # The name type(v) gives for a value of checker type t, or null when t does not tell.

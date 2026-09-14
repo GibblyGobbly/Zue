@@ -136,6 +136,7 @@ example to be sure it causes the error it claims to.
 | `E0209` | A type name is not known |
 | `E0210` | A typed field is given the wrong type |
 | `E0211` | A call or value cannot be used this way |
+| `E0212` | A function does not return its written result type |
 | `E0301` | A name is not defined |
 | `E0302` | An import cannot be resolved |
 | `E0401` | An index or slice is outside its list or string |
