@@ -105,8 +105,23 @@ func strict_on() {
 
 # Per-call checking of user functions. A function body is checked once for each distinct list of
 # argument types, with the parameters bound to those types.
-# The typed bloc and template definitions of the program, by name.
+# The typed bloc and template definitions the file being checked knows, by name.
 let TYPEDEFS = {}
+
+# Every bloc and template definition of every file, by name, and the definitions known in the file that
+# declares it. A value can reach a file that never names its type (a function of another file returns
+# it), and its fields are still known; the types written in a definition or in the signature of a
+# function are read in the file they are written in.
+let ALL_TYPEDEFS = {}
+let DEF_SCOPE = {}
+
+func note_typedef(n) {
+    TYPEDEFS[n.name] = n
+    if (not map_has(ALL_TYPEDEFS, n.name)) {
+        ALL_TYPEDEFS[n.name] = n
+        DEF_SCOPE[n.name] = TYPEDEFS
+    }
+}
 
 let MEMO = {}
 let INPROG = {}
@@ -302,7 +317,7 @@ func template_args(t) {
 # The type of field fi of a value of type t whose definition is td.
 func object_field_type(td, t, fi) {
     if (td.ftypes[fi] != null) {
-        return field_check_type(td.ftypes[fi])
+        return field_check_type(td.ftypes[fi], def_scope(td))
     }
     let args = template_args(t)
     if (args == null) {
@@ -552,10 +567,15 @@ func adapt_expr(n, et, want) {
 
 # The checker type for a type written in the source. An unknown name is an error when strict, else any.
 func annot(text, span, strict) {
+    return annot_in(text, span, strict, TYPEDEFS)
+}
+
+# annot with the type definitions ds.
+func annot_in(text, span, strict, ds) {
     if (contains(text, "<")) {
         let i = index_of(text, "<")
         let kind = cut(text, 0, i)
-        let inner = annot(cut(text, i + 1, len(text) - 1), span, strict)
+        let inner = annot_in(cut(text, i + 1, len(text) - 1), span, strict, ds)
         if (inner == "any") {
             return kind
         }
@@ -567,7 +587,7 @@ func annot(text, span, strict) {
     if (text == "list" or text == "map" or text == "function") {
         return text
     }
-    let td = map_get(TYPEDEFS, text, null)
+    let td = map_get(ds, text, null)
     if (td != null) {
         if (td.is_bloc == true or td.is_template == true) {
             return text
@@ -1209,7 +1229,7 @@ func article(t) {
 }
 
 # The checker type a field declared with type text accepts, or "any" for a type it cannot judge.
-func field_check_type(text) {
+func field_check_type(text, defs) {
     if (text == null) {
         return "any"
     }
@@ -1222,7 +1242,15 @@ func field_check_type(text) {
     if (starts_with(text, "box:")) {
         return "box"
     }
-    return annot(text, null, false)
+    return annot_in(text, null, false, defs)
+}
+
+# The definitions the file that declares typedef td knows.
+func def_scope(td) {
+    if (map_get(ALL_TYPEDEFS, td.name, null) == td) {
+        return DEF_SCOPE[td.name]
+    }
+    return TYPEDEFS
 }
 
 # The index of field in the fields of the typed definition td, or -1.
@@ -1238,6 +1266,9 @@ func field_index(td, field) {
 # The definition t names when t is a bloc or template type, else null.
 func object_def(t) {
     let td = map_get(TYPEDEFS, kind_of(t), null)
+    if (td == null) {
+        td = map_get(ALL_TYPEDEFS, kind_of(t), null)
+    }
     if (td != null and (td.is_bloc == true or td.is_template == true)) {
         return td
     }
@@ -1253,7 +1284,7 @@ func ck_typed_construct(n, name, argtypes) {
         kind = "Bloc"
     }
     for (let i = 0; i < len(td.fields) and i < len(argtypes); i++) {
-        let want = field_check_type(td.ftypes[i])
+        let want = field_check_type(td.ftypes[i], def_scope(td))
         let got = argtypes[i]
         if (want == "any" or got == "any") {
             continue
@@ -1404,7 +1435,8 @@ func ck_builtin(n, name, argtypes) {
         }
         if (kind_of(first) == "list" and el != null) {
             let vt = adapt_expr(n.args[1], argtypes[1], el)
-            if (not fits_slot(vt, el)) {
+            # a list of a template type may hold empty items, as a field of that type may be empty
+            if (not fits_slot(vt, el) and not (vt == "null" and template_or_null([el]) != null)) {
                 let d = fail_node(n.args[1], "cannot append {describe(vt)} to {first}")
                 diag_text(d, "this is {describe(vt)}")
                 diag_label(d, node_span(n.args[0]), "{first}")
@@ -1555,14 +1587,15 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
     for (let i = 0; i < np; i++) {
         let want = null
         if (fn.ptypes != null and fn.ptypes[i] != null) {
-            want = annot(fn.ptypes[i], span_or(ptype_span(fn, i), fn), true)
+            want = sig_annot(fn.ptypes[i], span_or(ptype_span(fn, i), fn), home)
         }
         if (i < len(argtypes) and argtypes[i] != "absent") {
             let at = argtypes[i]
             if (want != null) {
                 strict_known(at, argnodes[i], "argument {i + 1} of {name}()")
                 at = adapt_expr(argnodes[i], at, want)
-                if (not fits_slot(at, want)) {
+                # a parameter of a template type may be given an empty value, as a field of that type may
+                if (not fits_slot(at, want) and not (at == "null" and template_or_null([want]) != null)) {
                     let d = fail_node(argnodes[i], "{name}() argument {i + 1} must be {article(want)} {want}, got {describe(at)}")
                     diag_text(d, "expected {want}, found {describe(at)}")
                     if (home == null) {
@@ -1601,7 +1634,7 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
         return MEMO[mkey]
     }
     if (map_has(INPROG, mkey) and fn.rtype != null) {
-        return annot(fn.rtype, span_or(fn.rspan, fn), true)
+        return sig_annot(fn.rtype, span_or(fn.rspan, fn), home)
     }
     if (map_has(INPROG, mkey)) {
         RECURSIVE[mkey] = true
@@ -1617,7 +1650,7 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
     let rets1 = check_body(name, fn, idx, types, line, home)
     let result = join_returns(rets1)
     if (fn.rtype != null) {
-        result = annot(fn.rtype, span_or(fn.rspan, fn), true)
+        result = sig_annot(fn.rtype, span_or(fn.rspan, fn), home)
     }
     if (map_has(RECURSIVE, mkey) and not is_scalar(result)) {
         result = try_assume(name, fn, idx, types, line, mkey, rets1, result, home)
@@ -1631,6 +1664,15 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
         spec_site(call, fn, idx, types, result)
     }
     return result
+}
+
+# A type written in the signature of a function: read in its own file (home) when it is another file's.
+# An unknown name there was reported when that file was checked.
+func sig_annot(text, span, home) {
+    if (home == null) {
+        return annot(text, span, true)
+    }
+    return annot_in(text, span, false, home.typedefs)
 }
 
 # Whether every way through stmts ends in a return.
@@ -2059,6 +2101,10 @@ func ck_assign(n) {
         ORIGINS[si][n.name] = n.e
         return null
     }
+    # a variable of a template type may be emptied, as a field of that type may
+    if (et == "null" and template_or_null([vt]) != null) {
+        return null
+    }
     strict_known(et, n.e, "the value assigned to '{n.name}'")
     et = adapt_expr(n.e, et, vt)
     if (not fits_slot(et, vt)) {
@@ -2260,7 +2306,7 @@ func ck_stmt(n) {
         }
         if (el != null and n.op == null) {
             et = adapt_expr(n.e, et, el)
-            if (not fits_slot(et, el)) {
+            if (not fits_slot(et, el) and not (et == "null" and template_or_null([el]) != null)) {
                 let d = fail_node(n.e, "cannot store {describe(et)} in {tt}")
                 diag_text(d, "this is {describe(et)}")
                 diag_label(d, node_span(n.target), "{tt}")
@@ -2281,7 +2327,7 @@ func ck_stmt(n) {
         pop_scope()
     } else if (k == "typedef") {
         declare(n.name, "type")
-        TYPEDEFS[n.name] = n
+        note_typedef(n)
     } else if (k == "use") {
         bind_use(n)
     } else if (k == "break" or k == "continue") {
@@ -2301,7 +2347,7 @@ func ck_hoist(stmts) {
             HOISTED[s.name] = true
         } else if (k == "typedef") {
             declare(s.name, "type")
-            TYPEDEFS[s.name] = s
+            note_typedef(s)
             HOISTED[s.name] = true
         } else if (k == "use") {
             bind_use(s)
@@ -2714,6 +2760,8 @@ export func check_program(stmts, canon = null) {
     STRICT = file_is_strict(ST.src_lines)
     SCOPES = []
     TYPEDEFS = {}
+    ALL_TYPEDEFS = {}
+    DEF_SCOPE = {}
     MEMO = {}
     INPROG = {}
     CALLS = []

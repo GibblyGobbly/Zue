@@ -54,7 +54,9 @@ in the importing file, even with `use "file.zu"`.
 - **Types cross files.** The type checker reads each imported file too. A call of an imported function
   is checked for the types it is called with, so `area("big", 2.0)` with `area(w: float, h: float)` in
   another file is an error when the program is built. Each error names the file it is in (see
-  [syntax](syntax.md#type-checking)).
+  [syntax](syntax.md#type-checking)). The types written in an imported file are read in that file, and a
+  template value that comes back from an imported function keeps its field types even when the importing
+  file does not import the template's name.
 - `import "util.zu"` is an older spelling of `use "util.zu"`: it brings in the exported names
   only.
 - An imported name is a copy of the module's binding made when `use` runs. Exported constants

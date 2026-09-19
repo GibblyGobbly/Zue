@@ -19,3 +19,10 @@ export func twice(x) {
 export func label(s) {
     return s + 1
 }
+
+# A file that imports only corner_of still knows the fields of the Corner it returns.
+template Corner { at: Size, next: Corner }
+
+export func corner_of(s: Size) -> Corner {
+    return Corner(s, null)
+}

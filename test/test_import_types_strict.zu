@@ -1,0 +1,13 @@
+# strict
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Strict mode across files: a template that comes back from an imported function is known, with its
+# field types, though this file does not import its name; a typed parameter of the imported function is
+# read in its own file.
+
+use { Size, corner_of } from "fixtures/typed_shapes.zu"
+
+let c = corner_of(Size(2.0, 4.0))
+print(c.at.w * c.at.h)
+print(c.next == null)

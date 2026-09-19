@@ -4,7 +4,7 @@
 # Types cross files: the result of an imported function, an imported template and an imported variable
 # are known where they are used, and an untyped parameter takes the type of each call.
 
-use { area, twice, Size, UNIT } from "fixtures/typed_shapes.zu"
+use { area, twice, Size, UNIT, corner_of } from "fixtures/typed_shapes.zu"
 
 let a = area(2.0, 3.0)
 print(a + 0.5)
@@ -13,3 +13,6 @@ print(twice("ab") + "!")
 let s = Size(2.0, 4.0)
 print(area(s.w, s.h))
 print(UNIT * 2.0)
+let c = corner_of(s)
+print(c.at.w + c.at.h)
+print(c.next == null)

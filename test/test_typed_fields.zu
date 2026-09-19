@@ -223,3 +223,25 @@ print(leaf.l.k)
 # CASE a bloc field may not be empty
 bloc P { x: int, y: int }
 let p = P{1, null}
+# CASE a variable, a list item and an argument of a template type may be empty
+template Link { v: int, next: Link }
+func total(l: Link) {
+    if (l == null) {
+        return 0
+    }
+    return l.v + total(l.next)
+}
+let mut_l = Link(1, Link(2, null))
+print(total(mut_l))
+mut_l = null
+print(total(null))
+let links: list<Link> = []
+append(links, null)
+append(links, Link(3, null))
+links[0] = Link(4, null)
+print(total(links[0]) + total(links[1]))
+# CASE a variable or list of ints or strings may not be emptied
+let n = 5
+n = null
+let names: list<string> = []
+append(names, null)

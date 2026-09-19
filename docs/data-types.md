@@ -31,7 +31,9 @@ does. A `bloc` types all its fields or none. `data` fields have no types.
 
 A typed field of a `template` may be empty (`null`), so a template can point to more of itself, as a tree
 does. Reading an empty field is a missing value: `else` handles it, and using it without a check is an
-error when the program runs. A `bloc` field is never empty.
+error when the program runs. A `bloc` field is never empty. The same holds for any value of a template
+type: a variable, a list item or an argument may be empty. A variable or list of `int`, `float`, `bool`,
+`char` or `string` may not (`let n = 5` then `n = null` is an error).
 
 ```javascript
 template Node { k: string, l: Node, r: Node }
@@ -49,6 +51,24 @@ Output:
 ```
 id
 leaf has no right child
+```
+
+```javascript
+template Link { v: int, next: Link }
+func total(l: Link) {
+    if (l == null) {
+        return 0
+    }
+    return l.v + total(l.next)
+}
+let links: list<Link> = [Link(1, Link(2, null)), null]
+print(total(links[0]) + total(links[1]))
+```
+
+Output:
+
+```
+3
 ```
 
 What a type may hold:

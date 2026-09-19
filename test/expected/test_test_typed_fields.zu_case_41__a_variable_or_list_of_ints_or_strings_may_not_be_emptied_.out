@@ -1,0 +1,21 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 2:
+  cannot assign null to 'n', which is int
+
+   1 | let n = 5
+     |         - 'n' became int here
+   2 | n = null
+     | -   ^^^^ this is null
+     | |
+     | 'n' is int
+
+Hint: A variable keeps the type of its first value. Use another variable for the new value
+
+Type Error [E0204] in /tmp/zue_test_case.zu at line 4:
+  cannot append null to list<string>
+
+   4 | append(names, null)
+     |        -----  ^^^^ this is null
+     |        |
+     |        list<string>
+
+2 errors found.
