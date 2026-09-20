@@ -199,7 +199,7 @@ func lex_string(src, i, start_line) {
     let q_at = i
     let ls0 = LS
     let q_col = col_of(i)
-    let parts: list<map> = []
+    let parts = []
     let cur = []
     i += 1
     let seg = i

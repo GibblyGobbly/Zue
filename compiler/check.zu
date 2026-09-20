@@ -109,7 +109,8 @@ func strict_on() {
 let TYPEDEFS = {}
 
 # Every bloc and template definition of every file, by name, and the definitions known in the file that
-# declares it. A value can reach a file that never names its type (a function of another file returns
+# declares it. Kept for the whole compilation, as FILES is: each module is checked on its own
+# (check_program), and a file checked for an earlier module is not checked again. A value can reach a file that never names its type (a function of another file returns
 # it), and its fields are still known; the types written in a definition or in the signature of a
 # function are read in the file they are written in.
 let ALL_TYPEDEFS = {}
@@ -2368,6 +2369,10 @@ func ck_block(stmts) {
     ck_hoist(stmts)
     for (let s in stmts) {
         ck_stmt(s)
+        # if (type(x) == "list") { ...; return }: for a list x the rest of the block never runs
+        if (s.k == "if" and s.cond.k != "let" and dead_branch(s.cond) == "else" and always_returns(s.then)) {
+            break
+        }
     }
 }
 
@@ -2760,8 +2765,6 @@ export func check_program(stmts, canon = null) {
     STRICT = file_is_strict(ST.src_lines)
     SCOPES = []
     TYPEDEFS = {}
-    ALL_TYPEDEFS = {}
-    DEF_SCOPE = {}
     MEMO = {}
     INPROG = {}
     CALLS = []

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# A type known from a module compiled earlier stays known in a module compiled later: order_type.zu is
+# compiled first, and order_user.zu gives its function an empty Item.
+
+use { size_of } from "fixtures/order_type.zu"
+use { none } from "fixtures/order_user.zu"
+
+print(none())
+print(size_of(null))

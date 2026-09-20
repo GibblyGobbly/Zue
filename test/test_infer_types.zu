@@ -47,3 +47,12 @@ let m = {"x": 1, "y": 2}
 print(map_get(m, "x") + 1)
 print(len(map_values(m)))
 let wrong: int = a
+# CASE after if (type(x) == "list") { return ... } the rest of the function is not for a list
+func first(x) {
+    if (type(x) == "list") {
+        return len(x)
+    }
+    return x + 1
+}
+print(first([1, 2]))
+print(first(5))

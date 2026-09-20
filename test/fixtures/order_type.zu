@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# For test_import_types_order.zu: a template and a function that takes one, possibly empty.
+
+export template Item { size: int }
+
+export func size_of(t: Item) -> int {
+    if (t == null) {
+        return 0
+    }
+    return t.size
+}

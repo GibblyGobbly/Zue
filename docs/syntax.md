@@ -522,7 +522,25 @@ a `Type Error` with the line, and the program is not built.
   of mixed items. Write the type (`let xs: list<int> = []`) to have such a value rejected instead.
 - A test of `type(x)` against a name, when the type of `x` is known, leaves out the branch that cannot run:
   a function with `if (type(x) == "string") { return "text" }` called with a list does not count that
-  return.
+  return. When the branch that runs always returns, the rest of the block is left out too:
+
+  ```javascript
+  func first(x) {
+      if (type(x) == "list") {
+          return len(x)
+      }
+      return x + 1        // checked for an int x only
+  }
+  print(first([1, 2]))
+  print(first(5))
+  ```
+
+  Output:
+
+  ```
+  2
+  6
+  ```
 - A function that returns values of one template type, and maybe `null` (an empty value), has that
   template type, also when it calls itself.
 - A type can be written after a colon on a variable, a parameter or a field: `let xs: list<float> = [1, 2]`,

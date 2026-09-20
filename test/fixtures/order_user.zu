@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# For test_import_types_order.zu: calls size_of with an empty Item without importing the name Item.
+
+use { size_of } from "order_type.zu"
+
+export func none() -> int {
+    return size_of(null)
+}
