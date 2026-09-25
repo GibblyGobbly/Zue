@@ -9,7 +9,8 @@
 # overflows, a zero divisor, and a float result that is not finite all end in the same runtime
 # call, which reports the error.
 
-use { diag_exit_if_errors, diag_hint, diag_new, node_span } from "diag.zu"
+use { diag_exit_if_errors, diag_hint, diag_new } from "diag.zu"
+use { node_span } from "ast_nodes.zu"
 use { HOOKS, SPECS, ll, ll_alloca, ll_temp_alloca, ll_args_array, ll_br, ll_call_out, ll_slot, ll_condbr, ll_cstr, ll_float_text, ll_gname, ll_label, ll_mark, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
 use { find_local, resolve } from "ll_scope.zu"
 use { box_raw, ty_load, unbox_checked } from "ll_unbox.zu"

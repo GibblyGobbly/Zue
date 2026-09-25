@@ -25,7 +25,7 @@ use { call_spec, lit_int, math_spec, skind, spec_float_lit, tex, tex_step } from
 use { clear_kc, machine_type, parse_sig, spec_closure_global, spec_key_of, spec_prescan, spec_symbol } from "ll_spec.zu"
 use { check_program } from "check.zu"
 use { resolve_named_args } from "named_args.zu"
-use { ST } from "state.zu"
+use { Defer, FnSpec, Loop, Module, ST } from "state.zu"
 use { cut } from "ranges.zu"
 use { diag_new, diag_text, diag_hint, diag_exit_if_errors, suggest } from "diag.zu"
 
@@ -637,7 +637,7 @@ func ex_defer(n) {
         ll_keep(kept)
         append(saved, kept)
     }
-    append(ST.ctx.defers[len(ST.ctx.defers) - 1], {"kind": "call", "f": f, "args": saved})
+    append(ST.ctx.defers[len(ST.ctx.defers) - 1], Defer("call", f, saved, null))
     return ll_null()
 }
 
@@ -724,9 +724,9 @@ func ex_incdec(n, as_statement) {
 func ex_tmpl(n) {
     let items: list<string> = []
     for (let part in n.parts) {
-        if (type(part) == "string") {
-            if (len(part) > 0) {
-                append(items, ll_kstr(part))
+        if (part.k == "text") {
+            if (len(part.v) > 0) {
+                append(items, ll_kstr(part.v))
             }
         } else {
             append(items, ex(part))
@@ -871,7 +871,7 @@ func box_scope_id() {
     let id = ll_reg()
     ll("{id} = call i64 @lv_scope_new()")
     ll("store i64 {id}, ptr {slot}")
-    append(ST.ctx.defers[top], {"kind": "boxes", "slot": slot})
+    append(ST.ctx.defers[top], Defer("boxes", null, null, slot))
     return id
 }
 
@@ -1270,7 +1270,7 @@ func compile_spec_function(n, key, entry) {
     child.nested = nested
     child.capmap = {}
     child.no_unbox = uses_address(n.body) or uses_address(n.defaults)
-    child.spec = {"res": sig.res, "name": n.name, "argkey": join(sig.args, ",")}
+    child.spec = FnSpec(sig.res, n.name, join(sig.args, ","))
     ST.ctx = child
     ll("store ptr @mod_{ST.mod.id}, ptr @lv_pos_mod")
     let params: list<string> = []
@@ -1370,7 +1370,7 @@ func st_if(n) {
 }
 
 func loop_push(kind, brk, cont) {
-    let l = {"kind": kind, "id": uid(), "brk": brk, "cont": cont, "depth": len(ST.ctx.scopes)}
+    let l = Loop(kind, uid(), brk, cont, len(ST.ctx.scopes))
     append(ST.ctx.loops, l)
     return l
 }
@@ -1497,8 +1497,8 @@ func st_switch(n) {
     let done = ll_new_label("swend")
     loop_push("switch", done, null)
     for (let c in n.cases) {
-        let cv = ex(c.value)
-        ll_mark(c.value)
+        let cv = ex(c.e)
+        ll_mark(c.e)
         let r = ll_reg()
         ll("{r} = call i32 @lvp_eq_b(ptr {sv}, ptr {cv})")
         let flag = ll_reg()
@@ -1528,7 +1528,7 @@ func st_unsafe(n) {
     push_scope()
     # Variables in scopes below this index were declared outside the block.
     append(ST.ctx.unsafe_marks, len(ST.ctx.scopes) - 1)
-    append(ST.ctx.defers[len(ST.ctx.defers) - 1], {"kind": "unsafe"})
+    append(ST.ctx.defers[len(ST.ctx.defers) - 1], Defer("unsafe", null, null, null))
     for (let s in n.body) {
         st(s)
     }
@@ -1686,8 +1686,7 @@ func st(n) {
 
 func new_module(display, canon) {
     let id = len(MOD_LIST)
-    let m = {"id": id, "path": display, "canon": canon, "prefix": "g_", "globals": {},
-             "exports": [], "state": "compiling"}
+    let m = Module(id, display, canon, "g_", {}, [], "compiling")
     if (id > 0) {
         m.prefix = "m{id}_"
     }
@@ -1740,7 +1739,7 @@ func define_types(stmts) {
             let typed = false
             let type_texts: list<string> = []
             for (let ft in s.ftypes) {
-                if (ft == null) {
+                if (ft == "") {
                     append(type_texts, "ptr null")
                 } else {
                     typed = true

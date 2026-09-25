@@ -8,7 +8,7 @@ func show_tokens(title, src) {
     print("--- {title}")
     for (let t in lex(src, 1)) {
         let v = t.v
-        if (type(v) == "list") {
+        if (t.parts != null) {
             v = "<string>"
         }
         print("{pad_right(t.t, 6, " ")} {pad_right(to_string(v), 8, " ")} {t.line}:{t.col} to {t.eline}:{t.ecol}")

@@ -8,8 +8,8 @@
 # still run in the order they are written. A parameter left out that has a default gets an "absent" node,
 # which the called function reads as not given.
 
-use { Node, mk_jump, node_children, node_kind } from "ast_nodes.zu"
-use { diag_new, diag_text, diag_label, diag_hint, diag_exit_if_errors, diag_count, suggest } from "diag.zu"
+use { NODE_FIELDS, Node, child_list, child_node, mk_jump, node_span, nodes_under } from "ast_nodes.zu"
+use { Span, diag_new, diag_text, diag_label, diag_hint, diag_exit_if_errors, diag_count, suggest } from "diag.zu"
 use { parse_source } from "parser.zu"
 use { BUILTINS } from "shared.zu"
 use { ST } from "state.zu"
@@ -18,9 +18,9 @@ use { path_dir, path_join, path_norm, split_lines } from "util.zu"
 # The parameter names of the builtins that take named arguments. A builtin that takes more than one kind
 # of argument list (min, max, rand, slice, contains), any number of arguments (print, spawn) or works
 # inside unsafe is left out.
-let BUILTIN_PARAMS = {}
+let BUILTIN_PARAMS: map<list<string>> = {}
 
-func add_params(text) {
+func add_params(text: string) {
     for (let entry in split(text, ";")) {
         let parts = split(trim(entry), " ")
         let names: list<string> = []
@@ -38,19 +38,22 @@ add_params("abs x; clamp x lo hi; sign x; pow base exp; sqrt x; cbrt x; exp x; l
 add_params("open path mode; close handle; read handle; read_line handle; write handle text; file_exists path; remove_file path; flush handle; dense_list n fill; vec_add a b; vec_sub a b; vec_mul a b; vec_div a b; vec_mul_inline a b; mat_mul a b; srand seed; shuffle list; tshuffle list; ssort list; shape v; wait thread; yield; channel n; send ch v; recv ch; channel_close ch")
 
 # The top-level statements of imported files, by path, parsed once.
-let IMPORTED = {}
+let IMPORTED: map<list<Node>> = {}
 
-# The state of one pass over a file: its path, the names assigned anywhere in it, the open scopes (each a
-# map from name to what it is: {kind, node} or {kind: "import", path, name}).
-template Pass { canon, assigned, scopes }
+# What a name in a scope is: kind "func" or "typedef" (with its node), "var", or "import" (the path of
+# the file and the name there).
+template Decl { kind: string, node: Node, path: string, name: string }
+
+# The state of one pass over a file: its path, the names assigned anywhere in it, the open scopes.
+template Pass { canon: string, assigned: map<bool>, scopes: list<map<Decl>> }
 
 # Stops the run when this pass found an error. Errors found before it (the type checker reads imported
 # files while it checks the main one) are left to be reported with the rest.
-export func resolve_named_args(stmts, canon) {
+export func resolve_named_args(stmts: list<Node>, canon: string) {
     let before = diag_count()
     let ps = Pass(canon, {}, [])
     collect_assigned(stmts, ps.assigned)
-    walk(stmts, ps)
+    walk_list(stmts, ps)
     if (diag_count() > before) {
         diag_exit_if_errors()
     }
@@ -58,89 +61,75 @@ export func resolve_named_args(stmts, canon) {
 
 # Names that an assignment or ++/-- changes somewhere: a function name among them may hold another
 # function when it is called.
-func collect_assigned(x, out) {
-    let t = type(x)
-    if (t == "list") {
-        for (let y in x) {
-            collect_assigned(y, out)
+func collect_assigned(stmts: list<Node>, out: map<bool>) {
+    for (let x in nodes_under(stmts)) {
+        if (x.k == "assign" or x.k == "incdec") {
+            out[x.name] = true
         }
-        return null
     }
-    if (t != "template" and t != "map") {
-        return null
-    }
-    let k = node_kind(x)
-    if (k == "assign" or k == "incdec") {
-        out[x.name] = true
-    }
-    for (let y in node_children(x)) {
-        collect_assigned(y, out)
-    }
-    return null
-}
-
-func is_node(x) {
-    let t = type(x)
-    return t == "template" or t == "map"
 }
 
 # A statement list opens a scope that holds its functions, types, variables and imports from the start,
 # so a function can be called above the line that declares it.
-func declare_all(stmts, scope) {
+func declare_all(stmts: list<Node>, scope: map<Decl>) {
     for (let s in stmts) {
-        if (is_node(s)) {
-            let k = node_kind(s)
-            if ((k == "func" or k == "typedef") and s.name != null) {
-                scope[s.name] = {"kind": k, "node": s}
-            } else if (k == "let") {
-                scope[s.name] = {"kind": "var"}
-            } else if (k == "group") {
-                declare_all(s.items, scope)
-            } else if (k == "use") {
-                for (let nm in s.names) {
-                    scope[nm] = {"kind": "import", "path": s.path, "name": nm}
-                }
+        if (s == null) {
+            continue
+        }
+        let k = s.k
+        if ((k == "func" or k == "typedef") and s.name != null) {
+            scope[s.name] = Decl(k, s, null, null)
+        } else if (k == "let") {
+            scope[s.name] = Decl("var", null, null, null)
+        } else if (k == "group") {
+            declare_all(s.items, scope)
+        } else if (k == "use") {
+            for (let nm in s.names) {
+                scope[nm] = Decl("import", null, s.path, nm)
             }
         }
     }
 }
 
-func var_scope(name) {
-    let scope = {}
-    scope[name] = {"kind": "var"}
+func var_scope(name: string) -> map<Decl> {
+    let scope: map<Decl> = {}
+    scope[name] = Decl("var", null, null, null)
     return scope
 }
 
-func with_scope(ps, scope, x) {
+func with_scope(ps: Pass, scope: map<Decl>, xs: list<Node>) {
     append(ps.scopes, scope)
-    walk(x, ps)
+    walk_list(xs, ps)
     remove(ps.scopes, len(ps.scopes) - 1)
 }
 
-func walk(x, ps) {
-    let t = type(x)
-    if (t == "list") {
-        let scope = {}
-        declare_all(x, scope)
-        append(ps.scopes, scope)
-        for (let y in x) {
-            walk(y, ps)
-        }
-        remove(ps.scopes, len(ps.scopes) - 1)
+# A list of statements or expressions, in a scope of its own.
+func walk_list(xs: list<Node>, ps: Pass) {
+    if (xs == null) {
         return null
     }
-    if (t != "template" and t != "map") {
+    let scope: map<Decl> = {}
+    declare_all(xs, scope)
+    append(ps.scopes, scope)
+    for (let y in xs) {
+        walk(y, ps)
+    }
+    remove(ps.scopes, len(ps.scopes) - 1)
+}
+
+func walk(x: Node, ps: Pass) {
+    if (x == null) {
         return null
     }
-    let k = node_kind(x)
+    let k = x.k
     if (k == "func") {
-        let scope = {}
+        let scope: map<Decl> = {}
         for (let p in x.params) {
-            scope[p] = {"kind": "var"}
+            scope[p] = Decl("var", null, null, null)
         }
         append(ps.scopes, scope)
-        walk(x.defaults, ps)
-        walk(x.body, ps)
+        walk_list(x.defaults, ps)
+        walk_list(x.body, ps)
         remove(ps.scopes, len(ps.scopes) - 1)
         return null
     }
@@ -149,29 +138,38 @@ func walk(x, ps) {
         with_scope(ps, var_scope(x.name), x.body)
         return null
     }
-    if (k == "if" and node_kind(x.cond) == "let") {
+    if (k == "if" and x.cond.k == "let") {
         walk(x.cond.init, ps)
         with_scope(ps, var_scope(x.cond.name), x.then)
-        walk(x.els, ps)
+        walk_list(x.els, ps)
         return null
     }
     if (k == "for") {
-        # the list's scope holds the variable of the init
-        walk([x.init, x.cond, x.incr, x.body], ps)
+        # one scope holds the variable of the init, the condition, the step and the body
+        let scope: map<Decl> = {}
+        if (x.init != null) {
+            declare_all([x.init], scope)
+        }
+        append(ps.scopes, scope)
+        walk(x.init, ps)
+        walk(x.cond, ps)
+        walk(x.incr, ps)
+        walk_list(x.body, ps)
+        remove(ps.scopes, len(ps.scopes) - 1)
         return null
     }
-    for (let y in node_children(x)) {
-        walk(y, ps)
+    # each list of nodes in a scope of its own
+    for (let name in NODE_FIELDS[k]) {
+        walk(child_node(x, name), ps)
+        walk_list(child_list(x, name), ps)
     }
     if (k == "call" and x.names != null) {
-        # The checker does not narrow x by the type() test above, so it would check the call for a list
-        # too; the node goes through a list of mixed items, whose element type is not known.
-        resolve_call([x, null][0], ps)
+        resolve_call(x, ps)
     }
     return null
 }
 
-func lookup(ps, name) {
+func lookup(ps: Pass, name: string) -> Decl {
     for (let i = len(ps.scopes) - 1; i >= 0; i--) {
         if (map_has(ps.scopes[i], name)) {
             return ps.scopes[i][name]
@@ -181,7 +179,7 @@ func lookup(ps, name) {
 }
 
 # The exported function or type called name in an imported file, or null.
-func imported_def(ps, ent) {
+func imported_def(ps: Pass, ent: Decl) -> Node {
     let canon = path_norm(path_join(path_dir(ps.canon), ent.path))
     if (not map_has(IMPORTED, canon)) {
         let f = open(canon, "r")
@@ -202,9 +200,9 @@ func imported_def(ps, ent) {
     return find_def(IMPORTED[canon], ent.name)
 }
 
-func find_def(stmts, name) {
+func find_def(stmts: list<Node>, name: string) -> Node {
     for (let s in stmts) {
-        let k = node_kind(s)
+        let k = s.k
         if ((k == "func" or k == "typedef" or k == "let") and s.name == name and s.exported == true) {
             return s
         }
@@ -218,20 +216,20 @@ func find_def(stmts, name) {
     return null
 }
 
-func unknown_callee(c, why) {
-    let d = diag_new("Argument Error", c.callee, "Named arguments need a function known when the program is built")
+func unknown_callee(c: Node, why: string) {
+    let d = diag_new("Argument Error", node_span(c.callee), "Named arguments need a function known when the program is built")
     diag_text(d, why)
     diag_hint(d, "Pass the arguments by position, or call a function declared with func by its name")
 }
 
-func resolve_call(c, ps) {
-    if (node_kind(c.callee) != "id") {
+func resolve_call(c: Node, ps: Pass) {
+    if (c.callee.k != "id") {
         unknown_callee(c, "not the name of a function")
         return null
     }
     let name = c.callee.name
     let ent = lookup(ps, name)
-    let def = null
+    let def: Node = null
     if (ent == null) {
         if (not map_has(BUILTINS, name)) {
             unknown_callee(c, "'{name}' is not a function this file knows")
@@ -243,7 +241,7 @@ func resolve_call(c, ps) {
             diag_hint(d, "Pass the arguments of {name}() by position")
             return null
         }
-        place(c, name, BUILTIN_PARAMS[name], null, ps)
+        place(c, name, BUILTIN_PARAMS[name], [])
         return null
     }
     if (ent.kind == "import") {
@@ -262,31 +260,31 @@ func resolve_call(c, ps) {
         unknown_callee(c, "'{name}' is assigned elsewhere, so the function it holds can change")
         return null
     }
-    if (node_kind(def) == "func") {
-        place(c, name, def.params, def.defaults, ps)
-    } else if (node_kind(def) == "typedef") {
-        place(c, name, def.fields, null, ps)
+    if (def.k == "func") {
+        place(c, name, def.params, def.defaults)
+    } else if (def.k == "typedef") {
+        place(c, name, def.fields, [])
     } else {
         unknown_callee(c, "'{name}' is a variable")
     }
     return null
 }
 
-func first_named(c) {
+func first_named(c: Node) -> int {
     for (let i = 0; i < len(c.names); i++) {
-        if (c.names[i] != null) {
+        if (c.names[i] != "") {
             return i
         }
     }
     return 0
 }
 
-# Puts each argument at the place of its parameter. defaults is null for a builtin or a type, whose
+# Puts each argument at the place of its parameter. defaults is empty for a builtin or a type, whose
 # arguments fill the parameters in order with no gaps; for a function, a parameter with a default may be
 # left out.
-func place(c, name, params, defaults, ps) {
+func place(c: Node, name: string, params: list<string>, defaults: list<Node>) {
     let np = len(params)
-    let slots = []
+    let slots: list<Node> = []
     for (let i = 0; i < np; i++) {
         append(slots, null)
     }
@@ -295,9 +293,9 @@ func place(c, name, params, defaults, ps) {
     for (let i = 0; i < len(c.args); i++) {
         let pos = i
         let nm = c.names[i]
-        if (nm == null) {
+        if (nm == "") {
             if (i >= np) {
-                let d = diag_new("Argument Error", c.args[i], "{name}() has only {np} parameter{s_if(np)}")
+                let d = diag_new("Argument Error", node_span(c.args[i]), "{name}() has only {np} parameter{s_if(np)}")
                 diag_text(d, "one argument too many")
                 diag_hint(d, "Usage: {name}({join(params, ", ")})")
                 return null
@@ -321,7 +319,7 @@ func place(c, name, params, defaults, ps) {
             if (slots[pos] != null) {
                 let d = diag_new("Argument Error", c.nspans[i], "'{nm}' is given by position and by name")
                 diag_text(d, "given again here")
-                diag_label(d, c.args[pos], "given by position here")
+                diag_label(d, node_span(c.args[pos]), "given by position here")
                 diag_hint(d, "Give each argument once")
                 return null
             }
@@ -342,7 +340,7 @@ func place(c, name, params, defaults, ps) {
     for (let p = 0; p < np; p++) {
         if (slots[p] != null) {
             append(args, slots[p])
-        } else if (defaults == null) {
+        } else if (len(defaults) == 0) {
             if (p < last) {
                 let d = diag_new("Argument Error", c.nspans[first_named(c)], "{name}() cannot skip '{params[p]}'")
                 diag_text(d, "'{params[p]}' is not given before this")
@@ -366,7 +364,7 @@ func place(c, name, params, defaults, ps) {
     return null
 }
 
-func index_in(xs, v) {
+func index_in(xs: list<string>, v: string) -> int {
     for (let i = 0; i < len(xs); i++) {
         if (xs[i] == v) {
             return i
@@ -375,7 +373,7 @@ func index_in(xs, v) {
     return -1
 }
 
-func s_if(n) {
+func s_if(n: int) -> string {
     if (n == 1) {
         return ""
     }

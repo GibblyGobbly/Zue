@@ -14,9 +14,9 @@
 
 use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
-use { diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, node_span, suggest } from "diag.zu"
+use { Diag, diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, suggest } from "diag.zu"
 use { cut } from "ranges.zu"
-use { node_children } from "ast_nodes.zu"
+use { Node, node_span, nodes_under } from "ast_nodes.zu"
 use { parse_source } from "parser.zu"
 use { resolve_named_args } from "named_args.zu"
 use { path_dir, path_join, path_norm, split_lines } from "util.zu"
@@ -317,7 +317,7 @@ func template_args(t) {
 
 # The type of field fi of a value of type t whose definition is td.
 func object_field_type(td, t, fi) {
-    if (td.ftypes[fi] != null) {
+    if (td.ftypes[fi] != "") {
         return field_check_type(td.ftypes[fi], def_scope(td))
     }
     let args = template_args(t)
@@ -326,7 +326,7 @@ func object_field_type(td, t, fi) {
     }
     let pos = 0
     for (let i = 0; i < fi; i++) {
-        if (td.ftypes[i] == null) {
+        if (td.ftypes[i] == "") {
             pos += 1
         }
     }
@@ -436,24 +436,12 @@ func adapt_to(n, want) {
 # Every name that some statement of the program assigns (name = value, name += value, name++), at any depth.
 let ASSIGNED = {}
 
-func collect_assigned(x) {
-    let t = type(x)
-    if (t == "list") {
-        for (let y in x) {
-            collect_assigned(y)
+func collect_assigned(stmts: list<Node>) {
+    for (let x in nodes_under(stmts)) {
+        if (x.k == "assign" or x.k == "incdec") {
+            ASSIGNED[x.name] = true
         }
-        return null
     }
-    if (t != "template") {
-        return null
-    }
-    if (x.k == "assign" or x.k == "incdec") {
-        ASSIGNED[x.name] = true
-    }
-    for (let y in node_children(x)) {
-        collect_assigned(y)
-    }
-    return null
 }
 
 # The signature of the function being checked, as the key of n.ads and n.stys.
@@ -765,21 +753,31 @@ func undefined_error(span, name, what, scopes) {
     }
     # the "did you mean" replaces the hint later, if the error is printed (fill_guesses)
     if (d != null) {
-        d.guess = [name, scopes]
+        d.guess = name
+        append(GUESS_SCOPES, Guess(d, scopes))
     }
 }
+
+# For each undefined-name error, the scopes that were open where the name was used.
+template Guess { d: Diag, scopes: list }
+let GUESS_SCOPES: list<Guess> = []
 
 # Gives each printed undefined-name error a "did you mean" when a declared name is close to it.
 func fill_guesses() {
     for (let d in diag_shown()) {
         if (d.guess != null) {
-            let guess = suggest(d.guess[0], name_candidates(d.guess[1]))
-            if (guess != null) {
-                diag_hint(d, "Did you mean '{guess}'?")
+            for (let g in GUESS_SCOPES) {
+                if (g.d == d) {
+                    let guess = suggest(d.guess, name_candidates(g.scopes))
+                    if (guess != null) {
+                        diag_hint(d, "Did you mean '{guess}'?")
+                    }
+                }
             }
             d.guess = null
         }
     }
+    GUESS_SCOPES = []
 }
 
 # Places that already have an error. A function body is checked once for each list of argument
@@ -1231,7 +1229,7 @@ func article(t) {
 
 # The checker type a field declared with type text accepts, or "any" for a type it cannot judge.
 func field_check_type(text, defs) {
-    if (text == null) {
+    if (text == null or text == "") {
         return "any"
     }
     if (text == "int" or text == "float" or text == "bool" or text == "char" or text == "string") {
@@ -1314,7 +1312,7 @@ func ck_typed_construct(n, name, argtypes) {
     let args: list<string> = []
     let known = false
     for (let i = 0; i < len(td.fields); i++) {
-        if (td.ftypes[i] == null) {
+        if (td.ftypes[i] == "") {
             let t = "any"
             if (i < len(argtypes)) {
                 t = settle(argtypes[i])
@@ -1341,8 +1339,8 @@ func literal_holes(n) {
         text = n.v
     } else if (n.k == "tmpl") {
         for (let part in n.parts) {
-            if (type(part) == "string") {
-                text = text + part
+            if (part.k == "text") {
+                text = text + part.v
             }
         }
     } else {
@@ -1587,7 +1585,7 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
     let types = []
     for (let i = 0; i < np; i++) {
         let want = null
-        if (fn.ptypes != null and fn.ptypes[i] != null) {
+        if (fn.ptypes != null and fn.ptypes[i] != "") {
             want = sig_annot(fn.ptypes[i], span_or(ptype_span(fn, i), fn), home)
         }
         if (i < len(argtypes) and argtypes[i] != "absent") {
@@ -1871,7 +1869,7 @@ func try_assume(name, fn, idx, types, line, mkey, rets1, first, home = null) {
 func ck_func(n) {
     let untyped = false
     for (let i = 0; i < len(n.params); i++) {
-        if (n.ptypes == null or n.ptypes[i] == null) {
+        if (n.ptypes == null or n.ptypes[i] == "") {
             untyped = true
             if (strict_on() and n.name == null) {
                 let d = fail_at(span_or(param_span(n, i), n), "strict mode: parameter '{n.params[i]}' of this function value needs a type, for example {n.params[i]}: int")
@@ -1890,7 +1888,7 @@ func ck_func(n) {
         if (n.defaults[i] != null) {
             ck_expr(n.defaults[i])
         }
-        if (n.ptypes != null and n.ptypes[i] != null) {
+        if (n.ptypes != null and n.ptypes[i] != "") {
             declare(n.params[i], annot(n.ptypes[i], span_or(ptype_span(n, i), n), true), param_span(n, i))
         } else {
             declare(n.params[i], "any", param_span(n, i))
@@ -1926,7 +1924,7 @@ func ck_expr(n) {
     }
     if (k == "tmpl") {
         for (let part in n.parts) {
-            if (type(part) != "string") {
+            if (part.k != "text") {
                 ck_expr(part)
             }
         }
@@ -2254,7 +2252,7 @@ func ck_stmt(n) {
     } else if (k == "switch") {
         ck_expr(n.e)
         for (let c in n.cases) {
-            ck_expr(c.value)
+            ck_expr(c.e)
             push_scope()
             ck_block(c.body)
             pop_scope()

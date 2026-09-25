@@ -9,7 +9,7 @@
 # Zue: compiler/runtime/zue_rt_*.zu.
 
 use { uid } from "shared.zu"
-use { ST } from "state.zu"
+use { Ctx, ST } from "state.zu"
 use { cut } from "ranges.zu"
 
 export const LL_STRS = []        # private string constants
@@ -156,8 +156,6 @@ export func ll_use_native(name) {
     }
 }
 
-template Ctx { out, allocas, scopes, defers, nested, capmap, is_main, line, loops, dead, unsafe_marks, no_unbox, lv, spills, dbg, dbg_locs, spec, pooling, pool, taken }
-
 # Set by --gc=lowmem: the program asks the collector to use less memory and accepts a lower speed.
 export const GC_LOWMEM = [false]
 
@@ -171,7 +169,7 @@ export const SPECS = {}
 export const HOOKS = {"generic_call": null, "ex": null, "builtin": null}
 
 export func ll_new_ctx(is_main) {
-    return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, null, null, 0, {}, null, false, {}, [])
+    return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, false, false, 0, {}, null, false, {}, [])
 }
 
 # Debug information, for zue build -g: a line table, so that gdb, valgrind and perf name the Zue

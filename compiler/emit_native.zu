@@ -24,11 +24,11 @@
 # p[i] = v writes the 64-bit word at p + 8 * i.
 
 use { die } from "util.zu"
-use { mk_id_line, node_children, node_kind } from "ast_nodes.zu"
+use { Node, mk_id_line, nodes_under } from "ast_nodes.zu"
 use { ll, ll_alloca, ll_br, ll_condbr, ll_escape, ll_label, ll_new_ctx, ll_new_label } from "ll_state.zu"
 use { ll_reg } from "ll_state.zu"
 use { find_local } from "ll_scope.zu"
-use { ST } from "state.zu"
+use { Loop, ST, Var } from "state.zu"
 
 let NS = {"funcs": {}, "order": [], "externs": {}, "consts": {}, "gvars": {}, "datas": {},
           "decls": [], "decl_ids": {}, "strs": [], "str_ids": {}, "defs": [], "syms": {}}
@@ -228,7 +228,7 @@ func nx_id(n) {
     let v = find_local(n.name)
     if (v != null) {
         let r = ll_reg()
-        ll("{r} = load i64, ptr {v}")
+        ll("{r} = load i64, ptr {v.c}")
         return r
     }
     let c = map_get(NS.consts, n.name, null)
@@ -738,7 +738,7 @@ func nx(n) {
 func local_slot(name) {
     let v = find_local(name)
     if (v != null) {
-        return "ptr {v}"
+        return "ptr {v.c}"
     }
     if (map_has(NS.gvars, name)) {
         return "ptr @{name}"
@@ -792,7 +792,7 @@ func nst_let(n) {
     }
     let slot = ll_alloca("i64")
     ll("store i64 {v}, ptr {slot}")
-    ST.ctx.scopes[len(ST.ctx.scopes) - 1][n.name] = slot
+    ST.ctx.scopes[len(ST.ctx.scopes) - 1][n.name] = Var(n.name, false, slot, null)
 }
 
 func nst_assign(n) {
@@ -853,7 +853,7 @@ func nst_while(n) {
     let c = ncond(n.cond)
     ll_condbr(c, body, end)
     ll_label(body)
-    append(ST.ctx.loops, {"brk": end, "cont": head})
+    append(ST.ctx.loops, Loop("while", 0, end, head, 0))
     nblock(n.body)
     remove(ST.ctx.loops, len(ST.ctx.loops) - 1)
     ll_br(head)
@@ -874,7 +874,7 @@ func nst_for(n) {
     let c = ncond(n.cond)
     ll_condbr(c, body, end)
     ll_label(body)
-    append(ST.ctx.loops, {"brk": end, "cont": step})
+    append(ST.ctx.loops, Loop("for", 0, end, step, 0))
     nblock(n.body)
     remove(ST.ctx.loops, len(ST.ctx.loops) - 1)
     ll_br(step)
@@ -889,7 +889,7 @@ func nst_switch(n) {
     let v = nx(n.e)
     let end = ll_new_label("sx")
     for (let c in n.cases) {
-        let want = nx(c.value)
+        let want = nx(c.e)
         let hit = ll_new_label("sc")
         let miss = ll_new_label("sn")
         let f = ll_reg()
@@ -966,23 +966,10 @@ func param_kind(name) {
     return "i64"
 }
 
-func has_retv(x) {
-    if (type(x) == "list") {
-        for (let it in x) {
-            if (has_retv(it)) {
-                return true
-            }
-        }
-        return false
-    }
-    if (type(x) == "template" or type(x) == "map") {
-        if (node_kind(x) == "call" and x.callee.k == "id" and (x.callee.name == "retv" or x.callee.name == "retp")) {
+func has_retv(xs: list<Node>) -> bool {
+    for (let x in nodes_under(xs)) {
+        if (x.k == "call" and x.callee.k == "id" and (x.callee.name == "retv" or x.callee.name == "retp")) {
             return true
-        }
-        for (let v in node_children(x)) {
-            if (has_retv(v)) {
-                return true
-            }
         }
     }
     return false
@@ -1002,7 +989,7 @@ func compile_func(n) {
         let ty = ntype(info.kinds[i])
         let w = from_type("%p{i}", ty)
         ll("store i64 {w}, ptr {slot}")
-        ST.ctx.scopes[0][n.params[i]] = slot
+        ST.ctx.scopes[0][n.params[i]] = Var(n.params[i], false, slot, null)
     }
     for (let s in n.body) {
         nst(s)

@@ -3,6 +3,33 @@
 #
 # state.zu: state shared between the compiler modules.
 
+# A module being compiled or compiled: its number, the path shown in messages, the path that identifies
+# it, the prefix of its global symbols, its top-level names, the names it exports, and "compiling" or "done".
+export template Module { id: int, path: string, canon: string, prefix: string, globals: map<bool>, exports: list<string>, state: string }
+
+# A variable of the function being compiled: c is its slot (or the slot holding its heap cell when
+# cell is true); ty is "int", "float" or "bool" for a variable kept as a raw machine value, else empty.
+export template Var { name: string, cell: bool, c: string, ty: string }
+
+# Work done when a scope ends: kind "call" (call f with args), "boxes" (release the boxes in slot)
+# or "unsafe" (leave an unsafe block).
+export template Defer { kind: string, f: string, args: list<string>, slot: string }
+
+# A loop being compiled: where break and continue jump, and the scope depth they unwind to.
+export template Loop { kind: string, id: int, brk: string, cont: string, depth: int }
+
+# The signature a function is compiled for when calls can reach it directly: result kind, name, and the
+# argument kinds joined by commas.
+export template FnSpec { res: string, name: string, argkey: string }
+
+# The function being compiled. See ll_new_ctx in ll_state.zu.
+export template Ctx {
+    out: list<string>, allocas: list<string>, scopes: list<map<Var>>, defers: list<list<Defer>>,
+    nested: map<bool>, capmap: map<int>, is_main: bool, line: int, loops: list<Loop>, dead: bool,
+    unsafe_marks: list<int>, no_unbox: bool, lv: bool, spills: bool, dbg: int, dbg_locs: map<int>,
+    spec: FnSpec, pooling: bool, pool: map<list<string>>, taken: list<list<string>>
+}
+
 # State shared between modules. An imported name is a copy, so a value that several
 # modules assign lives in this template, not in a top-level variable.
 #   src_file, src_lines  the file being compiled and its lines
@@ -10,5 +37,5 @@
 #   ctx                  the function being compiled
 #   mod                  the module being compiled
 #   uid                  counter for unique names
-template State { src_file, src_lines, cwd, ctx, mod, uid }
+template State { src_file: string, src_lines: list<string>, cwd: string, ctx: Ctx, mod: Module, uid: int }
 export const ST = State("", [], "", null, null, 0)

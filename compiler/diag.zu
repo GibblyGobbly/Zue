@@ -13,50 +13,45 @@ use { ST } from "state.zu"
 use { code_for } from "error_codes.zu"
 use { cut } from "ranges.zu"
 
-export template Span { line, col, eline, ecol }
-template Label { span, text }
-# guess is what the checker needs to suggest a name ("did you mean") for this error, or null. A
+export template Span { line: int, col: int, eline: int, ecol: int }
+template Label { span: Span, text: string }
+# guess is the undefined name the checker suggests a close name for ("did you mean"), or null. A
 # suggestion compares the name with every name in scope, so it is made only for the errors that are
 # printed (diag_shown), after all of them are known.
-export template Diag { kind, file, lines, span, ptext, msg, labels, hint, notes, trace, guess }
+export template Diag {
+    kind: string, file: string, lines: list<string>, span: Span, ptext: string, msg: string,
+    labels: list<Label>, hint: string, notes: list<string>, trace: list<string>, guess: string
+}
 
 # More errors than this are counted but not printed.
 let MAX_PRINTED = 100
 # A tab is shown as this many spaces so that the carets line up with the code.
 let TAB_WIDTH = 4
 
-let DIAGS = []
+let DIAGS: list<Diag> = []
 
 # "text" for the usual layout, "json" for one JSON object per error on its own line (for editors).
 let FORMAT = {"mode": "text"}
 
-export func diag_set_format(mode) {
+export func diag_set_format(mode: string) {
     FORMAT.mode = mode
 }
 
-export func span_at(line, col, eline, ecol) {
+export func span_at(line: int, col: int, eline: int, ecol: int) -> Span {
     return Span(line, col, eline, ecol)
 }
 
-export func span_line(line) {
+export func span_line(line: int) -> Span {
     return Span(line, 0, line, 0)
 }
 
-# The place of an AST node: the whole node, or only its line when it has no column.
-export func node_span(n) {
-    if (n.col == 0) {
-        return span_line(n.line)
-    }
-    return span_at(n.line, n.col, n.eline, n.ecol)
-}
-
 # The span of one token that starts at line, col and ends before ecol on the same line.
-export func span_tok(line, col, ecol) {
+export func span_tok(line: int, col: int, ecol: int) -> Span {
     return Span(line, col, line, ecol)
 }
 
 # Records an error and returns it, so the caller can add labels, a hint or notes.
-export func diag_new(kind, span, msg) {
+export func diag_new(kind: string, span: Span, msg: string) -> Diag {
     let d = Diag(kind, ST.src_file, ST.src_lines, span, "", msg, [], "", [], [], null)
     append(DIAGS, d)
     ERROR_LINES["{ST.src_file}:{span.line}"] = true
@@ -67,11 +62,11 @@ export func diag_new(kind, span, msg) {
 }
 
 # The lines that have an error ("file:line"), and the order in which files got their first error.
-let ERROR_LINES = {}
-let FILE_ORDER = {}
+let ERROR_LINES: map<bool> = {}
+let FILE_ORDER: map<int> = {}
 
 # Text printed next to the carets of the main span.
-export func diag_text(d, text) {
+export func diag_text(d: Diag, text: string) -> Diag {
     if (d == null) {
         return null
     }
@@ -81,7 +76,7 @@ export func diag_text(d, text) {
 
 # Marks another place with dashes and a short text. The functions that take an error accept null
 # (an error that was not recorded) and then do nothing, so a caller need not test for it.
-export func diag_label(d, span, text) {
+export func diag_label(d: Diag, span: Span, text: string) -> Diag {
     if (d == null or span == null) {
         return d
     }
@@ -89,7 +84,7 @@ export func diag_label(d, span, text) {
     return d
 }
 
-export func diag_hint(d, text) {
+export func diag_hint(d: Diag, text: string) -> Diag {
     if (d == null) {
         return null
     }
@@ -98,7 +93,7 @@ export func diag_hint(d, text) {
 }
 
 # A line printed under the message, before the source: the chain of calls the checker followed.
-export func diag_trace(d, text) {
+export func diag_trace(d: Diag, text: string) -> Diag {
     if (d == null) {
         return null
     }
@@ -107,17 +102,17 @@ export func diag_trace(d, text) {
 }
 
 # True when an error is already recorded on this line of the current file.
-export func diag_on_line(line) {
+export func diag_on_line(line: int) -> bool {
     return map_has(ERROR_LINES, "{ST.src_file}:{line}")
 }
 
 # True for a byte that continues a UTF-8 character.
-func is_cont(c) {
+func is_cont(c: int) -> bool {
     return c >= 128 and c < 192
 }
 
 # The number of screen columns taken by the first n bytes of text.
-func screen_width(text, n) {
+func screen_width(text: string, n: int) -> int {
     let w = 0
     let m = len(text)
     if (n < m) {
@@ -135,7 +130,7 @@ func screen_width(text, n) {
 }
 
 # The source line with each tab replaced by spaces.
-func shown_line(text) {
+func shown_line(text: string) -> string {
     if (not contains(text, "\t")) {
         return text
     }
@@ -143,11 +138,11 @@ func shown_line(text) {
 }
 
 # A mark under a line: where it starts on screen, how wide it is, its character and its text.
-template Mark { at, width, ch, text }
+template Mark { at: int, width: int, ch: string, text: string }
 
 # The marks of one source line: the main span (carets) and every label that sits on that line.
-func line_marks(d, line, text) {
-    let marks = []
+func line_marks(d: Diag, line: int, text: string) -> list<Mark> {
+    let marks: list<Mark> = []
     let s = d.span
     if (s.col > 0 and s.line == line) {
         let first = s.col - 1
@@ -180,8 +175,8 @@ func line_marks(d, line, text) {
 }
 
 # Sorts marks by their start; a main mark goes before a label that starts at the same place.
-func sort_marks(marks) {
-    let out = []
+func sort_marks(marks: list<Mark>) -> list<Mark> {
+    let out: list<Mark> = []
     for (let m in marks) {
         let i = len(out)
         while (i > 0 and out[i - 1].at > m.at) {
@@ -199,7 +194,7 @@ func sort_marks(marks) {
 }
 
 # The row of carets and dashes, with the text of the last mark after it.
-func underline_row(marks) {
+func underline_row(marks: list<Mark>) -> string {
     let row = ""
     let pos = 0
     for (let m in marks) {
@@ -219,7 +214,7 @@ func underline_row(marks) {
 }
 
 # A row with a bar at the start of each given mark.
-func bars_row(marks) {
+func bars_row(marks: list<Mark>) -> string {
     let row = ""
     let pos = 0
     for (let m in marks) {
@@ -232,7 +227,7 @@ func bars_row(marks) {
 }
 
 # The rows drawn under one source line, without the gutter.
-func mark_rows(marks) {
+func mark_rows(marks: list<Mark>) -> list<string> {
     let sorted = sort_marks(marks)
     let rows: list<string> = []
     let n = len(sorted)
@@ -242,7 +237,7 @@ func mark_rows(marks) {
         first_row = first_row + " " + last.text
     }
     append(rows, first_row)
-    let pending = []
+    let pending: list<Mark> = []
     for (let i = 0; i < n - 1; i++) {
         if (len(sorted[i].text) > 0) {
             append(pending, sorted[i])
@@ -262,7 +257,7 @@ func mark_rows(marks) {
     return rows
 }
 
-func gutter_width(d) {
+func gutter_width(d: Diag) -> int {
     let top = d.span.line
     for (let lb in d.labels) {
         if (lb.span.line > top) {
@@ -277,7 +272,7 @@ func gutter_width(d) {
 }
 
 # The lines of the source with their marks, for every line the error or a label points at.
-func excerpt_rows(d) {
+func excerpt_rows(d: Diag) -> list<string> {
     let width = gutter_width(d)
     let blank = repeat(" ", width) + " |"
     let lines = [d.span.line]
@@ -312,7 +307,7 @@ func excerpt_rows(d) {
 }
 
 # " [E0201]" for a message that belongs to a family of errors, else "".
-func code_text(msg) {
+func code_text(msg: string) -> string {
     let c = code_for(msg)
     if (c == null) {
         return ""
@@ -321,7 +316,7 @@ func code_text(msg) {
 }
 
 # The printed form of one error, as a list of lines.
-export func render(d) {
+export func render(d: Diag) -> list<string> {
     let out: list<string> = []
     append(out, "{d.kind}{code_text(d.msg)} in {d.file} at line {d.span.line}:")
     append(out, "  {d.msg}")
@@ -347,7 +342,7 @@ export func render(d) {
 
 # Position order: by file as recorded, then line, then column.
 # Errors of one file come together, files in the order of their first error, and within a file by place.
-func before(a, b) {
+func before(a: Diag, b: Diag) -> bool {
     if (a.file != b.file) {
         return FILE_ORDER[a.file] < FILE_ORDER[b.file]
     }
@@ -363,7 +358,7 @@ func sorted_diags() {
     return merge_sorted(DIAGS)
 }
 
-func merge_sorted(xs) {
+func merge_sorted(xs: list<Diag>) -> list<Diag> {
     let n = len(xs)
     if (n < 2) {
         return xs
@@ -371,7 +366,7 @@ func merge_sorted(xs) {
     let mid = n / 2
     let a = merge_sorted(cut(xs, 0, mid))
     let b = merge_sorted(cut(xs, mid, n))
-    let out = []
+    let out: list<Diag> = []
     let i = 0
     let j = 0
     while (i < len(a) and j < len(b)) {
@@ -394,7 +389,7 @@ func merge_sorted(xs) {
     return out
 }
 
-func json_str(s) {
+func json_str(s: string) -> string {
     let t = replace(s, "\\", "\\\\")
     t = replace(t, "\"", "\\\"")
     t = replace(t, "\n", "\\n")
@@ -403,11 +398,11 @@ func json_str(s) {
     return "\"" + t + "\""
 }
 
-func json_span(sp) {
+func json_span(sp: Span) -> string {
     return "\"line\": {sp.line}, \"column\": {sp.col}, \"end_line\": {sp.eline}, \"end_column\": {sp.ecol}"
 }
 
-func json_list(items) {
+func json_list(items: list<string>) -> string {
     let out: list<string> = []
     for (let x in items) {
         append(out, json_str(x))
@@ -416,7 +411,7 @@ func json_list(items) {
 }
 
 # One error as a JSON object on one line.
-func render_json(d) {
+func render_json(d: Diag) -> string {
     let labels: list<string> = []
     for (let lb in d.labels) {
         append(labels, "\{{json_span(lb.span)}, \"text\": {json_str(lb.text)}}")
@@ -488,7 +483,7 @@ export func diag_exit_if_errors() {
 }
 
 # Records one error that has only a line and stops at once. This is the old single error form.
-export func die_line(kind, line, msg) {
+export func die_line(kind: string, line: int, msg: string) {
     diag_new(kind, span_line(line), msg)
     diag_exit_if_errors()
 }
@@ -498,7 +493,7 @@ export func die_line(kind, line, msg) {
 # Two strings whose lengths differ by more than limit need more edits than that, and once two rows in
 # a row are all above limit no later row can come back under it, so most pairs stop early. rows holds
 # three lists of at least len(b) + 1 items, reused from call to call.
-func edit_distance(a, b, limit, rows) {
+func edit_distance(a: string, b: string, limit: int, rows: list<list<int>>) -> int {
     let n = len(a)
     let m = len(b)
     if (n - m > limit or m - n > limit) {
@@ -552,7 +547,7 @@ func edit_distance(a, b, limit, rows) {
 
 # The candidate that is closest to word, or null when none is close enough to be a likely typo:
 # within a third of the length of word (at least one edit). A difference in case alone counts as close.
-export func suggest(word, candidates) {
+export func suggest(word: string, candidates: list<string>) -> string {
     let limit = len(word) / 3
     if (limit < 1) {
         limit = 1
@@ -561,7 +556,7 @@ export func suggest(word, candidates) {
     let best = null
     let best_d = limit + 1
     # a candidate within limit edits is at most len(word) + limit long
-    let rows: list<list> = []
+    let rows: list<list<int>> = []
     for (let k = 0; k < 3; k++) {
         let r: list<int> = []
         for (let j = 0; j <= len(word) + limit; j++) {
@@ -583,9 +578,9 @@ export func suggest(word, candidates) {
 }
 
 # to_lower of a name, made once for each name.
-let LOWER_NAMES = {}
+let LOWER_NAMES: map<string> = {}
 
-func lower_name(c) {
+func lower_name(c: string) -> string {
     if (not map_has(LOWER_NAMES, c)) {
         LOWER_NAMES[c] = to_lower(c)
     }

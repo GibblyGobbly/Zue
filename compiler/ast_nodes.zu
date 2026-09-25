@@ -20,17 +20,17 @@
 # NODE_FIELDS lists the fields each kind uses besides k, line and the places; ast_dump.zu and the tree
 # walkers read it. A possible later form, smaller in memory, is in docs/plan.md (phase 4).
 
-use { Span, span_at } from "diag.zu"
+use { Span, span_at, span_line } from "diag.zu"
 
 export template Node {
     k: string, line: int, name: string, v: string, op: string, l: Node, r: Node, e: Node, callee: Node,
     args: list<Node>, target: Node, index: Node, field: string, body: list<Node>, cond: Node, then: list<Node>,
     els: list<Node>, items: list<Node>, init: Node, iter: Node, incr: Node, params: list<string>,
-    defaults: list, ptypes: list, exported: bool, type: string, sty: string, stys: map<string>, spec: string,
+    defaults: list<Node>, ptypes: list<string>, exported: bool, type: string, sty: string, stys: map<string>, spec: string,
     kc: string, ads: map<string>, ad: string, unary: bool, prefix: bool, const_decl: bool, orelse: list<Node>,
-    keys: list<string>, vals: list<Node>, parts: list, size: Node, lo: Node, hi: Node, cases: list,
-    dflt: list<Node>, is_template: bool, is_bloc: bool, fields: list<string>, ftypes: list, path: string,
-    names: list, col: int, eline: int, ecol: int, nspan: Span, ospan: Span, aspan: Span, fspan: Span,
+    keys: list<string>, vals: list<Node>, parts: list<Node>, size: Node, lo: Node, hi: Node, cases: list<Node>,
+    dflt: list<Node>, is_template: bool, is_bloc: bool, fields: list<string>, ftypes: list<string>, path: string,
+    names: list<string>, col: int, eline: int, ecol: int, nspan: Span, ospan: Span, aspan: Span, fspan: Span,
     pspan: Span, tspan: Span, nspans: list, pspans: list, tspans: list, fspans: list, rtype: string, rspan: Span
 }
 
@@ -52,7 +52,7 @@ func sp(x) {
 }
 
 export const NODE_FIELDS = {
-    "num": ["v", "ads", "ad"], "float": ["v"], "str": ["v"], "char": ["v"], "bool": ["v"],
+    "num": ["v", "ads", "ad"], "float": ["v"], "str": ["v"], "char": ["v"], "bool": ["v"], "text": ["v"],
     "id": ["name"],
     "tmpl": ["parts"],
     "list": ["items"],
@@ -74,6 +74,7 @@ export const NODE_FIELDS = {
     "for": ["init", "cond", "incr", "body"],
     "while": ["cond", "body"],
     "switch": ["e", "cases", "dflt"],
+    "case": ["e", "body"],
     "assign": ["name", "e"],
     "setidx": ["target", "index", "e", "op"],
     "typedef": ["exported", "name", "is_template", "is_bloc", "fields", "ftypes"],
@@ -228,7 +229,9 @@ export func mk_let(st, en, name, init, exported, const_decl, type, nspan, tspan)
     n.init = init
     n.exported = exported
     n.const_decl = const_decl
-    n.type = type
+    if (type != "") {
+        n.type = type
+    }
     n.nspan = sp(nspan)
     n.tspan = sp(tspan)
     return n
@@ -278,6 +281,14 @@ export func mk_switch(st, en, e, cases, dflt) {
     n.e = e
     n.cases = cases
     n.dflt = dflt
+    return n
+}
+
+# A case of a switch: its value and its statements.
+export func mk_case(st, e, body) {
+    let n = node("case", st, st)
+    n.e = e
+    n.body = body
     return n
 }
 
@@ -341,36 +352,131 @@ export func mk_jump(k, st, en) {
     return n
 }
 
+# The place of a node: the whole node, or only its line when it has no column.
+export func node_span(n: Node) -> Span {
+    if (n.col == 0) {
+        return span_line(n.line)
+    }
+    return span_at(n.line, n.col, n.eline, n.ecol)
+}
+
 export func is_node(x) {
     return type(x) == "template"
 }
 
-# The values inside x that can hold more nodes: lists, maps and nodes. x is a node, or a map such as
-# a switch case. The tree walkers use it to visit every part of a tree.
-# The kind of a syntax tree node, or null for a map that is not a node (a switch case, a string part).
-export func node_kind(x) {
-    if (type(x) == "template") {
-        return x.k
-    }
-    return map_get(x, "k", null)
+# The kind of a syntax tree node.
+export func node_kind(x: Node) -> string {
+    return x.k
 }
 
-export func node_children(x) {
-    let out = []
-    if (type(x) == "map") {
-        for (let y in map_values(x)) {
-            let t = type(y)
-            if (t == "list" or t == "map" or t == "template") {
-                append(out, y)
-            }
-        }
-        return out
-    }
+# The nodes directly inside x, in the order of the fields of its kind (NODE_FIELDS). An empty field or
+# list item is left out. The tree walkers use it to visit every part of a tree.
+export func node_children(x: Node) -> list<Node> {
+    let out: list<Node> = []
     for (let name in NODE_FIELDS[x.k]) {
-        let y = x[name]
-        let t = type(y)
-        if (t == "list" or t == "map" or t == "template") {
-            append(out, y)
+        add_child(out, x, name)
+    }
+    return out
+}
+
+func add_node(out: list<Node>, y: Node) {
+    if (y != null) {
+        append(out, y)
+    }
+}
+
+func add_nodes(out: list<Node>, ys: list<Node>) {
+    if (ys == null) {
+        return null
+    }
+    for (let y in ys) {
+        add_node(out, y)
+    }
+}
+
+# Adds what field name of x holds when it is a node or a list of nodes.
+func add_child(out: list<Node>, x: Node, name: string) {
+    add_node(out, child_node(x, name))
+    add_nodes(out, child_list(x, name))
+}
+
+# The node field name of x holds, or null when it is empty or not a node field.
+export func child_node(x: Node, name: string) -> Node {
+    if (name == "l") {
+        return x.l
+    } else if (name == "r") {
+        return x.r
+    } else if (name == "e") {
+        return x.e
+    } else if (name == "callee") {
+        return x.callee
+    } else if (name == "target") {
+        return x.target
+    } else if (name == "index") {
+        return x.index
+    } else if (name == "cond") {
+        return x.cond
+    } else if (name == "init") {
+        return x.init
+    } else if (name == "iter") {
+        return x.iter
+    } else if (name == "incr") {
+        return x.incr
+    } else if (name == "size") {
+        return x.size
+    } else if (name == "lo") {
+        return x.lo
+    } else if (name == "hi") {
+        return x.hi
+    }
+    return null
+}
+
+# The list of nodes field name of x holds: null when the field is empty, [] when it is not such a field.
+export func child_list(x: Node, name: string) -> list<Node> {
+    if (name == "args") {
+        return x.args
+    } else if (name == "body") {
+        return x.body
+    } else if (name == "then") {
+        return x.then
+    } else if (name == "els") {
+        return x.els
+    } else if (name == "items") {
+        return x.items
+    } else if (name == "orelse") {
+        return x.orelse
+    } else if (name == "vals") {
+        return x.vals
+    } else if (name == "parts") {
+        return x.parts
+    } else if (name == "cases") {
+        return x.cases
+    } else if (name == "dflt") {
+        return x.dflt
+    } else if (name == "defaults") {
+        return x.defaults
+    }
+    return []
+}
+
+# Every node in xs and inside them, each before the nodes inside it.
+export func nodes_under(xs: list<Node>) -> list<Node> {
+    let out: list<Node> = []
+    let stack: list<Node> = []
+    let i = len(xs) - 1
+    while (i >= 0) {
+        add_node(stack, xs[i])
+        i -= 1
+    }
+    while (len(stack) > 0) {
+        let n = remove(stack, len(stack) - 1)
+        append(out, n)
+        let kids = node_children(n)
+        let k = len(kids) - 1
+        while (k >= 0) {
+            append(stack, kids[k])
+            k -= 1
         }
     }
     return out

@@ -9,7 +9,7 @@
 # raw values (fn_spec in emit_llvm.zu). A call site uses it only after a check at run time that the name
 # still holds the very closure the specialized functions were made for (see tex_spec_call in ll_typed.zu).
 
-use { node_children, node_kind } from "ast_nodes.zu"
+use { Node, nodes_under } from "ast_nodes.zu"
 use { LL_GLOBALS, SPECS } from "ll_state.zu"
 use { ST } from "state.zu"
 
@@ -72,24 +72,9 @@ export func spec_closure_global(entry) {
 }
 
 # Whether x contains a call node.
-export func has_call(x) {
-    if (type(x) == "list") {
-        for (let y in x) {
-            if (has_call(y)) {
-                return true
-            }
-        }
-        return false
-    }
-    let t = type(x)
-    if (t != "template" and t != "map") {
-        return false
-    }
-    if (node_kind(x) == "call") {
-        return true
-    }
-    for (let y in node_children(x)) {
-        if (has_call(y)) {
+export func has_call(xs: list<Node>) -> bool {
+    for (let x in nodes_under(xs)) {
+        if (x.k == "call") {
             return true
         }
     }
@@ -98,47 +83,23 @@ export func has_call(x) {
 
 # Forgets the raw kinds cached on the binary nodes under x. A function body is compiled once for the
 # ordinary function and once for each signature; what is raw differs between them.
-export func clear_kc(x) {
-    if (type(x) == "list") {
-        for (let y in x) {
-            clear_kc(y)
+export func clear_kc(xs: list<Node>) {
+    for (let x in nodes_under(xs)) {
+        if (x.k == "bin") {
+            x.kc = null
         }
-        return null
     }
-    let t = type(x)
-    if (t != "template" and t != "map") {
-        return null
-    }
-    if (node_kind(x) == "bin") {
-        x.kc = null
-    }
-    for (let y in node_children(x)) {
-        clear_kc(y)
-    }
-    return null
 }
 
 # Collects, for every call node under x that names a candidate and carries signatures, the signatures.
-func collect_sigs(x, found) {
-    if (type(x) == "list") {
-        for (let y in x) {
-            collect_sigs(y, found)
-        }
-        return null
-    }
-    let t = type(x)
-    if (t != "template" and t != "map") {
-        return null
-    }
-    if (node_kind(x) == "call" and x.spec != null and x.callee.k == "id" and map_has(found, x.callee.name)) {
-        for (let key in split(x.spec, ";")) {
-            found[x.callee.name][key] = true
+func collect_sigs(xs: list<Node>, found: map<map<bool>>) {
+    for (let x in nodes_under(xs)) {
+        if (x.k == "call" and x.spec != null and x.callee.k == "id" and map_has(found, x.callee.name)) {
+            for (let key in split(x.spec, ";")) {
+                found[x.callee.name][key] = true
+            }
         }
     }
-    for (let y in node_children(x)) {
-        collect_sigs(y, found)
-    }
-    return null
 }
 
 # Registers the specializable functions of the module whose statements are stmts. A function qualifies when

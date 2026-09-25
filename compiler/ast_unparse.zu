@@ -76,7 +76,7 @@ func params_text(n) {
     let parts: list<string> = []
     for (let i = 0; i < len(n.params); i++) {
         let pname = n.params[i]
-        if (n.ptypes != null and n.ptypes[i] != null) {
+        if (n.ptypes != null and n.ptypes[i] != "") {
             pname = "{pname}: {n.ptypes[i]}"
         }
         if (n.defaults[i] == null) {
@@ -126,8 +126,8 @@ func expr(n) {
     if (k == "tmpl") {
         let out = ["\""]
         for (let part in n.parts) {
-            if (type(part) == "string") {
-                append(out, escape_text(part))
+            if (part.k == "text") {
+                append(out, escape_text(part.v))
             } else {
                 append(out, "\{{expr(part)}}")
             }
@@ -157,7 +157,7 @@ func expr(n) {
         }
         let parts: list<string> = []
         for (let i = 0; i < len(n.args); i++) {
-            if (n.names[i] == null) {
+            if (n.names[i] == "") {
                 append(parts, expr(n.args[i]))
             } else {
                 append(parts, "{n.names[i]}: {expr(n.args[i])}")
@@ -337,7 +337,7 @@ func stmt_body(n, depth) {
     if (k == "switch") {
         let out = "switch ({expr(n.e)}) \{\n"
         for (let c in n.cases) {
-            out = out + "{pad(depth + 1)}case {expr(c.value)}:\n{block_text(c.body, depth + 2)}"
+            out = out + "{pad(depth + 1)}case {expr(c.e)}:\n{block_text(c.body, depth + 2)}"
         }
         if (len(n.dflt) > 0) {
             out = out + "{pad(depth + 1)}default:\n{block_text(n.dflt, depth + 2)}"
@@ -375,7 +375,7 @@ func stmt_body(n, depth) {
         }
         let fields: list<string> = []
         for (let i = 0; i < len(n.fields); i++) {
-            if (n.ftypes[i] == null) {
+            if (n.ftypes[i] == "") {
                 append(fields, n.fields[i])
             } else {
                 let kind = n.ftypes[i]

@@ -6,7 +6,7 @@
 use { BUILTINS, uid } from "shared.zu"
 use { ll, ll_alloca, ll_args_array, ll_copy, ll_copy_heap, ll_reg, ll_slot } from "ll_state.zu"
 use { box_raw, new_typed_var, ty_load, ty_store, unbox_checked } from "ll_unbox.zu"
-use { ST } from "state.zu"
+use { ST, Var } from "state.zu"
 
 export func push_scope() {
     append(ST.ctx.scopes, {})
@@ -53,7 +53,7 @@ export func at_top() {
 export func declare(name, init_ptr) {
     let id = uid()
     let is_cell = map_has(ST.ctx.nested, name)
-    let v = {"name": name, "cell": is_cell, "c": "", "ty": null}
+    let v = Var(name, is_cell, "", null)
     if (is_cell) {
         v.c = ll_alloca("ptr")
         let cell = ll_reg()

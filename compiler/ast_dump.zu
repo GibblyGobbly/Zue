@@ -5,9 +5,9 @@
 #   (kind@line :field value :field value ...)
 # Fields are sorted by name, so the same tree always gives the same text.
 
-use { NODE_FIELDS, OPTIONAL_FIELDS, node_kind } from "ast_nodes.zu"
+use { NODE_FIELDS, Node, OPTIONAL_FIELDS, child_list, child_node } from "ast_nodes.zu"
 
-func quote_text(s) {
+func quote_text(s: string) -> string {
     let q = "\""
     let t = replace(s, "\\", "\\\\")
     t = replace(t, q, "\\\"")
@@ -15,66 +15,197 @@ func quote_text(s) {
     return q + t + q
 }
 
-func dump_value(x) {
-    let t = type(x)
-    if (t == "map" or t == "template") {
-        return dump_node(x)
+func str_text(s: string) -> string {
+    if (s == null) {
+        return "null"
     }
-    if (t == "list") {
-        let items: list<string> = []
-        for (let item in x) {
-            append(items, dump_value(item))
-        }
-        return "[" + join(items, " ") + "]"
-    }
-    if (t == "string") {
-        return quote_text(x)
-    }
-    return to_string(x)
+    return quote_text(s)
 }
 
-# A node is a template with a k kind; other maps (switch cases) print as "map". A field in
-# OPTIONAL_FIELDS that is null was never set, so it is left out.
-func is_optional(key) {
-    for (let name in OPTIONAL_FIELDS) {
-        if (name == key) {
-            return true
+# A bool field: "true", "false", or "null" when it is empty.
+func bool_text(n: Node, key: string) -> string {
+    let b = false
+    if (key == "exported") {
+        if (n.exported == null) {
+            return "null"
         }
+        b = n.exported
+    } else if (key == "unary") {
+        if (n.unary == null) {
+            return "null"
+        }
+        b = n.unary
+    } else if (key == "prefix") {
+        if (n.prefix == null) {
+            return "null"
+        }
+        b = n.prefix
+    } else if (key == "const_decl") {
+        if (n.const_decl == null) {
+            return "null"
+        }
+        b = n.const_decl
+    } else if (key == "is_template") {
+        if (n.is_template == null) {
+            return "null"
+        }
+        b = n.is_template
+    } else if (key == "is_bloc") {
+        if (n.is_bloc == null) {
+            return "null"
+        }
+        b = n.is_bloc
     }
-    return false
+    return to_string(b)
 }
 
-func dump_node(n) {
-    let kind = node_kind(n)
-    let keys = []
-    let is_tree_node = type(n) == "template"
-    if (is_tree_node) {
-        for (let name in NODE_FIELDS[kind]) {
-            append(keys, name)
+# A list of strings; in ptypes, ftypes and the names of a call's arguments "" stands for no type or
+# name and shows as null.
+func strs_text(xs: list<string>, empty_is_null: bool) -> string {
+    if (xs == null) {
+        return "null"
+    }
+    let items: list<string> = []
+    for (let x in xs) {
+        if (empty_is_null and x == "") {
+            append(items, "null")
+        } else {
+            append(items, quote_text(x))
         }
-    } else {
-        keys = map_keys(n)
+    }
+    return "[" + join(items, " ") + "]"
+}
+
+func node_text(n: Node) -> string {
+    if (n == null) {
+        return "null"
+    }
+    return dump_node(n)
+}
+
+func nodes_text(xs: list<Node>) -> string {
+    if (xs == null) {
+        return "null"
+    }
+    let items: list<string> = []
+    for (let x in xs) {
+        append(items, node_text(x))
+    }
+    return "[" + join(items, " ") + "]"
+}
+
+func map_text(m: map<string>) -> string {
+    if (m == null) {
+        return "null"
+    }
+    let items: list<string> = []
+    for (let key in sort(map_keys(m))) {
+        append(items, ":{key} {quote_text(m[key])}")
+    }
+    return "(map " + join(items, " ") + ")"
+}
+
+# The text of field key of node n.
+func field_text(n: Node, key: string) -> string {
+    if (key == "v") {
+        if (n.k == "bool" or n.k == "char") {
+            # kept as text in the node; shown as the value it stands for
+            return n.v
+        }
+        return str_text(n.v)
+    }
+    if (key == "name") {
+        return str_text(n.name)
+    } else if (key == "op") {
+        return str_text(n.op)
+    } else if (key == "field") {
+        return str_text(n.field)
+    } else if (key == "type") {
+        return str_text(n.type)
+    } else if (key == "sty") {
+        return str_text(n.sty)
+    } else if (key == "spec") {
+        return str_text(n.spec)
+    } else if (key == "kc") {
+        return str_text(n.kc)
+    } else if (key == "ad") {
+        return str_text(n.ad)
+    } else if (key == "path") {
+        return str_text(n.path)
+    } else if (key == "rtype") {
+        return str_text(n.rtype)
+    } else if (key == "exported") {
+        return bool_text(n, "exported")
+    } else if (key == "unary") {
+        return bool_text(n, "unary")
+    } else if (key == "prefix") {
+        return bool_text(n, "prefix")
+    } else if (key == "const_decl") {
+        return bool_text(n, "const_decl")
+    } else if (key == "is_template") {
+        return bool_text(n, "is_template")
+    } else if (key == "is_bloc") {
+        return bool_text(n, "is_bloc")
+    } else if (key == "params") {
+        return strs_text(n.params, false)
+    } else if (key == "keys") {
+        return strs_text(n.keys, false)
+    } else if (key == "fields") {
+        return strs_text(n.fields, false)
+    } else if (key == "ptypes") {
+        return strs_text(n.ptypes, true)
+    } else if (key == "ftypes") {
+        return strs_text(n.ftypes, true)
+    } else if (key == "names") {
+        return strs_text(n.names, n.k == "call")
+    } else if (key == "stys") {
+        return map_text(n.stys)
+    } else if (key == "ads") {
+        return map_text(n.ads)
+    }
+    let one = child_node(n, key)
+    if (one != null) {
+        return dump_node(one)
+    }
+    let many = child_list(n, key)
+    if (many != null and len(many) == 0 and not is_list_key(key)) {
+        return "null"
+    }
+    return nodes_text(many)
+}
+
+func is_list_key(key: string) -> bool {
+    return contains(["args", "body", "then", "els", "items", "orelse", "vals", "parts", "cases", "dflt", "defaults"], key)
+}
+
+# A field in OPTIONAL_FIELDS that is empty was never set, so it is left out.
+func is_optional(key: string) -> bool {
+    return contains(OPTIONAL_FIELDS, key)
+}
+
+func dump_node(n: Node) -> string {
+    if (n.k == "text") {
+        # a piece of text in a template string
+        return quote_text(n.v)
+    }
+    if (n.k == "case") {
+        # a case of a switch, shown as it was when cases were maps
+        return "(map@{n.line} :body {nodes_text(n.body)} :value {node_text(n.e)})"
+    }
+    let keys: list<string> = []
+    for (let name in NODE_FIELDS[n.k]) {
+        append(keys, name)
     }
     sort(keys)
-    if (kind == null) {
-        kind = "map"
-    }
     let at = "{n.line}"
-    if (SHOW_SPANS and is_tree_node and n.col > 0) {
+    if (SHOW_SPANS and n.col > 0) {
         at = "{n.line}:{n.col}-{n.eline}:{n.ecol}"
     }
-    let parts = ["({kind}@{at}"]
+    let parts: list<string> = ["({n.k}@{at}"]
     for (let key in keys) {
-        if (key != "k" and key != "line") {
-            let value = n[key]
-            if (not (is_tree_node and value == null and is_optional(key))) {
-                if (key == "v" and (kind == "bool" or kind == "char")) {
-                    # kept as text in the node; shown as the value it stands for
-                    append(parts, ":v {value}")
-                } else {
-                    append(parts, ":{key} {dump_value(value)}")
-                }
-            }
+        let text = field_text(n, key)
+        if (not (text == "null" and is_optional(key))) {
+            append(parts, ":{key} {text}")
         }
     }
     return join(parts, " ") + ")"
@@ -84,11 +215,11 @@ func dump_node(n) {
 # last byte. A node the compiler made has col 0 and shows only @line.
 let SHOW_SPANS = false
 
-export func dump_program(stmts, spans = false) {
+export func dump_program(stmts: list<Node>, spans: bool = false) -> string {
     SHOW_SPANS = spans
     let lines: list<string> = []
     for (let s in stmts) {
-        append(lines, dump_value(s))
+        append(lines, node_text(s))
     }
     return join(lines, "\n")
 }

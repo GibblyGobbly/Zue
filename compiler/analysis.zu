@@ -4,72 +4,53 @@
 # analysis.zu: which names a function uses and which are captured by nested functions.
 
 # Used by the LLVM backend.
-use { node_children, node_kind } from "ast_nodes.zu"
+use { Node, node_children, nodes_under } from "ast_nodes.zu"
 
 # Every name read or written anywhere inside x (in order of first use).
-func walk_names(x, seen, order) {
-    if (type(x) == "list") {
-        for (let y in x) {
-            walk_names(y, seen, order)
-        }
-        return null
-    }
-    let t = type(x)
-    if (t != "template" and t != "map") {
-        return null
-    }
-    let k = node_kind(x)
-    if (k == "id" or k == "assign" or k == "incdec") {
-        if (not map_has(seen, x.name)) {
-            seen[x.name] = true
-            append(order, x.name)
+func walk_names(x: Node, seen: map<bool>, order: list<string>) {
+    for (let y in nodes_under([x])) {
+        let k = y.k
+        if ((k == "id" or k == "assign" or k == "incdec") and not map_has(seen, y.name)) {
+            seen[y.name] = true
+            append(order, y.name)
         }
     }
-    for (let y in node_children(x)) {
-        walk_names(y, seen, order)
-    }
-    return null
 }
 
-export func used_names(fn_node) {
-    let order = []
+export func used_names(fn_node: Node) -> list<string> {
+    let order: list<string> = []
     walk_names(fn_node, {}, order)
     return order
 }
 
-# Names used inside any function literal nested within x.
-export func walk_nested(x, out) {
-    if (type(x) == "list") {
-        for (let y in x) {
-            walk_nested(y, out)
-        }
+# Names used inside any function literal nested within xs.
+export func walk_nested(xs: list<Node>, out: map<bool>) {
+    if (xs == null) {
         return null
     }
-    let t = type(x)
-    if (t != "template" and t != "map") {
-        return null
-    }
-    if (node_kind(x) == "func") {
-        # A parameter of the nested function hides any outer name of the same spelling in its whole body,
-        # so it is not a use of an outer variable (it made that variable a captured cell for nothing).
-        let seen = {}
-        for (let p in x.params) {
-            seen[p] = true
+    for (let x in xs) {
+        if (x == null) {
+            continue
         }
-        let order = []
-        walk_names(x, seen, order)
-        for (let nm in order) {
-            out[nm] = true
+        if (x.k == "func") {
+            # A parameter of the nested function hides any outer name of the same spelling in its whole
+            # body, so it is not a use of an outer variable (it made that variable a captured cell for nothing).
+            let seen: map<bool> = {}
+            for (let p in x.params) {
+                seen[p] = true
+            }
+            let order: list<string> = []
+            walk_names(x, seen, order)
+            for (let nm in order) {
+                out[nm] = true
+            }
+        } else {
+            walk_nested(node_children(x), out)
         }
-        return null
     }
-    for (let y in node_children(x)) {
-        walk_nested(y, out)
-    }
-    return null
 }
 
-export func collect_exports(stmts, out) {
+export func collect_exports(stmts: list<Node>, out: list<string>) {
     for (let s in stmts) {
         if (s.k == "group") {
             collect_exports(s.items, out)
@@ -79,7 +60,7 @@ export func collect_exports(stmts, out) {
     }
 }
 
-export func has_zero_arg_main(stmts) {
+export func has_zero_arg_main(stmts: list<Node>) -> bool {
     for (let s in stmts) {
         if (s.k == "func" and s.name == "main" and len(s.params) == 0) {
             return true

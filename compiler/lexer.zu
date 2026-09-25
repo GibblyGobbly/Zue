@@ -7,29 +7,29 @@
 # eline and ecol where it ends (ecol is the column just after its last byte). Kinds: nl, str, char,
 # num, float, id, eof, the keywords, and the operator names from token.zu. A "num" value is decimal
 # digit text (hex, binary and underscores are resolved here), a "float" value is the number text, a
-# "char" value is the code.
+# "char" value is the code as text. A "str" token has its text and interpolations in parts, and no v.
 #
 # A mistake in the text is recorded with diag_new and the lexer goes on, so one run finds every
 # lexical error. Each case below says how the lexer resumes.
 
-use { diag_new, diag_text, diag_hint, diag_on_line, span_tok } from "diag.zu"
+use { Diag, Span, diag_new, diag_text, diag_hint, diag_on_line, span_tok } from "diag.zu"
 use { KEYWORDS, ONE_CHAR, TWO_CHAR } from "token.zu"
 use { cut } from "ranges.zu"
 
 # True for a byte that continues a UTF-8 character.
-func is_cont_byte(c) {
+func is_cont_byte(c: int) -> bool {
     return c >= 128 and c < 192
 }
 
-func is_dig(c) {
+func is_dig(c: char) -> bool {
     return c >= '0' and c <= '9'
 }
 
-func is_ident_start(c) {
+func is_ident_start(c: char) -> bool {
     return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_'
 }
 
-func is_ident_char(c) {
+func is_ident_char(c: char) -> bool {
     return is_ident_start(c) or is_dig(c)
 }
 
@@ -47,20 +47,28 @@ let IDENT_BYTES = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_01234567
 let DIGIT_BYTES = "0123456789"
 let NUMBER_BYTES = "0123456789_"
 
-template Token { t, v, line, col, eline, ecol }
+# One piece of a string literal: text, or (when expr is not empty) the source of an interpolation and
+# where it starts.
+export template StrPart { text: string, expr: string, line: int, col: int }
+
+export template Token { t: string, v: string, parts: list<StrPart>, line: int, col: int, eline: int, ecol: int }
+
+# What a scan of a number, string or character literal found: the token kind and text (a number's
+# digits, a character's code) or the parts of a string, the index after it and the line it ends on.
+template Scan { kind: string, text: string, parts: list<StrPart>, next: int, line: int }
 
 # The index of the first byte of the line being scanned. Inside a string interpolation it is chosen
 # so that columns count from the place of the expression in the file.
 let LS = 0
 
 # The column of the byte at index i on the current line.
-func col_of(i) {
+func col_of(i: int) -> int {
     return i - LS + 1
 }
 
 # Records a lexical error, unless the line already has one: the first error on a line is the cause,
 # and what follows it on that line is usually its effect. Returns the error, or null.
-func lex_error(line, col, ecol, msg) {
+func lex_error(line: int, col: int, ecol: int, msg: string) -> Diag {
     if (diag_on_line(line)) {
         return null
     }
@@ -68,13 +76,13 @@ func lex_error(line, col, ecol, msg) {
 }
 
 # The index of the end of the line that holds index i.
-func line_end(src, i) {
+func line_end(src: string, i: int) -> int {
     # index_of_any gives len(src) when there is no line break after i
     return index_of_any(src, "\n", i)
 }
 
 # The value of a hex digit, or -1.
-func hex_value(c) {
+func hex_value(c: char) -> int {
     if (c >= '0' and c <= '9') {
         return code(c) - 48
     }
@@ -89,8 +97,8 @@ func hex_value(c) {
 
 # Strings
 
-# The text an escape letter stands for inside a string or character literal, or null.
-func escape_text(e) {
+# The text an escape letter stands for inside a string or character literal, or "" when it is not an escape.
+func escape_text(e: char) -> string {
     if (e == 'n') {
         return "\n"
     }
@@ -115,11 +123,11 @@ func escape_text(e) {
     if (e == '}') {
         return "\}"
     }
-    return null
+    return ""
 }
 
 # The index just after the string literal whose opening quote is at k.
-func skip_string(src, k, start_line) {
+func skip_string(src: string, k: int, start_line: int) -> int {
     let n = len(src)
     k += 1
     while (k < n) {
@@ -139,7 +147,7 @@ func skip_string(src, k, start_line) {
 
 # The index of the } that closes an interpolation whose text starts at k. Braces, strings and
 # character literals inside the expression are skipped over.
-func interp_end(src, k, start_line) {
+func interp_end(src: string, k: int, start_line: int) -> int {
     let n = len(src)
     let open_at = k - 1
     let open_col = col_of(open_at)
@@ -178,7 +186,7 @@ func interp_end(src, k, start_line) {
 }
 
 # Counts the line breaks in src from index a up to index b, and moves LS to the start of the last line.
-func track_newlines(src, a, b) {
+func track_newlines(src: string, a: int, b: int) -> int {
     let count = 0
     let k = index_of_any(src, "\n", a)
     while (k < b) {
@@ -189,18 +197,18 @@ func track_newlines(src, a, b) {
     return count
 }
 
-# Reads the string whose opening quote is at index i. Returns [parts, next_i, next_line]. A part
-# is either a string or {"expr": source, "line": n, "col": c}. A { starts an interpolation unless it
+# Reads the string whose opening quote is at index i: its parts, the index after it and the line it
+# ends on. A { starts an interpolation unless it
 # is written \{ or is immediately followed by }. An unterminated string is reported and ends at the
 # end of the line it starts on.
-func lex_string(src, i, start_line) {
+func lex_string(src: string, i: int, start_line: int) -> Scan {
     let n = len(src)
     let line = start_line
     let q_at = i
     let ls0 = LS
     let q_col = col_of(i)
-    let parts = []
-    let cur = []
+    let parts: list<StrPart> = []
+    let cur: list<string> = []
     i += 1
     let seg = i
     while (true) {
@@ -222,8 +230,7 @@ func lex_string(src, i, start_line) {
             }
             let text = escape_text(src[i + 1])
             let width = 2
-            if (text == null) {
-                text = ""
+            if (text == "") {
                 if (src[i + 1] == '\n') {
                     width = 1
                     let d = lex_error(line, col_of(i), col_of(i) + 1, "A backslash at the end of a line is not an escape")
@@ -258,14 +265,14 @@ func lex_string(src, i, start_line) {
                 before = join(cur, "")
             }
             if (len(before) > 0) {
-                append(parts, before)
+                append(parts, StrPart(before, null, 0, 0))
             }
             cur = []
             let expr = cut(src, i + 1, stop)
             if (ESCAPED_QUOTES) {
                 expr = replace(expr, "\\\"", "\"")
             }
-            append(parts, {"expr": expr, "line": line, "col": col_of(i + 1)})
+            append(parts, StrPart(null, expr, line, col_of(i + 1)))
             line += track_newlines(src, i + 1, stop)
             i = stop + 1
             seg = i
@@ -277,26 +284,26 @@ func lex_string(src, i, start_line) {
         last = join(cur, "")
     }
     if (len(last) > 0 or len(parts) == 0) {
-        append(parts, last)
+        append(parts, StrPart(last, null, 0, 0))
     }
-    return [parts, i + 1, line]
+    return Scan("str", null, parts, i + 1, line)
 }
 
 # Reports a string with no closing quote. The string is taken to end with its first line.
-func string_unterminated(src, q_at, q_col, ls0, start_line) {
+func string_unterminated(src: string, q_at: int, q_col: int, ls0: int, start_line: int) -> Scan {
     LS = ls0
     let e = line_end(src, q_at)
     let d = lex_error(start_line, q_col, col_of(e), "Unterminated string")
     diag_text(d, "this string has no closing quote")
     diag_hint(d, "Add a closing '\"' at the end of the string")
-    return [[cut(src, q_at + 1, e)], e, start_line]
+    return Scan("str", null, [StrPart(cut(src, q_at + 1, e), null, 0, 0)], e, start_line)
 }
 
 # Characters
 
-# Reports a bad character literal that starts at index i0 and returns [0, next_i]: the literal is
+# Reports a bad character literal that starts at index i0; its code is 0, and the literal is
 # taken to end at its closing quote when there is one on the line, otherwise at the end of the line.
-func char_fail(src, i0, line, msg, hint) {
+func char_fail(src: string, i0: int, line: int, msg: string, hint: string) -> Scan {
     let e = line_end(src, i0)
     let q = index_of_any(src, "'", i0 + 1)
     let next = e
@@ -305,11 +312,11 @@ func char_fail(src, i0, line, msg, hint) {
     }
     let d = lex_error(line, col_of(i0), col_of(next), msg)
     diag_hint(d, hint)
-    return [0, next]
+    return Scan("char", "0", null, next, line)
 }
 
-# Reads the character literal whose opening quote is at index i. Returns [code, next_i].
-func lex_char(src, i, line) {
+# Reads the character literal whose opening quote is at index i: its code and the index after it.
+func lex_char(src: string, i: int, line: int) -> Scan {
     let n = len(src)
     let i0 = i
     i += 1
@@ -329,7 +336,7 @@ func lex_char(src, i, line) {
             byte = 0
         } else {
             let text = escape_text(e)
-            if (text == null) {
+            if (text == "") {
                 return char_fail(src, i0, line, "Unknown escape '\\{e}' in character literal", "The escapes are \\n \\t \\r \\\\ \\' \\\" and \\0")
             }
             byte = code(text[0])
@@ -342,15 +349,15 @@ func lex_char(src, i, line) {
     if (i >= n or src[i] != '\'') {
         return char_fail(src, i0, line, "A character literal holds exactly one character", "Use double quotes for text: \"ab\"")
     }
-    return [byte, i + 1]
+    return Scan("char", "{byte}", null, i + 1, line)
 }
 
 # Numbers
 
 # Reads the digits of a number in the given base starting at i, allowing single underscores
-# between digits. s is the index where the literal starts. Returns [value, next_i]; for base 16 and
-# 2 the value is a decimal int. A bad literal is reported and read to its end, and its value is 0.
-func lex_based(src, s, i, base, line) {
+# between digits. s is the index where the literal starts. Gives the value as decimal digits and the
+# index after the literal. A bad literal is reported and read to its end, and its value is 0.
+func lex_based(src: string, s: int, i: int, base: int, line: int) -> Scan {
     let n = len(src)
     let limit = 576460752303423487
     if (base == 2) {
@@ -394,11 +401,11 @@ func lex_based(src, s, i, base, line) {
         bad.span.ecol = col_of(i)
         value = 0
     }
-    return [value, i]
+    return Scan("num", "{value}", null, i, line)
 }
 
 # The number of bytes of the UTF-8 character whose first byte is c.
-func utf8_len(c) {
+func utf8_len(c: char) -> int {
     let b = code(c)
     if (b < 0) {
         b += 256
@@ -419,7 +426,7 @@ func utf8_len(c) {
 # from 1.7976931348623158079372897140530341507993e308 on, halfway between the largest float
 # (1.7976931348623157e308) and the next power of two; a value below the halfway point rounds down to the
 # largest float.
-func float_too_big(text) {
+func float_too_big(text: string) -> bool {
     let e = index_of_any(text, "eE")
     let mant = text
     let ed = "0"
@@ -462,8 +469,8 @@ func float_too_big(text) {
     return cut(sig, 0, 40) >= "1797693134862315807937289714053034150799"
 }
 
-# Reads the number starting at index i. Returns [token fields, next_i]: the kind and the text.
-func lex_number(src, i, line) {
+# Reads the number starting at index i: its kind ("num" or "float"), its text and the index after it.
+func lex_number(src: string, i: int, line: int) -> Scan {
     let n = len(src)
     let s = i
     let kind = "num"
@@ -474,8 +481,8 @@ func lex_number(src, i, line) {
             base = 2
         }
         let r = lex_based(src, s, i + 2, base, line)
-        text = "{r[0]}"
-        i = r[1]
+        text = r.text
+        i = r.next
     } else {
         i = skip_chars(src, NUMBER_BYTES, i)
         let is_float = false
@@ -515,17 +522,17 @@ func lex_number(src, i, line) {
         let d = lex_error(line, col_of(s), col_of(j), "Invalid number literal: '{cut(src, s, i + 1)}' is a number followed by a letter")
         diag_hint(d, "Put an operator or a space between a number and a name")
     }
-    return [kind, text, i]
+    return Scan(kind, text, null, i, line)
 }
 
 # Tokens
 
 # One-character operators and the first characters of two-character operators, indexed by byte
 # code so that the lexer needs no string or map work for them.
-func build_one_kinds() {
-    let table = []
+func build_one_kinds() -> list<string> {
+    let table: list<string> = []
     for (let k = 0; k < 256; k++) {
-        append(table, null)
+        append(table, "")
     }
     for (let key in map_keys(ONE_CHAR)) {
         table[code(key[0])] = ONE_CHAR[key]
@@ -534,10 +541,10 @@ func build_one_kinds() {
 }
 
 # The text of each one-character operator by byte code, so a token reuses it instead of building "{c}".
-func build_one_texts() {
-    let table = []
+func build_one_texts() -> list<string> {
+    let table: list<string> = []
     for (let k = 0; k < 256; k++) {
-        append(table, null)
+        append(table, "")
     }
     for (let key in map_keys(ONE_CHAR)) {
         table[code(key[0])] = key
@@ -546,19 +553,19 @@ func build_one_texts() {
 }
 
 # Two-character operators: TWO_KIND[first][second] is the token kind and TWO_TEXT[first][second] the
-# operator text, both null where the pair is not an operator. A row exists only for first bytes that
-# start an operator, so the lexer looks a pair up without slicing a string.
-func build_two_table(want_kind) {
-    let table = []
+# operator text, both "" where the pair is not an operator. A row is not empty only for first bytes
+# that start an operator, so the lexer looks a pair up without slicing a string.
+func build_two_table(want_kind: bool) -> list<list<string>> {
+    let table: list<list<string>> = []
     for (let k = 0; k < 256; k++) {
-        append(table, null)
+        append(table, [])
     }
     for (let key in map_keys(TWO_CHAR)) {
         let a = code(key[0])
-        if (table[a] == null) {
-            let row = []
+        if (len(table[a]) == 0) {
+            let row: list<string> = []
             for (let k = 0; k < 256; k++) {
-                append(row, null)
+                append(row, "")
             }
             table[a] = row
         }
@@ -575,7 +582,7 @@ func build_two_table(want_kind) {
 # blank (space, tab, CR), 4 is a newline, 5 opens a string, 6 opens a character literal, 7 starts a
 # # comment, 8 is / (a comment when another / follows, an operator otherwise), 0 is an operator
 # byte or an error.
-func build_classes() {
+func build_classes() -> list<int> {
     let table: list<int> = []
     for (let k = 0; k < 256; k++) {
         if ((k >= 65 and k <= 90) or (k >= 97 and k <= 122) or k == 95) {
@@ -610,8 +617,8 @@ let CLASS = build_classes()
 # Tokens for src. first_line is the line number of its first line and first_col the column of its
 # first byte; both are 1 for a whole file and name the place of the expression for the text of a
 # string interpolation.
-export func lex(src, first_line, first_col = 1) {
-    let toks = []
+export func lex(src: string, first_line: int, first_col: int = 1) -> list<Token> {
+    let toks: list<Token> = []
     let n = len(src)
     let i = 0
     let line = first_line
@@ -628,21 +635,21 @@ export func lex(src, first_line, first_col = 1) {
             }
         }
         if (cls == 0) {
-            let kind = null
+            let kind = ""
             let col = i - ls + 1
             let row = TWO_KIND[byte]
-            if (row != null and i + 1 < n) {
+            if (len(row) > 0 and i + 1 < n) {
                 let second = code(src[i + 1])
                 kind = row[second]
-                if (kind != null) {
-                    append(toks, Token(kind, TWO_TEXT[byte][second], line, col, line, col + 2))
+                if (kind != "") {
+                    append(toks, Token(kind, TWO_TEXT[byte][second], null, line, col, line, col + 2))
                     i += 2
                     continue
                 }
             }
             kind = ONE_KIND[byte]
-            if (kind != null) {
-                append(toks, Token(kind, ONE_TEXT[byte], line, col, line, col + 1))
+            if (kind != "") {
+                append(toks, Token(kind, ONE_TEXT[byte], null, line, col, line, col + 1))
                 i += 1
             } else if (byte >= 128) {
                 let j = i + 1
@@ -661,18 +668,17 @@ export func lex(src, first_line, first_col = 1) {
             let s = i
             i = skip_chars(src, IDENT_BYTES, i + 1)
             let word = cut(src, s, i)
-            let kw = map_get(KEYWORDS, word, null)
             let col = s - ls + 1
-            if (kw != null) {
-                append(toks, Token(kw, word, line, col, line, col + i - s))
+            if (map_has(KEYWORDS, word)) {
+                append(toks, Token(KEYWORDS[word], word, null, line, col, line, col + i - s))
             } else {
-                append(toks, Token("id", word, line, col, line, col + i - s))
+                append(toks, Token("id", word, null, line, col, line, col + i - s))
             }
         } else if (cls == 3) {
             i = skip_chars(src, " \t\r", i + 1)
         } else if (cls == 4) {
             let col = i - ls + 1
-            append(toks, Token("nl", null, line, col, line, col + 1))
+            append(toks, Token("nl", null, null, line, col, line, col + 1))
             line += 1
             i += 1
             ls = i
@@ -680,27 +686,27 @@ export func lex(src, first_line, first_col = 1) {
             LS = ls
             let col = i - ls + 1
             let r = lex_number(src, i, line)
-            i = r[2]
-            append(toks, Token(r[0], r[1], line, col, line, i - ls + 1))
+            i = r.next
+            append(toks, Token(r.kind, r.text, null, line, col, line, i - ls + 1))
         } else if (cls == 5) {
             LS = ls
             let col = i - ls + 1
             let start_line = line
             let r = lex_string(src, i, line)
-            i = r[1]
-            line = r[2]
+            i = r.next
+            line = r.line
             ls = LS
-            append(toks, Token("str", r[0], start_line, col, line, i - ls + 1))
+            append(toks, Token("str", null, r.parts, start_line, col, line, i - ls + 1))
         } else if (cls == 6) {
             LS = ls
             let col = i - ls + 1
             let r = lex_char(src, i, line)
-            i = r[1]
-            append(toks, Token("char", r[0], line, col, line, i - ls + 1))
+            i = r.next
+            append(toks, Token("char", r.text, null, line, col, line, i - ls + 1))
         } else {
             i = index_of_any(src, "\n", i)
         }
     }
-    append(toks, Token("eof", null, line, n - ls + 1, line, n - ls + 1))
+    append(toks, Token("eof", null, null, line, n - ls + 1, line, n - ls + 1))
     return toks
 }

@@ -14,20 +14,20 @@
 #
 # The tree of a program with errors is never used.
 
-use { diag_new, diag_text, diag_hint, diag_label, diag_on_line, diag_exit_if_errors, diag_count, span_at, span_line, node_span } from "diag.zu"
-use { lex } from "lexer.zu"
+use { Diag, Span, diag_new, diag_text, diag_hint, diag_label, diag_on_line, diag_exit_if_errors, diag_count, span_at, span_line } from "diag.zu"
+use { StrPart, Token, lex } from "lexer.zu"
 use { KEYWORDS } from "token.zu"
-use { Node, mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_slice, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_typedef, mk_use, mk_block, mk_return, mk_jump, mk_neg } from "ast_nodes.zu"
+use { Node, node_span, mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_slice, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_case, mk_typedef, mk_use, mk_block, mk_return, mk_jump, mk_neg } from "ast_nodes.zu"
 use { cut } from "ranges.zu"
 
-let P_toks = []
+let P_toks: list<Token> = []
 let P_pos = 0
 
 # Number of ( [ and literal { currently open. Inside them a line break is only white space.
 let P_depth = 0
 
 # The last token that was consumed.
-let P_prev = null
+let P_prev: Token = null
 
 # True from the first error in a statement until p_recover.
 let P_panic = false
@@ -37,14 +37,14 @@ let P_ignore_close = 0
 
 # Names declared so far in each open scope, innermost last, each with the span of its declaration;
 # a name may be declared once per scope.
-let P_scopes = [{}]
+let P_scopes: list<map<Span>> = [{}]
 
 # Set when p_close_angle used up the first character of a token such as >> and left the rest.
-let P_split_tok = null
+let P_split_tok: Token = null
 
 # Records an error unless the parser is already in panic mode or the line has an error. A syntax
 # error puts the parser in panic mode (panic is true); a rule error such as a repeated name does not.
-func p_diag(span, msg, text, panic) {
+func p_diag(span: Span, msg: string, text: string, panic: bool) -> Diag {
     if (P_panic or diag_on_line(span.line)) {
         if (panic) {
             P_panic = true
@@ -61,6 +61,11 @@ func p_diag(span, msg, text, panic) {
     return d
 }
 
+# The place of a token.
+func tspan(tk: Token) -> Span {
+    return span_at(tk.line, tk.col, tk.eline, tk.ecol)
+}
+
 func p_scope_push() {
     append(P_scopes, {})
 }
@@ -69,23 +74,23 @@ func p_scope_pop() {
     remove(P_scopes, len(P_scopes) - 1)
 }
 
-func p_declare(name, tk) {
+func p_declare(name: string, tk: Token) {
     let top = P_scopes[len(P_scopes) - 1]
-    let first = map_get(top, name, null)
-    if (first != null) {
-        let d = p_diag(tk, "'{name}' is already declared in this scope", "declared again here", false)
+    if (map_has(top, name)) {
+        let first = top[name]
+        let d = p_diag(tspan(tk), "'{name}' is already declared in this scope", "declared again here", false)
         if (d != null) {
             diag_label(d, first, "first declared here")
             diag_hint(d, "Use another name, or assign to the existing variable without 'let'")
         }
         return null
     }
-    top[name] = tk
+    top[name] = tspan(tk)
 }
 
 # The current token and its kind. While a bracket is open, line breaks are skipped before either is
 # set, so the parser never sees them there. p_sync must run whenever P_pos or P_depth changes.
-let P_tk = null
+let P_tk: Token = null
 let P_kind = ""
 
 func p_sync() {
@@ -98,11 +103,11 @@ func p_sync() {
     P_kind = P_tk.t
 }
 
-func p_at(t) {
+func p_at(t: string) -> bool {
     return P_kind == t
 }
 
-func p_next() {
+func p_next() -> Token {
     let tk = P_tk
     P_prev = tk
     if (P_pos < len(P_toks) - 1) {
@@ -112,7 +117,7 @@ func p_next() {
     return tk
 }
 
-func p_eat(t) {
+func p_eat(t: string) -> bool {
     if (P_kind == t) {
         p_next()
         return true
@@ -128,12 +133,12 @@ func p_enter() {
 
 # Words that are keywords only where they mean something: in (for loops), from (use lists) and
 # data (data declarations). Elsewhere they are ordinary names.
-func p_at_word(w) {
+func p_at_word(w: string) -> bool {
     let tk = P_tk
     return tk.t == "id" and tk.v == w
 }
 
-func p_eat_word(w) {
+func p_eat_word(w: string) -> bool {
     if (p_at_word(w)) {
         p_next()
         return true
@@ -141,7 +146,7 @@ func p_eat_word(w) {
     return false
 }
 
-func p_expect_word(w, msg) {
+func p_expect_word(w: string, msg: string) -> Token {
     if (not p_at_word(w)) {
         p_fail(msg)
         return P_tk
@@ -150,7 +155,7 @@ func p_expect_word(w, msg) {
 }
 
 # data Name { ... }: the word data, a name, then an opening brace.
-func p_at_data() {
+func p_at_data() -> bool {
     if (not p_at_word("data")) {
         return false
     }
@@ -160,22 +165,22 @@ func p_at_data() {
 
 # True when the current token is the first on its line, inside brackets where line breaks are not
 # tokens the parser sees.
-func p_first_on_line() {
+func p_first_on_line() -> bool {
     return P_depth > 0 and P_pos > 0 and P_toks[P_pos - 1].t == "nl"
 }
 
 # Where an error about the current token points. At the end of a line or of the file the token is
 # not text, so the error points at the place just after the last token that was read.
-func p_here() {
+func p_here() -> Span {
     let tk = P_tk
     if ((tk.t == "nl" or tk.t == "eof" or p_first_on_line()) and P_prev != null) {
         return span_at(P_prev.eline, P_prev.ecol, P_prev.eline, P_prev.ecol + 1)
     }
-    return tk
+    return tspan(tk)
 }
 
 # What the current token is, for the text next to the carets.
-func p_found_text() {
+func p_found_text() -> string {
     let tk = P_tk
     let t = tk.t
     if (t == "nl" or p_first_on_line()) {
@@ -199,7 +204,7 @@ func p_found_text() {
     if (t == "id") {
         return "unexpected name '{tk.v}'"
     }
-    if (type(tk.v) == "string") {
+    if (tk.v != null) {
         return "unexpected '{tk.v}'"
     }
     return "unexpected '{t}'"
@@ -207,22 +212,26 @@ func p_found_text() {
 
 # Records a syntax error at the current token and puts the parser in panic mode. Returns the error,
 # or null when it was not recorded.
-func p_fail(msg) {
+func p_fail(msg: string) -> Diag {
     let d = p_diag(p_here(), msg, p_found_text(), true)
     let tk = P_tk
-    if (d != null and type(tk.v) == "string" and map_has(KEYWORDS, tk.v) and contains(msg, "name")) {
+    if (d != null and tk.v != null and map_has(KEYWORDS, tk.v) and contains(msg, "name")) {
         diag_hint(d, "'{tk.v}' is a keyword and cannot be used as a name; choose another")
     }
     return d
 }
 
-func p_fail_at(span, msg, text) {
+func p_fail_at(tk: Token, msg: string, text: string) -> Diag {
+    return p_diag(tspan(tk), msg, text, true)
+}
+
+func p_fail_span(span: Span, msg: string, text: string) -> Diag {
     return p_diag(span, msg, text, true)
 }
 
 # Consumes a token of kind t. When it is missing nothing is consumed and the current token is
 # returned, as if the missing token had been there.
-func p_expect(t, msg) {
+func p_expect(t: string, msg: string) -> Token {
     if (P_kind != t) {
         p_fail(msg)
         return P_tk
@@ -231,7 +240,7 @@ func p_expect(t, msg) {
 }
 
 # Consumes the opening bracket t, and line breaks stop mattering until p_close.
-func p_open(t, msg) {
+func p_open(t: string, msg: string) {
     if (P_kind != t) {
         p_fail(msg)
         return null
@@ -242,7 +251,7 @@ func p_open(t, msg) {
 
 # The opening bracket that the closer t should have matched: the nearest one before the current
 # token that has no closer of its own. Only used to describe an error.
-func p_find_opener(t) {
+func p_find_opener(t: string) -> Token {
     let open = "("
     if (t == "]") {
         open = "["
@@ -268,13 +277,13 @@ func p_find_opener(t) {
 
 # The closing bracket is checked first and the depth lowered before it is consumed, so a line break
 # after it still ends the statement. A missing one points at the bracket that was left open.
-func p_close(t, msg) {
+func p_close(t: string, msg: string) {
     if (P_kind != t) {
         let d = p_fail(msg)
         if (d != null) {
             let opener = p_find_opener(t)
             if (opener != null) {
-                diag_label(d, opener, "this '{opener.v}' is never closed")
+                diag_label(d, tspan(opener), "this '{opener.v}' is never closed")
             }
         }
         return null
@@ -292,7 +301,7 @@ func p_skip_nl() {
 # Parses source text with its own token stream, then restores the parser.
 let P_inline = 0
 
-func parse_inline(text, line, col) {
+func parse_inline(text: string, line: int, col: int) -> Node {
     P_inline += 1
     let saved_toks = P_toks
     let saved_pos = P_pos
@@ -315,29 +324,31 @@ func parse_inline(text, line, col) {
     return e
 }
 
-func p_string(tk) {
-    let parts = tk.v
+# A string literal: a "str" node, or a "tmpl" node whose parts are "text" nodes and the expressions
+# of its interpolations.
+func p_string(tk: Token) -> Node {
+    let parts = tk.parts
     let has_expr = false
     for (let part in parts) {
-        if (type(part) == "map") {
+        if (part.expr != null) {
             has_expr = true
         }
     }
     if (not has_expr) {
-        return mk_lit("str", tk, tk, parts[0])
+        return mk_lit("str", tk, tk, parts[0].text)
     }
     let items: list<Node> = []
     for (let part in parts) {
-        if (type(part) == "map") {
+        if (part.expr != null) {
             append(items, parse_inline(part.expr, part.line, part.col))
         } else {
-            append(items, part)
+            append(items, mk_lit("text", tk, tk, part.text))
         }
     }
     return mk_tmpl(tk, tk, items)
 }
 
-func p_list_literal(st) {
+func p_list_literal(st: Token) -> Node {
     p_enter()
     let items: list<Node> = []
     while (not (P_kind == "]") and not (P_kind == "eof")) {
@@ -350,9 +361,9 @@ func p_list_literal(st) {
     return mk_list(st, P_prev, items)
 }
 
-func p_map_literal(st) {
+func p_map_literal(st: Token) -> Node {
     p_enter()
-    let keys = []
+    let keys: list<string> = []
     let vals: list<Node> = []
     while (not (P_kind == "}") and not (P_kind == "eof")) {
         if (not (P_kind == "str")) {
@@ -360,14 +371,15 @@ func p_map_literal(st) {
             break
         }
         let kt = p_next()
-        if (len(kt.v) != 1 or type(kt.v[0]) != "string") {
+        if (len(kt.parts) != 1 or kt.parts[0].expr != null) {
             p_fail_at(kt, "Map literal keys must be plain strings", "this key has an interpolation")
             break
         }
-        if (contains(keys, kt.v[0])) {
-            p_fail_at(kt, "Map literal key '{kt.v[0]}' is given twice", "the key again")
+        let key = kt.parts[0].text
+        if (contains(keys, key)) {
+            p_fail_at(kt, "Map literal key '{key}' is given twice", "the key again")
         }
-        append(keys, kt.v[0])
+        append(keys, key)
         p_expect(":", "Expected ':' after map key")
         append(vals, p_expr())
         if (not p_eat(",")) {
@@ -380,7 +392,7 @@ func p_map_literal(st) {
 
 # A type annotation after ':' on a variable, a parameter or a field: a type name, and for list and
 # map an element type in angle brackets, as in list<int> or map<list<float>>. Returned as text.
-func p_type(what, after = ":") {
+func p_type(what: string, after: string = ":") -> string {
     if (not (P_kind == "id")) {
         p_fail("Expected a type after '{after}' in {what}")
         return "any"
@@ -422,22 +434,25 @@ func p_close_angle() {
 }
 
 # The span of the type annotation that started at token st and has just been read.
-func p_type_span(st) {
+func p_type_span(st: Token) -> Span {
     if (P_split_tok != null and P_split_tok == P_tk) {
         return span_at(st.line, st.col, P_tk.line, P_tk.col)
     }
     return span_at(st.line, st.col, P_prev.eline, P_prev.ecol)
 }
 
-# nt is the name token of a named function, or null; st the token where the function starts.
-func p_func_rest(name, nt, st, is_export) {
+# name and nt are the name and its token of a named function, "" and null for a function value; st the
+# token where the function starts.
+# A parameter without a type has "" in ptypes and an empty item in tspans; a parameter without a default
+# has an empty item in defaults.
+func p_func_rest(name: string, nt: Token, st: Token, is_export: bool) -> Node {
     p_open("(", "Expected '('")
     p_scope_push()
-    let params = []
-    let defaults = []
-    let ptypes = []
-    let pspans = []
-    let tspans = []
+    let params: list<string> = []
+    let defaults: list<Node> = []
+    let ptypes: list<string> = []
+    let pspans: list<Span> = []
+    let tspans: list<Span> = []
     let has_default = false
     let has_type = false
     while (not (P_kind == ")") and not (P_kind == "eof")) {
@@ -448,14 +463,14 @@ func p_func_rest(name, nt, st, is_export) {
         let pt = p_next()
         p_declare(pt.v, pt)
         append(params, pt.v)
-        append(pspans, pt)
+        append(pspans, tspan(pt))
         if (p_eat(":")) {
             let ts = P_tk
             append(ptypes, p_type("a parameter"))
             append(tspans, p_type_span(ts))
             has_type = true
         } else {
-            append(ptypes, null)
+            append(ptypes, "")
             append(tspans, null)
         }
         if (p_eat("=")) {
@@ -463,7 +478,7 @@ func p_func_rest(name, nt, st, is_export) {
             has_default = true
         } else {
             if (has_default) {
-                let d = p_diag(pt, "Parameter '{pt.v}' needs a default value because an earlier parameter has one", "no default value", false)
+                let d = p_diag(tspan(pt), "Parameter '{pt.v}' needs a default value because an earlier parameter has one", "no default value", false)
                 if (d != null) {
                     diag_hint(d, "Give it a default, for example {pt.v} = 0, or move it before the parameters that have one")
                 }
@@ -476,8 +491,8 @@ func p_func_rest(name, nt, st, is_export) {
     }
     p_close(")", "Expected ')'")
     # func area(w: float, h: float) -> float: the type of the result
-    let rtype = null
-    let rspan = null
+    let rtype = ""
+    let rspan: Span = null
     if (P_kind == "->") {
         p_next()
         let ts = P_tk
@@ -486,16 +501,23 @@ func p_func_rest(name, nt, st, is_export) {
     }
     p_skip_nl()
     p_expect("\{", "Expected '\{'")
-    let declared = null
-    if (has_type) {
-        declared = ptypes
-    }
     let body = p_block_body()
     p_scope_pop()
-    return mk_func(st, P_prev, name, params, defaults, declared, body, is_export, nt, pspans, tspans, rtype, rspan)
+    let n = mk_func(st, P_prev, null, params, defaults, null, body, is_export, nt, pspans, tspans)
+    if (name != "") {
+        n.name = name
+    }
+    if (has_type) {
+        n.ptypes = ptypes
+    }
+    if (rtype != "") {
+        n.rtype = rtype
+        n.rspan = rspan
+    }
+    return n
 }
 
-func p_primary() {
+func p_primary() -> Node {
     let tk = P_tk
     let line = tk.line
     let t = tk.t
@@ -540,7 +562,7 @@ func p_primary() {
     }
     if (t == "func") {
         p_next()
-        return p_func_rest(null, null, tk, false)
+        return p_func_rest("", null, tk, false)
     }
     if (t == "box") {
         p_next()
@@ -570,17 +592,19 @@ func p_primary() {
     return mk_lit("num", tk, tk, "0")
 }
 
-# The arguments of a call: [values, names, name tokens]. A named argument is written name: value and
-# comes after the positional ones; names is null when no argument is named, else it holds the name of
-# each argument (null for a positional one).
-func p_args(closer, msg) {
+# The arguments of a call: their values, names and the places of the names. A named argument is written
+# name: value and comes after the positional ones; names is empty when no argument is named, else it holds
+# the name of each argument ("" for a positional one).
+template CallArgs { args: list<Node>, names: list<string>, nspans: list<Span> }
+
+func p_args(closer: string, msg: string) -> CallArgs {
     p_enter()
     let args: list<Node> = []
-    let names = []
-    let ntoks = []
+    let names: list<string> = []
+    let nspans: list<Span> = []
     let named = false
     while (not p_at(closer) and not p_at("eof")) {
-        let nt = null
+        let nt: Token = null
         if (P_kind == "id" and P_toks[P_pos + 1].t == ":") {
             nt = p_next()
             p_next()
@@ -588,7 +612,7 @@ func p_args(closer, msg) {
                 if (names[i] == nt.v) {
                     let d = p_fail_at(nt, "Argument '{nt.v}' is named twice", "named again here")
                     if (d != null) {
-                        diag_label(d, ntoks[i], "first named here")
+                        diag_label(d, nspans[i], "first named here")
                         diag_hint(d, "Give each argument once")
                     }
                 }
@@ -602,31 +626,32 @@ func p_args(closer, msg) {
         }
         append(args, p_expr())
         if (nt == null) {
-            append(names, null)
+            append(names, "")
+            append(nspans, null)
         } else {
             append(names, nt.v)
+            append(nspans, tspan(nt))
         }
-        append(ntoks, nt)
         if (not p_eat(",")) {
             break
         }
     }
     p_close(closer, msg)
     if (not named) {
-        return [args, null, null]
+        return CallArgs(args, null, null)
     }
-    return [args, names, ntoks]
+    return CallArgs(args, names, nspans)
 }
 
 # A call node with the arguments p_args gave.
-func p_mk_call(st, callee, a, open) {
-    let c = mk_call(st, P_prev, callee, a[0], span_at(open.line, open.col, P_prev.eline, P_prev.ecol))
-    c.names = a[1]
-    c.nspans = a[2]
+func p_mk_call(st: Token, callee: Node, a: CallArgs, open: Token) -> Node {
+    let c = mk_call(st, P_prev, callee, a.args, span_at(open.line, open.col, P_prev.eline, P_prev.ecol))
+    c.names = a.names
+    c.nspans = a.nspans
     return c
 }
 
-func p_postfix() {
+func p_postfix() -> Node {
     let st = P_tk
     let e = p_primary()
     while (true) {
@@ -641,13 +666,13 @@ func p_postfix() {
         } else if ((P_kind == "[")) {
             p_next()
             p_enter()
-            let lo = null
+            let lo: Node = null
             if (P_kind != ":") {
                 lo = p_expr()
             }
             if (P_kind == ":") {
                 p_next()
-                let hi = null
+                let hi: Node = null
                 if (P_kind != "]") {
                     hi = p_expr()
                 }
@@ -660,7 +685,7 @@ func p_postfix() {
         } else if ((P_kind == ".")) {
             p_next()
             let tk = P_tk
-            let is_word = tk.t == "id" or (type(tk.v) == "string" and map_has(KEYWORDS, tk.v))
+            let is_word = tk.t == "id" or (tk.v != null and map_has(KEYWORDS, tk.v))
             if (not is_word) {
                 p_fail("Expected field name after '.'")
                 break
@@ -683,7 +708,7 @@ func p_postfix() {
     return e
 }
 
-func p_unary() {
+func p_unary() -> Node {
     let st = P_tk
     if (p_eat("-")) {
         let r = p_unary()
@@ -732,7 +757,7 @@ func p_unary() {
 }
 
 # Binding power of each binary operator; a higher number binds tighter. All are left-associative.
-let BINARY = {
+let BINARY: map<int> = {
     "or": 1, "and": 2,
     "==": 3, "!=": 3,
     "<": 4, ">": 4, "<=": 4, ">=": 4,
@@ -747,7 +772,7 @@ let BINARY = {
 const MAX_NESTING = 10000
 let P_nesting = 0
 
-func p_expr_bp(min_bp) {
+func p_expr_bp(min_bp: int) -> Node {
     P_nesting += 1
     if (P_nesting > MAX_NESTING) {
         let d = p_fail("Expression is nested more than {MAX_NESTING} levels deep")
@@ -759,9 +784,9 @@ func p_expr_bp(min_bp) {
     return r
 }
 
-func p_expr_bp_inner(min_bp) {
+func p_expr_bp_inner(min_bp: int) -> Node {
     let st = P_tk
-    let left = null
+    let left: Node = null
     if (min_bp <= 3 and (P_kind == "not")) {
         # not binds looser than a comparison and tighter than and: not a == b is not (a == b).
         p_next()
@@ -771,10 +796,10 @@ func p_expr_bp_inner(min_bp) {
         left = p_as(p_unary(), st)
     }
     while (true) {
-        let bp = map_get(BINARY, P_tk.t, null)
-        if (bp == null or bp < min_bp) {
+        if (not map_has(BINARY, P_tk.t) or BINARY[P_tk.t] < min_bp) {
             break
         }
+        let bp = BINARY[P_tk.t]
         let optk = P_tk
         let op = p_next().t
         p_skip_nl()
@@ -784,13 +809,13 @@ func p_expr_bp_inner(min_bp) {
     return left
 }
 
-func p_expr() {
+func p_expr() -> Node {
     return p_expr_bp(1)
 }
 
 # x as int, x as float and x as string are int(x), float(x) and string(x): the tree holds the call. 'as'
 # binds tighter than every binary operator (a + b as int is a + (b as int)) and looser than a unary minus.
-func p_as(left, st) {
+func p_as(left: Node, st: Token) -> Node {
     while (P_kind == "as") {
         p_next()
         if (not (P_kind == "id") or (P_tk.v != "int" and P_tk.v != "float" and P_tk.v != "string")) {
@@ -807,11 +832,11 @@ func p_as(left, st) {
 }
 
 # The calls whose value may be missing, besides the conversions int(x) and float(x).
-let P_MAY_MISS = ["find", "index_of", "last_index_of", "open"]
+let P_MAY_MISS: list<string> = ["find", "index_of", "last_index_of", "open"]
 
 # Whether e is a value that may be missing, the value 'else' and 'if (let ...)' take: a conversion int(x)
 # or float(x) (also written x as int and x as float), an index or field read, a search or open.
-func p_can_fail(e) {
+func p_can_fail(e: Node) -> bool {
     if (e.k == "index" or e.k == "field") {
         return true
     }
@@ -825,9 +850,9 @@ func p_can_fail(e) {
 }
 
 # The checks of the value of a 'let' with 'else' or of 'if (let ...)'; what names the construct.
-func p_check_can_fail(e, what) {
+func p_check_can_fail(e: Node, what: string) {
     if (not p_can_fail(e)) {
-        let d = p_fail_at(span_at(e.line, e.col, e.eline, e.ecol), "{what} needs a value that may be missing", "this cannot be missing")
+        let d = p_fail_span(node_span(e), "{what} needs a value that may be missing", "this cannot be missing")
         if (d != null) {
             diag_hint(d, "Use a conversion (s as int), a read (m[key], p.field), find, index_of, last_index_of or open")
         }
@@ -835,7 +860,7 @@ func p_check_can_fail(e, what) {
 }
 
 # Whether a block ends by leaving: its last statement is return, break or continue, or a call of exit.
-func p_leaves(stmts) {
+func p_leaves(stmts: list<Node>) -> bool {
     if (len(stmts) == 0) {
         return false
     }
@@ -846,7 +871,7 @@ func p_leaves(stmts) {
     return last.k == "call" and last.callee.k == "id" and last.callee.name == "exit"
 }
 
-func p_block() {
+func p_block() -> list<Node> {
     p_scope_push()
     let stmts = p_block_body()
     p_scope_pop()
@@ -856,7 +881,7 @@ func p_block() {
 # After a statement: when it had an error, skip to the start of the next statement; a statement
 # that consumed nothing and had no error cannot happen, but one token is skipped so that a loop
 # over statements always ends.
-func p_stmt_end(before) {
+func p_stmt_end(before: int) {
     if (P_panic) {
         p_recover()
     } else if (P_pos == before) {
@@ -919,12 +944,12 @@ func p_recover() {
     P_ignore_close += opened
 }
 
-func p_block_body() {
+func p_block_body() -> list<Node> {
     let open_tk = P_prev
     let saved_depth = P_depth
     P_depth = 0
     p_sync()
-    let stmts = []
+    let stmts: list<Node> = []
     while (not (P_kind == "eof")) {
         if (P_kind == "}") {
             if (P_ignore_close > 0) {
@@ -946,7 +971,7 @@ func p_block_body() {
     } else {
         let d = p_fail("Expected '}'")
         if (d != null and open_tk != null and open_tk.t == "\{") {
-            diag_label(d, open_tk, "this '\{' is never closed")
+            diag_label(d, tspan(open_tk), "this '\{' is never closed")
         }
     }
     P_depth = saved_depth
@@ -954,11 +979,12 @@ func p_block_body() {
     return stmts
 }
 
-func p_declaration(st, is_const, is_export) {
-    let names = []
-    let types = []
-    let nspans = []
-    let tspans = []
+# A name without a type has "" in types.
+func p_declaration(st: Token, is_const: bool, is_export: bool) -> Node {
+    let names: list<string> = []
+    let types: list<string> = []
+    let nspans: list<Span> = []
+    let tspans: list<Span> = []
     let more = true
     while (more) {
         if (not (P_kind == "id")) {
@@ -968,13 +994,13 @@ func p_declaration(st, is_const, is_export) {
         let nt = p_next()
         p_declare(nt.v, nt)
         append(names, nt.v)
-        append(nspans, nt)
+        append(nspans, tspan(nt))
         if (p_eat(":")) {
             let ts = P_tk
             append(types, p_type("a variable"))
             append(tspans, p_type_span(ts))
         } else {
-            append(types, null)
+            append(types, "")
             append(tspans, null)
         }
         more = p_eat(",")
@@ -998,11 +1024,11 @@ func p_declaration(st, is_const, is_export) {
         return mk_lit("num", st, st, "0")
     }
     if (is_const and len(vals) != len(names)) {
-        let d = p_fail_at(span_at(st.line, st.col, P_prev.eline, P_prev.ecol), "const declarations require an initializer for every name", "needs a value for every name")
+        let d = p_fail_span(span_at(st.line, st.col, P_prev.eline, P_prev.ecol), "const declarations require an initializer for every name", "needs a value for every name")
         diag_hint(d, "Write the value after the name, for example const limit = 10")
     }
     if (len(vals) > 0 and len(vals) != len(names)) {
-        let d = p_fail_at(span_at(st.line, st.col, P_prev.eline, P_prev.ecol), "Variable count ({len(names)}) does not match value count ({len(vals)})", "{len(names)} names, {len(vals)} values")
+        let d = p_fail_span(span_at(st.line, st.col, P_prev.eline, P_prev.ecol), "Variable count ({len(names)}) does not match value count ({len(vals)})", "{len(names)} names, {len(vals)} values")
         diag_hint(d, "Give one value for each name")
     }
     let end = P_prev
@@ -1013,7 +1039,7 @@ func p_declaration(st, is_const, is_export) {
         p_expect("\{", "Expected '\{' after 'else'")
         let orelse = p_block()
         if (not P_panic and not p_leaves(orelse)) {
-            let d = p_fail_at(span_at(et.line, et.col, et.eline, et.ecol), "The 'else' block of a 'let' must leave", "can end without leaving")
+            let d = p_fail_at(et, "The 'else' block of a 'let' must leave", "can end without leaving")
             if (d != null) {
                 diag_hint(d, "End it with return, break or continue: after the 'let', '{names[0]}' must hold a value")
             }
@@ -1023,7 +1049,7 @@ func p_declaration(st, is_const, is_export) {
         return n
     }
     if (len(names) == 1) {
-        let init = null
+        let init: Node = null
         if (len(vals) > 0) {
             init = vals[0]
         }
@@ -1031,7 +1057,7 @@ func p_declaration(st, is_const, is_export) {
     }
     let lets: list<Node> = []
     for (let i = 0; i < len(names); i++) {
-        let init = null
+        let init: Node = null
         if (len(vals) > 0 and i < len(vals)) {
             init = vals[i]
         }
@@ -1040,15 +1066,15 @@ func p_declaration(st, is_const, is_export) {
     return mk_group(st, end, lets)
 }
 
-func p_cond_paren(what) {
+func p_cond_paren(what: string) -> Node {
     p_open("(", "Expected '(' after {what}")
     let c = p_expr()
     p_close(")", "Expected ')' after condition")
     return c
 }
 
-func p_if(st) {
-    let cond = null
+func p_if(st: Token) -> Node {
+    let cond: Node = null
     let bound = false
     if (P_kind == "(" and P_toks[P_pos + 1].t == "let") {
         # if (let n = s as int) { ... }: n exists in the first block only, where the conversion worked
@@ -1062,7 +1088,7 @@ func p_if(st) {
         let e = p_expr()
         p_close(")", "Expected ')' after condition")
         p_check_can_fail(e, "'if (let ...)'")
-        cond = mk_let(lt, P_prev, nt.v, e, false, false, null, nt, null)
+        cond = mk_let(lt, P_prev, nt.v, e, false, false, "", nt, null)
         p_scope_push()
         p_declare(nt.v, nt)
         bound = true
@@ -1075,7 +1101,7 @@ func p_if(st) {
     if (bound) {
         p_scope_pop()
     }
-    let els = []
+    let els: list<Node> = []
     # else may come after blank lines; the line breaks read here also end the if statement (p_stmt_end)
     p_skip_nl()
     if (p_eat("else")) {
@@ -1090,14 +1116,14 @@ func p_if(st) {
     return mk_if(st, P_prev, cond, then_body, els)
 }
 
-func p_for(st) {
+func p_for(st: Token) -> Node {
     p_scope_push()
     let n = p_for_header(st)
     p_scope_pop()
     return n
 }
 
-func p_for_header(st) {
+func p_for_header(st: Token) -> Node {
     p_open("(", "Expected '(' after for")
     if ((P_kind == "let")) {
         let lt = p_next()
@@ -1116,18 +1142,18 @@ func p_for_header(st) {
             let body = p_block()
             return mk_forin(st, P_prev, name, iter, body, nt)
         }
-        let ty = null
-        let tspan = null
+        let ty = ""
+        let tsp: Span = null
         if (p_eat(":")) {
             let ts = P_tk
             ty = p_type("a variable")
-            tspan = p_type_span(ts)
+            tsp = p_type_span(ts)
         }
-        let first = null
+        let first: Node = null
         if (p_eat("=")) {
             first = p_expr()
         }
-        let init = mk_let(lt, P_prev, name, first, false, null, ty, nt, tspan)
+        let init = mk_let(lt, P_prev, name, first, false, null, ty, nt, tsp)
         return p_for_rest(st, init)
     }
     if ((P_kind == ";")) {
@@ -1136,14 +1162,14 @@ func p_for_header(st) {
     return p_for_rest(st, p_statement())
 }
 
-func p_for_rest(st, init) {
+func p_for_rest(st: Token, init: Node) -> Node {
     p_expect(";", "Expected ';' after loop initializer")
-    let cond = null
+    let cond: Node = null
     if (not (P_kind == ";")) {
         cond = p_expr()
     }
     p_expect(";", "Expected ';' after loop condition")
-    let incr = null
+    let incr: Node = null
     if (not (P_kind == ")")) {
         incr = p_statement()
     }
@@ -1154,31 +1180,32 @@ func p_for_rest(st, init) {
     return mk_for(st, P_prev, init, cond, incr, body)
 }
 
-func p_switch(st) {
+# Each case is a "case" node: its value in e and its statements in body.
+func p_switch(st: Token) -> Node {
     p_open("(", "Expected '(' after switch")
     let e = p_expr()
     p_close(")", "Expected ')'")
     p_skip_nl()
     p_expect("\{", "Expected '\{' starting switch block")
-    let cases: list<map> = []
-    let dflt = []
+    let cases: list<Node> = []
+    let dflt: list<Node> = []
     let seen_default = false
-    let seen_values = {}
+    let seen_values: map<bool> = {}
     while (not (P_kind == "}") and not (P_kind == "eof")) {
-        let cline = P_tk.line
+        let ctk = P_tk
         if (p_eat("case")) {
             let v = p_expr()
             # A literal value given twice: the second case could never run.
             if (v.k == "num" or v.k == "float" or v.k == "str" or v.k == "char" or v.k == "bool") {
                 let key = "{v.k}:{v.v}"
                 if (map_has(seen_values, key)) {
-                    p_fail_at(v, "case value {v.v} appears twice in this switch", "already a case above")
+                    p_fail_span(node_span(v), "case value {v.v} appears twice in this switch", "already a case above")
                 }
                 seen_values[key] = true
             }
             p_expect(":", "Expected ':' after case value")
             let body = p_case_body()
-            append(cases, {"value": v, "body": body, "line": cline})
+            append(cases, mk_case(ctk, v, body))
         } else if (p_eat("default")) {
             if (seen_default) {
                 p_fail_at(P_prev, "switch has two default branches", "the second default")
@@ -1197,9 +1224,9 @@ func p_switch(st) {
     return mk_switch(st, P_prev, e, cases, dflt)
 }
 
-func p_case_body() {
+func p_case_body() -> list<Node> {
     p_scope_push()
-    let body = []
+    let body: list<Node> = []
     while (not (P_kind == "case") and not (P_kind == "default") and not (P_kind == "}") and not (P_kind == "eof")) {
         if (p_eat("nl")) {
             continue
@@ -1212,7 +1239,7 @@ func p_case_body() {
     return body
 }
 
-func compound_op(t) {
+func compound_op(t: string) -> string {
     if (t == "+=") {
         return "+"
     }
@@ -1228,10 +1255,10 @@ func compound_op(t) {
     if (t == "%=") {
         return "%"
     }
-    return null
+    return ""
 }
 
-func p_simple(st) {
+func p_simple(st: Token) -> Node {
     let e = p_expr()
     if (P_kind == "=") {
         p_next()
@@ -1240,10 +1267,10 @@ func p_simple(st) {
         if (e.k == "id") {
             return mk_assign(st, P_prev, e.name, v, e)
         }
-        return make_setidx(st, e, v, null)
+        return make_setidx(st, e, v, "")
     }
     let op = compound_op(P_tk.t)
-    if (op != null) {
+    if (op != "") {
         let optk = p_next()
         p_skip_nl()
         let rhs = p_expr()
@@ -1256,20 +1283,26 @@ func p_simple(st) {
     return e
 }
 
-# target[index] = value  /  target.field = value, with an optional compound op.
-func make_setidx(st, e, v, op) {
-    if (e.k == "index") {
-        return mk_setidx(st, P_prev, e.target, e.index, v, op)
-    }
+# target[index] = value  /  target.field = value, with an optional compound op ("" for none).
+func make_setidx(st: Token, e: Node, v: Node, op: string) -> Node {
+    let index = e.index
     if (e.k == "field") {
-        return mk_setidx(st, P_prev, e.target, mk_lit("str", e.fspan, e.fspan, e.field), v, op)
+        index = mk_lit("str", e.fspan, e.fspan, e.field)
     }
-    let d = p_fail_at(node_span(e), "Invalid assignment target", "cannot assign to this")
+    if (e.k == "index" or e.k == "field") {
+        let n = mk_setidx(st, P_prev, e.target, index, v, null)
+        if (op != "") {
+            n.op = op
+        }
+        return n
+    }
+    let d = p_fail_span(node_span(e), "Invalid assignment target", "cannot assign to this")
     diag_hint(d, "Assign to a variable, an item such as list[0], or a field such as point.x")
     return v
 }
 
-func p_typedef(st, word, is_export) {
+# A field without a type has "" in ftypes.
+func p_typedef(st: Token, word: string, is_export: bool) -> Node {
     if (not (P_kind == "id")) {
         p_fail("Expected a name after '{word}'")
         return mk_block("block", st, st, [])
@@ -1277,9 +1310,9 @@ func p_typedef(st, word, is_export) {
     let nt = p_next()
     let name = nt.v
     p_declare(name, nt)
-    let fields = []
-    let ftypes = []
-    let fspans = []
+    let fields: list<string> = []
+    let ftypes: list<string> = []
+    let fspans: list<Span> = []
     p_expect("\{", "Expected '\{' after type name")
     while (not (P_kind == "}") and not (P_kind == "eof")) {
         p_skip_nl()
@@ -1293,12 +1326,12 @@ func p_typedef(st, word, is_export) {
             p_fail_at(ft, "{word} has duplicate field names", "'{ft.v}' is already a field")
         }
         append(fields, ft.v)
-        append(fspans, ft)
+        append(fspans, tspan(ft))
         if (P_kind == ":") {
             p_next()
             append(ftypes, p_field_type(word))
         } else {
-            append(ftypes, null)
+            append(ftypes, "")
         }
         p_skip_nl()
         if (not p_eat(",")) {
@@ -1313,7 +1346,7 @@ func p_typedef(st, word, is_export) {
 
 # The type after "name:" in a bloc or template field: int, float, bool, char, string, list, map,
 # function, the name of another type, or box[N]. Returned as text: "box:16" for box[16].
-func p_field_type(word) {
+func p_field_type(word: string) -> string {
     if (P_kind == "box") {
         p_next()
         p_expect("[", "Expected '[' after box in a field type")
@@ -1329,10 +1362,10 @@ func p_field_type(word) {
 }
 
 # A data type has no field types. A bloc has types on all its fields or on none.
-func p_check_field_types(n, word) {
+func p_check_field_types(n: Node, word: string) {
     let typed = 0
     for (let t in n.ftypes) {
-        if (t != null) {
+        if (t != "") {
             typed += 1
         }
     }
@@ -1348,7 +1381,7 @@ func p_check_field_types(n, word) {
         let d = p_diag(n.nspan, "bloc '{n.name}': give a type to every field or to none", "{typed} of {len(n.fields)} fields have a type", false)
         if (d != null) {
             for (let i = 0; i < len(n.fields); i++) {
-                if (n.ftypes[i] == null) {
+                if (n.ftypes[i] == "") {
                     diag_label(d, n.fspans[i], "no type")
                 }
             }
@@ -1357,9 +1390,9 @@ func p_check_field_types(n, word) {
     return null
 }
 
-func p_use(st, word) {
-    let names = []
-    let nspans = []
+func p_use(st: Token, word: string) -> Node {
+    let names: list<string> = []
+    let nspans: list<Span> = []
     if ((P_kind == "\{")) {
         p_next()
         p_enter()
@@ -1371,7 +1404,7 @@ func p_use(st, word) {
             let ut = p_next()
             p_declare(ut.v, ut)
             append(names, ut.v)
-            append(nspans, ut)
+            append(nspans, tspan(ut))
             if (not p_eat(",")) {
                 break
             }
@@ -1385,19 +1418,19 @@ func p_use(st, word) {
     }
     let pt = p_next()
     # The path is found when the program is compiled, so it cannot depend on a value: no interpolation.
-    if (len(pt.v) == 0) {
+    if (len(pt.parts) == 0) {
         p_fail_at(pt, "Expected string path after {word}: the path is empty", "this path is empty")
         return mk_use(st, P_prev, names, "", pt, nspans)
     }
-    if (len(pt.v) != 1 or type(pt.v[0]) != "string") {
+    if (len(pt.parts) != 1 or pt.parts[0].expr != null) {
         p_fail_at(pt, "Expected string path after {word}: a path cannot hold an interpolation", "this path has an interpolation")
         return mk_use(st, P_prev, names, "", pt, nspans)
     }
-    return mk_use(st, P_prev, names, pt.v[0], pt, nspans)
+    return mk_use(st, P_prev, names, pt.parts[0].text, pt, nspans)
 }
 
 # One statement.
-func p_statement() {
+func p_statement() -> Node {
     let tk = P_tk
     let t = tk.t
     if (t == "func") {
@@ -1501,7 +1534,7 @@ func p_statement() {
     return p_simple(tk)
 }
 
-export func parse_program(toks) {
+export func parse_program(toks: list<Token>) -> list<Node> {
     P_toks = toks
     P_pos = 0
     P_depth = 0
@@ -1511,7 +1544,7 @@ export func parse_program(toks) {
     P_split_tok = null
     P_scopes = [{}]
     p_sync()
-    let stmts = []
+    let stmts: list<Node> = []
     while (not (P_kind == "eof")) {
         if (p_eat("nl")) {
             continue
@@ -1538,7 +1571,7 @@ export func parse_program(toks) {
 # the run ends if there was any.
 # Stops the run when the text has a syntax error. Errors found before (the type checker reads imported
 # files while it checks the main one) are left to be reported with the rest.
-export func parse_source(text) {
+export func parse_source(text: string) -> list<Node> {
     let before = diag_count()
     let stmts = parse_program(lex(text, 1))
     if (diag_count() > before) {
