@@ -542,7 +542,10 @@ a `Type Error` with the line, and the program is not built.
   6
   ```
 - A function that returns values of one template type, and maybe `null` (an empty value), has that
-  template type, also when it calls itself.
+  template type, also when it calls itself. The same holds for a string, a list, a map or a function:
+  `return "Ann"` and `return null` make a function whose result is a string. An `int`, `float`, `bool` or
+  `char` is never empty, so a function returning an int or `null` has no known type. `map_get(m, key, null)`
+  of a `map<string>` is a string.
 - A type can be written after a colon on a variable, a parameter or a field: `let xs: list<float> = [1, 2]`,
   `func total(v: list<int>, n: int = 0)`, `template Bag { items: list<int> }`. `list` and `map` take an
   element type in angle brackets and may nest (`map<list<int>>`). The type names are `int`, `float`,

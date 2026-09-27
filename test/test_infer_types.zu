@@ -56,3 +56,26 @@ func first(x) {
 }
 print(first([1, 2]))
 print(first(5))
+# CASE a function returning a string or null has the type string, and so does map_get with a null default
+# strict
+func name_of(id: int) {
+    if (id == 1) {
+        return "Ann"
+    }
+    return null
+}
+let n = name_of(1)
+print(n + "!")
+print(name_of(2) == null)
+let ages: map<string> = {"a": "x"}
+let v = map_get(ages, "a", null)
+print(v + "y")
+# CASE an int or null stays unknown in strict mode
+# strict
+func count_of(id: int) {
+    if (id == 1) {
+        return 3
+    }
+    return null
+}
+print(count_of(1) + 1)

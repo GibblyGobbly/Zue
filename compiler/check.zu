@@ -1459,6 +1459,13 @@ func ck_builtin(n, name, argtypes) {
         if (len(argtypes) == 2 or (len(argtypes) == 3 and settle(argtypes[2]) == el)) {
             return el
         }
+        # map_get(m, key, null) of a map whose values may be empty (a string, a list, a template, ...)
+        if (len(argtypes) == 3 and argtypes[2] == "null" and nullable_or_null([el, "null"]) == el) {
+            return el
+        }
+        if (len(argtypes) == 3 and argtypes[2] == "null" and template_or_null([el]) == el) {
+            return el
+        }
     }
     if (el != null and kind_of(first) == "list" and name == "remove" and len(argtypes) == 2) {
         return el
@@ -1513,6 +1520,11 @@ func join_returns(rets) {
     let tt = template_or_null(rets)
     if (tt != null) {
         return tt
+    }
+    # So may a string, a list, a map or a function: returns of one such type and of null give that type.
+    let nt = nullable_or_null(rets)
+    if (nt != null) {
+        return nt
     }
     let t = rets[0]
     for (let r in rets) {
@@ -1767,7 +1779,32 @@ func check_body(name, fn, idx, types, line, home = null) {
     return rets
 }
 
-# The scalar type all the returns that do not depend on the recursion agree on, or null.
+# The one type of rets other than null when it is a type whose values may be empty (string, list, map,
+# function), with at least one null among rets; else null. int, float, bool and char are never empty.
+func nullable_or_null(rets) {
+    let t = null
+    let nulls = 0
+    for (let r in rets) {
+        if (r == "null") {
+            nulls += 1
+            continue
+        }
+        let k = kind_of(r)
+        if (k != "string" and k != "list" and k != "map" and k != "function") {
+            return null
+        }
+        if (t == null) {
+            t = r
+        } else if (t != r) {
+            return null
+        }
+    }
+    if (nulls == 0) {
+        return null
+    }
+    return t
+}
+
 # The one template type of rets when every other item is null, or null.
 func template_or_null(rets) {
     let t = null
