@@ -14,18 +14,19 @@
 
 use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
-use { Diag, diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, suggest } from "diag.zu"
+use { Diag, Span, diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, suggest } from "diag.zu"
 use { cut } from "ranges.zu"
 use { Node, node_span, nodes_under } from "ast_nodes.zu"
 use { parse_source } from "parser.zu"
 use { resolve_named_args } from "named_args.zu"
 use { path_dir, path_join, path_norm, split_lines } from "util.zu"
 
-let SCOPES: list<map> = []
+# One scope: the type of each name, and beside the types what else a name stands for: the node of a
+# function, the node of a list that started empty (let xs = [], emptied when it gets a second type), the
+# file a function was imported from, and where each variable got its type (a span, to label an error).
+template Scope { types: map<string>, fns: map<Node>, empties: map<Node>, homes: map<CkFile>, origins: map<Span> }
 
-# Beside each scope, where each of its variables got its type: a node (the first value) or a span
-# (a type annotation or a parameter). Used only to label an error.
-let ORIGINS = []
+let SCOPES: list<Scope> = []
 
 # Strict mode, per file: a "# strict" comment among the first lines turns every value whose type the
 # checker cannot tell into an error where it is used, and every untyped parameter into an error.
@@ -37,54 +38,54 @@ let STRICT = false
 let GENERIC = 0
 
 # zue check --list-types: for each list that starts empty (let xs = []), the types of the values appended
-# to it, so that a tool can write the element type: "file:line" -> {"name", "types"}.
+# to it, so that a tool can write the element type: "file:line" -> the list's name and the types.
 export const LIST_TYPES_ON = [false]
-let LIST_TYPES = {}
+template ListNote { name: string, types: map<bool> }
+let LIST_TYPES: map<ListNote> = {}
 
 # Notes that a value of type t is appended to the list a names, when a starts empty.
-func note_list_type(a, t) {
+func note_list_type(a: Node, t: string) {
     if (a.k != "id") {
         return null
     }
-    let ekey = "empty:{a.name}"
     let idx = scope_index(a.name)
-    if (idx < 0 or idx != scope_index(ekey)) {
+    if (idx < 0 or idx != empty_index(a.name)) {
         return null
     }
-    let ln = SCOPES[idx][ekey]
+    let ln = SCOPES[idx].empties[a.name]
     if (ln == null) {
         return null
     }
     let key = "{ST.src_file}:{ln.line}"
     if (not map_has(LIST_TYPES, key)) {
-        LIST_TYPES[key] = {"name": a.name, "types": {}}
+        LIST_TYPES[key] = ListNote(a.name, {})
     }
     # unknown while a recursive function is still being checked; its second pass gives the type
     let st = settle(t)
     if (st != "any") {
-        LIST_TYPES[key]["types"][st] = true
+        LIST_TYPES[key].types[st] = true
     }
 }
 
 # A list that starts empty (let xs = []) takes the type of the first value appended to it: xs is a
 # list<int> after append(xs, 1). A value of another type appended later makes it a list of mixed items.
 # Returns true when a is such a list, so the append needs no other check.
-func grow_list(a, t, vt) {
+func grow_list(a: Node, t: string, vt: string) -> bool {
     if (a.k != "id") {
         return false
     }
-    let ekey = "empty:{a.name}"
     let idx = scope_index(a.name)
-    if (idx < 0 or idx != scope_index(ekey) or SCOPES[idx][ekey] == null) {
+    if (idx < 0 or idx != empty_index(a.name) or SCOPES[idx].empties[a.name] == null) {
         return false
     }
+    let types = SCOPES[idx].types
     let v = settle(vt)
-    if (SCOPES[idx][a.name] == "list" and v != "any" and v != "null" and v != "unset") {
-        SCOPES[idx][a.name] = "list<{v}>"
-    } else if (SCOPES[idx][a.name] != "list<{v}>") {
+    if (types[a.name] == "list" and v != "any" and v != "null" and v != "unset") {
+        types[a.name] = "list<{v}>"
+    } else if (types[a.name] != "list<{v}>") {
         # a second type, or a value of unknown type: a list of mixed items from here on
-        SCOPES[idx][a.name] = "list"
-        SCOPES[idx][ekey] = null
+        types[a.name] = "list"
+        SCOPES[idx].empties[a.name] = null
     }
     return true
 }
@@ -92,31 +93,31 @@ func grow_list(a, t, vt) {
 # Prints "file:line: name: list<T>" for every list that starts empty and gets values of one known type.
 func print_list_types() {
     for (let key in sort(map_keys(LIST_TYPES))) {
-        let ts = map_keys(LIST_TYPES[key]["types"])
+        let ts = map_keys(LIST_TYPES[key].types)
         if (len(ts) == 1 and ts[0] != "null" and ts[0] != "unset") {
-            print("{key}: {LIST_TYPES[key]["name"]}: list<{ts[0]}>")
+            print("{key}: {LIST_TYPES[key].name}: list<{ts[0]}>")
         }
     }
 }
 
-func strict_on() {
+func strict_on() -> bool {
     return STRICT and GENERIC == 0
 }
 
 # Per-call checking of user functions. A function body is checked once for each distinct list of
 # argument types, with the parameters bound to those types.
 # The typed bloc and template definitions the file being checked knows, by name.
-let TYPEDEFS = {}
+let TYPEDEFS: map<Node> = {}
 
 # Every bloc and template definition of every file, by name, and the definitions known in the file that
 # declares it. Kept for the whole compilation, as FILES is: each module is checked on its own
 # (check_program), and a file checked for an earlier module is not checked again. A value can reach a file that never names its type (a function of another file returns
 # it), and its fields are still known; the types written in a definition or in the signature of a
 # function are read in the file they are written in.
-let ALL_TYPEDEFS = {}
-let DEF_SCOPE = {}
+let ALL_TYPEDEFS: map<Node> = {}
+let DEF_SCOPE: map<map<Node>> = {}
 
-func note_typedef(n) {
+func note_typedef(n: Node) {
     TYPEDEFS[n.name] = n
     if (not map_has(ALL_TYPEDEFS, n.name)) {
         ALL_TYPEDEFS[n.name] = n
@@ -124,35 +125,55 @@ func note_typedef(n) {
     }
 }
 
-let MEMO = {}
-let INPROG = {}
-let CALLS: list<map> = []
-let RETS: list<list> = []
+let MEMO: map<string> = {}
+let INPROG: map<bool> = {}
+
+# The function bodies being checked, innermost last: the function's name and argument types, the line of
+# the call, the place of the body, and the file of the call.
+template Call { name: string, types: list<string>, line: int, body: string, file: string }
+let CALLS: list<Call> = []
+let RETS: list<list<string>> = []
 
 # Recursion. The result type of a function that calls itself is unknown while its body is checked, so
 # the first pass takes it as any. When the other returns agree on one scalar type, the body is checked
 # once more with that type assumed for the recursive calls (ASSUME). If every return then has that type
 # the assumption holds, because a recursion that ends does so in a return that does not recurse.
 # The second pass reports nothing (QUIET counts the errors it would have reported) and keeps a log of
-# what it changed (MARKLOG, MEMOLOG), so that a rejected assumption leaves no trace.
-let RECURSIVE = {}
-let ASSUME = {}
+# what it changed (LOG), so that a rejected assumption leaves no trace.
+let RECURSIVE: map<bool> = {}
+let ASSUME: map<string> = {}
 let QUIET = 0
 let QUIET_HITS = 0
-let MARKLOG = null
-let MEMOLOG = null
 
-# Builtin signatures: name -> alternatives of [parameter types, result]. T stands for a number
+# A change to a node: which field ("sty", "stys", "ads" or "spec"), its value before, and for stys and
+# ads the key of the entry (before is null when the entry did not exist).
+template MarkEntry { n: Node, field: string, before: string, key: string }
+# The changes made and the MEMO keys added while LOG is not empty.
+template Log { marks: list<MarkEntry>, memos: list<string> }
+let LOG: Log = null
+
+# Builtin signatures: name -> alternatives, each the parameter types and the result. T stands for a number
 # type (int or float) that must be the same everywhere it appears.
-let SIGS = {}
-let BUILTIN_NAMES = {}
+template Alt { params: list<string>, res: string }
+let SIGS: map<list<Alt>> = {}
+let BUILTIN_NAMES: map<bool> = {}
 
-func sig(name, alts) {
+# The alternatives of a builtin, written "int,int>int|float,float>float" (">float" takes no argument).
+func sig(name: string, text: string) {
+    let alts: list<Alt> = []
+    for (let form in split(text, "|")) {
+        let gt = index_of(form, ">")
+        let params: list<string> = []
+        if (gt > 0) {
+            params = split(cut(form, 0, gt), ",")
+        }
+        append(alts, Alt(params, cut(form, gt + 1, len(form))))
+    }
     SIGS[name] = alts
 }
 
 # Builtins whose result type is fixed whatever the arguments are.
-let RESULTS = {}
+let RESULTS: map<string> = {}
 
 func ck_init_results() {
     for (let nm in split("len str_len index_of index_of_any skip_chars last_index_of", " ")) {
@@ -193,56 +214,56 @@ BUILTIN_NAMES["addr"] = true
 
 func ck_init_sigs() {
     for (let nm in split("sqrt cbrt exp ln log10 sin cos tan asin acos atan sinh cosh tanh fract deg_to_rad rad_to_deg", " ")) {
-        sig(nm, [[["float"], "float"]])
+        sig(nm, "float>float")
     }
-    sig("atan2", [[["float", "float"], "float"]])
-    sig("mod", [[["int", "int"], "int"], [["float", "float"], "float"]])
-    sig("floor_div", [[["int", "int"], "int"], [["float", "float"], "float"]])
-    sig("divmod", [[["int", "int"], "list"], [["float", "float"], "list"]])
-    sig("lerp", [[["float", "float", "float"], "float"]])
+    sig("atan2", "float,float>float")
+    sig("mod", "int,int>int|float,float>float")
+    sig("floor_div", "int,int>int|float,float>float")
+    sig("divmod", "int,int>list|float,float>list")
+    sig("lerp", "float,float,float>float")
     for (let nm in split("floor ceil round trunc", " ")) {
-        sig(nm, [[["float"], "int"]])
+        sig(nm, "float>int")
     }
-    sig("round", [[["float"], "int"], [["float", "int"], "float"], [["int", "int"], "int"]])
-    sig("pow", [[["int", "int"], "int"], [["float", "float"], "float"]])
-    sig("abs", [[["T"], "T"]])
-    sig("min", [[["T", "T"], "T"], [["list"], "any"]])
-    sig("max", [[["T", "T"], "T"], [["list"], "any"]])
-    sig("sum", [[["list"], "any"]])
-    sig("mean", [[["list"], "float"]])
-    sig("gcd", [[["int", "int"], "int"]])
-    sig("lcm", [[["int", "int"], "int"]])
-    sig("isqrt", [[["int"], "int"]])
-    sig("clamp", [[["T", "T", "T"], "T"]])
-    sig("sign", [[["int"], "int"], [["float"], "int"]])
-    sig("rand", [[[], "float"], [["int"], "int"], [["int", "int"], "int"]])
-    sig("srand", [[[], "null"], [["int"], "null"]])
-    sig("trand", [[[], "int"], [["int"], "int"], [["int", "int"], "int"]])
+    sig("round", "float>int|float,int>float|int,int>int")
+    sig("pow", "int,int>int|float,float>float")
+    sig("abs", "T>T")
+    sig("min", "T,T>T|list>any")
+    sig("max", "T,T>T|list>any")
+    sig("sum", "list>any")
+    sig("mean", "list>float")
+    sig("gcd", "int,int>int")
+    sig("lcm", "int,int>int")
+    sig("isqrt", "int>int")
+    sig("clamp", "T,T,T>T")
+    sig("sign", "int>int|float>int")
+    sig("rand", ">float|int>int|int,int>int")
+    sig("srand", ">null|int>null")
+    sig("trand", ">int|int>int|int,int>int")
     # Conversions keep the value: an int from a whole float or from text, a float from an int or from text.
     # A char or a bool is not a number (code(c) gives a character's code).
-    sig("float", [[["int"], "float"], [["float"], "float"], [["string"], "float"]])
-    sig("int", [[["float"], "int"], [["int"], "int"], [["string"], "int"]])
-    sig("to_string", [[["any"], "string"], [["float", "int"], "string"]])
-    sig("string", [[["any"], "string"]])
-    sig("code", [[["char"], "int"]])
-    sig("char", [[["int"], "char"]])
-    sig("fixed", [[["float", "int"], "string"]])
+    sig("float", "int>float|float>float|string>float")
+    sig("int", "float>int|int>int|string>int")
+    sig("to_string", "any>string|float,int>string")
+    sig("string", "any>string")
+    sig("code", "char>int")
+    sig("char", "int>char")
+    sig("fixed", "float,int>string")
 }
 
 ck_init_sigs()
 
 # Types
 
-func is_const(t) {
+func is_const(t: string) -> bool {
     return ends_with(t, "~")
 }
 
-func is_number(t) {
+func is_number(t: string) -> bool {
     return t == "int" or t == "float" or t == "int~" or t == "float~"
 }
 
 # A constant takes its natural type when nothing else decides.
-func settle(t) {
+func settle(t: string) -> string {
     if (t == "int~") {
         return "int"
     }
@@ -253,7 +274,7 @@ func settle(t) {
 }
 
 # Whether a value of type t can be used where type target is required.
-func fits(t, target) {
+func fits(t: string, target: string) -> bool {
     if (t == "any" or target == "any" or t == target) {
         return true
     }
@@ -292,12 +313,12 @@ func fits(t, target) {
 # name: Stack([1, 2]) is a Stack<list<int>>, a Pair(1, "a") of template Pair { a, b } a Pair<int,string>. Only
 # the fields without a type are listed, in their order. The plain name (an annotation, a value from code the
 # checker cannot see) says nothing about them.
-func template_args(t) {
+func template_args(t: string) {
     let inner = angle_inner(t)
     if (inner == null) {
         return null
     }
-    let out = []
+    let out: list<string> = []
     let depth = 0
     let start = 0
     for (let i = 0; i < len(inner); i++) {
@@ -316,7 +337,7 @@ func template_args(t) {
 }
 
 # The type of field fi of a value of type t whose definition is td.
-func object_field_type(td, t, fi) {
+func object_field_type(td: Node, t: string, fi: int) -> string {
     if (td.ftypes[fi] != "") {
         return field_check_type(td.ftypes[fi], def_scope(td))
     }
@@ -337,14 +358,14 @@ func object_field_type(td, t, fi) {
 }
 
 # list<int> has the kind list and the element type int; a plain list has no element type.
-func kind_of(t) {
+func kind_of(t: string) -> string {
     if (not contains(t, "<")) {
         return t
     }
     return cut(t, 0, index_of(t, "<"))
 }
 
-func elem_of(t) {
+func elem_of(t: string) {
     let k = kind_of(t)
     if (k != "list" and k != "map") {
         return null
@@ -353,7 +374,7 @@ func elem_of(t) {
 }
 
 # What is between the first < of t and its last character, or null when t has no <.
-func angle_inner(t) {
+func angle_inner(t: string) {
     if (not contains(t, "<")) {
         return null
     }
@@ -361,7 +382,7 @@ func angle_inner(t) {
 }
 
 # The element type of a list or map literal whose items have types ts, or null when they differ.
-func common_elem(ts) {
+func common_elem(ts: list<string>) {
     if (len(ts) == 0) {
         return null
     }
@@ -378,7 +399,7 @@ func common_elem(ts) {
 }
 
 # fits, except that a whole-number constant is not a float: it must be written 2.0 or adapted first.
-func fits_slot(t, target) {
+func fits_slot(t: string, target: string) -> bool {
     if (t == "int~" and target == "float") {
         return false
     }
@@ -394,7 +415,7 @@ func fits_slot(t, target) {
 # (n.ads), and settle_literals decides once everything is checked: a float for every signature makes it a
 # float literal; a float for some only makes it "dyn", and the generated code then turns it into a float at
 # run time when the value it goes into is one. A specialized version of the function reads n.ads itself.
-func adapt_to(n, want) {
+func adapt_to(n: Node, want: string) {
     if (want == "float") {
         if (n.k == "num") {
             if (not exact_float(n.v as int)) {
@@ -434,7 +455,7 @@ func adapt_to(n, want) {
 }
 
 # Every name that some statement of the program assigns (name = value, name += value, name++), at any depth.
-let ASSIGNED = {}
+let ASSIGNED: map<bool> = {}
 
 func collect_assigned(stmts: list<Node>) {
     for (let x in nodes_under(stmts)) {
@@ -445,18 +466,18 @@ func collect_assigned(stmts: list<Node>) {
 }
 
 # The signature of the function being checked, as the key of n.ads and n.stys.
-func call_key() {
+func call_key() -> string {
     return join(CALLS[len(CALLS) - 1].types, ",")
 }
 
 # The whole-number literals adapted inside a per-signature check, and for each function body (by place)
 # the signatures it was checked with.
-let LITERALS = []
-let BODY_SIGS = {}
+let LITERALS: list<Node> = []
+let BODY_SIGS: map<list<string>> = {}
 
 # Records that a whole-number literal is wanted as a float for the signature being checked. n.ad holds the
 # place of the function body until settle_literals.
-func lit_record(n, what) {
+func lit_record(n: Node, what: string) {
     let key = call_key()
     if (n.ads == null) {
         n.ads = {}
@@ -468,13 +489,13 @@ func lit_record(n, what) {
         return null
     }
     n.ads[key] = what
-    if (MARKLOG != null) {
-        append(MARKLOG, [n, "ads", before, key])
+    if (LOG != null) {
+        append(LOG.marks, MarkEntry(n, "ads", before, key))
     }
 }
 
 # A whole-number literal (or + - * of them) next to a value of unknown type: decided at run time.
-func lit_mark_any(n) {
+func lit_mark_any(n: Node) {
     if (n.k == "num") {
         if (n.ads == null) {
             n.ads = {}
@@ -520,7 +541,7 @@ func settle_literals() {
 }
 
 # Whether the int v becomes a float with no change of value.
-func exact_float(v) {
+func exact_float(v: int) -> bool {
     if (v == -9223372036854775807 - 1) {
         return true
     }
@@ -535,7 +556,7 @@ func exact_float(v) {
 }
 
 # Whether n is made only of whole-number literals joined by + - *.
-func is_int_tree(n) {
+func is_int_tree(n: Node) -> bool {
     if (n.k == "num") {
         return true
     }
@@ -546,7 +567,7 @@ func is_int_tree(n) {
 }
 
 # The type of expression n (of type et) once it is adapted to the slot type want.
-func adapt_expr(n, et, want) {
+func adapt_expr(n: Node, et: string, want: string) -> string {
     if (want == "any" or fits_slot(et, want)) {
         return et
     }
@@ -555,12 +576,12 @@ func adapt_expr(n, et, want) {
 }
 
 # The checker type for a type written in the source. An unknown name is an error when strict, else any.
-func annot(text, span, strict) {
+func annot(text: string, span: Span, strict: bool) -> string {
     return annot_in(text, span, strict, TYPEDEFS)
 }
 
 # annot with the type definitions ds.
-func annot_in(text, span, strict, ds) {
+func annot_in(text: string, span: Span, strict: bool, ds: map<Node>) -> string {
     if (contains(text, "<")) {
         let i = index_of(text, "<")
         let kind = cut(text, 0, i)
@@ -591,7 +612,7 @@ func annot_in(text, span, strict, ds) {
     return "any"
 }
 
-func describe(t) {
+func describe(t: string) -> string {
     if (t == "int~") {
         return "an int constant"
     }
@@ -602,7 +623,7 @@ func describe(t) {
 }
 
 # The type of an operation on two numbers, or null when they do not fit.
-func unify(a, b) {
+func unify(a: string, b: string) {
     if (not is_number(a) or not is_number(b)) {
         return null
     }
@@ -633,60 +654,63 @@ func unify(a, b) {
 # Scopes
 
 func push_scope() {
-    append(SCOPES, {})
-    append(ORIGINS, null)
+    append(SCOPES, Scope({}, {}, {}, {}, {}))
 }
 
 func pop_scope() {
     remove(SCOPES, len(SCOPES) - 1)
-    remove(ORIGINS, len(ORIGINS) - 1)
 }
 
 # Every name a block declares with let, func, a type or use, noted when the block starts. At the end
 # of the check it tells a typo from a name that is merely declared further down.
-let HOISTED = {}
+let HOISTED: map<bool> = {}
 
-func declare(name, t, at = null) {
-    let last = len(SCOPES) - 1
-    SCOPES[last][name] = t
+# Declares name with type t in the innermost scope; at is where it got the type, or null.
+func declare(name: string, t: string, at: Span = null) {
+    let sc = SCOPES[len(SCOPES) - 1]
+    sc.types[name] = t
     if (at != null) {
-        if (ORIGINS[last] == null) {
-            ORIGINS[last] = {}
-        }
-        ORIGINS[last][name] = at
+        sc.origins[name] = at
     }
 }
 
+func declare_fn(name: string, n: Node) {
+    SCOPES[len(SCOPES) - 1].fns[name] = n
+}
+
+func declare_home(name: string, cf: CkFile) {
+    SCOPES[len(SCOPES) - 1].homes[name] = cf
+}
+
+# Notes that the list variable name starts empty (n is its let), or, with n null, that it no longer does.
+func declare_empty(name: string, n: Node) {
+    SCOPES[len(SCOPES) - 1].empties[name] = n
+}
+
 # Where the type of variable name was decided, as a span, or null.
-func type_origin(name) {
+func type_origin(name: string) -> Span {
+    let i = scope_index(name)
+    if (i < 0 or not map_has(SCOPES[i].origins, name)) {
+        return null
+    }
+    return SCOPES[i].origins[name]
+}
+
+# The types of the scope that holds name, or null.
+func scope_of(name: string) {
     let i = scope_index(name)
     if (i < 0) {
         return null
     }
-    if (ORIGINS[i] == null or not map_has(ORIGINS[i], name)) {
-        return null
-    }
-    return node_span(ORIGINS[i][name])
+    return SCOPES[i].types
 }
 
-# The scope map that holds name, or null.
-func scope_of(name) {
-    let i = len(SCOPES) - 1
-    while (i >= 0) {
-        if (map_has(SCOPES[i], name)) {
-            return SCOPES[i]
-        }
-        i -= 1
-    }
-    return null
-}
-
-func lookup(name) {
-    let s = scope_of(name)
-    if (s == null) {
+func lookup(name: string) {
+    let i = scope_index(name)
+    if (i < 0) {
         return null
     }
-    return s[name]
+    return SCOPES[i].types[name]
 }
 
 # Errors
@@ -695,16 +719,17 @@ func lookup(name) {
 # check, when every declaration has been seen: it is a typo only if nothing in the program declares
 # it, and it is not a builtin. When a use brings in a whole file without naming its names, any name
 # may come from it.
-let PENDING: list<map> = []
+template Pending { span: Span, name: string, what: string, scopes: list<Scope> }
+let PENDING: list<Pending> = []
 let OPEN_IMPORT = false
 
 # The names a typo could have meant: those in scope, those declared anywhere, then the builtins.
-func name_candidates(scopes) {
+func name_candidates(scopes: list<Scope>) -> list<string> {
     let out: list<string> = []
-    let seen = {}
+    let seen: map<bool> = {}
     for (let sc in scopes) {
-        for (let key in map_keys(sc)) {
-            if (not contains(key, ":") and not map_has(seen, key)) {
+        for (let key in map_keys(sc.types)) {
+            if (not map_has(seen, key)) {
                 seen[key] = true
                 append(out, key)
             }
@@ -727,19 +752,19 @@ func name_candidates(scopes) {
 # Notes the name in id node n for the end of the check if it is not a builtin. what is Variable or
 # Function. Returns true when the name is not declared at this point, so the caller treats its type
 # as unknown.
-func check_name(n, what) {
+func check_name(n: Node, what: string) -> bool {
     let name = n.name
     if (map_has(BUILTIN_NAMES, name) or name == "null") {
         return false
     }
-    append(PENDING, {"span": node_span(n), "name": name, "what": what, "scopes": cut(SCOPES, 0, len(SCOPES))})
+    append(PENDING, Pending(node_span(n), name, what, cut(SCOPES, 0, len(SCOPES))))
     return true
 }
 
 # Builtins that were removed, and what to write instead.
-let REMOVED_NAMES = {"to_int": "s as int, or int(s)", "to_float": "s as float, or float(s)"}
+let REMOVED_NAMES: map<string> = {"to_int": "s as int, or int(s)", "to_float": "s as float, or float(s)"}
 
-func undefined_error(span, name, what, scopes) {
+func undefined_error(span: Span, name: string, what: string, scopes: list<Scope>) {
     let d = fail_at(span, "{what} '{name}' is not defined", "Name Error")
     diag_text(d, "not declared anywhere")
     if (what == "Function") {
@@ -759,7 +784,7 @@ func undefined_error(span, name, what, scopes) {
 }
 
 # For each undefined-name error, the scopes that were open where the name was used.
-template Guess { d: Diag, scopes: list }
+template Guess { d: Diag, scopes: list<Scope> }
 let GUESS_SCOPES: list<Guess> = []
 
 # Gives each printed undefined-name error a "did you mean" when a declared name is close to it.
@@ -782,10 +807,10 @@ func fill_guesses() {
 
 # Places that already have an error. A function body is checked once for each list of argument
 # types, so the same mistake could be found again; it is reported once.
-let REPORTED = {}
+let REPORTED: map<bool> = {}
 
 # sp, or the place of node n when sp is not known.
-func span_or(sp, n) {
+func span_or(sp: Span, n: Node) -> Span {
     if (sp == null) {
         return node_span(n)
     }
@@ -795,7 +820,7 @@ func span_or(sp, n) {
 # Records a type error at span. Returns it, to add labels and a hint, or null when the place already
 # has one. Checking goes on after an error; the expression that failed is given the type any, which
 # raises no further errors.
-func fail_at(span, msg, kind = "Type Error") {
+func fail_at(span: Span, msg: string, kind: string = "Type Error") -> Diag {
     if (QUIET > 0) {
         QUIET_HITS += 1
         return null
@@ -823,12 +848,12 @@ func fail_at(span, msg, kind = "Type Error") {
     return d
 }
 
-func fail_node(n, msg) {
+func fail_node(n: Node, msg: string) -> Diag {
     return fail_at(node_span(n), msg)
 }
 
 # What to write to get a value of type want from one of type got, or "".
-func convert_hint(want, got, n = null) {
+func convert_hint(want: string, got: string, n: Node = null) -> string {
     if (n != null and (n.k == "str" or n.k == "tmpl" or n.k == "char" or n.k == "bool" or n.k == "list" or n.k == "map")) {
         # A literal of the wrong type is not something to convert; the value itself is wrong.
         if (want != "float" and want != "int") {
@@ -860,7 +885,7 @@ func convert_hint(want, got, n = null) {
 }
 
 # In strict mode a value of type any may not be used where its type matters.
-func strict_known(t, n, what) {
+func strict_known(t: string, n: Node, what: string) {
     if (strict_on() and t == "any") {
         let d = fail_node(n, "strict mode: the type of {what} is not known. Give it a type, for example let x: int = ...")
         diag_text(d, "type not known")
@@ -868,14 +893,14 @@ func strict_known(t, n, what) {
 }
 
 # The place of the operator of a binary node.
-func op_span(n) {
+func op_span(n: Node) -> Span {
     if (n.ospan != null) {
         return n.ospan
     }
     return node_span(n)
 }
 
-func operand_error(n, a, b) {
+func operand_error(n: Node, a: string, b: string) {
     let op = n.op
     let d = fail_at(op_span(n), "cannot use '{op}' on {describe(a)} and {describe(b)}")
     diag_label(d, node_span(n.l), describe(a))
@@ -890,7 +915,7 @@ func operand_error(n, a, b) {
 }
 
 # Names the operands of a binary node; unary minus is stored as 0 - x.
-func bin_error(n, a, b) {
+func bin_error(n: Node, a: string, b: string) {
     if (n.unary == true) {
         let d = fail_at(op_span(n), "cannot negate {describe(b)}")
         diag_label(d, node_span(n.r), describe(b))
@@ -903,7 +928,7 @@ func bin_error(n, a, b) {
 # Expressions
 
 # A list is indexed by an int.
-func ck_index(t, it, idx_node) {
+func ck_index(t: string, it: string, idx_node: Node) {
     if (kind_of(t) == "list" and it != "any" and it != "int" and it != "int~") {
         let d = fail_node(idx_node, "list index must be an int, got {describe(it)}")
         diag_text(d, "this is {describe(it)}")
@@ -911,11 +936,11 @@ func ck_index(t, it, idx_node) {
     }
 }
 
-func is_zero_literal(n) {
+func is_zero_literal(n: Node) -> bool {
     return (n.k == "num" and n.v == "0") or (n.k == "float" and (n.v == "0.0" or n.v == "0"))
 }
 
-func ck_bin(n) {
+func ck_bin(n: Node) -> string {
     let a = ck_expr(n.l)
     let b = ck_expr(n.r)
     let op = n.op
@@ -1030,11 +1055,14 @@ func ck_bin(n) {
     return t
 }
 
-# The first mismatch of args against one signature alternative: null when it fits, else
-# [argument index, expected type]. T is bound to the number type seen first.
-func match_alt(alt, argtypes) {
+# The first argument that does not fit a signature alternative: its index and the type expected there.
+template Miss { i: int, want: string }
+
+# The first mismatch of args against one signature alternative, or null when it fits. T is bound to the
+# number type seen first.
+func match_alt(alt: Alt, argtypes: list<string>) -> Miss {
     let bound = null
-    let params = alt[0]
+    let params = alt.params
     for (let i = 0; i < len(params); i++) {
         let p = params[i]
         let a = argtypes[i]
@@ -1043,19 +1071,19 @@ func match_alt(alt, argtypes) {
                 continue
             }
             if (not is_number(a)) {
-                return [i, "number"]
+                return Miss(i, "number")
             }
             if (bound == null) {
                 bound = a
             } else {
                 let u = unify(bound, a)
                 if (u == null) {
-                    return [i, settle(bound)]
+                    return Miss(i, settle(bound))
                 }
                 bound = u
             }
         } else if (not fits(a, p)) {
-            return [i, p]
+            return Miss(i, p)
         }
     }
     return null
@@ -1064,38 +1092,38 @@ func match_alt(alt, argtypes) {
 # A whole-number literal given where the matched form of a builtin takes a float becomes a float, so the
 # runtime gets two floats: min(1, 2.5) is min(1.0, 2.5), sqrt(16) is sqrt(16.0). A T parameter takes the type
 # the arguments agree on.
-func adapt_builtin_args(n, alt, argtypes) {
-    let bound = alt_result([alt[0], "T"], argtypes)
-    for (let i = 0; i < len(alt[0]); i++) {
-        let p = alt[0][i]
+func adapt_builtin_args(n: Node, alt: Alt, argtypes: list<string>) {
+    let bound = alt_result(Alt(alt.params, "T"), argtypes)
+    for (let i = 0; i < len(alt.params); i++) {
+        let p = alt.params[i]
         if (p == "T") {
             p = bound
         }
         if (p == "float" and argtypes[i] == "int~") {
             argtypes[i] = adapt_expr(n.args[i], argtypes[i], "float")
-        } else if (alt[0][i] == "T" and argtypes[i] == "int~" and contains(argtypes, "any")) {
+        } else if (alt.params[i] == "T" and argtypes[i] == "int~" and contains(argtypes, "any")) {
             lit_mark_any(n.args[i])
         }
     }
 }
 
-func fits_without_adapting(alt, argtypes) {
-    for (let i = 0; i < len(alt[0]); i++) {
-        if (alt[0][i] != "T" and not fits_slot(argtypes[i], alt[0][i])) {
+func fits_without_adapting(alt: Alt, argtypes: list<string>) -> bool {
+    for (let i = 0; i < len(alt.params); i++) {
+        if (alt.params[i] != "T" and not fits_slot(argtypes[i], alt.params[i])) {
             return false
         }
     }
     return true
 }
 
-func alt_result(alt, argtypes) {
-    let r = alt[1]
+func alt_result(alt: Alt, argtypes: list<string>) -> string {
+    let r = alt.res
     if (r != "T") {
         return r
     }
     let bound = null
-    for (let i = 0; i < len(alt[0]); i++) {
-        if (alt[0][i] == "T" and argtypes[i] != "any") {
+    for (let i = 0; i < len(alt.params); i++) {
+        if (alt.params[i] == "T" and argtypes[i] != "any") {
             if (bound == null) {
                 bound = argtypes[i]
             } else {
@@ -1109,30 +1137,30 @@ func alt_result(alt, argtypes) {
     return settle(bound)
 }
 
-func alt_text(alt) {
+func alt_text(alt: Alt) -> string {
     let sep = ", "
-    return "({join(alt[0], sep)})"
+    return "({join(alt.params, sep)})"
 }
 
 # The place of the argument list of a call node, parentheses included.
-func args_span(n) {
+func args_span(n: Node) -> Span {
     if (n.aspan != null) {
         return n.aspan
     }
     return node_span(n)
 }
 
-func ck_builtin_call(n, name, alts, argtypes) {
-    let same_count = []
+func ck_builtin_call(n: Node, name: string, alts: list<Alt>, argtypes: list<string>) -> string {
+    let same_count: list<Alt> = []
     for (let alt in alts) {
-        if (len(alt[0]) == len(argtypes)) {
+        if (len(alt.params) == len(argtypes)) {
             append(same_count, alt)
         }
     }
     if (len(same_count) == 0) {
         let counts: list<string> = []
         for (let alt in alts) {
-            append(counts, "{len(alt[0])}")
+            append(counts, "{len(alt.params)}")
         }
         let last = remove(counts, len(counts) - 1)
         let wanted = last
@@ -1163,7 +1191,7 @@ func ck_builtin_call(n, name, alts, argtypes) {
             return alt_result(alt, argtypes)
         }
     }
-    let first_miss = null
+    let first_miss: Miss = null
     for (let alt in same_count) {
         let miss = match_alt(alt, argtypes)
         if (miss == null) {
@@ -1175,18 +1203,19 @@ func ck_builtin_call(n, name, alts, argtypes) {
         }
     }
     if (len(same_count) == 1) {
-        let idx = first_miss[0]
-        let d = fail_node(n.args[idx], "{name}() argument {idx + 1} must be {article(first_miss[1])} {first_miss[1]}, got {describe(argtypes[idx])}")
-        diag_text(d, "expected {first_miss[1]}, found {describe(argtypes[idx])}")
+        let idx = first_miss.i
+        let want = first_miss.want
+        let d = fail_node(n.args[idx], "{name}() argument {idx + 1} must be {article(want)} {want}, got {describe(argtypes[idx])}")
+        diag_text(d, "expected {want}, found {describe(argtypes[idx])}")
         diag_label(d, node_span(n.callee), "argument {idx + 1} of {name}()")
-        diag_hint(d, convert_hint(first_miss[1], argtypes[idx], n.args[idx]))
+        diag_hint(d, convert_hint(want, argtypes[idx], n.args[idx]))
         return "any"
     }
     let forms: list<string> = []
     for (let alt in same_count) {
         append(forms, alt_text(alt))
     }
-    let got = []
+    let got: list<string> = []
     for (let t in argtypes) {
         append(got, settle(t))
     }
@@ -1206,13 +1235,13 @@ func ck_builtin_call(n, name, alts, argtypes) {
 }
 
 # A builtin that wants a particular type is not given a value of unknown type.
-func ck_strict_args(n, name, alts, argtypes) {
+func ck_strict_args(n: Node, name: string, alts: list<Alt>, argtypes: list<string>) {
     for (let i = 0; i < len(argtypes); i++) {
         if (argtypes[i] != "any") {
             continue
         }
         for (let alt in alts) {
-            if (len(alt[0]) == len(argtypes) and alt[0][i] != "any") {
+            if (len(alt.params) == len(argtypes) and alt.params[i] != "any") {
                 let d = fail_node(n.args[i], "strict mode: the type of argument {i + 1} of {name}() is not known. Give it a type, for example let x: float = ...")
                 diag_text(d, "type not known")
             }
@@ -1220,7 +1249,7 @@ func ck_strict_args(n, name, alts, argtypes) {
     }
 }
 
-func article(t) {
+func article(t: string) -> string {
     if (contains("aeiouAEIOU", char_at(t, 0))) {
         return "an"
     }
@@ -1228,7 +1257,7 @@ func article(t) {
 }
 
 # The checker type a field declared with type text accepts, or "any" for a type it cannot judge.
-func field_check_type(text, defs) {
+func field_check_type(text: string, defs: map<Node>) -> string {
     if (text == null or text == "") {
         return "any"
     }
@@ -1245,7 +1274,7 @@ func field_check_type(text, defs) {
 }
 
 # The definitions the file that declares typedef td knows.
-func def_scope(td) {
+func def_scope(td: Node) -> map<Node> {
     if (map_get(ALL_TYPEDEFS, td.name, null) == td) {
         return DEF_SCOPE[td.name]
     }
@@ -1253,7 +1282,7 @@ func def_scope(td) {
 }
 
 # The index of field in the fields of the typed definition td, or -1.
-func field_index(td, field) {
+func field_index(td: Node, field: string) -> int {
     for (let i = 0; i < len(td.fields); i++) {
         if (td.fields[i] == field) {
             return i
@@ -1263,7 +1292,7 @@ func field_index(td, field) {
 }
 
 # The definition t names when t is a bloc or template type, else null.
-func object_def(t) {
+func object_def(t: string) -> Node {
     let td = map_get(TYPEDEFS, kind_of(t), null)
     if (td == null) {
         td = map_get(ALL_TYPEDEFS, kind_of(t), null)
@@ -1276,7 +1305,7 @@ func object_def(t) {
 
 # Constructing a type with typed fields: a whole-number literal given to a float field becomes a
 # float literal, and an argument that cannot fit its field is an error now, not when it runs.
-func ck_typed_construct(n, name, argtypes) {
+func ck_typed_construct(n: Node, name: string, argtypes: list<string>) -> string {
     let td = TYPEDEFS[name]
     let kind = "Template"
     if (td.is_bloc == true) {
@@ -1333,7 +1362,7 @@ func ck_typed_construct(n, name, argtypes) {
 }
 
 # How many "{}" placeholders a string literal holds, or -1 when the node is not a string literal.
-func literal_holes(n) {
+func literal_holes(n: Node) -> int {
     let text = ""
     if (n.k == "str") {
         text = n.v
@@ -1359,7 +1388,7 @@ func literal_holes(n) {
 }
 
 # print("... {} ...", a, b): one value for each placeholder.
-func check_print_holes(n) {
+func check_print_holes(n: Node) {
     if (len(n.args) < 2) {
         return null
     }
@@ -1371,7 +1400,7 @@ func check_print_holes(n) {
     }
 }
 
-func ck_call(n) {
+func ck_call(n: Node) -> string {
     let argtypes = []
     for (let a in n.args) {
         append(argtypes, ck_expr(a))
@@ -1400,15 +1429,13 @@ func ck_call(n) {
     # The body of a function is trusted only for the declaration the name stands for here (a parameter or a
     # local of the same name hides it) and only when the name is never assigned: after g = h a call of g runs h.
     if (known == "function" and not map_has(ASSIGNED, name)) {
-        let fkey = "fn:{name}"
-        let fidx = scope_index(fkey)
+        let fidx = fn_index(name)
         if (fidx >= 0 and fidx == scope_index(name)) {
-            let home = null
-            let hkey = "home:{name}"
-            if (scope_index(hkey) == fidx) {
-                home = SCOPES[fidx][hkey]
+            let home: CkFile = null
+            if (home_index(name) == fidx) {
+                home = SCOPES[fidx].homes[name]
             }
-            return ck_user_call(name, SCOPES[fidx][fkey], fidx, argtypes, n, home)
+            return ck_user_call(name, SCOPES[fidx].fns[name], fidx, argtypes, n, home)
         }
     }
     if (known == null and map_has(BUILTIN_NAMES, name)) {
@@ -1419,7 +1446,7 @@ func ck_call(n) {
 
 # Calls of builtins: the signature table where there is one, a fixed result type where there is
 # one, and the element type of a list argument for append, remove, min and max.
-func ck_builtin(n, name, argtypes) {
+func ck_builtin(n: Node, name: string, argtypes: list<string>) -> string {
     let first = "any"
     if (len(argtypes) > 0) {
         first = argtypes[0]
@@ -1499,11 +1526,47 @@ func ck_builtin(n, name, argtypes) {
     return result
 }
 
-# The index of the innermost scope that holds key, or -1.
-func scope_index(key) {
+# The index of the innermost scope that declares name, or -1.
+func scope_index(name: string) -> int {
     let i = len(SCOPES) - 1
     while (i >= 0) {
-        if (map_has(SCOPES[i], key)) {
+        if (map_has(SCOPES[i].types, name)) {
+            return i
+        }
+        i -= 1
+    }
+    return -1
+}
+
+# The index of the innermost scope that holds the function node of name, or -1.
+func fn_index(name: string) -> int {
+    let i = len(SCOPES) - 1
+    while (i >= 0) {
+        if (map_has(SCOPES[i].fns, name)) {
+            return i
+        }
+        i -= 1
+    }
+    return -1
+}
+
+# The index of the innermost scope that holds the file name was imported from, or -1.
+func home_index(name: string) -> int {
+    let i = len(SCOPES) - 1
+    while (i >= 0) {
+        if (map_has(SCOPES[i].homes, name)) {
+            return i
+        }
+        i -= 1
+    }
+    return -1
+}
+
+# The index of the innermost scope that notes whether list name started empty, or -1.
+func empty_index(name: string) -> int {
+    let i = len(SCOPES) - 1
+    while (i >= 0) {
+        if (map_has(SCOPES[i].empties, name)) {
             return i
         }
         i -= 1
@@ -1512,7 +1575,7 @@ func scope_index(key) {
 }
 
 # The type a function returns: the common type of its return statements.
-func join_returns(rets) {
+func join_returns(rets: list<string>) -> string {
     if (len(rets) == 0) {
         return "null"
     }
@@ -1542,7 +1605,7 @@ func join_returns(rets) {
 # Checks the body of fn with its parameters bound to the argument types of this call, and returns
 # the type the call has. The body sees the scopes the function was defined in, not the caller's.
 # "s" for a count other than one.
-func s_if(count) {
+func s_if(count: int) -> string {
     if (count == 1) {
         return ""
     }
@@ -1550,7 +1613,7 @@ func s_if(count) {
 }
 
 # The place of the type written for parameter i of fn, or null.
-func ptype_span(fn, i) {
+func ptype_span(fn: Node, i: int) -> Span {
     if (fn.tspans == null) {
         return null
     }
@@ -1558,14 +1621,14 @@ func ptype_span(fn, i) {
 }
 
 # The place of parameter i of fn, or null.
-func param_span(fn, i) {
+func param_span(fn: Node, i: int) -> Span {
     if (fn.pspans == null) {
         return null
     }
     return fn.pspans[i]
 }
 
-func ck_user_call(name, fn, idx, argtypes, call, home = null) {
+func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call: Node, home: CkFile = null) -> string {
     let argnodes = call.args
     let line = call.line
     let np = len(fn.params)
@@ -1594,7 +1657,7 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
         }
         return "any"
     }
-    let types = []
+    let types: list<string> = []
     for (let i = 0; i < np; i++) {
         let want = null
         if (fn.ptypes != null and fn.ptypes[i] != "") {
@@ -1667,8 +1730,8 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
         result = try_assume(name, fn, idx, types, line, mkey, rets1, result, home)
     }
     MEMO[mkey] = result
-    if (MEMOLOG != null) {
-        append(MEMOLOG, mkey)
+    if (LOG != null) {
+        append(LOG.memos, mkey)
     }
     map_delete(INPROG, mkey)
     if (home == null) {
@@ -1679,7 +1742,7 @@ func ck_user_call(name, fn, idx, argtypes, call, home = null) {
 
 # A type written in the signature of a function: read in its own file (home) when it is another file's.
 # An unknown name there was reported when that file was checked.
-func sig_annot(text, span, home) {
+func sig_annot(text: string, span: Span, home: CkFile) -> string {
     if (home == null) {
         return annot(text, span, true)
     }
@@ -1687,7 +1750,7 @@ func sig_annot(text, span, home) {
 }
 
 # Whether every way through stmts ends in a return.
-func always_returns(stmts) {
+func always_returns(stmts: list<Node>) -> bool {
     if (len(stmts) == 0) {
         return false
     }
@@ -1707,7 +1770,7 @@ func always_returns(stmts) {
 # Marks a call of a user function that can be made directly: the function is defined at the top of its
 # module, takes no default values, its parameters and its result are int, float or bool, and every
 # way through its body returns. The emitter decides the rest (see emit_llvm.zu).
-func spec_site(call, fn, idx, types, result) {
+func spec_site(call: Node, fn: Node, idx: int, types: list<string>, result: string) {
     if (call == null or call.k != "call") {
         return null
     }
@@ -1732,19 +1795,17 @@ func spec_site(call, fn, idx, types, result) {
     }
 }
 
-func is_scalar(t) {
+func is_scalar(t: string) -> bool {
     return t == "int" or t == "float" or t == "bool"
 }
 
 # Checks the body of fn with its parameters bound to types, and returns the types of its return statements.
-func check_body(name, fn, idx, types, line, home = null) {
+func check_body(name: string, fn: Node, idx: int, types: list<string>, line: int, home: CkFile = null) -> list<string> {
     let caller_file = ST.src_file
     let saved = SCOPES
-    let saved_origins = ORIGINS
-    let saved_ctx = null
+    let saved_ctx: FileState = null
     if (home == null) {
         SCOPES = cut(saved, 0, idx + 1)
-        ORIGINS = cut(saved_origins, 0, idx + 1)
     } else {
         saved_ctx = enter_file(home)
     }
@@ -1760,8 +1821,9 @@ func check_body(name, fn, idx, types, line, home = null) {
     if (not contains(BODY_SIGS[body], key)) {
         append(BODY_SIGS[body], key)
     }
-    append(CALLS, {"name": name, "types": types, "line": line, "body": body, "file": caller_file})
-    append(RETS, [])
+    append(CALLS, Call(name, types, line, body, caller_file))
+    let none: list<string> = []
+    append(RETS, none)
     push_result_type(fn)
     ck_block(fn.body)
     remove(RESULT_TYPES, len(RESULT_TYPES) - 1)
@@ -1775,13 +1837,12 @@ func check_body(name, fn, idx, types, line, home = null) {
         leave_file(saved_ctx)
     }
     SCOPES = saved
-    ORIGINS = saved_origins
     return rets
 }
 
 # The one type of rets other than null when it is a type whose values may be empty (string, list, map,
 # function), with at least one null among rets; else null. int, float, bool and char are never empty.
-func nullable_or_null(rets) {
+func nullable_or_null(rets: list<string>) {
     let t = null
     let nulls = 0
     for (let r in rets) {
@@ -1806,7 +1867,7 @@ func nullable_or_null(rets) {
 }
 
 # The one template type of rets when every other item is null, or null.
-func template_or_null(rets) {
+func template_or_null(rets: list<string>) {
     let t = null
     for (let r in rets) {
         if (r == "null") {
@@ -1827,7 +1888,7 @@ func template_or_null(rets) {
 
 # The type all the returns that do not depend on the recursion agree on, or null. A template type
 # may come with null returns (an empty value).
-func common_scalar(rets) {
+func common_scalar(rets: list<string>) {
     let tt = template_or_null(without_any(rets))
     if (tt != null) {
         return tt
@@ -1849,8 +1910,8 @@ func common_scalar(rets) {
     return t
 }
 
-func without_any(rets) {
-    let out = []
+func without_any(rets: list<string>) -> list<string> {
+    let out: list<string> = []
     for (let r in rets) {
         if (r != "any") {
             append(out, r)
@@ -1861,15 +1922,13 @@ func without_any(rets) {
 
 # The second pass of a recursive function: checks the body again with the recursive calls typed as the
 # type its other returns have. Returns that type if every return has it, else first (the first pass).
-func try_assume(name, fn, idx, types, line, mkey, rets1, first, home = null) {
+func try_assume(name: string, fn: Node, idx: int, types: list<string>, line: int, mkey: string, rets1: list<string>, first: string, home: CkFile = null) -> string {
     let cand = common_scalar(rets1)
     if (cand == null) {
         return first
     }
-    let saved_log = MARKLOG
-    let saved_memo = MEMOLOG
-    MARKLOG = []
-    MEMOLOG = []
+    let saved_log = LOG
+    LOG = Log([], [])
     ASSUME[mkey] = cand
     QUIET += 1
     let hits = QUIET_HITS
@@ -1878,32 +1937,28 @@ func try_assume(name, fn, idx, types, line, mkey, rets1, first, home = null) {
     map_delete(ASSUME, mkey)
     if (QUIET_HITS == hits and join_returns(rets) == cand) {
         if (saved_log != null) {
-            for (let e in MARKLOG) {
-                append(saved_log, e)
+            for (let e in LOG.marks) {
+                append(saved_log.marks, e)
+            }
+            for (let k in LOG.memos) {
+                append(saved_log.memos, k)
             }
         }
-        if (saved_memo != null) {
-            for (let k in MEMOLOG) {
-                append(saved_memo, k)
-            }
-        }
-        MARKLOG = saved_log
-        MEMOLOG = saved_memo
+        LOG = saved_log
         return cand
     }
-    undo_marks(MARKLOG)
-    for (let k in MEMOLOG) {
+    undo_marks(LOG.marks)
+    for (let k in LOG.memos) {
         map_delete(MEMO, k)
     }
-    MARKLOG = saved_log
-    MEMOLOG = saved_memo
+    LOG = saved_log
     return first
 }
 
 # A named function is checked for the argument types of each call, so an untyped parameter of it is
 # known where the function is used. A function value (func without a name) is called through
 # variables the checker does not follow, so in strict mode its parameters need types.
-func ck_func(n) {
+func ck_func(n: Node) {
     let untyped = false
     for (let i = 0; i < len(n.params); i++) {
         if (n.ptypes == null or n.ptypes[i] == "") {
@@ -1919,7 +1974,8 @@ func ck_func(n) {
         GENERIC += 1
     }
     push_result_type(n)
-    append(RETS, [])
+    let none: list<string> = []
+    append(RETS, none)
     push_scope()
     for (let i = 0; i < len(n.params); i++) {
         if (n.defaults[i] != null) {
@@ -1941,7 +1997,7 @@ func ck_func(n) {
     }
 }
 
-func ck_expr(n) {
+func ck_expr(n: Node) -> string {
     let k = n.k
     if (k == "absent") {
         # a parameter with a default that a call with named arguments leaves out (named_args.zu)
@@ -2066,7 +2122,7 @@ func ck_expr(n) {
     if (k == "incdec") {
         let t = lookup(n.name)
         if (t == null and not map_has(BUILTIN_NAMES, n.name)) {
-            append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": cut(SCOPES, 0, len(SCOPES))})
+            append(PENDING, Pending(span_or(n.nspan, n), n.name, "Variable", cut(SCOPES, 0, len(SCOPES))))
             return "any"
         }
         if (t != null and t != "any" and t != "unset" and t != "int" and t != "float") {
@@ -2103,12 +2159,12 @@ func ck_expr(n) {
 
 # Statements
 
-func declare_func(n) {
+func declare_func(n: Node) {
     declare(n.name, "function")
-    declare("fn:{n.name}", n)
+    declare_fn(n.name, n)
 }
 
-func ck_cond(e, what) {
+func ck_cond(e: Node, what: string) {
     let t = ck_expr(e)
     strict_known(t, e, "the condition of {what}")
     if (t != "any" and t != "bool") {
@@ -2118,23 +2174,19 @@ func ck_cond(e, what) {
     }
 }
 
-func ck_assign(n) {
+func ck_assign(n: Node) {
     let et = ck_expr(n.e)
     let s = scope_of(n.name)
     if (s == null) {
         if (not map_has(BUILTIN_NAMES, n.name)) {
-            append(PENDING, {"span": span_or(n.nspan, n), "name": n.name, "what": "Variable", "scopes": cut(SCOPES, 0, len(SCOPES))})
+            append(PENDING, Pending(span_or(n.nspan, n), n.name, "Variable", cut(SCOPES, 0, len(SCOPES))))
         }
         return null
     }
     let vt = s[n.name]
     if (vt == "unset") {
         s[n.name] = settle(et)
-        let si = scope_index(n.name)
-        if (ORIGINS[si] == null) {
-            ORIGINS[si] = {}
-        }
-        ORIGINS[si][n.name] = n.e
+        SCOPES[scope_index(n.name)].origins[n.name] = node_span(n.e)
         return null
     }
     # a variable of a template type may be emptied, as a field of that type may
@@ -2162,7 +2214,7 @@ func ck_assign(n) {
 }
 
 # let name: type = init. The declared type decides the variable's type.
-func ck_typed_let(n) {
+func ck_typed_let(n: Node) {
     let at = annot(n.type, span_or(n.tspan, n), true)
     if (n.init != null) {
         let et = adapt_expr(n.init, ck_expr(n.init), at)
@@ -2187,7 +2239,7 @@ func ck_typed_let(n) {
     mark_sty(n, at)
 }
 
-func ck_stmt(n) {
+func ck_stmt(n: Node) {
     let k = n.k
     if (k == "let") {
         if (n.orelse != null) {
@@ -2207,11 +2259,11 @@ func ck_stmt(n) {
                 # A variable that starts as null takes the type of its first real value.
                 it = "unset"
             }
-            declare(n.name, it, n.init)
+            declare(n.name, it, node_span(n.init))
             if (n.init.k == "list" and len(n.init.items) == 0) {
-                declare("empty:{n.name}", n)
-            } else if (scope_index("empty:{n.name}") == len(SCOPES) - 1) {
-                declare("empty:{n.name}", null)
+                declare_empty(n.name, n)
+            } else if (empty_index(n.name) == len(SCOPES) - 1) {
+                declare_empty(n.name, null)
             }
             mark_sty(n, it)
         }
@@ -2231,7 +2283,7 @@ func ck_stmt(n) {
         let it = settle(ck_expr(n.cond.init))
         strict_known(it, n.cond.init, "the value given to '{n.cond.name}'")
         push_scope()
-        declare(n.cond.name, it, n.cond.init)
+        declare(n.cond.name, it, node_span(n.cond.init))
         mark_sty(n.cond, it)
         ck_block(n.then)
         pop_scope()
@@ -2375,7 +2427,7 @@ func ck_stmt(n) {
 }
 
 # Names of functions and types are known before their definition runs.
-func ck_hoist(stmts) {
+func ck_hoist(stmts: list<Node>) {
     for (let s in stmts) {
         let k = s.k
         if (k == "func" and s.name != null) {
@@ -2400,7 +2452,7 @@ func ck_hoist(stmts) {
     }
 }
 
-func ck_block(stmts) {
+func ck_block(stmts: list<Node>) {
     ck_hoist(stmts)
     for (let s in stmts) {
         ck_stmt(s)
@@ -2411,11 +2463,12 @@ func ck_block(stmts) {
     }
 }
 
-# The result types written after -> of the functions being checked, innermost last: [type, name, span]
-# or null for a function without one.
-let RESULT_TYPES = []
+# The result types written after -> of the functions being checked, innermost last: the type, how to name
+# the function and the place of the type; an empty item for a function without one.
+template ResultType { t: string, who: string, span: Span }
+let RESULT_TYPES: list<ResultType> = []
 
-func push_result_type(fn) {
+func push_result_type(fn: Node) {
     if (fn.rtype == null) {
         append(RESULT_TYPES, null)
         return null
@@ -2424,17 +2477,17 @@ func push_result_type(fn) {
     if (fn.name != null) {
         who = "{fn.name}()"
     }
-    append(RESULT_TYPES, [annot(fn.rtype, span_or(fn.rspan, fn), true), who, fn.rspan])
+    append(RESULT_TYPES, ResultType(annot(fn.rtype, span_or(fn.rspan, fn), true), who, fn.rspan))
 }
 
 # A return in a function with a written result type: the value must fit it; a template result may be
 # empty (null). Returns the type the return gives.
-func check_result(n, rt) {
+func check_result(n: Node, rt: string) -> string {
     if (len(RESULT_TYPES) == 0 or RESULT_TYPES[len(RESULT_TYPES) - 1] == null) {
         return rt
     }
     let r = RESULT_TYPES[len(RESULT_TYPES) - 1]
-    let want = r[0]
+    let want = r.t
     if (n.e != null) {
         rt = adapt_expr(n.e, rt, want)
     }
@@ -2445,16 +2498,16 @@ func check_result(n, rt) {
         if (n.e != null) {
             at = node_span(n.e)
         }
-        let d = fail_at(at, "{r[1]} must return {article(want)} {want}, got {describe(rt)}")
+        let d = fail_at(at, "{r.who} must return {article(want)} {want}, got {describe(rt)}")
         diag_text(d, "this is {describe(rt)}")
-        diag_label(d, r[2], "the result is {want}")
+        diag_label(d, r.span, "the result is {want}")
         diag_hint(d, convert_hint(want, rt, n.e))
     }
     return want
 }
 
 # A function with a written result type that is not a template must return on every way through its body.
-func check_result_paths(fn) {
+func check_result_paths(fn: Node) {
     if (fn.rtype == null or always_returns(fn.body)) {
         return null
     }
@@ -2473,7 +2526,7 @@ func check_result_paths(fn) {
 }
 
 # The name type(v) gives for a value of checker type t, or null when t does not tell.
-func runtime_name(t) {
+func runtime_name(t: string) {
     let k = kind_of(t)
     if (k == "int" or k == "float" or k == "bool" or k == "string" or k == "char" or k == "list" or k == "map" or k == "function") {
         return k
@@ -2491,7 +2544,7 @@ func runtime_name(t) {
 # For if (type(x) == "string") with the type of x known: "then" when that branch cannot run, "else" when
 # the other cannot, else null. A function checked for a list argument then does not count a return
 # meant for a string. Also with != and the two sides swapped.
-func dead_branch(c) {
+func dead_branch(c: Node) {
     if (c.k != "bin" or (c.op != "==" and c.op != "!=")) {
         return null
     }
@@ -2528,7 +2581,7 @@ func dead_branch(c) {
 # Records on a let or for-in node the scalar type of its variable, for the code generator to keep
 # in a machine register. A node can be checked several times (once per argument-type signature of its
 # function); only a type that is the same every time stays, any other becomes "any".
-func mark_sty(n, t) {
+func mark_sty(n: Node, t: string) {
     if (t != "int" and t != "float" and t != "bool") {
         t = "any"
     }
@@ -2538,8 +2591,8 @@ func mark_sty(n, t) {
     } else if (n.sty != t) {
         n.sty = "any"
     }
-    if (MARKLOG != null and n.sty != old) {
-        append(MARKLOG, [n, "sty", old])
+    if (LOG != null and n.sty != old) {
+        append(LOG.marks, MarkEntry(n, "sty", old, null))
     }
     # The same per signature of the function being checked: its specialized version knows its arguments,
     # so a variable it computes from them can be raw there even where it is not in the ordinary version.
@@ -2554,8 +2607,8 @@ func mark_sty(n, t) {
         } else if (before != t) {
             n.stys[key] = "any"
         }
-        if (MARKLOG != null and n.stys[key] != before) {
-            append(MARKLOG, [n, "stys", before, key])
+        if (LOG != null and n.stys[key] != before) {
+            append(LOG.marks, MarkEntry(n, "stys", before, key))
         }
     }
 }
@@ -2564,45 +2617,45 @@ func mark_sty(n, t) {
 # arguments and of the result, for example "int,int>int". A call node can be checked several times, with
 # different argument types, so the node keeps every signature, separated by ";". The emitter picks the
 # one whose argument types it has as raw values.
-func mark_spec(n, key) {
+func mark_spec(n: Node, key: string) {
     let old = n.spec
     if (n.spec == null) {
         n.spec = key
     } else if (not contains(";{n.spec};", ";{key};")) {
         n.spec = "{n.spec};{key}"
     }
-    if (MARKLOG != null and n.spec != old) {
-        append(MARKLOG, [n, "spec", old])
+    if (LOG != null and n.spec != old) {
+        append(LOG.marks, MarkEntry(n, "spec", old, null))
     }
 }
 
 # Puts back what a rejected pass changed, the last change first.
-func undo_marks(log) {
+func undo_marks(log: list<MarkEntry>) {
     let i = len(log) - 1
     while (i >= 0) {
         let e = log[i]
-        if (e[1] == "sty") {
-            e[0].sty = e[2]
-        } else if (e[1] == "stys" or e[1] == "ads") {
+        if (e.field == "sty") {
+            e.n.sty = e.before
+        } else if (e.field == "stys" or e.field == "ads") {
             # null was "no entry yet": the entry is removed again
-            let table = e[0].stys
-            if (e[1] == "ads") {
-                table = e[0].ads
+            let table = e.n.stys
+            if (e.field == "ads") {
+                table = e.n.ads
             }
-            if (e[2] == null) {
-                map_delete(table, e[3])
+            if (e.before == null) {
+                map_delete(table, e.key)
             } else {
-                table[e[3]] = e[2]
+                table[e.key] = e.before
             }
         } else {
-            e[0].spec = e[2]
+            e.n.spec = e.before
         }
         i -= 1
     }
 }
 
 # Whether a line "# strict" (or "// strict") comes before the first line of code.
-func file_is_strict(lines) {
+func file_is_strict(lines: list<string>) -> bool {
     for (let line in lines) {
         let t = trim(line)
         if (t == "") {
@@ -2637,44 +2690,50 @@ func report_undefined() {
 # call of it is checked there for the argument types of the call, as a function of the same file is.
 # So a wrong type passed across files is an error when the program is built, at the call, and an
 # error inside the other file names that file.
-template CkFile { canon, lines, scopes, origins, typedefs, assigned, hoisted, strict, exports, done }
-
-# Canonical path -> CkFile, or null for a file that cannot be read.
-let FILES = {}
-
-# The canonical path of the file being checked, or null when it is not known.
-let CUR_CANON = null
-
-# The checker state that belongs to one file, so that another file can be checked in between.
-func save_file_state() {
-    return {"scopes": SCOPES, "origins": ORIGINS, "typedefs": TYPEDEFS, "assigned": ASSIGNED,
-        "hoisted": HOISTED, "pending": PENDING, "open": OPEN_IMPORT, "strict": STRICT,
-        "file": ST.src_file, "lines": ST.src_lines, "canon": CUR_CANON, "calls": CALLS, "rets": RETS}
+template CkFile {
+    canon: string, lines: list<string>, scopes: list<Scope>, typedefs: map<Node>, assigned: map<bool>,
+    hoisted: map<bool>, strict: bool, exports: map<bool>, done: bool
 }
 
-func restore_file_state(st) {
-    SCOPES = st["scopes"]
-    ORIGINS = st["origins"]
-    TYPEDEFS = st["typedefs"]
-    ASSIGNED = st["assigned"]
-    HOISTED = st["hoisted"]
-    PENDING = st["pending"]
-    OPEN_IMPORT = st["open"]
-    STRICT = st["strict"]
-    ST.src_file = st["file"]
-    ST.src_lines = st["lines"]
-    CUR_CANON = st["canon"]
-    CALLS = st["calls"]
-    RETS = st["rets"]
+# Canonical path -> CkFile, or an empty item for a file that cannot be read.
+let FILES: map<CkFile> = {}
+
+# The canonical path of the file being checked.
+let CUR_CANON = ""
+
+# The checker state that belongs to one file, so that another file can be checked in between.
+template FileState {
+    scopes: list<Scope>, typedefs: map<Node>, assigned: map<bool>, hoisted: map<bool>, pending: list<Pending>,
+    open: bool, strict: bool, file: string, lines: list<string>, canon: string, calls: list<Call>,
+    rets: list<list<string>>
+}
+
+func save_file_state() -> FileState {
+    return FileState(SCOPES, TYPEDEFS, ASSIGNED, HOISTED, PENDING, OPEN_IMPORT, STRICT, ST.src_file,
+        ST.src_lines, CUR_CANON, CALLS, RETS)
+}
+
+func restore_file_state(st: FileState) {
+    SCOPES = st.scopes
+    TYPEDEFS = st.typedefs
+    ASSIGNED = st.assigned
+    HOISTED = st.hoisted
+    PENDING = st.pending
+    OPEN_IMPORT = st.open
+    STRICT = st.strict
+    ST.src_file = st.file
+    ST.src_lines = st.lines
+    CUR_CANON = st.canon
+    CALLS = st.calls
+    RETS = st.rets
 }
 
 # Switches to the context of file cf to check a body of it; leave_file puts the caller's back. The
 # calls being checked stay, so an error inside the body shows where it was called from. Names the
 # body reads that nothing declares were reported when the file itself was checked.
-func enter_file(cf) {
+func enter_file(cf: CkFile) -> FileState {
     let saved = save_file_state()
     SCOPES = cut(cf.scopes, 0, len(cf.scopes))
-    ORIGINS = cut(cf.origins, 0, len(cf.origins))
     TYPEDEFS = cf.typedefs
     ASSIGNED = cf.assigned
     HOISTED = cf.hoisted
@@ -2687,7 +2746,7 @@ func enter_file(cf) {
     return saved
 }
 
-func leave_file(saved) {
+func leave_file(saved: FileState) {
     let calls = CALLS
     let rets = RETS
     restore_file_state(saved)
@@ -2696,7 +2755,7 @@ func leave_file(saved) {
 }
 
 # The names a file exports: functions, types and variables, also inside groups.
-func collect_file_exports(stmts, out) {
+func collect_file_exports(stmts: list<Node>, out: map<bool>) {
     for (let s in stmts) {
         let k = s.k
         if ((k == "func" or k == "typedef" or k == "let") and s.name != null and s.exported == true) {
@@ -2709,7 +2768,7 @@ func collect_file_exports(stmts, out) {
 
 # Checks the file at canon once and returns its CkFile, or null when it cannot be read. While the file is
 # being checked its CkFile is not done, so a file that imports it back gets its names as unknown.
-func check_file(canon) {
+func check_file(canon: string) -> CkFile {
     if (map_has(FILES, canon)) {
         return FILES[canon]
     }
@@ -2726,11 +2785,10 @@ func check_file(canon) {
     ST.src_lines = lines
     let stmts = parse_source(text)
     resolve_named_args(stmts, canon)
-    let cf = CkFile(canon, lines, [], [], {}, {}, {}, file_is_strict(lines), {}, false)
+    let cf = CkFile(canon, lines, [], {}, {}, {}, file_is_strict(lines), {}, false)
     FILES[canon] = cf
     collect_file_exports(stmts, cf.exports)
     SCOPES = []
-    ORIGINS = []
     TYPEDEFS = {}
     ASSIGNED = {}
     HOISTED = {}
@@ -2745,7 +2803,6 @@ func check_file(canon) {
     ck_block(stmts)
     report_undefined()
     cf.scopes = SCOPES
-    cf.origins = ORIGINS
     cf.typedefs = TYPEDEFS
     cf.assigned = ASSIGNED
     cf.hoisted = HOISTED
@@ -2758,9 +2815,9 @@ func check_file(canon) {
 # its declaration and its file, a type its definition, a variable its type. A name the file does not
 # export, or a file that cannot be read or is still being checked, gives unknown names (the code
 # generator reports a bad import).
-func bind_use(n) {
-    let cf = null
-    if (CUR_CANON != null) {
+func bind_use(n: Node) {
+    let cf: CkFile = null
+    if (CUR_CANON != "") {
         cf = check_file(path_norm(path_join(path_dir(CUR_CANON), n.path)))
     }
     let names = n.names
@@ -2777,11 +2834,11 @@ func bind_use(n) {
             continue
         }
         let top = cf.scopes[0]
-        let t = map_get(top, nm, "any")
+        let t = map_get(top.types, nm, "any")
         if (t == "function") {
             declare(nm, "function")
-            declare("fn:{nm}", top["fn:{nm}"])
-            declare("home:{nm}", cf)
+            declare_fn(nm, top.fns[nm])
+            declare_home(nm, cf)
         } else if (t == "type" and map_has(cf.typedefs, nm)) {
             declare(nm, "type")
             TYPEDEFS[nm] = cf.typedefs[nm]
@@ -2792,10 +2849,10 @@ func bind_use(n) {
 }
 
 # Reports every Type Error it can prove, in source order, and ends the run if there is one.
-export func check_program(stmts, canon = null) {
+export func check_program(stmts: list<Node>, canon: string) {
     CUR_CANON = canon
-    if (canon != null and not map_has(FILES, canon)) {
-        FILES[canon] = CkFile(canon, ST.src_lines, [], [], {}, {}, {}, false, {}, false)
+    if (canon != "" and not map_has(FILES, canon)) {
+        FILES[canon] = CkFile(canon, ST.src_lines, [], {}, {}, {}, false, {}, false)
     }
     STRICT = file_is_strict(ST.src_lines)
     SCOPES = []
@@ -2806,7 +2863,6 @@ export func check_program(stmts, canon = null) {
     RETS = []
     REPORTED = {}
     HOISTED = {}
-    ORIGINS = []
     PENDING = []
     OPEN_IMPORT = false
     LITERALS = []
