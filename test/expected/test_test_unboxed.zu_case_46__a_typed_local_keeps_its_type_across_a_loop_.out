@@ -1,5 +1,6 @@
 Type Error [E0204] in /tmp/zue_test_case.zu at line 6:
   cannot assign a float constant to 's', which is int
+  in f(), called at line 8
 
    2 |     let s = 0
      |             - 's' became int here

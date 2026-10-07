@@ -79,3 +79,18 @@ func count_of(id: int) {
     return null
 }
 print(count_of(1) + 1)
+# CASE a function knows a variable declared below it
+# strict
+func bump() {
+    COUNT += 1
+    return COUNT > 1
+}
+let COUNT = 0
+print(bump())
+print(bump())
+# CASE a field read on a map has the map's value type, and open gives a file
+# strict
+let mode = {"name": "text"}
+print(mode.name + "!")
+let f = open("no_such_file_here.txt", "r")
+print(f == null)

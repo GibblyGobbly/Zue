@@ -1,5 +1,6 @@
 Type Error [E0212] in /tmp/zue_test_case.zu at line 2:
   label() must return an int, got string
+  in label(int), called at line 4
 
    1 | func label(n: int) -> int {
      |                       --- the result is int

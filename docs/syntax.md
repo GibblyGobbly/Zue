@@ -541,6 +541,9 @@ a `Type Error` with the line, and the program is not built.
   2
   6
   ```
+- A function's body is checked after the other statements of its block, so it knows a variable
+  declared below it (a function at the top of a file that uses a variable declared further down).
+- `m.key` on a `map<T>` is a `T`, and `open(path, mode)` gives a file (or `null` when it cannot open it).
 - A function that returns values of one template type, and maybe `null` (an empty value), has that
   template type, also when it calls itself. The same holds for a string, a list, a map or a function:
   `return "Ann"` and `return null` make a function whose result is a string. An `int`, `float`, `bool` or

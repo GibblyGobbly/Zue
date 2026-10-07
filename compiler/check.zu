@@ -200,6 +200,8 @@ func ck_init_results() {
     RESULTS["char"] = "char"
     RESULTS["clock"] = "float"
     RESULTS["file_exists"] = "bool"
+    # an open file, or null when it cannot be opened
+    RESULTS["open"] = "file"
 }
 
 ck_init_results()
@@ -2117,6 +2119,10 @@ func ck_expr(n: Node) -> string {
                 return object_field_type(td, ft, fi)
             }
         }
+        # m.key reads the key "key" of a map
+        if (kind_of(ft) == "map" and elem_of(ft) != null) {
+            return elem_of(ft)
+        }
         return "any"
     }
     if (k == "incdec") {
@@ -2452,14 +2458,26 @@ func ck_hoist(stmts: list<Node>) {
     }
 }
 
+# The body of a function declared in the block is checked after the block's other statements, so it
+# knows the variables the block declares below it (a function at the top of a file that uses a variable
+# declared further down).
 func ck_block(stmts: list<Node>) {
     ck_hoist(stmts)
+    let later: list<Node> = []
     for (let s in stmts) {
+        if (s.k == "func" and s.name != null) {
+            declare_func(s)
+            append(later, s)
+            continue
+        }
         ck_stmt(s)
         # if (type(x) == "list") { ...; return }: for a list x the rest of the block never runs
         if (s.k == "if" and s.cond.k != "let" and dead_branch(s.cond) == "else" and always_returns(s.then)) {
             break
         }
+    }
+    for (let f in later) {
+        ck_func(f)
     }
 }
 

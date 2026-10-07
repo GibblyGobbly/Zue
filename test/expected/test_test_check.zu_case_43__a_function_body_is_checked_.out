@@ -1,5 +1,6 @@
 Type Error [E0204] in /tmp/zue_test_case.zu at line 3:
   cannot assign string to 'x', which is int
+  in f(), called at line 6
 
    2 |     let x = 1
      |             - 'x' became int here
