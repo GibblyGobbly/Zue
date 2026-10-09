@@ -11,9 +11,9 @@
 use { die, path_dir, path_join, path_norm, split_lines } from "util.zu"
 use { parse_source } from "parser.zu"
 use { MODULES, MOD_LIST, uid } from "shared.zu"
-use { mk_id_line } from "ast_nodes.zu"
+use { Node, mk_id_line } from "ast_nodes.zu"
 use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analysis.zu"
-use { GC_LOWMEM, HOOKS, LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS, SPECS } from "ll_state.zu"
+use { GC_LOWMEM, HOOKS, SpecEntry, LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS, SPECS } from "ll_state.zu"
 use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_temp_alloca, ll_keep, ll_release_temps, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.zu"
 use { ll_call_out, ll_char, ll_condbr, ll_copy, ll_copy_heap, ll_const, ll_cstr, ll_float, ll_gname, ll_int } from "ll_state.zu"
 use { DBG, dbg_function, dbg_module_text, ll_store_pos, ll_ic, ll_kstr, ll_label, ll_mark, ll_mark_line, ll_mark_pos, ll_new_ctx, ll_new_label, ll_null, ll_pos, ll_pos_range, ll_reg } from "ll_state.zu"
@@ -25,30 +25,30 @@ use { call_spec, lit_int, math_spec, skind, spec_float_lit, tex, tex_step } from
 use { clear_kc, machine_type, parse_sig, spec_closure_global, spec_key_of, spec_prescan, spec_symbol } from "ll_spec.zu"
 use { check_program } from "check.zu"
 use { resolve_named_args } from "named_args.zu"
-use { Defer, FnSpec, Loop, Module, ST } from "state.zu"
+use { Ctx, Defer, FnSpec, Loop, Module, ST } from "state.zu"
 use { cut } from "ranges.zu"
-use { diag_new, diag_text, diag_hint, diag_exit_if_errors, suggest } from "diag.zu"
+use { Span, diag_new, diag_text, diag_hint, diag_exit_if_errors, suggest } from "diag.zu"
 
-let LL_BINOPS = {
+let LL_BINOPS: map<string> = {
     "+": "lvp_add_fast", "-": "lvp_sub_fast", "*": "lvp_mul_fast", "/": "lvp_div", "%": "lvp_mod",
     "==": "lvp_eq_fast", "!=": "lvp_ne_fast", "<": "lvp_lt_fast", "<=": "lvp_le_fast",
     ">": "lvp_gt_fast", ">=": "lvp_ge_fast",
     "&": "lvp_band", "|": "lvp_bor", "^": "lvp_bxor", "<<": "lvp_shl", ">>": "lvp_shr"
 }
-let LL_VALUE_CALL = {
+let LL_VALUE_CALL: map<string> = {
     "+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod", "<": "lt", "<=": "le",
     ">": "gt", ">=": "ge", "==": "eq", "!=": "ne", "&": "band", "|": "bor", "^": "bxor",
     "<<": "shl", ">>": "shr"
 }
-let LL_FLOAT_ARITH = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}
+let LL_FLOAT_ARITH: map<string> = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}
 # The operator codes of lvv_binop_lit.
-let LL_LIT_OPS = {"+": 0, "-": 1, "*": 2, "/": 3, "%": 4, "<": 5, "<=": 6, ">": 7, ">=": 8, "==": 9, "!=": 10}
-let LL_FLOAT_COMPARE = {"==": "oeq", "!=": "une", "<": "olt", "<=": "ole", ">": "ogt", ">=": "oge"}
-let LL_INT_BITWISE = {"&": "and", "|": "or", "^": "xor"}
+let LL_LIT_OPS: map<int> = {"+": 0, "-": 1, "*": 2, "/": 3, "%": 4, "<": 5, "<=": 6, ">": 7, ">=": 8, "==": 9, "!=": 10}
+let LL_FLOAT_COMPARE: map<string> = {"==": "oeq", "!=": "une", "<": "olt", "<=": "ole", ">": "ogt", ">=": "oge"}
+let LL_INT_BITWISE: map<string> = {"&": "and", "|": "or", "^": "xor"}
 
-let LL_INT_ARITH = {"+": "sadd", "-": "ssub", "*": "smul"}
-let LL_INT_DIVIDE = {"/": "sdiv", "%": "srem"}
-let LL_INT_COMPARE = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
+let LL_INT_ARITH: map<string> = {"+": "sadd", "-": "ssub", "*": "smul"}
+let LL_INT_DIVIDE: map<string> = {"/": "sdiv", "%": "srem"}
+let LL_INT_COMPARE: map<string> = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
 
 # Integer operations are done in line when both operands are ints (tag 2) and an arithmetic
 # result does not overflow. Everything else, including the errors, goes to the runtime call.
@@ -56,14 +56,14 @@ let LL_INT_COMPARE = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt
 # alit or blit is the float constant of a whole-number literal operand that the checker could not decide
 # (ad "dyn", see adapt_to in check.zu): next to a float it is that float, next to anything else the int.
 # x when it is set, else y.
-func first_set(x, y) {
+func first_set(x: string, y: string) -> string {
     if (x != null) {
         return x
     }
     return y
 }
 
-func ll_binop(op, a, b, pos, alit = null, blit = null) {
+func ll_binop(op: string, a: string, b: string, pos: int, alit: string = null, blit: string = null) -> string {
     let arith = map_get(LL_INT_ARITH, op, null)
     let compare = map_get(LL_INT_COMPARE, op, null)
     let divide = map_get(LL_INT_DIVIDE, op, null)
@@ -253,7 +253,7 @@ func ll_binop(op, a, b, pos, alit = null, blit = null) {
 
 # The i1 for a condition held in slot. A boolean is read in place; anything else goes to the
 # runtime, which reports the error. 1 is the runtime's T_BOOL tag.
-func ll_truth_flag(slot) {
+func ll_truth_flag(slot: string) -> string {
     let tag = ll_reg()
     ll("{tag} = load i64, ptr {slot}")
     let is_bool = ll_reg()
@@ -281,19 +281,19 @@ func ll_truth_flag(slot) {
 
 # Expressions
 
-func int_literal(n) {
+func int_literal(n: Node) -> string {
     return ll_int(lit_int(n))
 }
 
 # True when n cannot be a pointer or a box: a string or char literal, or an expression computed raw (int,
 # float or bool). Such a value needs no check when it is stored in a list or a map.
-func holds_no_pointer(n) {
-    return n.k == "str" or n.k == "char" or skind(n) != null
+func holds_no_pointer(n: Node) -> bool {
+    return n.k == "str" or n.k == "char" or skind(n) != ""
 }
 
 # len(x): a list and a string both keep their length in the first word of the object the value points
 # to, so those two are read in line. Anything else, and every error, goes to the builtin.
-func ex_len(n) {
+func ex_len(n: Node) -> string {
     let argv = ex_list(n.args)
     let v = argv[0]
     let t = ll_slot()
@@ -334,7 +334,7 @@ func ex_len(n) {
 
 # target[index] on a list with an int index in range is read in line: two words are copied into a fresh
 # slot (a stack cell, so there is no write barrier). Every other case, and every error, is the call.
-func ex_index(n) {
+func ex_index(n: Node) -> string {
     let t = ex(n.target)
     let i = ex(n.index)
     let out = ll_slot()
@@ -390,8 +390,8 @@ func ex_index(n) {
     return out
 }
 
-func ex_list(nodes) {
-    let res = []
+func ex_list(nodes: list<Node>) -> list<string> {
+    let res: list<string> = []
     for (let n in nodes) {
         append(res, ex(n))
     }
@@ -401,7 +401,7 @@ func ex_list(nodes) {
 # Reads a global variable. The common case, a defined variable, is a plain load and store; the
 # runtime call is only made (to report the error) when the variable is still undefined. 17 is the
 # runtime's T_UNDEF tag.
-func global_get(name) {
+func global_get(name: string) -> string {
     let g = ll_gname(name)
     let t = ll_slot()
     let tag = ll_reg()
@@ -422,7 +422,7 @@ func global_get(name) {
 # A whole-number literal, or + - * of them, that the checker found wanted as a float for some signatures of
 # its function only (ad "dyn", see adapt_to in check.zu). The ordinary version of the function computes it as
 # an int and makes it a float at run time when like, the value it goes into, is a float or a list of floats.
-func dyn_literal(e) {
+func dyn_literal(e: Node) -> bool {
     if (e.k == "num") {
         return e.ad == "dyn"
     }
@@ -432,14 +432,14 @@ func dyn_literal(e) {
     return false
 }
 
-func int_tree(e) {
+func int_tree(e: Node) -> bool {
     if (e.k == "num") {
         return true
     }
     return e.k == "bin" and e.unary == null and (e.op == "+" or e.op == "-" or e.op == "*") and int_tree(e.l) and int_tree(e.r)
 }
 
-func adapt_dyn(e, v, like) {
+func adapt_dyn(e: Node, v: string, like: string) -> string {
     if (not dyn_literal(e) or decided_in_spec(e)) {
         return v
     }
@@ -448,7 +448,7 @@ func adapt_dyn(e, v, like) {
 
 # adapt_dyn where like is a single value (an operand, a variable, another argument): a literal with an exact
 # float is picked inline, one of two constants by the tag of like, with no call and no slot.
-func adapt_dyn_scalar(e, v, like) {
+func adapt_dyn_scalar(e: Node, v: string, like: string) -> string {
     if (not dyn_literal(e) or decided_in_spec(e)) {
         return v
     }
@@ -466,7 +466,7 @@ func adapt_dyn_scalar(e, v, like) {
 
 # The float constant of an undecided whole-number literal operand for ll_binop, or null. A literal with no
 # exact float, or + - * of literals, takes the general path (adapt_dyn_scalar) before the operator instead.
-func dyn_float_const(e) {
+func dyn_float_const(e: Node) {
     if (e.k != "num" or not dyn_literal(e) or decided_in_spec(e) or not small_whole(e.v)) {
         return null
     }
@@ -474,7 +474,7 @@ func dyn_float_const(e) {
 }
 
 # Whether the decimal text of a whole number is at most 2^53 in size, so that its float is exact.
-func small_whole(text) {
+func small_whole(text: string) -> bool {
     let digits = text
     if (starts_with(digits, "-")) {
         digits = cut(digits, 1, len(digits))
@@ -483,7 +483,7 @@ func small_whole(text) {
 }
 
 # Whether a specialized version knows what the literal is for its signature (spec_float_lit).
-func decided_in_spec(e) {
+func decided_in_spec(e: Node) -> bool {
     if (ST.ctx.spec == null) {
         return false
     }
@@ -493,7 +493,7 @@ func decided_in_spec(e) {
     return e.k == "bin" and (decided_in_spec(e.l) or decided_in_spec(e.r))
 }
 
-func ex_id(n) {
+func ex_id(n: Node) -> string {
     let r = resolve(n.name)
     if (r.kind == "local") {
         return var_get(r.v)
@@ -515,13 +515,13 @@ func ex_id(n) {
     return global_get(n.name)
 }
 
-func call_builtin(name, argv) {
+func call_builtin(name: string, argv: list<string>) -> string {
     ll_use_native(name)
     let arr = ll_args_array(argv)
     return ll_call_lv("lb_{name}", "ptr @nf_{name}, i32 {len(argv)}, ptr {arr}")
 }
 
-func ex_call(n) {
+func ex_call(n: Node) -> string {
     ll_mark(n)
     let sp = call_spec(n)
     if (sp != null) {
@@ -575,7 +575,7 @@ func ex_call(n) {
 }
 
 # The ordinary call of n: the callee is a value, the arguments are boxed, lvp_call does the rest.
-func generic_call(n) {
+func generic_call(n: Node) -> string {
     let f = ex(n.callee)
     let argv = ex_list(n.args)
     ll_mark(n)
@@ -586,12 +586,12 @@ func generic_call(n) {
 HOOKS.generic_call = generic_call
 HOOKS.builtin = call_builtin
 
-func is_address_of_call(c) {
+func is_address_of_call(c: Node) -> bool {
     return c.callee.k == "id" and (c.callee.name == "address_of" or c.callee.name == "addr") and resolve(c.callee.name).kind != "local"
 }
 
 # address_of(name): a pointer to the variable's own storage.
-func ex_address_of(n) {
+func ex_address_of(n: Node) -> string {
     if (len(n.args) == 1 and n.args[0].k == "id") {
         let name = n.args[0].name
         let r = resolve(name)
@@ -617,14 +617,14 @@ func ex_address_of(n) {
     return ll_call_lv("lv_addr_invalid", "i32 {len(n.args)}")
 }
 
-func copy_slot(src) {
+func copy_slot(src: string) -> string {
     let t = ll_slot()
     ll_copy(t, src)
     return t
 }
 
 # defer(f(args)): the callee and arguments are captured now and called when the scope exits.
-func ex_defer(n) {
+func ex_defer(n: Node) -> string {
     if (len(n.args) != 1 or n.args[0].k != "call") {
         die("Compile Error", n.line, "defer expects a call, like defer(close(f))")
     }
@@ -641,7 +641,7 @@ func ex_defer(n) {
     return ll_null()
 }
 
-func ex_bin(n) {
+func ex_bin(n: Node) -> string {
     if (n.op == "and" or n.op == "or") {
         let a = ex(n.l)
         ll_mark(n.l)
@@ -686,7 +686,7 @@ func ex_bin(n) {
 
 # x++ and x-- as a value give the old value; ++x and --x give the new one. as_statement skips
 # keeping the old value.
-func ex_incdec(n, as_statement) {
+func ex_incdec(n: Node, as_statement: bool) -> string {
     let pos = ll_pos(n)
     let op = "+"
     if (n.op == "--") {
@@ -721,7 +721,7 @@ func ex_incdec(n, as_statement) {
     return t
 }
 
-func ex_tmpl(n) {
+func ex_tmpl(n: Node) -> string {
     let items: list<string> = []
     for (let part in n.parts) {
         if (part.k == "text") {
@@ -737,7 +737,7 @@ func ex_tmpl(n) {
     return ll_call_lv("lv_interp", "i32 {len(items)}, ptr {arr}")
 }
 
-func ex(n) {
+func ex(n: Node) -> string {
     let k = n.k
     if (k == "num") {
         if (spec_float_lit(n)) {
@@ -765,7 +765,7 @@ func ex(n) {
     }
     if (k == "bin" or k == "not") {
         let sk = skind(n)
-        if (sk != null) {
+        if (sk != "") {
             return box_raw(sk, tex(n))
         }
     }
@@ -849,13 +849,14 @@ func ex(n) {
         return ll_call_out("lvp_box_new", "ptr {size}, i64 {id}")
     }
     die("Compile Error", n.line, "cannot compile expression of kind '{k}'")
+    return ll_null()
 }
 
 # The id that ties a box to the scope it was created in, as an i64 operand; 0 at the top
 # level, where boxes live until freed.
 HOOKS.ex = ex
 
-func box_scope_id() {
+func box_scope_id() -> string {
     if (ST.ctx.is_main and len(ST.ctx.scopes) == 1) {
         return "0"
     }
@@ -878,7 +879,7 @@ func box_scope_id() {
 # Functions
 
 # Puts a finished function together: signature, entry-block allocas, then the body.
-func finish_function(header, ctx) {
+func finish_function(header: string, ctx: Ctx) {
     if (ctx.dbg != 0) {
         header = "{cut(header, 0, len(header) - 2)} !dbg !{ctx.dbg} \{"
     }
@@ -893,13 +894,13 @@ func finish_function(header, ctx) {
     append(LL_FUNCS, join(lines, "\n"))
 }
 
-func compile_function(n) {
+func compile_function(n: Node) -> string {
     let fid = uid()
     let fname = "fn_{fid}"
     let parent = ST.ctx
 
     let caps: list<string> = []
-    let capmap = {}
+    let capmap: map<int> = {}
     for (let nm in used_names(n)) {
         let r = resolve(nm)
         if (r.kind == "local") {
@@ -921,7 +922,7 @@ func compile_function(n) {
         }
         child.dbg = dbg_function(shown, n.line)
     }
-    let nested = {}
+    let nested: map<bool> = {}
     walk_nested(n.body, nested)
     walk_nested(n.defaults, nested)
     child.nested = nested
@@ -1001,7 +1002,8 @@ func compile_function(n) {
     return ll_call_lv("lv_closure", "ptr @{fname}, ptr {ll_cstr(name)}, i32 {len(caps)}, ptr {arr}")
 }
 
-func global_in_function() {
+# 1 inside a function, 0 at the top of a module: the i64 the runtime check takes.
+func global_in_function() -> int {
     if (ST.ctx.is_main) {
         return 0
     }
@@ -1010,7 +1012,7 @@ func global_in_function() {
 
 # Whether a value stored into name would leave the innermost unsafe block: the variable was
 # declared outside it.
-func outlives_unsafe(name) {
+func outlives_unsafe(name: string) -> bool {
     let marks = ST.ctx.unsafe_marks
     if (len(marks) == 0) {
         return false
@@ -1021,7 +1023,7 @@ func outlives_unsafe(name) {
 
 # Only pointers and boxes need the checks in lvp_global_store_check. Null, bool, int and float
 # (tags 0 to 3) skip the call.
-func global_store_check(value, in_function) {
+func global_store_check(value: string, in_function: int) {
     let tag = ll_reg()
     let plain = ll_reg()
     ll("{tag} = load i64, ptr {value}")
@@ -1041,7 +1043,7 @@ func global_store_check(value, in_function) {
 
 # R2: a pointer may not go into a captured variable, which belongs to a closure that can outlive the block.
 # Only a value with the pointer tag (16) needs the call.
-func capture_store_check(value) {
+func capture_store_check(value: string) {
     let tag = ll_reg()
     let is_ptr = ll_reg()
     ll("{tag} = load i64, ptr {value}")
@@ -1055,7 +1057,7 @@ func capture_store_check(value) {
     ll_label(done)
 }
 
-func store_name(name, value) {
+func store_name(name: string, value: string) {
     let r = resolve(name)
     if (r.kind == "local") {
         if (outlives_unsafe(name)) {
@@ -1074,7 +1076,7 @@ func store_name(name, value) {
 
 # Statements
 
-func st_block(stmts) {
+func st_block(stmts: list<Node>) {
     push_scope()
     for (let s in stmts) {
         st(s)
@@ -1085,7 +1087,7 @@ func st_block(stmts) {
 # A value read from a variable, field or element is copied when it is a box: assigning a box makes
 # a new box with the same bytes, so the two never share storage. A box passed to a function is
 # lent and not copied.
-func copy_if_box(node, v) {
+func copy_if_box(node: Node, v: string) -> string {
     if (node.k == "id" or node.k == "field" or node.k == "index") {
         let t = copy_slot(v)
         ll("call void @lvp_box_assign_copy(ptr {t}, i64 {box_scope_id()})")
@@ -1096,7 +1098,7 @@ func copy_if_box(node, v) {
 
 # The scalar kind a variable is kept raw as, or null: the checker proved the type, nothing captures
 # the variable and the function never takes an address.
-func raw_kind(n) {
+func raw_kind(n: Node) {
     let t = n.sty
     if (ST.ctx.spec != null and n.stys != null and map_has(n.stys, ST.ctx.spec.argkey)) {
         t = n.stys[ST.ctx.spec.argkey]
@@ -1111,11 +1113,14 @@ func raw_kind(n) {
 }
 
 # The searches that 'else' and 'if (let ...)' take, by the number lv_try_search uses for each.
-let TRY_SEARCH = {"find": 1, "index_of": 2, "last_index_of": 3}
+let TRY_SEARCH: map<int> = {"find": 1, "index_of": 2, "last_index_of": 3}
 
-# A value that may be missing, for 'else' and 'if (let ...)': the i1 that says it is there and the slot
-# that then holds it. The parser allows a conversion, an index or field read, a search and open.
-func try_value(e) {
+# A value that may be missing: the i1 that says it is there and the slot that then holds it.
+template Maybe { flag: string, slot: string }
+
+# The value of e for 'else' and 'if (let ...)'. The parser allows a conversion, an index or field read, a
+# search and open.
+func try_value(e: Node) -> Maybe {
     if (e.k == "index") {
         let t = ex(e.target)
         let i = ex(e.index)
@@ -1152,30 +1157,30 @@ func try_value(e) {
 }
 
 # A call of fn(out, args) that returns nonzero when the value is there.
-func try_flag(e, fn, args) {
+func try_flag(e: Node, fn: string, args: string) -> Maybe {
     let out = ll_slot()
     let r = ll_reg()
     ll("{r} = call i64 @{fn}(ptr {out}, {args})")
     let flag = ll_reg()
     ll("{flag} = icmp ne i64 {r}, 0")
-    return [flag, out]
+    return Maybe(flag, out)
 }
 
 # A value that is there unless it is null.
-func try_not_null(v) {
+func try_not_null(v: string) -> Maybe {
     let tag = ll_reg()
     ll("{tag} = load i64, ptr {v}")
     let flag = ll_reg()
     ll("{flag} = icmp ne i64 {tag}, 0")
-    return [flag, v]
+    return Maybe(flag, v)
 }
 
 # let n = s as int else { ... }: the block runs when the conversion fails, and it leaves (the parser checks).
-func st_let_else(n) {
+func st_let_else(n: Node) {
     let t = try_value(n.init)
     let ok = ll_new_label("letok")
     let fail = ll_new_label("letelse")
-    ll_condbr(t[0], ok, fail)
+    ll_condbr(t.flag, ok, fail)
     ll_label(fail)
     st_block(n.orelse)
     if (not ST.ctx.dead) {
@@ -1185,23 +1190,23 @@ func st_let_else(n) {
     ll_label(ok)
     if (at_top()) {
         ll_reg_global(n.name)
-        global_store_check(t[1], 0)
-        ll_copy(ll_gname(n.name), t[1])
+        global_store_check(t.slot, 0)
+        ll_copy(ll_gname(n.name), t.slot)
     } else {
-        declare(n.name, t[1])
+        declare(n.name, t.slot)
     }
 }
 
 # if (let n = s as int) { ... } else { ... }: n exists in the first block.
-func st_if_let(n) {
+func st_if_let(n: Node) {
     let t = try_value(n.cond.init)
     let yes = ll_new_label("then")
     let no = ll_new_label("else")
     let done = ll_new_label("endif")
-    ll_condbr(t[0], yes, no)
+    ll_condbr(t.flag, yes, no)
     ll_label(yes)
     push_scope()
-    declare(n.cond.name, t[1])
+    declare(n.cond.name, t.slot)
     for (let s in n.then) {
         st(s)
     }
@@ -1213,7 +1218,7 @@ func st_if_let(n) {
     ll_label(done)
 }
 
-func st_let(n) {
+func st_let(n: Node) {
     ll_mark_line(n)
     if (n.orelse != null) {
         st_let_else(n)
@@ -1250,7 +1255,7 @@ func st_let(n) {
 # is defined at the top of its module, and what it uses from there is global. They are the only
 # functions that run without lv_arity and a frame of their own: the call site writes the frame
 # (lvp_enter), which is why they must be reached only through tex_spec_call in ll_typed.zu.
-func compile_spec_function(n, key, entry) {
+func compile_spec_function(n: Node, key: string, entry: SpecEntry) {
     let sig = parse_sig(key, len(n.params))
     let parent = ST.ctx
     for (let nm in used_names(n)) {
@@ -1264,7 +1269,7 @@ func compile_spec_function(n, key, entry) {
     if (DBG.on) {
         child.dbg = dbg_function(n.name, n.line)
     }
-    let nested = {}
+    let nested: map<bool> = {}
     walk_nested(n.body, nested)
     walk_nested(n.defaults, nested)
     child.nested = nested
@@ -1293,7 +1298,7 @@ func compile_spec_function(n, key, entry) {
     clear_kc(n.body)
 }
 
-func st_funcdef(n) {
+func st_funcdef(n: Node) {
     ll_mark_line(n)
     if (n.name == null) {
         ex(n)
@@ -1322,7 +1327,7 @@ func st_funcdef(n) {
     }
 }
 
-func st_setidx(n) {
+func st_setidx(n: Node) {
     let t = ex(n.target)
     let i = ex(n.index)
     let v = ex(n.e)
@@ -1341,7 +1346,7 @@ func st_setidx(n) {
 
 # The i1 for a condition. A condition computed raw needs no LV; any other goes through the check
 # that it is a boolean.
-func cond_flag(e) {
+func cond_flag(e: Node) -> string {
     if (skind(e) == "bool") {
         return tex(e)
     }
@@ -1350,7 +1355,7 @@ func cond_flag(e) {
     return ll_truth_flag(c)
 }
 
-func st_if(n) {
+func st_if(n: Node) {
     if (n.cond.k == "let") {
         st_if_let(n)
         return null
@@ -1369,7 +1374,7 @@ func st_if(n) {
     ll_label(done)
 }
 
-func loop_push(kind, brk, cont) {
+func loop_push(kind: string, brk: string, cont: string) -> Loop {
     let l = Loop(kind, uid(), brk, cont, len(ST.ctx.scopes))
     append(ST.ctx.loops, l)
     return l
@@ -1379,7 +1384,7 @@ func loop_pop() {
     remove(ST.ctx.loops, len(ST.ctx.loops) - 1)
 }
 
-func st_while(n) {
+func st_while(n: Node) {
     let cond = ll_new_label("wcond")
     let body = ll_new_label("wbody")
     let done = ll_new_label("wend")
@@ -1394,7 +1399,7 @@ func st_while(n) {
     loop_pop()
 }
 
-func st_for(n) {
+func st_for(n: Node) {
     push_scope()
     if (n.init != null) {
         st(n.init)
@@ -1441,7 +1446,7 @@ func fresh_loop_cells() {
     }
 }
 
-func st_forin(n) {
+func st_forin(n: Node) {
     push_scope()
     let it = ex(n.iter)
     ll_mark(n.iter)
@@ -1491,11 +1496,11 @@ func st_forin(n) {
     pop_scope()
 }
 
-func st_switch(n) {
+func st_switch(n: Node) {
     push_scope()
     let sv = copy_slot(ex(n.e))
     let done = ll_new_label("swend")
-    loop_push("switch", done, null)
+    loop_push("switch", done, "")
     for (let c in n.cases) {
         let cv = ex(c.e)
         ll_mark(c.e)
@@ -1519,7 +1524,7 @@ func st_switch(n) {
 }
 
 # Rule R6: an unsafe block inside another one in the same function is an error.
-func st_unsafe(n) {
+func st_unsafe(n: Node) {
     if (len(ST.ctx.unsafe_marks) > 0) {
         die("Syntax Error", n.line, "unsafe blocks cannot be nested: the enclosing unsafe block already allows unsafe operations")
     }
@@ -1536,7 +1541,7 @@ func st_unsafe(n) {
     pop_scope()
 }
 
-func st_break(n) {
+func st_break(n: Node) {
     if (len(ST.ctx.loops) == 0) {
         die("Compile Error", n.line, "break statement outside loop")
     }
@@ -1545,7 +1550,7 @@ func st_break(n) {
     ll_br(lp.brk)
 }
 
-func st_continue(n) {
+func st_continue(n: Node) {
     let i = len(ST.ctx.loops) - 1
     while (i >= 0 and ST.ctx.loops[i].kind == "switch") {
         i -= 1
@@ -1559,7 +1564,7 @@ func st_continue(n) {
 }
 
 # A return in a function that takes and returns raw values (see compile_spec_function).
-func st_return_raw(n) {
+func st_return_raw(n: Node) {
     ll_mark_line(n)
     let want = ST.ctx.spec.res
     if (n.e == null) {
@@ -1578,7 +1583,7 @@ func st_return_raw(n) {
     ST.ctx.dead = true
 }
 
-func st_return(n) {
+func st_return(n: Node) {
     if (ST.ctx.spec != null) {
         st_return_raw(n)
         return null
@@ -1625,7 +1630,7 @@ func st_return(n) {
     }
 }
 
-func st(n) {
+func st(n: Node) {
     let k = n.k
     if (k == "let") {
         st_let(n)
@@ -1684,7 +1689,7 @@ func st(n) {
 
 # Modules
 
-func new_module(display, canon) {
+func new_module(display: string, canon: string) -> Module {
     let id = len(MOD_LIST)
     let m = Module(id, display, canon, "g_", {}, [], "compiling")
     if (id > 0) {
@@ -1696,7 +1701,7 @@ func new_module(display, canon) {
     return m
 }
 
-func decl_module_source(m, lines) {
+func decl_module_source(m: Module, lines: list<string>) {
     let entries: list<string> = []
     for (let line_text in lines) {
         append(entries, "ptr {ll_cstr(line_text)}")
@@ -1707,7 +1712,7 @@ func decl_module_source(m, lines) {
     append(LL_MODDECLS, "@mod_{m.id} = internal constant %LvModule \{ ptr {ll_cstr(m.path)}, ptr @srcl_{m.id}, i32 {len(lines)} }")
 }
 
-func prescan_globals(stmts) {
+func prescan_globals(stmts: list<Node>) {
     for (let s in stmts) {
         if (s.k == "let") {
             ll_reg_global(s.name)
@@ -1720,7 +1725,7 @@ func prescan_globals(stmts) {
 }
 
 # data, template and bloc names exist before the program starts (main file only).
-func define_types(stmts) {
+func define_types(stmts: list<Node>) {
     for (let s in stmts) {
         if (s.k == "typedef") {
             ll_reg_global(s.name)
@@ -1778,7 +1783,7 @@ func define_types(stmts) {
 }
 
 # Compiles the statements of module m into a function named `fname`.
-func compile_module_body(m, stmts, fname) {
+func compile_module_body(m: Module, stmts: list<Node>, fname: string) {
     ST.ctx = ll_new_ctx(true)
     if (DBG.on) {
         ST.ctx.dbg = dbg_function("<module {ST.src_file}>", 1)
@@ -1806,7 +1811,7 @@ func compile_module_body(m, stmts, fname) {
 }
 
 # Loads, parses and compiles an imported file. Returns null if it cannot be read.
-func compile_module(canon) {
+func compile_module(canon: string) -> Module {
     let f = open(canon, "r")
     if (f == null) {
         return null
@@ -1836,14 +1841,14 @@ func compile_module(canon) {
 }
 
 # A bad import is a compile error at the use statement, even in a branch that never runs.
-func import_error(span, msg, text, hint) {
+func import_error(span: Span, msg: string, text: string, hint: string) {
     let d = diag_new("Name Error", span, msg)
     diag_text(d, text)
     diag_hint(d, hint)
     return d
 }
 
-func st_use(n) {
+func st_use(n: Node) {
     ll_mark_line(n)
     let canon = path_norm(path_join(path_dir(ST.mod.canon), n.path))
     let m2 = map_get(MODULES, canon, null)
@@ -1899,7 +1904,7 @@ func st_use(n) {
 
 # Program
 
-func declarations() {
+func declarations() -> list<string> {
     let d: list<string> = []
     for (let nm in split("add_fast sub_fast mul_fast div mod eq_fast ne_fast lt_fast le_fast gt_fast ge_fast band bor bxor shl shr", " ")) {
         append(d, "declare void @lvp_{nm}(ptr, ptr, ptr)")
@@ -1981,7 +1986,7 @@ func declarations() {
     return d
 }
 
-export func compile_program_ll(stmts) {
+export func compile_program_ll(stmts: list<Node>) -> string {
     let m = new_module(ST.src_file, path_norm(path_join(ST.cwd, ST.src_file)))
     ST.mod = m
     decl_module_source(m, ST.src_lines)

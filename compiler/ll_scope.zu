@@ -8,13 +8,17 @@ use { ll, ll_alloca, ll_args_array, ll_copy, ll_copy_heap, ll_reg, ll_slot } fro
 use { box_raw, new_typed_var, ty_load, ty_store, unbox_checked } from "ll_unbox.zu"
 use { ST, Var } from "state.zu"
 
+# What a name refers to where it is used: kind "local" (the variable v), "cap" (captured cell i of the
+# running closure), "global", "null" or "builtin".
+export template Ref { kind: string, v: Var, i: int }
+
 export func push_scope() {
     append(ST.ctx.scopes, {})
     append(ST.ctx.defers, [])
 }
 
 # Emits the deferred calls of every scope from index `from_depth` inward, innermost first.
-export func run_defers(from_depth) {
+export func run_defers(from_depth: int) {
     let i = len(ST.ctx.defers) - 1
     while (i >= from_depth) {
         let list = ST.ctx.defers[i]
@@ -44,13 +48,13 @@ export func pop_scope() {
     remove(ST.ctx.defers, len(ST.ctx.defers) - 1)
 }
 
-export func at_top() {
+export func at_top() -> bool {
     return ST.ctx.is_main and len(ST.ctx.scopes) == 1
 }
 
 # A variable holding a copy of the LV that init_ptr points to. A variable captured by a
 # nested function lives in a heap cell; its slot then holds the cell's address.
-export func declare(name, init_ptr) {
+export func declare(name: string, init_ptr: string) -> Var {
     let id = uid()
     let is_cell = map_has(ST.ctx.nested, name)
     let v = Var(name, is_cell, "", null)
@@ -68,7 +72,7 @@ export func declare(name, init_ptr) {
 }
 
 # A variable kept as a raw int, float or bool. Its first value is raw, an SSA operand.
-export func declare_typed(name, kind, raw) {
+export func declare_typed(name: string, kind: string, raw: string) -> Var {
     let v = new_typed_var(name, kind)
     ty_store(v, raw)
     ST.ctx.scopes[len(ST.ctx.scopes) - 1][name] = v
@@ -77,7 +81,7 @@ export func declare_typed(name, kind, raw) {
 
 # The variable's value as a slot pointer. A cell is copied out, so a later write through
 # another closure does not change a value that is already part of an expression.
-export func var_get(v) {
+export func var_get(v: Var) -> string {
     if (v.ty != null) {
         return box_raw(v.ty, ty_load(v))
     }
@@ -91,7 +95,7 @@ export func var_get(v) {
     return v.c
 }
 
-export func var_set(v, expr) {
+export func var_set(v: Var, expr: string) {
     if (v.ty != null) {
         ty_store(v, unbox_checked(expr, v.ty, v.name))
         return null
@@ -106,7 +110,7 @@ export func var_set(v, expr) {
 }
 
 # The index in the scope stack of the scope that declares name, or -1.
-export func find_local_index(name) {
+export func find_local_index(name: string) -> int {
     let i = len(ST.ctx.scopes) - 1
     while (i >= 0) {
         if (map_has(ST.ctx.scopes[i], name)) {
@@ -117,41 +121,39 @@ export func find_local_index(name) {
     return -1
 }
 
-export func find_local(name) {
+export func find_local(name: string) -> Var {
     let i = len(ST.ctx.scopes) - 1
     while (i >= 0) {
-        let v = map_get(ST.ctx.scopes[i], name, null)
-        if (v != null) {
-            return v
+        if (map_has(ST.ctx.scopes[i], name)) {
+            return ST.ctx.scopes[i][name]
         }
         i -= 1
     }
     return null
 }
 
-export func resolve(name) {
+export func resolve(name: string) -> Ref {
     let v = find_local(name)
     if (v != null) {
-        return {"kind": "local", "v": v}
+        return Ref("local", v, 0)
     }
-    let ci = map_get(ST.ctx.capmap, name, null)
-    if (ci != null) {
-        return {"kind": "cap", "i": ci}
+    if (map_has(ST.ctx.capmap, name)) {
+        return Ref("cap", null, ST.ctx.capmap[name])
     }
     if (map_has(ST.mod.globals, name)) {
-        return {"kind": "global"}
+        return Ref("global", null, 0)
     }
     if (name == "null") {
-        return {"kind": "null"}
+        return Ref("null", null, 0)
     }
     if (map_has(BUILTINS, name)) {
-        return {"kind": "builtin"}
+        return Ref("builtin", null, 0)
     }
-    return {"kind": "global"}
+    return Ref("global", null, 0)
 }
 
 # The address of captured cell i of the running closure.
-export func cap_cell(i) {
+export func cap_cell(i: int) -> string {
     let cp = ll_reg()
     ll("{cp} = getelementptr inbounds %LvFunc, ptr %self, i32 0, i32 4")
     let cells = ll_reg()

@@ -66,17 +66,21 @@ def lit(text):
 
 
 def build_compiler(entries):
-    out = [HEADER.format(name="error_codes.zu"), "export const ERROR_CODES = ["]
+    out = [HEADER.format(name="error_codes.zu"),
+           "# One family of errors: its code and title, the pieces of message text that belong to it, and its",
+           "# explanation, example and fix.",
+           "export template ErrorCode { code: string, title: string, match: list<string>, text: string, example: string, fix: string }",
+           "",
+           "export const ERROR_CODES: list<ErrorCode> = ["]
     for i, e in enumerate(entries):
         sep = "," if i + 1 < len(entries) else ""
-        out.append("    {%s: %s, %s: %s, %s: [%s], %s: %s, %s: %s, %s: %s}%s" % (
-            lit("code"), lit(e["code"]), lit("title"), lit(e["title"]),
-            lit("match"), ", ".join(lit(m) for m in e["match"]),
-            lit("text"), lit(e["text"]), lit("example"), lit(e["example"]), lit("fix"), lit(e["fix"]), sep))
+        out.append("    ErrorCode(%s, %s, [%s], %s, %s, %s)%s" % (
+            lit(e["code"]), lit(e["title"]), ", ".join(lit(m) for m in e["match"]),
+            lit(e["text"]), lit(e["example"]), lit(e["fix"]), sep))
     out.append("]")
     out.append("""
 # The code of an error message, or null when the message belongs to no family.
-export func code_for(msg) {
+export func code_for(msg: string) {
     for (let e in ERROR_CODES) {
         for (let piece in e.match) {
             if (contains(msg, piece)) {

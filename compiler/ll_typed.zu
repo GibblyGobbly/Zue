@@ -10,23 +10,23 @@
 # call, which reports the error.
 
 use { diag_exit_if_errors, diag_hint, diag_new } from "diag.zu"
-use { node_span } from "ast_nodes.zu"
-use { HOOKS, SPECS, ll, ll_alloca, ll_temp_alloca, ll_args_array, ll_br, ll_call_out, ll_slot, ll_condbr, ll_cstr, ll_float_text, ll_gname, ll_label, ll_mark, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
+use { Node, node_span } from "ast_nodes.zu"
+use { HOOKS, SPECS, SpecEntry, ll, ll_alloca, ll_temp_alloca, ll_args_array, ll_br, ll_call_out, ll_slot, ll_condbr, ll_cstr, ll_float_text, ll_gname, ll_label, ll_mark, ll_new_label, ll_pos, ll_reg, ll_store_pos } from "ll_state.zu"
 use { find_local, resolve } from "ll_scope.zu"
 use { box_raw, ty_load, unbox_checked } from "ll_unbox.zu"
-use { SPEC_FRAME_SIZE, SPEC_MAX_DEPTH, machine_type, parse_sig, spec_closure_global, spec_key_of, spec_symbol } from "ll_spec.zu"
+use { SPEC_FRAME_SIZE, SPEC_MAX_DEPTH, Sig, machine_type, parse_sig, spec_closure_global, spec_key_of, spec_symbol } from "ll_spec.zu"
 use { ST } from "state.zu"
 use { cut } from "ranges.zu"
 
-let T_VALUE_CALL = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod"}
-let T_INT_OP = {"+": "sadd", "-": "ssub", "*": "smul"}
-let T_FLOAT_OP = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}
-let T_INT_CMP = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
-let T_FLOAT_CMP = {"==": "oeq", "!=": "une", "<": "olt", "<=": "ole", ">": "ogt", ">=": "oge"}
-let T_BITWISE = {"&": "and", "|": "or", "^": "xor"}
+let T_VALUE_CALL: map<string> = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod"}
+let T_INT_OP: map<string> = {"+": "sadd", "-": "ssub", "*": "smul"}
+let T_FLOAT_OP: map<string> = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}
+let T_INT_CMP: map<string> = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
+let T_FLOAT_CMP: map<string> = {"==": "oeq", "!=": "une", "<": "olt", "<=": "ole", ">": "ogt", ">=": "oge"}
+let T_BITWISE: map<string> = {"&": "and", "|": "or", "^": "xor"}
 
 # An integer literal must fit in 64 bits; -9223372036854775808 is the one that needs the sign.
-export func lit_int(n) {
+export func lit_int(n: Node) -> string {
     let digits = n.v
     let limit = "9223372036854775807"
     if (starts_with(digits, "-")) {
@@ -46,12 +46,12 @@ export func lit_int(n) {
 
 # Whether a whole-number literal is a float in the specialized version being emitted: the checker found it
 # wanted as a float for this signature (n.ads, see adapt_to in check.zu).
-export func spec_float_lit(n) {
-    return n.k == "num" and n.ads != null and ST.ctx.spec != null and map_get(n.ads, ST.ctx.spec.argkey, null) == "float"
+export func spec_float_lit(n: Node) -> bool {
+    return n.k == "num" and n.ads != null and ST.ctx.spec != null and map_get(n.ads, ST.ctx.spec.argkey, "") == "float"
 }
 
-# The kind (int, float or bool) n has when computed raw, or null when it cannot be.
-export func skind(n) {
+# The kind (int, float or bool) n has when computed raw, or "" when it cannot be.
+export func skind(n: Node) -> string {
     let k = n.k
     if (k == "num") {
         if (spec_float_lit(n)) {
@@ -70,24 +70,24 @@ export func skind(n) {
         if (v != null and v.ty != null) {
             return v.ty
         }
-        return null
+        return ""
     }
     if (k == "not") {
         if (skind(n.e) == "bool") {
             return "bool"
         }
-        return null
+        return ""
     }
     if (k == "bin") {
         # kc keeps the answer ("-" for none) so a long chain is walked once, not once per level
         if (n.kc != null) {
             if (n.kc == "-") {
-                return null
+                return ""
             }
             return n.kc
         }
         let r = bin_kind(n)
-        if (r == null) {
+        if (r == "") {
             n.kc = "-"
         } else {
             n.kc = r
@@ -107,13 +107,16 @@ export func skind(n) {
             return ms.res
         }
     }
-    return null
+    return ""
 }
+
+# A direct call: the signature key, the function's SpecEntry, the signature and the function's name.
+export template SpecCall { key: string, entry: SpecEntry, sig: Sig, name: string }
 
 # The direct call n can be made with, or null: the checker proved a signature for it (n.spec), the callee
 # is a function of this module that has specialized functions for it, the name is not shadowed here, and
 # every argument is available as a raw value of the kind the signature wants.
-export func call_spec(n) {
+export func call_spec(n: Node) -> SpecCall {
     if (n.spec == null or n.callee.k != "id") {
         return null
     }
@@ -126,14 +129,14 @@ export func call_spec(n) {
         if (map_has(entry.sigs, key)) {
             let sig = parse_sig(key, len(n.args))
             if (sig != null and args_fit(n.args, sig.args)) {
-                return {"key": key, "entry": entry, "sig": sig, "name": name}
+                return SpecCall(key, entry, sig, name)
             }
         }
     }
     return null
 }
 
-func args_fit(args, kinds) {
+func args_fit(args: list<Node>, kinds: list<string>) -> bool {
     for (let i = 0; i < len(args); i++) {
         let a = args[i]
         let k = skind(a)
@@ -146,7 +149,7 @@ func args_fit(args, kinds) {
 
 # float(x) where x is computed raw as an int and float is the builtin: a plain conversion that
 # cannot fail.
-func is_float_of_int(n) {
+func is_float_of_int(n: Node) -> bool {
     let c = n.callee
     if (c.k != "id" or c.name != "float" or len(n.args) != 1) {
         return false
@@ -157,16 +160,16 @@ func is_float_of_int(n) {
     return skind(n.args[0]) == "int"
 }
 
-# The kind both operands of a binary node are computed in, or null. A whole-number literal next to a
+# The kind both operands of a binary node are computed in, or "". A whole-number literal next to a
 # float is a float, as it is in the runtime.
-func operand_kind(n) {
+func operand_kind(n: Node) -> string {
     let a = skind(n.l)
-    if (a == null) {
-        return null
+    if (a == "") {
+        return ""
     }
     let b = skind(n.r)
-    if (b == null) {
-        return null
+    if (b == "") {
+        return ""
     }
     if (a == b) {
         return a
@@ -177,26 +180,26 @@ func operand_kind(n) {
     if (b == "float" and n.l.k == "num") {
         return "float"
     }
-    return null
+    return ""
 }
 
-func bin_kind(n) {
+func bin_kind(n: Node) -> string {
     let op = n.op
     if (op == "and" or op == "or") {
         if (skind(n.l) == "bool" and skind(n.r) == "bool") {
             return "bool"
         }
-        return null
+        return ""
     }
     let u = operand_kind(n)
-    if (u == null) {
-        return null
+    if (u == "") {
+        return ""
     }
     if (u == "bool") {
         if (op == "==" or op == "!=") {
             return "bool"
         }
-        return null
+        return ""
     }
     if (map_has(T_INT_CMP, op)) {
         return "bool"
@@ -207,11 +210,11 @@ func bin_kind(n) {
     if ((op == "%" or op == "&" or op == "|" or op == "^") and u == "int") {
         return "int"
     }
-    return null
+    return ""
 }
 
 # The raw operand of n, which skind accepted.
-export func tex(n) {
+export func tex(n: Node) -> string {
     let k = n.k
     if (k == "num") {
         if (spec_float_lit(n)) {
@@ -267,17 +270,21 @@ export func tex(n) {
 # builtin is called on the boxed arguments, so that it reports the exact error it always did.
 # Each entry: the function to call and the test of the argument (none, ge0: not negative, gt0: positive,
 # unit: from -1 to 1).
-let MATH_UNARY = {
+let MATH_UNARY: map<list<string>> = {
     "sqrt": ["llvm.sqrt.f64", "ge0"], "exp": ["exp", "none"], "ln": ["log", "gt0"], "log10": ["log10", "gt0"],
     "sin": ["sin", "none"], "cos": ["cos", "none"], "tan": ["tan", "none"], "asin": ["asin", "unit"],
     "acos": ["acos", "unit"], "atan": ["atan", "none"], "sinh": ["sinh", "none"], "cosh": ["cosh", "none"],
     "tanh": ["tanh", "none"]
 }
-let MATH_ROUND = {"floor": "llvm.floor.f64", "ceil": "llvm.ceil.f64", "round": "llvm.round.f64"}
+let MATH_ROUND: map<string> = {"floor": "llvm.floor.f64", "ceil": "llvm.ceil.f64", "round": "llvm.round.f64"}
 
-# {"name", "kind", "res"} when n is a call of a math builtin whose arguments are raw floats (or whole number
+# A call of a math builtin with raw arguments: the builtin, which kind of call (unary, round, pow, abs) and
+# the kind of its result.
+export template MathSpec { name: string, kind: string, res: string }
+
+# The MathSpec of n when n is a call of a math builtin whose arguments are raw floats (or whole number
 # literals, which the runtime also takes as numbers), else null. abs takes a raw int too.
-export func math_spec(n) {
+export func math_spec(n: Node) -> MathSpec {
     if (n.callee.k != "id") {
         return null
     }
@@ -313,11 +320,11 @@ export func math_spec(n) {
     } else if (kind == "abs") {
         res = skind(n.args[0])
     }
-    return {"name": name, "kind": kind, "res": res}
+    return MathSpec(name, kind, res)
 }
 
 # The result r of a libm call is used when it is finite (not NaN, not infinite); otherwise the slow path runs.
-func math_finite_or_slow(r, good, slow) {
+func math_finite_or_slow(r: string, good: string, slow: string) {
     let a = ll_reg()
     ll("{a} = call double @llvm.fabs.f64(double {r})")
     let fin = ll_reg()
@@ -325,11 +332,11 @@ func math_finite_or_slow(r, good, slow) {
     ll_condbr(fin, good, slow)
 }
 
-func tex_math_call(n) {
+func tex_math_call(n: Node) -> string {
     let ms = math_spec(n)
     let rt = machine_type(ms.res)
     let out = ll_temp_alloca(rt)
-    let raws = []
+    let raws: list<string> = []
     let kinds: list<string> = []
     for (let a in n.args) {
         if (a.k == "num" and ms.kind != "abs") {
@@ -445,7 +452,7 @@ func tex_math_call(n) {
         for (let i = 0; i < len(raws); i++) {
             append(argv, box_raw(kinds[i], raws[i]))
         }
-        let slot = HOOKS.builtin(ms.name, argv)
+        let slot: string = HOOKS.builtin(ms.name, argv)
         let u = unbox_checked(slot, ms.res, ms.name)
         ll("store {rt} {u}, ptr {out}")
         ll_br(done)
@@ -462,7 +469,7 @@ func tex_math_call(n) {
 # functions were made for, the call goes straight to the one for the signature, with the same bookkeeping
 # as lvp_call. If not (the name was given another value), the arguments are boxed and it is the ordinary
 # call, and its result is unboxed with the check of a tag.
-func tex_spec_call(n) {
+func tex_spec_call(n: Node) -> string {
     let sp = call_spec(n)
     let rt = machine_type(sp.sig.res)
     let out = ll_temp_alloca(rt)
@@ -490,7 +497,7 @@ func tex_spec_call(n) {
     ll("{same} = icmp eq i64 {held}, {made}")
     let ok = ll_reg()
     ll("{ok} = and i1 {is_func}, {same}")
-    let raws = []
+    let raws: list<string> = []
     for (let i = 0; i < len(n.args); i++) {
         let a = n.args[i]
         if (sp.sig.args[i] == "float" and a.k == "num") {
@@ -585,14 +592,14 @@ func tex_spec_call(n) {
 }
 
 # n computed as kind want; a whole-number literal becomes a double when a float is wanted.
-func tex_as(n, want) {
+func tex_as(n: Node, want: string) -> string {
     if (want == "float" and n.k == "num") {
         return ll_float_text(n.v)
     }
     return tex(n)
 }
 
-func tex_bin(n) {
+func tex_bin(n: Node) -> string {
     let op = n.op
     if (op == "and" or op == "or") {
         return tex_logic(n)
@@ -623,7 +630,7 @@ func tex_bin(n) {
 }
 
 # cur plus or minus one, for ++ and --, in the machine type of kind.
-export func tex_step(kind, op, cur, pos) {
+export func tex_step(kind: string, op: string, cur: string, pos: int) -> string {
     if (kind == "float") {
         return tex_float_arith(op, cur, "1.0", pos)
     }
@@ -631,7 +638,7 @@ export func tex_step(kind, op, cur, pos) {
 }
 
 # a and b / a or b: the right side runs only when the left does not decide.
-func tex_logic(n) {
+func tex_logic(n: Node) -> string {
     let res = ll_temp_alloca("i64")
     let left = tex(n.l)
     let lw = ll_reg()
@@ -660,7 +667,7 @@ func tex_logic(n) {
 
 # + - * with an overflow check, and / % where a divisor of 0 or -1 is left to the runtime (the two
 # that raise an error or overflow). The runtime call returns the result or raises.
-func tex_int_arith(op, a, b, pos) {
+func tex_int_arith(op: string, a: string, b: string, pos: int) -> string {
     let fast = ll_new_label("tfast")
     let slow = ll_new_label("tslow")
     let done = ll_new_label("tdone")
@@ -704,7 +711,7 @@ func tex_int_arith(op, a, b, pos) {
 # + - * / on doubles. A zero divisor and a result that is not finite go to the runtime, which
 # raises the error. A result may be -0.0; ty_store and box_raw turn it into 0.0 where it leaves the
 # chain of operations.
-func tex_float_arith(op, a, b, pos) {
+func tex_float_arith(op: string, a: string, b: string, pos: int) -> string {
     let compute = ll_new_label("tcomp")
     let store = ll_new_label("tstore")
     let slow = ll_new_label("tslow")

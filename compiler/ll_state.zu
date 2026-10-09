@@ -10,29 +10,30 @@
 
 use { uid } from "shared.zu"
 use { Ctx, ST } from "state.zu"
+use { Node } from "ast_nodes.zu"
 use { cut } from "ranges.zu"
 
-export const LL_STRS = []        # private string constants
-export const LL_STR_IDS = {}
-export const LL_CONSTS = []      # private constant LV values
-export const LL_CONST_IDS = {}
-export const LL_GLOBALS = []     # one definition per Zue global
-export const LL_MODDECLS = []    # per-module state, source tables and descriptors
-export const LL_FUNCS = []       # finished function bodies
-export const LL_KSTRS = []       # text of each K[] string constant
-export const LL_K_IDS = {}
-export const LL_ICS = []         # one inline cache per field read: a template type and a field index
-export const LL_BUILTINS = []    # builtin names whose lb_ function is declared
-export const LL_BUILTIN_IDS = {}
-export const LL_NATIVES = []     # builtins called directly: names that need an nf_ global
-export const LL_NATIVE_IDS = {}
+export const LL_STRS: list<string> = []        # private string constants
+export const LL_STR_IDS: map<string> = {}
+export const LL_CONSTS: list<string> = []      # private constant LV values
+export const LL_CONST_IDS: map<string> = {}
+export const LL_GLOBALS: list<string> = []     # one definition per Zue global
+export const LL_MODDECLS: list<string> = []    # per-module state, source tables and descriptors
+export const LL_FUNCS: list<string> = []       # finished function bodies
+export const LL_KSTRS: list<string> = []       # text of each K[] string constant
+export const LL_K_IDS: map<int> = {}
+export const LL_ICS: list<int> = []            # one inline cache per field read: a template type and a field index
+export const LL_BUILTINS: list<string> = []    # builtin names whose lb_ function is declared
+export const LL_BUILTIN_IDS: map<bool> = {}
+export const LL_NATIVES: list<string> = []     # builtins called directly: names that need an nf_ global
+export const LL_NATIVE_IDS: map<bool> = {}
 
-func ll_hex_digit(n) {
+func ll_hex_digit(n: int) -> char {
     return "0123456789ABCDEF"[n]
 }
 
 # Text for an LLVM c"..." constant (without the surrounding quotes).
-export func ll_escape(text) {
+export func ll_escape(text: string) -> string {
     let parts: list<string> = []
     for (let ch in text) {
         let byte = code(ch)
@@ -48,39 +49,39 @@ export func ll_escape(text) {
 }
 
 # A NUL-terminated string constant; returns its global name.
-export func ll_cstr(text) {
+export func ll_cstr(text: string) -> string {
     let key = "s{text}"
-    let name = map_get(LL_STR_IDS, key, null)
-    if (name == null) {
-        name = "@.s{len(LL_STRS)}"
-        append(LL_STRS, "{name} = private unnamed_addr constant [{len(text) + 1} x i8] c\"{ll_escape(text)}\\00\"")
-        LL_STR_IDS[key] = name
+    if (map_has(LL_STR_IDS, key)) {
+        return LL_STR_IDS[key]
     }
+    let name = "@.s{len(LL_STRS)}"
+    append(LL_STRS, "{name} = private unnamed_addr constant [{len(text) + 1} x i8] c\"{ll_escape(text)}\\00\"")
+    LL_STR_IDS[key] = name
     return name
 }
 
 # A constant LV with the given tag and payload text; returns its global name.
-export func ll_const(tag, payload) {
+export func ll_const(tag: int, payload: string) -> string {
     let key = "{tag}:{payload}"
-    let name = map_get(LL_CONST_IDS, key, null)
-    if (name == null) {
-        name = "@.c{len(LL_CONSTS)}"
-        append(LL_CONSTS, "{name} = private constant %LV \{ i64 {tag}, i64 {payload} }")
-        LL_CONST_IDS[key] = name
+    if (map_has(LL_CONST_IDS, key)) {
+        return LL_CONST_IDS[key]
     }
+    let name = "@.c{len(LL_CONSTS)}"
+    append(LL_CONSTS, "{name} = private constant %LV \{ i64 {tag}, i64 {payload} }")
+    LL_CONST_IDS[key] = name
     return name
 }
 
-export func ll_null() {
+export func ll_null() -> string {
     return ll_const(0, "0")
 }
 
-export func ll_int(text) {
+export func ll_int(text: string) -> string {
     return ll_const(2, text)
 }
 
 # Float literal text such as 3.14, 1e-05 or 2. as the text of an LLVM double constant.
-export func ll_float_text(text) {
+export func ll_float_text(text: string) -> string {
     let t = text
     # Zue has no negative zero: -0.0 is 0.0
     if (starts_with(t, "-")) {
@@ -108,15 +109,15 @@ export func ll_float_text(text) {
     return t
 }
 
-export func ll_float(text) {
+export func ll_float(text: string) -> string {
     return ll_const(3, "bitcast (double {ll_float_text(text)} to i64)")
 }
 
-export func ll_char(code) {
+export func ll_char(code: int) -> string {
     return ll_const(4, "{code}")
 }
 
-export func ll_bool(b) {
+export func ll_bool(b: bool) -> string {
     if (b) {
         return ll_const(1, "1")
     }
@@ -124,23 +125,22 @@ export func ll_bool(b) {
 }
 
 # The K[] slot for a string literal, as a constant pointer expression.
-export func ll_kstr(text) {
-    let idx = map_get(LL_K_IDS, text, null)
-    if (idx == null) {
-        idx = len(LL_KSTRS)
+export func ll_kstr(text: string) -> string {
+    if (not map_has(LL_K_IDS, text)) {
+        LL_K_IDS[text] = len(LL_KSTRS)
         append(LL_KSTRS, text)
-        LL_K_IDS[text] = idx
     }
+    let idx = LL_K_IDS[text]
     return "getelementptr inbounds (%LV, ptr @K, i64 {idx})"
 }
 
 # The inline cache for one field read, as a constant pointer expression into @ic (two words).
-export func ll_ic() {
+export func ll_ic() -> string {
     append(LL_ICS, 0)
     return "getelementptr inbounds (i64, ptr @ic, i64 {(len(LL_ICS) - 1) * 2})"
 }
 
-export func ll_use_builtin(name) {
+export func ll_use_builtin(name: string) {
     if (not map_has(LL_BUILTIN_IDS, name)) {
         LL_BUILTIN_IDS[name] = true
         append(LL_BUILTINS, name)
@@ -148,7 +148,7 @@ export func ll_use_builtin(name) {
 }
 
 # Builtins called with their own LvFunc (nf_<name>) need a global for it.
-export func ll_use_native(name) {
+export func ll_use_native(name: string) {
     ll_use_builtin(name)
     if (not map_has(LL_NATIVE_IDS, name)) {
         LL_NATIVE_IDS[name] = true
@@ -159,43 +159,47 @@ export func ll_use_native(name) {
 # Set by --gc=lowmem: the program asks the collector to use less memory and accepts a lower speed.
 export const GC_LOWMEM = [false]
 
-# Functions that calls can reach directly, by "<module id>:<name>": {"node": the func node, "sigs": the
-# signatures calls were found for, "sym": the name part of the LLVM symbols}. Filled by ll_spec.zu.
-export const SPECS = {}
+# A function that calls can reach directly: its func node, the signatures calls were found for, and the
+# name part of its LLVM symbols.
+export template SpecEntry { node: Node, sigs: map<bool>, sym: string }
+
+# The SpecEntry of each such function, by "<module id>:<name>". Filled by ll_spec.zu.
+export const SPECS: map<SpecEntry> = {}
 
 # Functions the raw-expression code (ll_typed.zu) needs from the statement emitter (emit_llvm.zu), which
 # imports it: ex(n) emits an expression and returns the slot of its value; builtin(name, slots) calls a builtin on
 # boxed arguments and returns the slot of the result.
-export const HOOKS = {"generic_call": null, "ex": null, "builtin": null}
+export const HOOKS: map<function> = {"generic_call": null, "ex": null, "builtin": null}
 
-export func ll_new_ctx(is_main) {
+export func ll_new_ctx(is_main: bool) -> Ctx {
     return Ctx([], [], [{}], [[]], {}, {}, is_main, -1, [], false, [], false, false, false, 0, {}, null, false, {}, [])
 }
 
 # Debug information, for zue build -g: a line table, so that gdb, valgrind and perf name the Zue
 # line and function. Metadata nodes are numbered from 5 (0 to 4 are fixed, see dbg_module_text).
-# DBG is a map so that every module sees the same one.
-export const DBG = {"on": false, "next": 5, "lines": [], "files": {}}
+# DBG is shared, so that every module sees the same one: whether it is on, the next node number, the
+# metadata lines and the node of each file.
+template DbgState { on: bool, next: int, lines: list<string>, files: map<int> }
+export const DBG = DbgState(false, 5, [], {})
 
 export func dbg_enable() {
     DBG.on = true
 }
 
-func dbg_id() {
+func dbg_id() -> int {
     let id = DBG.next
     DBG.next = id + 1
     return id
 }
 
-func dbg_quote(text) {
+func dbg_quote(text: string) -> string {
     return replace(replace(text, "\\", "\\\\"), "\"", "\\\"")
 }
 
 # The metadata node for the file path, made on first use.
-func dbg_file(path) {
-    let known = map_get(DBG.files, path, null)
-    if (known != null) {
-        return known
+func dbg_file(path: string) -> int {
+    if (map_has(DBG.files, path)) {
+        return DBG.files[path]
     }
     let id = dbg_id()
     append(DBG.lines, "!{id} = !DIFile(filename: \"{dbg_quote(path)}\", directory: \".\")")
@@ -204,7 +208,7 @@ func dbg_file(path) {
 }
 
 # Starts the debug scope of a function: returns its node, or 0 when debug information is off.
-export func dbg_function(name, line) {
+export func dbg_function(name: string, line: int) -> int {
     if (not DBG.on) {
         return 0
     }
@@ -215,26 +219,25 @@ export func dbg_function(name, line) {
 }
 
 # ", !dbg !N" for the position p in the running function, or "" when there is no debug information.
-export func dbg_at(p) {
+export func dbg_at(p: int) -> string {
     let c = ST.ctx
     if (c.dbg == 0) {
         return ""
     }
     let key = "{p}"
-    let known = map_get(c.dbg_locs, key, null)
-    if (known == null) {
+    if (not map_has(c.dbg_locs, key)) {
         let line = p % 4194304
         let col = (p / 4194304) % 4096
-        known = dbg_id()
-        append(DBG.lines, "!{known} = !DILocation(line: {line}, column: {col}, scope: !{c.dbg})")
-        c.dbg_locs[key] = known
+        let id = dbg_id()
+        append(DBG.lines, "!{id} = !DILocation(line: {line}, column: {col}, scope: !{c.dbg})")
+        c.dbg_locs[key] = id
     }
-    return ", !dbg !{known}"
+    return ", !dbg !{c.dbg_locs[key]}"
 }
 
 # The metadata that goes at the end of the module.
-export func dbg_module_text() {
-    let out = ["!llvm.dbg.cu = !\{!0}", "!llvm.module.flags = !\{!3}"]
+export func dbg_module_text() -> string {
+    let out: list<string> = ["!llvm.dbg.cu = !\{!0}", "!llvm.module.flags = !\{!3}"]
     append(out, "!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !{dbg_file(ST.src_file)}, producer: \"zue\", isOptimized: false, runtimeVersion: 0, emissionKind: LineTablesOnly)")
     append(out, "!1 = !DIFile(filename: \"{dbg_quote(ST.src_file)}\", directory: \".\")")
     append(out, "!2 = !DISubroutineType(types: !4)")
@@ -248,13 +251,13 @@ export func dbg_module_text() {
 
 # Records the position p where an error can be raised: one store, which also carries the line table
 # entry when debug information is on.
-export func ll_store_pos(p) {
+export func ll_store_pos(p: int) {
     ll("store i64 {p}, ptr @lv_pos{dbg_at(p)}")
 }
 
 # One instruction. After a terminator a fresh block starts first, so unreachable code
 # after return, break or continue is still valid IR.
-export func ll(text) {
+export func ll(text: string) {
     let c = ST.ctx
     if (c.dead) {
         c.dead = false
@@ -263,29 +266,29 @@ export func ll(text) {
     append(c.out, "  {text}")
 }
 
-export func ll_label(name) {
+export func ll_label(name: string) {
     let c = ST.ctx
     c.dead = false
     c.line = -1
     append(c.out, "{name}:")
 }
 
-export func ll_br(label) {
+export func ll_br(label: string) {
     ll("br label %{label}")
     ST.ctx.dead = true
 }
 
-export func ll_condbr(cond, yes, no) {
+export func ll_condbr(cond: string, yes: string, no: string) {
     ll("br i1 {cond}, label %{yes}, label %{no}")
     ST.ctx.dead = true
 }
 
-export func ll_new_label(prefix) {
+export func ll_new_label(prefix: string) -> string {
     return "{prefix}{uid()}"
 }
 
 # An LV slot for a temporary value, allocated in the entry block.
-export func ll_slot() {
+export func ll_slot() -> string {
     if (ST.ctx.pooling) {
         return ll_temp_alloca("%LV")
     }
@@ -300,7 +303,7 @@ export func ll_slot() {
 # LLVM's SROA pass takes time for each slot in proportion to the size of the function, which made
 # long scripts quadratic (11,200 lines took 23 s). Slots that outlive their statement are made with
 # ll_alloca (variables, box memory) or taken out of the pool with ll_keep (deferred call arguments).
-export func ll_temp_alloca(kind_text) {
+export func ll_temp_alloca(kind_text: string) -> string {
     if (not ST.ctx.pooling) {
         return ll_alloca(kind_text)
     }
@@ -315,8 +318,8 @@ export func ll_temp_alloca(kind_text) {
 }
 
 # Keeps the temporary slot name for the rest of the function: it is not given back to the pool.
-export func ll_keep(name) {
-    let kept = []
+export func ll_keep(name: string) {
+    let kept: list<list<string>> = []
     for (let t in ST.ctx.taken) {
         if (t[1] != name) {
             append(kept, t)
@@ -336,24 +339,24 @@ export func ll_release_temps() {
     ST.ctx.taken = []
 }
 
-export func ll_alloca(kind_text) {
+export func ll_alloca(kind_text: string) -> string {
     let name = "%a{uid()}"
     append(ST.ctx.allocas, "  {name} = alloca {kind_text}, align 8")
     return name
 }
 
-export func ll_reg() {
+export func ll_reg() -> string {
     return "%r{uid()}"
 }
 
 # Like ll_copy, for a cell in a heap object. The write barrier of the collector sees the value that is
 # being overwritten (see zue_gc.zu).
-export func ll_copy_heap(dst, src) {
+export func ll_copy_heap(dst: string, src: string) {
     ll("call void @lv_wb_cell(ptr {dst})")
     ll_copy(dst, src)
 }
 
-export func ll_copy(dst, src) {
+export func ll_copy(dst: string, src: string) {
     let r = ll_reg()
     # two 8-byte moves: a 16-byte vector load right after two 8-byte stores cannot be forwarded
     # by the CPU and stalls
@@ -372,7 +375,7 @@ export func ll_copy(dst, src) {
 # are the line, 22-33 the column, 34-45 the length on the first line, 46-57 the offset of the operator
 # from the column (0 when the node has none) and 58-59 the operator length minus one. A node with no
 # column, or one too far along its line, is only a line.
-export func ll_pos(n) {
+export func ll_pos(n: Node) -> int {
     let line = n.line
     if (line > 4194303) {
         return 0
@@ -403,7 +406,7 @@ export func ll_pos(n) {
 }
 
 # The place that runs from the start of node a to the end of node b plus extra bytes (a closing bracket).
-export func ll_pos_range(a, b, extra) {
+export func ll_pos_range(a: Node, b: Node, extra: int) -> int {
     let line = a.line
     if (a.col == 0 or a.col > 4095 or line > 4194303) {
         return line
@@ -423,17 +426,17 @@ export func ll_pos_range(a, b, extra) {
 
 # Records where the next operations run, so a runtime error can name the exact text. The store is
 # left out when the place is the one already recorded.
-export func ll_mark(n) {
+export func ll_mark(n: Node) {
     ll_mark_pos(ll_pos(n))
 }
 
 # The same for a statement: only its line is recorded, so that an error no operation inside it claims
 # is not drawn under the wrong text.
-export func ll_mark_line(n) {
+export func ll_mark_line(n: Node) {
     ll_mark_pos(n.line)
 }
 
-export func ll_mark_pos(p) {
+export func ll_mark_pos(p: int) {
     if (ST.ctx.line != p) {
         ll_store_pos(p)
         ST.ctx.line = p
@@ -441,7 +444,7 @@ export func ll_mark_pos(p) {
 }
 
 # Calls a pointer-ABI wrapper that writes its result through the first argument.
-export func ll_call_out(fn_name, args_text) {
+export func ll_call_out(fn_name: string, args_text: string) -> string {
     let t = ll_slot()
     if (args_text == "") {
         ll("call void @{fn_name}(ptr {t})")
@@ -452,7 +455,7 @@ export func ll_call_out(fn_name, args_text) {
 }
 
 # Calls a runtime function that returns an LV by value and stores the result in a slot.
-export func ll_call_lv(callee, args_text) {
+export func ll_call_lv(callee: string, args_text: string) -> string {
     let r = ll_reg()
     ll("{r} = call %LV @{callee}({args_text})")
     let t = ll_slot()
@@ -460,11 +463,11 @@ export func ll_call_lv(callee, args_text) {
     return t
 }
 
-export func ll_gname(name) {
+export func ll_gname(name: string) -> string {
     return "@{ST.mod.prefix}{name}"
 }
 
-export func ll_reg_global(name) {
+export func ll_reg_global(name: string) {
     if (not map_has(ST.mod.globals, name)) {
         ST.mod.globals[name] = true
         append(LL_GLOBALS, "{ll_gname(name)} = internal global %LV \{ i64 17, i64 0 }")
@@ -472,7 +475,7 @@ export func ll_reg_global(name) {
 }
 
 # An array of LVs holding copies of the given slots; returns a pointer to its first element.
-export func ll_args_array(items) {
+export func ll_args_array(items: list<string>) -> string {
     if (len(items) == 0) {
         return "null"
     }

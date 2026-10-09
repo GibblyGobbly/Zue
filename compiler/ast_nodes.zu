@@ -31,7 +31,7 @@ export template Node {
     keys: list<string>, vals: list<Node>, parts: list<Node>, size: Node, lo: Node, hi: Node, cases: list<Node>,
     dflt: list<Node>, is_template: bool, is_bloc: bool, fields: list<string>, ftypes: list<string>, path: string,
     names: list<string>, col: int, eline: int, ecol: int, nspan: Span, ospan: Span, aspan: Span, fspan: Span,
-    pspan: Span, tspan: Span, nspans: list, pspans: list, tspans: list, fspans: list, rtype: string, rspan: Span
+    pspan: Span, tspan: Span, nspans: list<Span>, pspans: list<Span>, tspans: list<Span>, fspans: list<Span>, rtype: string, rspan: Span
 }
 
 # A node of kind k from token (or node) st to en, every other field empty.
@@ -51,7 +51,7 @@ func sp(x) {
     return span_at(x.line, x.col, x.eline, x.ecol)
 }
 
-export const NODE_FIELDS = {
+export const NODE_FIELDS: map<list<string>> = {
     "num": ["v", "ads", "ad"], "float": ["v"], "str": ["v"], "char": ["v"], "bool": ["v"], "text": ["v"],
     "id": ["name"],
     "tmpl": ["parts"],
@@ -85,7 +85,7 @@ export const NODE_FIELDS = {
 }
 
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
-export const OPTIONAL_FIELDS = ["rtype", "ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad", "orelse", "names"]
+export const OPTIONAL_FIELDS: list<string> = ["rtype", "ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad", "orelse", "names"]
 
 # The constructors take st and en, the first and the last token of the node (a node can stand for
 # either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and

@@ -10,14 +10,14 @@
 # still holds the very closure the specialized functions were made for (see tex_spec_call in ll_typed.zu).
 
 use { Node, nodes_under } from "ast_nodes.zu"
-use { LL_GLOBALS, SPECS } from "ll_state.zu"
+use { LL_GLOBALS, SPECS, SpecEntry } from "ll_state.zu"
 use { ST } from "state.zu"
 
 # zue build --no-spec turns the direct calls off, to compare a program with and without them.
 export const SPEC_ON = [true]
 
 # The key under which the function name of the current module is registered.
-export func spec_key_of(name) {
+export func spec_key_of(name: string) -> string {
     return "{ST.mod.id}:{name}"
 }
 
@@ -27,7 +27,7 @@ export const SPEC_MAX_DEPTH = 100000
 export const SPEC_FRAME_SIZE = 24
 
 # The machine type of a kind.
-export func machine_type(kind) {
+export func machine_type(kind: string) -> string {
     if (kind == "float") {
         return "double"
     }
@@ -37,9 +37,12 @@ export func machine_type(kind) {
     return "i64"
 }
 
-# "int,float>bool" as {"args": ["int", "float"], "res": "bool"}, or null when it is not a signature of
-# scalar kinds with the number of arguments given.
-export func parse_sig(key, nargs) {
+# A signature of scalar kinds: the kinds of the arguments and of the result.
+export template Sig { args: list<string>, res: string }
+
+# "int,float>bool" as Sig(["int", "float"], "bool"), or null when it is not a signature of scalar kinds
+# with the number of arguments given.
+export func parse_sig(key: string, nargs: int) -> Sig {
     let parts = split(key, ">")
     if (len(parts) != 2) {
         return null
@@ -56,18 +59,18 @@ export func parse_sig(key, nargs) {
     if (parts[1] != "int" and parts[1] != "float" and parts[1] != "bool") {
         return null
     }
-    return {"args": kinds, "res": parts[1]}
+    return Sig(kinds, parts[1])
 }
 
 # The symbol of the function for one signature. The key goes in unchanged (a quoted LLVM name may hold
 # "," and ">"), so no two signatures or functions share a symbol: f with int,int>int and f_int with int>int
 # once both became sp_g_f_int_int_to_int.
-export func spec_symbol(entry, key) {
+export func spec_symbol(entry: SpecEntry, key: string) -> string {
     return "@\"sp.{entry.sym}.{key}\""
 }
 
 # The global that holds the closure the specialized functions belong to.
-export func spec_closure_global(entry) {
+export func spec_closure_global(entry: SpecEntry) -> string {
     return "@spc_{entry.sym}"
 }
 
@@ -105,12 +108,12 @@ func collect_sigs(xs: list<Node>, found: map<map<bool>>) {
 # Registers the specializable functions of the module whose statements are stmts. A function qualifies when
 # it is the only top-level statement that declares its name and has no default values. Its call sites
 # are looked for in the whole module.
-export func spec_prescan(stmts) {
+export func spec_prescan(stmts: list<Node>) {
     if (not SPEC_ON[0]) {
         return null
     }
-    let declared = {}
-    let defs = {}
+    let declared: map<int> = {}
+    let defs: map<Node> = {}
     for (let s in stmts) {
         let name = null
         if (s.k == "func" and s.name != null) {
@@ -139,7 +142,7 @@ export func spec_prescan(stmts) {
             }
         }
     }
-    let found = {}
+    let found: map<map<bool>> = {}
     for (let name in map_keys(defs)) {
         if (declared[name] == 1) {
             let plain = true
@@ -159,7 +162,7 @@ export func spec_prescan(stmts) {
     collect_sigs(stmts, found)
     for (let name in map_keys(found)) {
         let node = defs[name]
-        let sigs = {}
+        let sigs: map<bool> = {}
         let count = 0
         for (let key in map_keys(found[name])) {
             if (parse_sig(key, len(node.params)) != null) {
@@ -168,7 +171,7 @@ export func spec_prescan(stmts) {
             }
         }
         if (count > 0) {
-            let entry = {"node": node, "sigs": sigs, "sym": "{ST.mod.prefix}{name}"}
+            let entry = SpecEntry(node, sigs, "{ST.mod.prefix}{name}")
             SPECS[spec_key_of(name)] = entry
             append(LL_GLOBALS, "{spec_closure_global(entry)} = internal global i64 0")
         }

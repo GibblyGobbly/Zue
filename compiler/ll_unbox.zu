@@ -13,7 +13,7 @@ use { Var } from "state.zu"
 use { ll, ll_alloca, ll_cstr, ll_new_label, ll_reg, ll_label, ll_condbr, ll_br, ll_slot } from "ll_state.zu"
 
 # The runtime tag of each scalar kind.
-export func tag_of(kind) {
+export func tag_of(kind: string) -> int {
     if (kind == "bool") {
         return 1
     }
@@ -38,7 +38,7 @@ export func uses_address(xs: list<Node>) -> bool {
 }
 
 # A variable record for a scalar of the given kind; its storage is an alloca of the machine type.
-export func new_typed_var(name, kind) {
+export func new_typed_var(name: string, kind: string) -> Var {
     let machine = "i64"
     if (kind == "float") {
         machine = "double"
@@ -47,7 +47,7 @@ export func new_typed_var(name, kind) {
 }
 
 # The variable's current raw value as an SSA operand.
-export func ty_load(v) {
+export func ty_load(v: Var) -> string {
     let r = ll_reg()
     if (v.ty == "float") {
         ll("{r} = load double, ptr {v.c}")
@@ -62,7 +62,7 @@ export func ty_load(v) {
 }
 
 # Stores a raw SSA operand (i64, double or i1 by the variable's kind).
-export func ty_store(v, raw) {
+export func ty_store(v: Var, raw: string) {
     if (v.ty == "float") {
         let clean = ll_reg()
         ll("{clean} = fadd double {raw}, 0.0")
@@ -77,7 +77,7 @@ export func ty_store(v, raw) {
 }
 
 # An LV slot holding the raw value.
-export func box_raw(kind, raw) {
+export func box_raw(kind: string, raw: string) -> string {
     let t = ll_slot()
     ll("store i64 {tag_of(kind)}, ptr {t}")
     let p = ll_reg()
@@ -100,7 +100,7 @@ export func box_raw(kind, raw) {
 
 # The raw value of the LV in slot, which must have the tag of kind; any other tag is a runtime error
 # naming the variable.
-export func unbox_checked(slot, kind, name) {
+export func unbox_checked(slot: string, kind: string, name: string) -> string {
     let tag = ll_reg()
     ll("{tag} = load i64, ptr {slot}")
     let p = ll_reg()

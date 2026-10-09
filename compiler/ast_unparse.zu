@@ -6,11 +6,12 @@
 # must give the same tree as the original (see tools/check_round_trip.sh).
 
 use { cut } from "ranges.zu"
+use { Node } from "ast_nodes.zu"
 
 let PRINTABLE = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz\{|}~"
 
 # The text of a string value with the escapes the lexer reads back.
-func escape_text(s) {
+func escape_text(s: string) -> string {
     let out: list<string> = []
     for (let ch in s) {
         let c = code(ch)
@@ -35,7 +36,7 @@ func escape_text(s) {
     return join(out, "")
 }
 
-func char_literal(code) {
+func char_literal(code: int) -> string {
     if (code == 10) {
         return "'\\n'"
     }
@@ -60,11 +61,11 @@ func char_literal(code) {
     return "'?'"
 }
 
-func pad(depth) {
+func pad(depth: int) -> string {
     return repeat("    ", depth)
 }
 
-func exprs(list) {
+func exprs(list: list<Node>) -> string {
     let parts = []
     for (let e in list) {
         append(parts, expr(e))
@@ -72,7 +73,7 @@ func exprs(list) {
     return join(parts, ", ")
 }
 
-func params_text(n) {
+func params_text(n: Node) -> string {
     let parts: list<string> = []
     for (let i = 0; i < len(n.params); i++) {
         let pname = n.params[i]
@@ -88,7 +89,7 @@ func params_text(n) {
     return join(parts, ", ")
 }
 
-func func_text(n, depth) {
+func func_text(n: Node, depth: int) -> string {
     let head = "func"
     if (n.name != null) {
         head = "func {n.name}"
@@ -100,7 +101,7 @@ func func_text(n, depth) {
     return "{head}({params_text(n)}){result} \{\n{block_text(n.body, depth + 1)}{pad(depth)}}"
 }
 
-func expr(n) {
+func expr(n: Node) -> string {
     let k = n.k
     if (k == "num") {
         if (starts_with(n.v, "-")) {
@@ -203,7 +204,7 @@ func expr(n) {
     return "<unknown {k}>"
 }
 
-func let_text(n, depth = 0) {
+func let_text(n: Node, depth: int = 0) -> string {
     let word = "let"
     if (n.const_decl == true) {
         word = "const"
@@ -225,7 +226,7 @@ func let_text(n, depth = 0) {
     return "{head} {target} = {expr(n.init)}"
 }
 
-func block_text(stmts, depth) {
+func block_text(stmts: list<Node>, depth: int) -> string {
     let out = ""
     for (let s in stmts) {
         out = out + stmt(s, depth)
@@ -233,7 +234,7 @@ func block_text(stmts, depth) {
     return out
 }
 
-func if_text(n, depth) {
+func if_text(n: Node, depth: int) -> string {
     let cond = ""
     if (n.cond.k == "let") {
         cond = "let {n.cond.name} = {expr(n.cond.init)}"
@@ -250,7 +251,7 @@ func if_text(n, depth) {
     return "{text} else \{\n{block_text(n.els, depth + 1)}{pad(depth)}}"
 }
 
-func simple_text(n) {
+func simple_text(n: Node) -> string {
     if (n.k == "let") {
         return let_text(n)
     }
@@ -263,7 +264,7 @@ func simple_text(n) {
     return expr(n)
 }
 
-func stmt_body(n, depth) {
+func stmt_body(n: Node, depth: int) -> string {
     let k = n.k
     if (k == "let") {
         return let_text(n, depth)
@@ -397,10 +398,10 @@ func stmt_body(n, depth) {
     return expr(n)
 }
 
-func stmt(n, depth) {
+func stmt(n: Node, depth: int) -> string {
     return "{pad(depth)}{stmt_body(n, depth)}\n"
 }
 
-export func unparse_program(stmts) {
+export func unparse_program(stmts: list<Node>) -> string {
     return block_text(stmts, 0)
 }
