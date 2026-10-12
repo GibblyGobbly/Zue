@@ -22,7 +22,7 @@
 use { read_file, split_lines } from "util.zu"
 use { parse_source } from "parser.zu"
 use { compile_program_ll } from "emit_llvm.zu"
-use { compile_native } from "emit_native.zu"
+use { NativeFile, compile_native } from "emit_native.zu"
 use { ST } from "state.zu"
 use { dump_program } from "ast_dump.zu"
 use { unparse_program } from "ast_unparse.zu"
@@ -271,7 +271,7 @@ func unparse_main(a) {
 
 # zue --native a.zu b.zu ... -o out.ll: compiles runtime files (emit_native.zu).
 func native_main(a) {
-    let files: list<map> = []
+    let files: list<NativeFile> = []
     let out_path = ""
     let i = 1
     while (i < len(a)) {
@@ -282,7 +282,7 @@ func native_main(a) {
             ST.src_file = a[i]
             let text = read_file(a[i])
             ST.src_lines = split_lines(text)
-            append(files, {"path": a[i], "stmts": parse_source(text)})
+            append(files, NativeFile(a[i], parse_source(text)))
             i += 1
         }
     }
