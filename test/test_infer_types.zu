@@ -94,3 +94,14 @@ let mode = {"name": "text"}
 print(mode.name + "!")
 let f = open("no_such_file_here.txt", "r")
 print(f == null)
+# CASE a parameter given null: the code after if (x == null) { return ... } is not checked for it
+# strict
+template Pt { x: int, y: int }
+func sum_of(p) {
+    if (p == null) {
+        return 0
+    }
+    return p.x + p.y
+}
+print(sum_of(null))
+print(sum_of(Pt(2, 3)))

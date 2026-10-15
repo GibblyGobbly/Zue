@@ -2561,10 +2561,14 @@ func runtime_name(t: string) {
 
 # For if (type(x) == "string") with the type of x known: "then" when that branch cannot run, "else" when
 # the other cannot, else null. A function checked for a list argument then does not count a return
-# meant for a string. Also with != and the two sides swapped.
+# meant for a string. Also with != and the two sides swapped, and for x == null (see null_branch).
 func dead_branch(c: Node) {
     if (c.k != "bin" or (c.op != "==" and c.op != "!=")) {
         return null
+    }
+    let nb = null_branch(c)
+    if (nb != null) {
+        return nb
     }
     let call = c.l
     let lit = c.r
@@ -2591,6 +2595,27 @@ func dead_branch(c: Node) {
         same = not same
     }
     if (same) {
+        return "else"
+    }
+    return "then"
+}
+
+# For x == null (or !=, or the sides swapped) where x is a variable that holds null here, as a parameter
+# given null by a call does: the branch that cannot run, as dead_branch says, else null.
+func null_branch(c: Node) {
+    let v = c.l
+    let other = c.r
+    if (v.k == "id" and v.name == "null") {
+        v = c.r
+        other = c.l
+    }
+    if (v.k != "id" or other.k != "id" or other.name != "null" or lookup("null") != null) {
+        return null
+    }
+    if (lookup(v.name) != "null") {
+        return null
+    }
+    if (c.op == "==") {
         return "else"
     }
     return "then"

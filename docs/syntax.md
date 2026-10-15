@@ -541,6 +541,8 @@ a `Type Error` with the line, and the program is not built.
   2
   6
   ```
+- A parameter given `null` by a call: the code after `if (p == null) { return ... }` is not checked for that
+  call, as it cannot run (`p != null` and the sides swapped too).
 - A function's body is checked after the other statements of its block, so it knows a variable
   declared below it (a function at the top of a file that uses a variable declared further down).
 - `m.key` on a `map<T>` is a `T`, and `open(path, mode)` gives a file (or `null` when it cannot open it).
