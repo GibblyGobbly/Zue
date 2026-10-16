@@ -265,7 +265,7 @@ fix: Pass exactly the arguments that the function takes.
 
 == E0204
 title: A value of the wrong type is stored
-match: cannot assign | cannot store | cannot append | must be a bool, got | variable ' | store() cannot change
+match: cannot assign | cannot store | cannot append | must be a bool, got | variable ' | store() cannot change | cannot put | the default value of parameter
 text: A variable keeps the type of its first value, and a list or typed field holds one type.
 example:
     let n = 1

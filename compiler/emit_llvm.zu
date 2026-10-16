@@ -57,13 +57,13 @@ let LL_INT_COMPARE: map<string> = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sl
 # (ad "dyn", see adapt_to in check.zu): next to a float it is that float, next to anything else the int.
 # x when it is set, else y.
 func first_set(x: string, y: string) -> string {
-    if (x != null) {
+    if (x != "") {
         return x
     }
     return y
 }
 
-func ll_binop(op: string, a: string, b: string, pos: int, alit: string = null, blit: string = null) -> string {
+func ll_binop(op: string, a: string, b: string, pos: int, alit: string = "", blit: string = "") -> string {
     let arith = map_get(LL_INT_ARITH, op, null)
     let compare = map_get(LL_INT_COMPARE, op, null)
     let divide = map_get(LL_INT_DIVIDE, op, null)
@@ -155,9 +155,9 @@ func ll_binop(op: string, a: string, b: string, pos: int, alit: string = null, b
         ll("{fa} = icmp eq i64 {ta}, 3")
         ll("{fb} = icmp eq i64 {tb}, 3")
         let fboth = ll_reg()
-        if (blit != null) {
+        if (blit != "") {
             ll("{fboth} = and i1 {fa}, true")
-        } else if (alit != null) {
+        } else if (alit != "") {
             ll("{fboth} = and i1 {fb}, true")
         } else {
             ll("{fboth} = and i1 {fa}, {fb}")
@@ -232,9 +232,9 @@ func ll_binop(op: string, a: string, b: string, pos: int, alit: string = null, b
     let res_tag = ll_reg()
     let res_val = ll_reg()
     let res_ptr = ll_reg()
-    if (alit != null or blit != null) {
+    if (alit != "" or blit != "") {
         let side = 2
-        if (alit != null) {
+        if (alit != "") {
             side = 1
         }
         ll("{sres} = call %LV @lvv_binop_lit(i64 {LL_LIT_OPS[op]}, i64 {side}, i64 {ta}, i64 {sa}, i64 {tb}, i64 {sb})")
@@ -466,9 +466,9 @@ func adapt_dyn_scalar(e: Node, v: string, like: string) -> string {
 
 # The float constant of an undecided whole-number literal operand for ll_binop, or null. A literal with no
 # exact float, or + - * of literals, takes the general path (adapt_dyn_scalar) before the operator instead.
-func dyn_float_const(e: Node) {
+func dyn_float_const(e: Node) -> string {
     if (e.k != "num" or not dyn_literal(e) or decided_in_spec(e) or not small_whole(e.v)) {
-        return null
+        return ""
     }
     return ll_float("{e.v}.0")
 }
@@ -673,10 +673,10 @@ func ex_bin(n: Node) -> string {
     }
     let alit = dyn_float_const(n.l)
     let blit = dyn_float_const(n.r)
-    if (alit == null) {
+    if (alit == "") {
         a = adapt_dyn_scalar(n.l, a, b)
     }
-    if (blit == null) {
+    if (blit == "") {
         b = adapt_dyn_scalar(n.r, b, a)
     }
     let r = ll_binop(n.op, a, b, ll_pos(n), alit, blit)

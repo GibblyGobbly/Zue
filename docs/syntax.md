@@ -517,6 +517,14 @@ a `Type Error` with the line, and the program is not built.
   `list<int>` and `{"a": 1.5}` is a `map<float>`. Reading an item gives the element type, and storing
   or appending another type is an error: after `let xs = [1, 2]`, `xs[0] = "a"` and `append(xs, "a")`
   fail. A list of mixed items is a plain `list` whose items are not checked.
+- A list or map literal written where a typed one is wanted must have items of that type:
+  `let xs: list<int> = [1, null]` and `[1, "a"]` are errors, and `let ys: list<float> = [1.5, 2]`
+  holds `[1.5, 2.0]`. A value of unknown type stored or appended into a typed list or map needs `as`:
+  `xs[0] = person[1] as int`.
+- The default value of a typed parameter must have its type: `func f(b: list<int> = ["a"])` is an
+  error, and `func f(b: float = 2)` gives `2.0`.
+- A function declared inside another is checked for each call of its parent, with the types it takes
+  from that call.
 - A list that starts empty takes the type of the first value appended to it: after `let xs = []` and
   `append(xs, 1)`, `xs` is a `list<int>`. A value of another type appended or stored later makes it a list
   of mixed items. Write the type (`let xs: list<int> = []`) to have such a value rejected instead.

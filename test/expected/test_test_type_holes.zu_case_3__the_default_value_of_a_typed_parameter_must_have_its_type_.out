@@ -1,0 +1,8 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 1:
+  the default value of parameter 'b' must be a list<int>, got list<string>
+
+   1 | func f(b: list<int> = ["a"]) {
+     |           ---------   ^^^^^ expected list<int>, found list<string>
+     |           |
+     |           parameter 'b' is list<int>
+

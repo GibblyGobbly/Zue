@@ -1,0 +1,7 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 1:
+  cannot put string in a list<int>
+
+   1 | let xs: list<int> = [1, "a"]
+     |                         ^^^ this is string
+
+Hint: A list<int> holds only int items

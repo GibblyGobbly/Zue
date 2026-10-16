@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Holes in the type checker found when phases 1 to 4 were checked again (F1 to F11).
+# CASE a nested function is checked for the captured types of each call of its parent
+func outer(a) {
+    func inner() {
+        return a
+    }
+    return inner()
+}
+let r = outer(2)
+let q = outer(2.5)
+print(r + 1, q + 1.5)
+# CASE a nested function given a wrong captured type is an error
+func outer(a) {
+    func inner(b) {
+        return a + b
+    }
+    return inner(1)
+}
+print(outer(2))
+print(outer("s"))
+# CASE the default value of a typed parameter must have its type
+func f(b: list<int> = ["a"]) {
+    return b
+}
+print(f())
+# CASE a whole-number default of a float parameter is a float
+func f(b: float = 2) {
+    return b * 1.5
+}
+func g(n: int = 3) -> int {
+    return n * 2
+}
+template P { x: int }
+func h(p: P = null) {
+    return p
+}
+print(f(), g(), h())
+# CASE a value of unknown type stored in a typed list needs as
+let person = ["Ann", 30]
+let xs: list<int> = [1, 2]
+xs[0] = person[0]
+# CASE a value of unknown type appended to a typed list needs as
+let person = ["Ann", 30]
+let xs: list<int> = [1, 2]
+append(xs, person[1])
+# CASE a value of unknown type stored in a typed map needs as
+let person = ["Ann", 30]
+let m: map<int> = {"a": 1}
+m["b"] = person[1]
+# CASE a value converted with as goes into a typed list
+let person = ["Ann", 30]
+let xs: list<int> = [1, 2]
+xs[0] = person[1] as int
+append(xs, person[1] as int)
+print(xs)
+# CASE a typed list literal cannot hold null
+let xs: list<int> = [1, null]
+# CASE a typed list literal cannot hold an item of another type
+let xs: list<int> = [1, "a"]
+# CASE whole numbers in a typed float list or map literal are floats
+let ys: list<float> = [1.5, 2]
+let m: map<float> = {"a": 1.5, "b": 2}
+let zz: list<list<int>> = [[1], [2, 3]]
+print(ys, m, zz)

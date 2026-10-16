@@ -599,11 +599,53 @@ func is_int_tree(n: Node) -> bool {
 
 # The type of expression n (of type et) once it is adapted to the slot type want.
 func adapt_expr(n: Node, et: string, want: string) -> string {
-    if (want == "any" or fits_slot(et, want)) {
+    if (want == "any") {
         return et
     }
-    adapt_to(n, want)
-    return ck_expr(n)
+    # a list or map literal is adapted item by item even when its plain type fits ([1.5, 2] is a list)
+    let literal = (n.k == "list" or n.k == "map") and elem_of(want) != null
+    if (literal or not fits_slot(et, want)) {
+        adapt_to(n, want)
+        et = ck_expr(n)
+    }
+    if (fits_slot(et, want)) {
+        ck_literal_items(n, want)
+    }
+    return et
+}
+
+# A list or map written out where a typed one is wanted: each item must be of the element type. (Such a
+# literal of mixed items has the plain type list or map, which fits any list or map type.)
+func ck_literal_items(n: Node, want: string) {
+    let e = elem_of(want)
+    if (e == null or e == "any") {
+        return null
+    }
+    let items = n.items
+    if (n.k == "map") {
+        items = n.vals
+    } else if (n.k != "list") {
+        return null
+    }
+    for (let item in items) {
+        let it = ck_expr(item)
+        if (it == "any") {
+            strict_known(it, item, "an item of this {want}")
+        } else if (it == "null" and not is_scalar(e) and e != "char") {
+            # an item of a type whose values may be empty (string, list, map, function, template)
+            continue
+        } else if (not fits_slot(it, e)) {
+            let d = fail_node(item, "cannot put {describe(it)} in a {want}")
+            diag_text(d, "this is {describe(it)}")
+            let how = convert_hint(e, it, item)
+            if (len(how) == 0) {
+                how = "A {want} holds only {e} items"
+            }
+            diag_hint(d, how)
+        } else {
+            ck_literal_items(item, e)
+        }
+    }
 }
 
 # The checker type for a type written in the source. An unknown name is an error when strict, else any.
@@ -1529,6 +1571,9 @@ func ck_builtin(n: Node, name: string, argtypes: list<string>) -> string {
             return lookup(n.args[0].name)
         }
         if (kind_of(first) == "list" and el != null) {
+            if (el != "any") {
+                strict_known(argtypes[1], n.args[1], "the value appended to {first}")
+            }
             let vt = adapt_expr(n.args[1], argtypes[1], el)
             # a list of a template type may hold empty items, as a field of that type may be empty
             if (not fits_slot(vt, el) and not (vt == "null" and template_or_null([el]) != null)) {
@@ -1780,7 +1825,7 @@ func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call
         }
     }
     let sep = ","
-    let mkey = "{name}({join(types, sep)})"
+    let mkey = "{name}({join(types, sep)}){captured_types(fn, idx)}"
     if (home != null) {
         mkey = "{home.canon}:{mkey}"
     }
@@ -1850,6 +1895,48 @@ func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call
         spec_site(call, fn, idx, types, result)
     }
     return result
+}
+
+# The names a function's body uses, by the place of the function.
+let BODY_NAMES: map<list<string>> = {}
+
+# For a function declared inside another (scope idx above 0), the types of the names its body takes
+# from the enclosing functions, as text for the check's key: the same function checked inside two
+# calls of its parent can see a captured variable with two types, so the two checks are not the same.
+func captured_types(fn: Node, idx: int) -> string {
+    if (idx == 0) {
+        return ""
+    }
+    let key = "{ST.src_file}:{fn.line}:{fn.col}"
+    if (not map_has(BODY_NAMES, key)) {
+        let seen: map<bool> = {}
+        let names: list<string> = []
+        for (let x in nodes_under(fn.body)) {
+            if (x.k == "id" and not map_has(seen, x.name)) {
+                seen[x.name] = true
+                append(names, x.name)
+            }
+        }
+        BODY_NAMES[key] = names
+    }
+    let parts: list<string> = []
+    for (let name in BODY_NAMES[key]) {
+        if (contains(fn.params, name)) {
+            continue
+        }
+        let j = idx
+        while (j >= 1) {
+            if (map_has(SCOPES[j].types, name)) {
+                append(parts, "{name}={SCOPES[j].types[name]}")
+                break
+            }
+            j -= 1
+        }
+    }
+    if (len(parts) == 0) {
+        return ""
+    }
+    return "[{join(parts, ",")}]"
 }
 
 # Whether the body of fn calls name, the name fn has where it is called.
@@ -2109,6 +2196,20 @@ func try_assume(name: string, fn: Node, idx: int, types: list<string>, line: int
     return first
 }
 
+# The default value of typed parameter i of fn (of type dt) must fit the parameter's type want, as an
+# argument must. A whole-number literal becomes a float where the parameter is a float.
+func ck_default(fn: Node, i: int, dt: string, want: string) {
+    let dn = fn.defaults[i]
+    strict_known(dt, dn, "the default value of '{fn.params[i]}'")
+    let at = adapt_expr(dn, dt, want)
+    if (not fits_slot(at, want) and not (at == "null" and template_or_null([want]) != null)) {
+        let d = fail_node(dn, "the default value of parameter '{fn.params[i]}' must be {article(want)} {want}, got {describe(at)}")
+        diag_text(d, "expected {want}, found {describe(at)}")
+        diag_label(d, ptype_span(fn, i), "parameter '{fn.params[i]}' is {want}")
+        diag_hint(d, convert_hint(want, at, dn))
+    }
+}
+
 # A named function is checked for the argument types of each call, so an untyped parameter of it is
 # known where the function is used. A function value (func without a name) is called through
 # variables the checker does not follow, so in strict mode its parameters need types.
@@ -2132,11 +2233,16 @@ func ck_func(n: Node) {
     append(RETS, none)
     push_scope()
     for (let i = 0; i < len(n.params); i++) {
+        let dt = ""
         if (n.defaults[i] != null) {
-            ck_expr(n.defaults[i])
+            dt = ck_expr(n.defaults[i])
         }
         if (n.ptypes != null and n.ptypes[i] != "") {
-            declare(n.params[i], annot(n.ptypes[i], span_or(ptype_span(n, i), n), true), param_span(n, i))
+            let want = annot(n.ptypes[i], span_or(ptype_span(n, i), n), true)
+            if (n.defaults[i] != null) {
+                ck_default(n, i, dt, want)
+            }
+            declare(n.params[i], want, param_span(n, i))
         } else {
             declare(n.params[i], "any", param_span(n, i))
         }
@@ -2549,6 +2655,9 @@ func ck_stmt(n: Node) {
             let fi = field_index(od, n.index.v)
             if (fi >= 0) {
                 let want = object_field_type(od, tt, fi)
+                if (want != "any") {
+                    strict_known(et, n.e, "the value stored in field '{od.fields[fi]}'")
+                }
                 et = adapt_expr(n.e, et, want)
                 let empty_ok = et == "null" and od.is_bloc != true
                 if (want != "any" and et != "any" and not empty_ok and not fits_slot(et, want)) {
@@ -2574,6 +2683,9 @@ func ck_stmt(n: Node) {
             return null
         }
         if (el != null and n.op == null) {
+            if (el != "any") {
+                strict_known(et, n.e, "the value stored in {tt}")
+            }
             et = adapt_expr(n.e, et, el)
             if (not fits_slot(et, el) and not (et == "null" and template_or_null([el]) != null)) {
                 let d = fail_node(n.e, "cannot store {describe(et)} in {tt}")
