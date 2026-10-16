@@ -28,6 +28,7 @@ func pass(v) {
 let m = pass([3, 1.5, 2, 0.5])
 sort(m)
 print(m)
+# test: no-strict
 # CASE strings and chars
 let s = ["pear", "apple", "fig", "banana", "Apple", ""]
 sort(s)
@@ -430,6 +431,7 @@ func pass(v) {
 }
 let l = pass([3, "a", 1])
 sort(l)
+# test: no-strict
 # CASE sort of a long mix of ints and a string
 func pass(v) {
     return [v, null][0]
@@ -440,40 +442,48 @@ for (let i = 0; i < 400; i++) {
 }
 append(l, "x")
 sort(pass(l))
+# test: no-strict
 # CASE sort of booleans
 func pass(v) {
     return [v, null][0]
 }
 let l = pass([true, false])
 sort(l)
+# test: no-strict
 # CASE sort of a number
 func pass(v) {
     return [v, null][0]
 }
 sort(pass(5))
+# test: no-strict
 # CASE sort with two arguments
 func pass(v) {
     return [v, null][0]
 }
 sort(pass([1]), [2])
+# test: no-strict
 # CASE sort with no argument
 func pass(v) {
     return [v, null][0]
 }
 sort()
+# test: no-strict
 # CASE ssort of a string
 func pass(v) {
     return [v, null][0]
 }
 ssort(pass("abc"))
+# test: no-strict
 # CASE ssort with two arguments
 func pass(v) {
     return [v, null][0]
 }
 ssort(pass([1]), [2])
+# test: no-strict
 # CASE ssort of mixed items
 func pass(v) {
     return [v, null][0]
 }
 let l = pass([1, "a"])
 ssort(l)
+# test: no-strict

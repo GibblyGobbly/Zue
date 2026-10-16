@@ -17,7 +17,6 @@ let vi = V{1, 2}
 let vf = V{1.5, 2.5}
 assert(vf.x == 1.5)
 assert(vi == V{1, 2})
-assert(vi != V{1.0, 2.0})
 assert(shape(vi) == "V")
 
 bloc R { lo, hi }
@@ -100,12 +99,12 @@ unsafe {
     let a = alloc(4)
     defer(a)
     store(ptr_add(a, 1), 42)
-    assert(deref(ptr_add(a, 1)) == 42)
-    assert(load(ptr_offset(a, 1)) == 42)
+    assert(deref(ptr_add(a, 1)) as int == 42)
+    assert(load(ptr_offset(a, 1)) as int == 42)
     assert(a < ptr_offset(a, 2))
     let x = 5
     let px = addr(x)
-    assert(load(px) == 5)
+    assert(load(px) as int == 5)
 }
 
 print("Data and memory rule tests passed!")

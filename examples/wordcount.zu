@@ -2,7 +2,7 @@
 # Copyright (c) 2026 GibblyGobbly
 # Count how often each word appears in a piece of text.
 let text = "the quick brown fox jumps over the lazy dog the end"
-let counts = {}
+let counts: map<int> = {}
 for (let word in split(text, " ")) {
     if (map_has(counts, word)) {
         map_set(counts, word, map_get(counts, word) + 1)

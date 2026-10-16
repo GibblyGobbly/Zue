@@ -1,5 +1,5 @@
-func pass(v) {
-    return [v, null][0]
+func pass(v: int) -> int {
+    return v
 }
 func inner(n) {
     let xs = [1, 2, 3]

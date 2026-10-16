@@ -29,18 +29,23 @@ print(to_string(29814127.78))
 # CASE fixed needs a float
 func pass(v) { return [v, null][0] }
 print(fixed(pass(5), 2))
+# test: no-strict
 # CASE fixed decimals must be an int
 func pass(v) { return [v, null][0] }
 print(fixed(1.5, pass("2")))
+# test: no-strict
 # CASE fixed decimals out of range
 func pass(v) { return [v, null][0] }
 print(fixed(1.5, pass(16)))
+# test: no-strict
 # CASE to_string digits out of range
 func pass(v) { return [v, null][0] }
 print(to_string(1.5, pass(18)))
+# test: no-strict
 # CASE to_string digits needs a float
 func pass(v) { return [v, null][0] }
 print(to_string(pass(5), 3))
+# test: no-strict
 # CASE fixed with a whole-number literal adapts it
 print(fixed(5, 2))
 # CASE fixed with an int variable is a compile error

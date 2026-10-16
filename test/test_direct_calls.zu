@@ -145,7 +145,8 @@ print(pw(2.0, 10))
 # CASE a parameter captured by a closure
 func f(n) {
     let g = func() { return n }
-    return g() + 1
+    let r: int = g()
+    return r + 1
 }
 print(f(4))
 print(f(5))

@@ -1,0 +1,9 @@
+Type Error [E0201] in /tmp/zue_test_case.zu at line 2:
+  cannot use '==' on V<int,int> and V<float,float>
+
+   2 | print(V{1, 2} == V{1.0, 2.0})
+     |       ------- ^^ ----------- V<float,float>
+     |       |
+     |       V<int,int>
+
+Hint: '==' compares two values of the same kind; convert one side first

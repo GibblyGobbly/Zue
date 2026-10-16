@@ -13,6 +13,8 @@ for (let round = 0; round < 200; round++) {
 }
 let sum = 0
 for (let row in live) {
-    sum = sum + row[0] + row[1][0] + row[2]["k"]
+    let pair: list = row[1]
+    let m: map<int> = row[2]
+    sum = sum + row[0] as int + pair[0] as int + m["k"]
 }
 print(sum)

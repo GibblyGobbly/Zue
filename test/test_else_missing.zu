@@ -26,7 +26,7 @@ print(get("a"))
 print(get("z"))
 
 # CASE a map key that holds null counts as missing
-let m = {"a": null}
+let m: map<string> = {"a": null}
 if (let v = m["a"]) {
     print("found")
 } else {
@@ -46,14 +46,16 @@ if (let c = ""[0]) { print(c) } else { print("empty string") }
 func pass(v) { return [v, null][0] }
 let xs = [1]
 if (let x = xs[pass("0")]) { print(x) } else { print("missing") }
+# test: no-strict
 
 # CASE a map key that is not a string is still an error
 func pass(v) { return [v, null][0] }
 let m = {"a": 1}
 if (let x = m[pass(0)]) { print(x) } else { print("missing") }
+# test: no-strict
 
 # CASE a field that is empty
-template Node { value, left }
+template Node { value: int, left: Node }
 let leaf = Node(1, null)
 let root = Node(2, leaf)
 func walk(n) {
@@ -88,6 +90,7 @@ print(j)
 # CASE a search with a wrong argument is still an error
 func pass(v) { return [v, null][0] }
 if (let i = find(pass("abc"), "b")) { print(i) } else { print("missing") }
+# test: no-strict
 
 # CASE open
 let f = open("/nonexistent/zue-test/file.txt", "r") else {

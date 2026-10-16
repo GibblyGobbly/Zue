@@ -55,11 +55,7 @@ template C { z }
 func get_x(o) {
     return o.x
 }
-let objs = [A(1, 2), B(20, 10, 0), A(3, 4), B(40, 30, 0), A(5, 6)]
-let xs = []
-for (let o in objs) {
-    append(xs, get_x(o))
-}
+let xs = [get_x(A(1, 2)), get_x(B(20, 10, 0)), get_x(A(3, 4)), get_x(B(40, 30, 0)), get_x(A(5, 6))]
 print(xs)
 let m = {"x": "from a map"}
 print(get_x(m))

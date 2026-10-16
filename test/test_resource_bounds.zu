@@ -201,7 +201,8 @@ func work(n) {
 func churn_threads(n) {
     let total = 0
     for (let i = 0; i < n; i++) {
-        total += wait(spawn(work, i))
+        let got_total: int = wait(spawn(work, i))
+        total += got_total
     }
     return total
 }
@@ -233,7 +234,7 @@ func churn_channels(n) {
         let ch = channel(2)
         send(ch, i)
         send(ch, i + 1)
-        total += recv(ch) + recv(ch)
+        total += recv(ch) as int + recv(ch) as int
         channel_close(ch)
     }
     return total
@@ -271,7 +272,9 @@ func churn_closures(count) {
     let sum = 0
     for (let i = 0; i < count; i++) {
         let c = make_counter(i)
-        sum += c() + c()
+        let first: int = c()
+        let second: int = c()
+        sum += first + second
     }
     return sum
 }

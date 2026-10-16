@@ -1056,7 +1056,7 @@ are not built: with two markers the spin is 1 percent of the run or less.
 | c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
 | d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |
 
-## Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 to 3, per-value templates and phase 4 step 1 done 2026-11-05)
+## Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 to 4 done 2026-11-06)
 
 The language changes after the collector work. The aim: every type known when the program is built, values
 that cannot change unless they say so, conversions with one clear meaning, named arguments, and memory that
@@ -1207,8 +1207,34 @@ Steps, each its own commit:
 | 3 | Result types may be written: `func area(w: float, h: float) -> float`; checked at every return and on every path (E0212); a call has that type | Done 2026-11-06 |
 | 4a | A typed template field may be empty (null) | Done 2026-11-06 |
 | 4 | One `Node` template in the compiler, 63 typed fields; literal values kept as text; places kept as `Span` | Done 2026-11-06 |
-| 5 | The compiler's files pass strict mode, small files first, a seed after each group | |
-| 6 | Strict is the rule; mixed-list items need `as`. Tests that hide a type to reach a run-time error (`[v, null][0]`) become compile-error tests, or get their value from `input()` where the run-time check itself is what is tested | |
+| 5 | The compiler's files pass strict mode, small files first, a seed after each group | Done 2026-11-06 (5a to 5i): 3,285 unknown uses to 0 |
+| 6 | Strict is the rule; mixed-list items need `as`. Tests that hide a type to reach a run-time error (`[v, null][0]`) become compile-error tests, or get their value from `input()` where the run-time check itself is what is tested | Done 2026-11-06, with a change: those tests keep the run-time checks covered with the test-only switch `zue --no-strict` (line `# test: no-strict`), because the runner has no input and the runtime's own checks still guard values the checker cannot see |
+
+Step 5 typed the compiler's own code: maps and mixed lists used as records became templates (Module, Var,
+Ctx, Token, Diag, Scope, Call, Ref, SpecEntry, NState and others), the tree walkers became typed walks over
+`Node`, and every function got typed parameters. On the way the checker learned what the typed code needed
+(each change with its own seed): an empty value of a template type anywhere a field of that type may be
+empty; types of an imported file read in that file and kept for the whole compilation; a function returning
+a string, list, map or function value, or null, keeps that type; narrowing after `if (type(x) == ...) {
+return }` and after `if (x == null) { return }`; function bodies checked after the rest of their block;
+`m.key` on a map; `open()` gives a file. It found real mistakes: a bool parameter that held 0 or 1, a list
+annotated `list<map>` that also held strings, a switch that pushed a loop with a null label.
+
+Step 6 made strict the rule and added what ordinary programs need under it: result types for every builtin
+(new type names `pointer`, `channel`, `thread`, `file`), `x as int` of a value of unknown type, maps that
+start empty taking their value type, `alloc` of a template keeping the template's type, a box's `len`,
+`cap` and bytes, pointer ordering and `int(p)`, untyped bloc fields typed per value like a template's,
+`slice` and `reverse` of a string, `exit` ending a path, a return inside `unsafe { }`, a recursive function
+checked once more when its result type is settled, and no second "type not known" error for a value whose
+expression already had one. Values the checker cannot know (`recv`, `wait`, `load`, `reduce`, the result of
+a function value, an item of a mixed list) are given their type where they are taken: `let n: int = recv(ch)`
+or `xs[1] as int`.
+
+Later improvements found on the way: typed channels and threads (`channel<int>`, `thread<int>`, so `recv`
+and `wait` need no written type); function types (`func(int) -> string`), so a function value's result is
+known; parameters of a function value passed straight to `map`, `filter` or `reduce` taken from the list's
+element type; whole-file imports (`use "x.zu"`) keeping typo checks (the explicit `use { a } from` list is
+the standard for now).
 
 Step 4 uses one wide `Node`: a field for every field of every kind (63), the unused ones empty. It keeps the
 compiler's code as it reads today (`n.cond`, `n.target`). Its cost is memory: every field is a 16-byte value,
@@ -1232,6 +1258,25 @@ rest follow from them (a node's kind, its name) or from builtins and fields whos
 
 Step 1 found two calls of `die` in `emit_llvm.zu` with one argument instead of three (they would have
 crashed instead of reporting an internal error); they are fixed.
+
+### Before phase 5 (owner, 2026-11-06)
+
+Phase 5 is not started until its options are discussed: how `let`/`let mut` treats parameters, loops,
+closures, fields and collections, and what other languages chose.
+
+### Core data kinds (owner, 2026-11-06; after phase 6)
+
+`data` is removed (an untyped template does the same). `bloc` and `box` stay for programs that need an exact
+layout or raw memory. Four core kinds, with the compiler as their first user:
+
+| Kind | What it is | First use in the compiler |
+|---|---|---|
+| `template` | The ordinary record | Everything today |
+| `table` | Struct of arrays: each field a packed column, whole-column operations with SIMD (Odin `#soa`, Zig MultiArrayList) | The syntax tree, instead of the 65-field Node (replaces the compact-node idea above) |
+| `history` | Versioned values with snapshots and undo, sharing what did not change (persistent structures as in Clojure) | The checker's assume-and-roll-back (Log, MarkEntry) |
+| `decimal` | Exact decimal numbers for money | Users and examples, not the compiler |
+
+Order: `table`, `history`, `decimal`. They depend on value semantics, so they come after phase 6.
 
 ### Phase 5: immutability
 

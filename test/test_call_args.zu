@@ -6,8 +6,10 @@ func two(a, b) {
     return "{a}|{b}"
 }
 
-assert(reduce(range(3), func(a, b) { return a + b }, 100) == 103)
-assert(reduce(range(3), func(acc, x) { return acc + to_string(x) }, "z") == "z012")
+let r1: int = reduce(range(3), func(a: int, b: int) { return a + b }, 100)
+assert(r1 == 103)
+let r2: string = reduce(range(3), func(acc: string, x: int) { return acc + to_string(x) }, "z")
+assert(r2 == "z012")
 assert(two(func() { return 1 }(), 9) == "1|9")
 
 let m = {"k": 3}

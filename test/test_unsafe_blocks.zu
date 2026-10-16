@@ -15,7 +15,8 @@ func fill(buf, n) {
 func sum(buf, n) {
     let total = 0
     for (let i = 0; i < n; i++) {
-        total += load(ptr_offset(buf, i))
+        let got_total: int = load(ptr_offset(buf, i))
+        total += got_total
     }
     return total
 }
@@ -35,7 +36,7 @@ func read_twice(value) {
         let inner = alloc(1)
         defer(inner)
         store(inner, value)
-        return load(inner) * 2
+        return load(inner) as int * 2
     }
 }
 
@@ -43,7 +44,7 @@ unsafe {
     let outer = alloc(1)
     defer(outer)
     store(outer, 10)
-    print(load(outer) + read_twice(16))
+    print(load(outer) as int + read_twice(16))
     print(load(outer))
 }
 
@@ -78,6 +79,6 @@ unsafe {
     let a = alloc(1)
     defer(a)
     store(a, 99)
-    result = load(a)
+    result = load(a) as int
 }
 print(result)

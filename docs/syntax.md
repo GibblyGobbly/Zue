@@ -302,7 +302,7 @@ func greet(name, greeting = "Hello") {    # default parameter
     return "{greeting}, {name}"
 }
 
-let inc = func(x) { return x + 1 }        # anonymous function
+let inc = func(x: int) { return x + 1 }   # anonymous function: its parameters have types
 
 func make_counter() {                     # closure
     let count = 0
@@ -318,8 +318,8 @@ Functions are values: pass them, return them, and store them in lists. A functio
 (`f() expects 1 argument, but got 2`). `map`, `filter` and `reduce` take functions:
 
 ```javascript
-let doubled = map([1, 2, 3], func(x) { return x * 2 })
-let total = reduce(doubled, func(acc, x) { return acc + x }, 0)
+let doubled = map([1, 2, 3], func(x: int) { return x * 2 })
+let total: int = reduce(doubled, func(acc: int, x: int) { return acc + x }, 0)
 ```
 
 ### Named arguments
@@ -605,24 +605,49 @@ a `Type Error` with the line, and the program is not built.
   Hint: area is defined in shapes.zu at line 1, with 'w' a float
   ```
 
-- Where the checker cannot tell a type (items of a plain list, the result of a function whose returns
-  differ, function values, files that import each other in a circle), it says nothing and the runtime checks
-  still apply. The element types are not checked at run time: a list that was handed over by code the
-  checker cannot see may hold other items.
+- Where the checker cannot tell a type (items of a list of mixed items, the result of a function whose
+  returns differ, the result of a function value, a value from `recv`, `wait` or `load`), the program says
+  it: see Strict mode below.
 
-### Strict mode
+### Strict mode: every type known
 
-A file whose first lines, before any code, include the comment `# strict` is checked more strictly.
-A value whose type the checker cannot tell is an error where it is used: as an operand, in a condition, as an argument of a builtin or of a typed parameter, as the value
-given to an untyped `let`, or as the target of an index or a field read. Writing the type
-(`let y: int = xs[0]`) is the way to say what the value is. Comparing with `null` is allowed.
+Every type is known when the program is built. A value whose type the checker cannot tell is an error
+where its type matters: as an operand, in a condition, as an argument of a builtin or of a typed
+parameter, as the value given to an untyped `let`, or as the target of an index or a field read.
+Comparing with `null` is allowed. (The comment `# strict`, which used to turn this on for one file, is
+now an ordinary comment.)
+
+The program says the type in one of two ways: convert the value with `as`, or write the type where the
+value is taken:
+
+| The value | Write |
+|---|---|
+| An item of a list of mixed items | `person[1] as int`, `person[0] as string` |
+| A value from a channel or a thread | `let n: int = recv(ch)`, `let total: int = wait(t)` |
+| A value loaded from memory | `let v: int = load(p)`, or `load(p) as int` |
+| The result of calling a function value | `let r: string = f(1)` |
+| The result of `reduce` | `let sum: int = reduce(xs, add, 0)` |
+
+```javascript
+let person = ["Ann", 30]
+print(person[1] as int + 1)
+print(person[1] + 1)          // error: the type of the left operand of '+' is not known
+```
+
+Output of the first `print`:
+
+```
+31
+```
+
+A written type on a `let` is checked when the program runs where the value comes from code the checker
+cannot see (`let n: int = recv(ch)` stops with a precise error if the value is not an int).
 
 A parameter of a named function may stay untyped: the body is checked for the argument types of each
 call, and strict mode reports what is unknown in those checks. The parameters of a function value
 (`let f = func(x) { ... }`) need types, because the checker does not follow calls made through a variable:
 
 ```javascript
-# strict
 func twice(x) {
     return x + x
 }
@@ -636,7 +661,6 @@ let f = func(x) {      # error: parameter 'x' of this function value needs a typ
 The same function can be used with ints and with floats, and each call is checked with its own types:
 
 ```javascript
-# strict
 func area(w, h) {
     return w * h
 }

@@ -93,12 +93,12 @@ assert(seen == "0.1")
 let player = {"name": "Astra", "hp": 100, "zone": "forest"}
 assert(type(player) == "map")
 assert(len(player) == 3)
-assert(map_get(player, "name") == "Astra")
+assert(map_get(player, "name") as string == "Astra")
 assert(map_has(player, "hp") == true)
 map_set(player, "hp", 125)
 map_set(player, "mana", 40)
-assert(map_get(player, "hp") == 125)
-assert(map_get(player, "mana") == 40)
+assert(map_get(player, "hp") as int == 125)
+assert(map_get(player, "mana") as int == 40)
 assert(len(player) == 4)
 let player_keys = map_keys(player)
 assert(find(player_keys, "name") >= 0)
@@ -127,35 +127,39 @@ func make_counter() {
 }
 
 let counter = make_counter()
-assert(counter() == 1)
-assert(counter() == 2)
-assert(counter() == 3)
+let c1: int = counter()
+let c2: int = counter()
+let c3: int = counter()
+assert(c1 == 1)
+assert(c2 == 2)
+assert(c3 == 3)
 
 func apply_twice(fn, value) {
     return fn(fn(value))
 }
 
-let inc = func(x) {
+let inc = func(x: int) {
     return x + 1
 }
 
-assert(apply_twice(inc, 5) == 7)
+let twice_inc: int = apply_twice(inc, 5)
+assert(twice_inc == 7)
 
 let numbers2 = [1, 2, 3, 4, 5]
-let doubled = map(numbers2, func(x) {
+let doubled: list<int> = map(numbers2, func(x: int) {
     return x * 2
 })
 assert(doubled[0] == 2)
 assert(doubled[4] == 10)
 
-let evens = filter(numbers2, func(x) {
+let evens = filter(numbers2, func(x: int) {
     return x % 2 == 0
 })
 assert(len(evens) == 2)
 assert(evens[0] == 2)
 assert(evens[1] == 4)
 
-let total2 = reduce(numbers2, func(acc, x) {
+let total2: int = reduce(numbers2, func(acc: int, x: int) {
     return acc + x
 }, 0)
 assert(total2 == 15)

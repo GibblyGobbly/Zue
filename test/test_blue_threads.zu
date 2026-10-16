@@ -29,7 +29,9 @@ func count(name, n) {
 }
 let a = spawn(count, "a", 3)
 let b = spawn(count, "b", 3)
-print(wait(a) + wait(b))
+let ra: int = wait(a)
+let rb: int = wait(b)
+print(ra + rb)
 
 # CASE unbuffered channel hands values over in order
 func producer(ch, n) {
@@ -59,7 +61,8 @@ yield()
 print("main wakes")
 let sum = 0
 for (let i = 0; i < 6; i++) {
-    sum += recv(ch)
+    let got: int = recv(ch)
+    sum += got
 }
 wait(f)
 print(sum)
@@ -85,7 +88,8 @@ let g = spawn(gen, c1, 4)
 let s = spawn(square, c1, c2, 4)
 let total = 0
 for (let i = 0; i < 4; i++) {
-    total += recv(c2)
+    let got: int = recv(c2)
+    total += got
 }
 print(total)
 
@@ -110,7 +114,7 @@ recv(ch)
 func me(cell) {
     return wait(cell[0])
 }
-let holder = [0]
+let holder = [null]
 holder[0] = spawn(me, holder)
 wait(holder[0])
 
@@ -151,7 +155,8 @@ for (let i = 0; i < 2000; i++) {
 }
 let total = 0
 for (let i = 0; i < 2000; i++) {
-    total += wait(ts[i])
+    let got_total: int = wait(ts[i])
+    total += got_total
 }
 print(total)
 
@@ -191,7 +196,8 @@ for (let i = 0; i < 20000; i++) {
 }
 let total = 0
 for (let id = 0; id < 20; id++) {
-    total += wait(ts[id])
+    let got_total: int = wait(ts[id])
+    total += got_total
 }
 print(total)
 
@@ -232,12 +238,13 @@ for (let i = 0; i < 30000; i++) {
 }
 let sum = 0
 for (let id = 0; id < 400; id++) {
-    sum += wait(ds[id])
+    let got_sum: int = wait(ds[id])
+    sum += got_sum
 }
 let ok = 0
 for (let i = 0; i < len(shelf); i++) {
-    let row = shelf[i]
-    if (row[1] == "only{row[0]}") {
+    let row: list = shelf[i]
+    if (row[1] as string == "only{row[0]}") {
         ok += 1
     }
 }

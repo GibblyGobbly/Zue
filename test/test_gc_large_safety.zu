@@ -7,9 +7,17 @@ func make_big_keeper(tag, slots) {
     }
 
     let meta = {"tag": tag, "payload": payload}
-    return func(idx) {
-        return map_get(meta, "tag") + ":" + map_get(meta, "payload")[idx]
+    return func(idx: int) {
+        let tag: string = map_get(meta, "tag")
+        let parts: list<string> = map_get(meta, "payload")
+        return tag + ":" + parts[idx]
     }
+}
+
+# The text a keeper gives for idx (a function value's result has no known type, so it is written here).
+func text_of(keeper, idx) {
+    let s: string = keeper(idx)
+    return s
 }
 
 let keepers = []
@@ -24,13 +32,13 @@ for (let round = 0; round < 40; round++) {
     }
 
     if (round % 10 == 0) {
-        assert(keepers[0](0) == "blob0:" + repeat("blob0-", 2048) + "0")
-        assert(keepers[3](4) == "blob3:" + repeat("blob3-", 2048) + "4")
-        assert(keepers[5](5) == "blob5:" + repeat("blob5-", 2048) + "5")
+        assert(text_of(keepers[0], 0) == "blob0:" + repeat("blob0-", 2048) + "0")
+        assert(text_of(keepers[3], 4) == "blob3:" + repeat("blob3-", 2048) + "4")
+        assert(text_of(keepers[5], 5) == "blob5:" + repeat("blob5-", 2048) + "5")
     }
 }
 
-assert(keepers[1](2) == "blob1:" + repeat("blob1-", 2048) + "2")
-assert(keepers[4](1) == "blob4:" + repeat("blob4-", 2048) + "1")
+assert(text_of(keepers[1], 2) == "blob1:" + repeat("blob1-", 2048) + "2")
+assert(text_of(keepers[4], 1) == "blob4:" + repeat("blob4-", 2048) + "1")
 
 print("GC large object safety tests passed!")

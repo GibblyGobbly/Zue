@@ -43,7 +43,8 @@ for (let k = 0; k < 200000; k++) {
 let bad = 0
 for (let i = 0; i < len(keep); i++) {
     let r = keep[i]
-    if (len(r) != 15 or r[0] != "a{i}" or r[1][1] != i or r[2] != "b{i}" or r[14] != "x{i}-11") {
+    let inner: list = r[1]
+    if (len(r) != 15 or r[0] as string != "a{i}" or inner[1] as int != i or r[2] as string != "b{i}" or r[14] as string != "x{i}-11") {
         bad += 1
     }
 }

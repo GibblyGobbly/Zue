@@ -12,10 +12,8 @@ func f(c) {
         return 1
     }
 }
-let y = f(false)
-print(y)
-y = "s"
-print(y)
+print(f(false))
+print(f(true))
 # CASE a literal adapted for a float signature stays an int for an int one
 func f(v) {
     let x = v
@@ -45,7 +43,8 @@ func f() {
     return 1
 }
 func g(f) {
-    return f() + "x"
+    let r: string = f()
+    return r + "x"
 }
 print(g(func() { return "s" }))
 # CASE a local named like a function
@@ -54,7 +53,8 @@ func f() {
 }
 func h() {
     let f = func() { return "t" }
-    return f() + "y"
+    let r: string = f()
+    return r + "y"
 }
 print(h())
 # CASE a reassigned function name
@@ -65,7 +65,7 @@ func h(n) {
     return "x"
 }
 g = h
-let a = g(1)
+let a: string = g(1)
 print(a)
 # CASE a direct call of a function whose callee is reassigned later
 func g(n) {
@@ -85,8 +85,7 @@ func g(n) {
     return n + 1.5
 }
 func f(n) {
-    let a = g(n)
-    return a
+    return g(n)
 }
 func h(n) {
     return 7

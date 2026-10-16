@@ -26,3 +26,4 @@ print("one {}", 1, 2)
 func pass(v) { return [v, null][0] }
 let text = pass("a {} b {}")
 print(text, 1)
+# test: no-strict

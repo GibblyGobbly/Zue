@@ -3,7 +3,7 @@
 // those results must stay rooted (value_root_push in list_lib.c).
 print("Testing GC safety of map/filter/reduce callbacks...")
 
-func churn(x) {
+func churn(x: int) {
     let junk = []
     for (let i in range(20)) {
         append(junk, "s" + to_string(i * x))
@@ -13,7 +13,7 @@ func churn(x) {
 
 let src = range(2000)
 
-let mapped = map(src, func(x) {
+let mapped: list<string> = map(src, func(x: int) {
     churn(x)
     return "v" + to_string(x)
 })
@@ -24,7 +24,7 @@ for (let i in range(2000)) {
 }
 assert(bad == 0)
 
-let kept = filter(src, func(x) {
+let kept = filter(src, func(x: int) {
     churn(x)
     return x % 2 == 0
 })
@@ -36,7 +36,7 @@ func join_digits(acc, x) {
     if (x < 50) { return acc + to_string(x % 10) }
     return acc
 }
-let joined = reduce(src, join_digits, "")
+let joined: string = reduce(src, join_digits, "")
 assert(len(joined) == 50)
 
 print("GC callback tests passed!")

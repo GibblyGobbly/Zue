@@ -10,46 +10,55 @@ func pass(v) {
     return [v, null][0]
 }
 print(pass(1.0) + pass(1))
+# test: no-strict
 # CASE remainder of a hidden int and float
 func pass(v) {
     return [v, null][0]
 }
 print(pass(7) % pass(2.0))
+# test: no-strict
 # CASE comparing a hidden int and float
 func pass(v) {
     return [v, null][0]
 }
 print(pass(9007199254740993) == pass(9007199254740992.0))
+# test: no-strict
 # CASE ordering a hidden int and float
 func pass(v) {
     return [v, null][0]
 }
 print(pass(1) < pass(2.0))
+# test: no-strict
 # CASE sqrt of a hidden int
 func pass(v) {
     return [v, null][0]
 }
 print(sqrt(pass(4)))
+# test: no-strict
 # CASE floor of a hidden int
 func pass(v) {
     return [v, null][0]
 }
 print(floor(pass(4)))
+# test: no-strict
 # CASE pow of a hidden int and float
 func pass(v) {
     return [v, null][0]
 }
 print(pow(pass(2), pass(0.5)))
+# test: no-strict
 # CASE clamp needs one number type
 func pass(v) {
     return [v, null][0]
 }
 print(clamp(pass(5), pass(1.0), pass(10)))
+# test: no-strict
 # CASE clamp with floats
 func pass(v) {
     return [v, null][0]
 }
 print(clamp(pass(5.0), pass(1.0), pass(2.5)))
+# test: no-strict
 # CASE literals next to hidden values take their type at run time
 func pass(v) {
     return [v, null][0]
@@ -58,6 +67,7 @@ let f = pass(2.5)
 let i = pass(4)
 print(f + 1, 1 + f, f * 2, f / 2, f - 1, f % 2, f < 3, f == 2.5, 3 > f)
 print(i + 1, i * 2, i / 2, i % 3, i < 3, i == 4)
+# test: no-strict
 # CASE divmod and floor_div of floats agree with mod
 print(divmod(1.0, 0.1))
 print(floor_div(1.0, 0.1), mod(1.0, 0.1))
@@ -79,3 +89,4 @@ func pass(v) {
     return [v, null][0]
 }
 print(mat_mul(pass([[1, 2]]), pass([[1.0], [2.0]])))
+# test: no-strict

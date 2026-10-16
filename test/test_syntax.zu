@@ -195,7 +195,7 @@ func double(n) {
     return n * 2
 }
 print(apply(double, 4))
-print(apply(func(n) { return n + 1 }, 4))
+print(apply(func(n: int) { return n + 1 }, 4))
 # CASE recursion
 func fib(n) {
     if (n < 2) {

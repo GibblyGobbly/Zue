@@ -25,10 +25,12 @@ print(not "1" as int == 2)
 # CASE a float with a fraction has no int
 func pass(v) { return [v, null][0] }
 print(int(pass(2.5)))
+# test: no-strict
 
 # CASE a float with a fraction has no int, written with as
 func pass(v) { return [v, null][0] }
 print(pass(-0.5) as int)
+# test: no-strict
 
 # CASE rounding is said with a function
 print(round(2.5))
@@ -42,10 +44,12 @@ print(int('A'))
 # CASE a char is not a number, found while the program runs
 func pass(v) { return [v, null][0] }
 print(int(pass('A')))
+# test: no-strict
 
 # CASE a bool is not a number
 func pass(v) { return [v, null][0] }
 print(float(pass(true)))
+# test: no-strict
 
 # CASE text that is not a whole number
 print("4x" as int)
@@ -54,6 +58,7 @@ print("4x" as int)
 func pass(v) { return [v, null][0] }
 print(float(pass(9007199254740992)))
 print(float(pass(9007199254740993)))
+# test: no-strict
 
 # CASE an int kept raw that has no exact float
 func f(n) {
@@ -119,6 +124,7 @@ func f(v) {
 print(f(3.0))
 print(f([1]))
 print(f(true))
+# test: no-strict
 
 # CASE the else block must leave
 func f(s) {

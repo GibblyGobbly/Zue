@@ -132,7 +132,7 @@ example to be sure it causes the error it claims to.
 | `E0205` | A condition is not true or false |
 | `E0206` | An index or a slice position is not valid |
 | `E0207` | A division by zero |
-| `E0208` | Strict mode needs a type that is not known |
+| `E0208` | A value's type is not known |
 | `E0209` | A type name is not known |
 | `E0210` | A typed field is given the wrong type |
 | `E0211` | A call or value cannot be used this way |

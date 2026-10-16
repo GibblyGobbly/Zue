@@ -156,7 +156,7 @@ print(greet("Astra", "Hi"))
 func twice(f, x) {
     return f(f(x))
 }
-print(twice(func(n) { return n * 3 }, 2))   # 18
+print(twice(func(n: int) { return n * 3 }, 2))   # 18
 ```
 
 A function remembers the variables around it (a closure):
@@ -185,9 +185,9 @@ print(nums[-1])         # 1, negative indexes count from the end
 print(len(nums))        # 4
 sort(nums)
 print(nums)             # [1, 3, 5, 8]
-print(map(nums, func(n) { return n * 10 }))
-print(filter(nums, func(n) { return n > 3 }))
-print(reduce(nums, func(sum, n) { return sum + n }, 0))
+print(map(nums, func(n: int) { return n * 10 }))
+print(filter(nums, func(n: int) { return n > 3 }))
+print(reduce(nums, func(sum: int, n: int) { return sum + n }, 0))
 
 let player = {"name": "Astra", "hp": 100}
 print(player.name)

@@ -4,4 +4,4 @@ Type Error [E0209] in /tmp/zue_test_case.zu at line 1:
    1 | let x: strin = "a"
      |        ^^^^^ not a type
 
-Hint: The types are int, float, bool, char, string, list, map, function, and the names of your own bloc and template types
+Hint: The types are int, float, bool, char, string, list, map, function, pointer, channel, thread, file, and the names of your own bloc and template types

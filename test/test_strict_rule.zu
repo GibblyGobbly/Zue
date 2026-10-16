@@ -1,0 +1,83 @@
+# CASE an item of a mixed list is converted with as
+let person = ["Ann", 30]
+print(person[1] as int + 1)
+print(person[0] as string + "!")
+# CASE an item of a mixed list used without as is an error
+let person = ["Ann", 30]
+print(person[1] + 1)
+# CASE a value from a channel or a thread is given its type where it is taken
+func square(n) {
+    return n * n
+}
+let t = spawn(square, 7)
+let n: int = wait(t)
+let ch = channel(1)
+send(ch, "hi")
+let s: string = recv(ch)
+print(n + 1, s + "!")
+# CASE a value from a channel used without a type is an error
+let ch = channel(1)
+send(ch, 3)
+print(recv(ch) + 1)
+# CASE a function value needs typed parameters, and its result a type where it is used
+let inc = func(x: int) { return x + 1 }
+let r: int = inc(4)
+print(r * 2)
+let doubled: list<int> = map([1, 2], func(v: int) { return v * 2 })
+print(doubled[1] + 1)
+# CASE a map that starts empty takes the type of its first value
+let ages = {}
+ages["ann"] = 30
+print(ages["ann"] + 1)
+print(ages.ann * 2)
+# CASE a value stored in memory is given its type when it is loaded
+unsafe {
+    let p = alloc(2)
+    defer(p)
+    store(p, 40)
+    let v: int = load(p)
+    print(v + 2)
+    print(load(p) as int + 1)
+    let q = ptr_offset(p, 1)
+    print(p < q, int(p) > 0)
+}
+# CASE a template made by hand is used as the template
+template Player { name: string, hp: int }
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    defer(p)
+    p.hp = p.hp - 20
+    print(p.hp)
+}
+# CASE a box knows its size and holds bytes
+let b = box[8]
+b[0] = 7
+print(b.len + b[0])
+# CASE a function that ends with exit, or returns inside an unsafe block, has its type
+func number(text) {
+    if (text == "one") {
+        return 1
+    }
+    print("not a number")
+    exit(1)
+}
+func doubled_in_block(v) {
+    unsafe {
+        let m = alloc(1)
+        defer(m)
+        store(m, v)
+        return load(m) as int * 2
+    }
+}
+print(number("one") + doubled_in_block(4))
+# CASE a recursive function is checked with the type of its result
+func fib(n) {
+    if (n < 2) {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+print(fib(15) + 1)
+# CASE an error is reported once, not again as an unknown type
+let a = 1 + "x"
+print(a * 2)

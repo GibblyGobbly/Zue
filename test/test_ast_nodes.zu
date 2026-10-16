@@ -104,7 +104,8 @@ for (let kind in kinds) {
     assert(seen[kind] != null)
     for (let field in NODE_FIELDS[kind]) {
         let node = seen[kind]
-        assert(node[field] == node[field])
+        # reading a field that the template does not have is an error
+        assert(type(node[field]) == type(node[field]))
     }
 }
 for (let kind in map_keys(seen)) {

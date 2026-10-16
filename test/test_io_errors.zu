@@ -23,6 +23,7 @@ func pass(v) {
 }
 let f = open("/dev/null", "w")
 write(f, pass(42))
+# test: no-strict
 # CASE read from a file opened for writing
 let f = open("/dev/null", "w")
 print(read(f))

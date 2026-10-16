@@ -24,18 +24,22 @@ func pass(v) {
     return [v, null][0]
 }
 print([pass(9223372036854775807)] + [pass(1)])
+# test: no-strict
 # CASE int list division by zero
 func pass(v) {
     return [v, null][0]
 }
 print([pass(1)] / [pass(0)])
+# test: no-strict
 # CASE a list of ints with a list of floats
 func pass(v) {
     return [v, null][0]
 }
 print(pass([1, 2]) + pass([1.0, 2.0]))
+# test: no-strict
 # CASE a list that mixes ints and floats
 func pass(v) {
     return [v, null][0]
 }
 print(pass([1, 2.5]) + pass([1.0, 2.0]))
+# test: no-strict

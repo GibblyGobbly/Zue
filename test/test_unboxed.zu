@@ -273,7 +273,7 @@ print(f())
 # CASE modules style global fn
 func f() {
     let a = 7
-    let f2 = func(x) { return x + a }
+    let f2 = func(x: int) { return x + a }
     print(f2(1))
     a = 8
     print(f2(1))

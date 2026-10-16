@@ -9,7 +9,12 @@ func make_obj(i) {
 }
 
 func check_obj(o, i) {
-    if (len(o) != 4 or o[0] != i or o[1] != i * 2 or o[2] != "n{i}" or o[3][0] != i or o[3][1] != i + 1) {
+    if (len(o) != 4) {
+        print("object {i} was damaged")
+        exit(1)
+    }
+    let pair: list<int> = o[3]
+    if (o[0] as int != i or o[1] as int != i * 2 or o[2] as string != "n{i}" or pair[0] != i or pair[1] != i + 1) {
         print("object {i} was damaged")
         exit(1)
     }
@@ -53,7 +58,7 @@ func case_map_set() {
 
 func make_cell(i) {
     let v = make_obj(i)
-    return [func() { return v }, func(x) { v = x }]
+    return [func() { return v }, func(x: list) { v = x }]
 }
 
 func case_closure_cell() {
@@ -66,7 +71,7 @@ func case_closure_cell() {
     for (let i = n - 1; i >= 0; i--) {
         let get = cells[i][0]
         let put = cells[i][1]
-        let x = get()
+        let x: list = get()
         put(0)
         let junk = make_obj(0 - i)
         append(saved, x)

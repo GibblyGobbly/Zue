@@ -300,12 +300,13 @@ example:
 fix: Check the divisor before dividing.
 
 == E0208
-title: Strict mode needs a type that is not known
+title: A value's type is not known
 match: strict mode
-text: A file that starts with the comment # strict must give a type to every value whose type the
-    checker cannot work out, and to the parameters of a function value (func without a name).
+text: Every type is known when the program is built. A value whose type the checker cannot work out
+    (an item of a list of mixed items, a value from recv, wait or load, the result of a function value)
+    must be given a type or converted where it is used, and the parameters of a function value (func
+    without a name) need types.
 example:
-    # strict
     let xs = [1, "two"]
     let y = xs[0] + 1
 fix: Write the type, let y: int = ..., or convert the value: xs[0] as int.

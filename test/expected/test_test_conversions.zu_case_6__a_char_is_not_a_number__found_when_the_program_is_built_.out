@@ -1,5 +1,5 @@
 Type Error [E0202] in /tmp/zue_test_case.zu at line 1:
-  int() cannot be called with (char); use (float) or (int) or (string)
+  int() cannot be called with (char); use (float) or (int) or (string) or (pointer)
 
    1 | print(int('A'))
      |       ---^^^^^ no form takes (char)

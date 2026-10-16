@@ -28,16 +28,19 @@ func pass(v) {
     return [v, null][0]
 }
 print(rand(pass("a")))
+# test: no-strict
 # CASE rand with a float
 func pass(v) {
     return [v, null][0]
 }
 print(rand(pass(5.9)))
+# test: no-strict
 # CASE srand with a string
 func pass(v) {
     return [v, null][0]
 }
 srand(pass("x"))
+# test: no-strict
 # CASE rand over every 64-bit value
 let r = rand(-9223372036854775807 - 1, 9223372036854775807)
 print(type(r))
@@ -97,12 +100,14 @@ func pass(v) {
 }
 let d = dense_list(2, 0.0)
 d[0] = pass("s")
+# test: no-strict
 # CASE storing an int in a dense list
 func pass(v) {
     return [v, null][0]
 }
 let d = dense_list(2, 0.0)
 d[0] = pass(1)
+# test: no-strict
 # CASE a literal stored in a dense list becomes a float
 let d = dense_list(2, 0.0)
 d[0] = 1
@@ -131,11 +136,13 @@ func pass(v) {
     return [v, null][0]
 }
 print(mat_mul(pass([[1.0], 5]), [[1.0]]))
+# test: no-strict
 # CASE mat_mul with a second row that is not a list
 func pass(v) {
     return [v, null][0]
 }
 print(mat_mul([[1.0, 2.0]], [[1.0], pass(7)]))
+# test: no-strict
 # CASE mat_mul with a longer row
 print(mat_mul([[1.0, 2.0], [1.0, 2.0, 3.0]], [[1.0], [1.0]]))
 # CASE mat_mul with an empty second matrix

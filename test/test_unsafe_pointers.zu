@@ -163,7 +163,7 @@ func churn(n) {
     return len(junk)
 }
 unsafe {
-    let p = grab()
+    let p: pointer = grab()
     churn(10)
     churn(300000)
     let other = []
@@ -177,7 +177,7 @@ unsafe {
 }
 # CASE a pointer assigned to a captured variable
 let keep = null
-let set = func(v) {
+let set = func(v: pointer) {
     keep = v
 }
 unsafe {

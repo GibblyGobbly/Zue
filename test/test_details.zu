@@ -14,11 +14,13 @@ func pass(v) {
     return [v, null][0]
 }
 print(pad_left("7", 3, pass(5)))
+# test: no-strict
 # CASE join names the separator argument
 func pass(v) {
     return [v, null][0]
 }
 print(join(["a"], pass(5)))
+# test: no-strict
 # CASE repeat too large
 print(repeat("ab", 40000000000000))
 # CASE str_len and concat take strings
@@ -27,6 +29,7 @@ func pass(v) {
 }
 print(str_len("abc"))
 print(str_len(pass([1])))
+# test: no-strict
 # CASE empty slices at the end
 print(""[0:] == "", "abc"[3:] == "", [1, 2][2:])
 # CASE slices of dense lists

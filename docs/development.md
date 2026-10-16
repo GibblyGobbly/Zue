@@ -88,6 +88,7 @@ covered by tests in `test/`.
 | Tool | What it proves |
 |---|---|
 | Golden-file tests: output, errors and exit status of every program are recorded and compared | Behaviour does not change by accident |
+| Runtime checks: a test (or a `# CASE`) that contains the line `# test: no-strict` is compiled with `zue --no-strict`, which keeps strict mode silent, so the test can hide a type (`func pass(v) { return [v, null][0] }`) and reach a check the runtime makes itself. The switch is for the test suite only, not part of the language | The runtime's own type checks, which guard values the checker cannot see, keep their tests |
 | Syntax matrix (`test/test_syntax.zu`) with hand-checked outputs | Every construct and every precedence pair |
 | Round trip (`make round-trip`): parse, print back as source, parse again, require the same tree | The parser and the printer agree on all 620 project files and cases |
 | Mutation fuzzing (`tools/fuzz_syntax_errors.py`): real programs are broken at random and `zue check` must not crash, hang or name a line that does not exist | The error paths of the lexer, the parser and the checker hold up on thousands of broken programs |

@@ -45,7 +45,7 @@ func main() {
         let total = 0
         let j = 0
         while (j < 20000) {
-            total += load(first) + load(ptr_add(first, 3))
+            total += load(first) as int + load(ptr_add(first, 3)) as int
             j++
         }
         print(total)

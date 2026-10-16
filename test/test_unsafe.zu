@@ -11,8 +11,8 @@ unsafe {
     store(next, "right")
 
     assert(value == 11)
-    assert(load(buf) == "left")
-    assert(load(next) == "right")
+    assert(load(buf) as string == "left")
+    assert(load(next) as string == "right")
     assert(type(buf) == "pointer")
     assert(int(buf) > 0)
     assert(next > buf)

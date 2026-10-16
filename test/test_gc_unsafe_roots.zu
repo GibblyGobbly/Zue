@@ -19,8 +19,8 @@ unsafe {
         junk += len(g)
     }
     for (let i = 0; i < n; i++) {
-        let v = load(ptr_offset(buf, i))
-        if (v[0] != i or v[1] != "s{i}") {
+        let v: list = load(ptr_offset(buf, i))
+        if (v[0] as int != i or v[1] as string != "s{i}") {
             bad += 1
         }
     }
@@ -43,8 +43,8 @@ unsafe {
         }
     }
     for (let i = 0; i < n; i++) {
-        let v = load(ptr_offset(buf, i))
-        if (v[0] != "new2" or v[1] != i or v[2] != "x{i}") {
+        let v: list = load(ptr_offset(buf, i))
+        if (v[0] as string != "new2" or v[1] as int != i or v[2] as string != "x{i}") {
             bad += 1
         }
     }
@@ -70,8 +70,8 @@ for (let k = 0; k < 300000; k++) {
 }
 let bad = 0
 for (let j = 0; j < len(kept); j++) {
-    let v = kept[j]
-    if (v[0] != "kept" or v[2] != "t{v[1]}") {
+    let v: list = kept[j]
+    if (v[0] as string != "kept" or v[2] as string != "t{v[1]}") {
         bad += 1
     }
 }
@@ -94,9 +94,9 @@ unsafe {
         junk += len(g)
     }
     for (let i = 0; i < 20000; i++) {
-        let vb = load(ptr_offset(b, i))
-        let vc = load(ptr_offset(c, i))
-        if (vb[2] != "b{i}" or vc[2] != "c{i}") {
+        let vb: list = load(ptr_offset(b, i))
+        let vc: list = load(ptr_offset(c, i))
+        if (vb[2] as string != "b{i}" or vc[2] as string != "c{i}") {
             bad += 1
         }
     }
@@ -136,8 +136,8 @@ unsafe {
     }
 }
 for (let j = 0; j < len(kept); j++) {
-    let v = kept[j]
-    if (v[0] != "last" or v[1] != j or v[2] != "v{j}") {
+    let v: list = kept[j]
+    if (v[0] as string != "last" or v[1] as int != j or v[2] as string != "v{j}") {
         bad += 1
     }
 }

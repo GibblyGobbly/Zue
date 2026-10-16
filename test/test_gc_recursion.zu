@@ -2,7 +2,7 @@
 // function entry is a GC safepoint. Runs under GC stress + verify.
 print("Testing GC in recursion-only code...")
 
-template Node { left, right, value }
+template Node { left: Node, right: Node, value: int }
 
 func build(depth) {
     if (depth == 0) {

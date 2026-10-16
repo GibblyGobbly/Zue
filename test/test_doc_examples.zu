@@ -56,7 +56,7 @@ let w = World("Main", 100)
 unsafe {
     let buf3 = alloc(2)
     store(buf3, w.size)
-    let v = load(buf3)
+    let v: int = load(buf3)
     assert(v == 100)
     defer(buf3)
 }

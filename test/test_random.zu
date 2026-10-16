@@ -176,43 +176,52 @@ func pass(v) {
     return [v, null][0]
 }
 print(rand(pass("a")))
+# test: no-strict
 # CASE rand with a float bound
 func pass(v) {
     return [v, null][0]
 }
 print(rand(1, pass(2.5)))
+# test: no-strict
 # CASE trand with a string
 func pass(v) {
     return [v, null][0]
 }
 print(trand(pass("a")))
+# test: no-strict
 # CASE trand with a float bound
 func pass(v) {
     return [v, null][0]
 }
 print(trand(pass(2.5), 9))
+# test: no-strict
 # CASE srand with a float
 func pass(v) {
     return [v, null][0]
 }
 srand(pass(1.5))
+# test: no-strict
 # CASE shuffle of a number
 func pass(v) {
     return [v, null][0]
 }
 shuffle(pass(5))
+# test: no-strict
 # CASE tshuffle of a string
 func pass(v) {
     return [v, null][0]
 }
 tshuffle(pass("abc"))
+# test: no-strict
 # CASE shuffle with two arguments
 func pass(v) {
     return [v, null][0]
 }
 shuffle(pass([1]), [2])
+# test: no-strict
 # CASE tshuffle with no arguments
 func pass(v) {
     return [v, null][0]
 }
 tshuffle()
+# test: no-strict

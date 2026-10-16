@@ -7,8 +7,8 @@ unsafe {
     let last = ptr_offset(a, 3)
     store(a, 1)
     store(last, 2)
-    assert(load(a) == 1)
-    assert(load(last) == 2)
+    assert(load(a) as int == 1)
+    assert(load(last) as int == 2)
     let zero = ptr_offset(a, 0)
     assert(zero == a)
     print("in bounds")
@@ -82,7 +82,7 @@ unsafe {
     defer(b)
     store(a, 1)
     store(b, 2)
-    seen = load(a) + load(b)
+    seen = load(a) as int + load(b) as int
 }
 assert(seen == 3)
 print("deferred")
@@ -91,7 +91,7 @@ for (let i = 0; i < 3; i++) {
     unsafe {
         let a = alloc(1)
         store(a, i)
-        assert(load(a) == i)
+        assert(load(a) as int == i)
         defer(a)
     }
 }
@@ -102,7 +102,8 @@ unsafe {
     for (let i = 0; i < 300; i++) {
         let p = alloc(2)
         store(p, i)
-        total += load(p)
+        let got_total: int = load(p)
+        total += got_total
         defer(p)
     }
     assert(total == 44850)

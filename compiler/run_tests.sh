@@ -26,10 +26,14 @@ pass=0; fail=0; skip=0
 # check_one <source> <label>: compiles and runs <source> on both engines. A compile-time error
 # ("Type Error in ..." and so on) counts as the program's output: its text is recorded as
 # stdout with exit status 1, and the program is not built.
+# A test whose source has the line "# test: no-strict" is compiled with --no-strict: it hides the type of
+# a value on purpose to reach a check the runtime makes itself (strict mode would report it first).
 check_one() {
     src=$1; label=$2; name=bin_$$
     key=$(printf '%s' "$label" | sed 's/[^A-Za-z0-9._-]/_/g')
-    if ! "$ZUEC" "$src" "$TMP/$name.$EXT" . > "$TMP/cerr" 2>&1; then
+    flags=""
+    grep -q '^# test: no-strict$' "$src" && flags="--no-strict"
+    if ! "$ZUEC" $flags "$src" "$TMP/$name.$EXT" . > "$TMP/cerr" 2>&1; then
         if grep -q "not supported by zuec" "$TMP/cerr"; then
             skip=$((skip + 1)); echo "[SKIP] $label"; return
         fi

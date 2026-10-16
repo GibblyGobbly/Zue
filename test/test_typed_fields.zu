@@ -38,6 +38,7 @@ func pass(v) {
     return [v, null][0]
 }
 let o = Outer{pass(Other{1})}
+# test: no-strict
 # CASE a bloc cannot hold a template
 template T { a: int }
 bloc B { t: T }
@@ -98,6 +99,7 @@ func pass(v) {
 }
 let p = Player("Astra", 100)
 p.hp = pass("dead")
+# test: no-strict
 # CASE a template built with the wrong type
 template Player { name: string, hp: int }
 let p = Player("Astra", 1.5)
@@ -121,6 +123,7 @@ func pass(v) {
     return [v, null][0]
 }
 let b = Body(pass(5))
+# test: no-strict
 # CASE a template may hold another template
 template Inner { n: int }
 template Outer { inner: Inner, name: string }
@@ -130,7 +133,7 @@ o.inner.n = 5
 print(o.inner.n)
 # CASE a template field typed as a function
 template Handler { name: string, run: function }
-let h = Handler("double", func(x) { return x * 2 })
+let h = Handler("double", func(x: int) { return x * 2 })
 print(h.run(4))
 # CASE a typed template mixed with untyped fields
 template Mixed { id: int, extra }
@@ -141,6 +144,7 @@ func pass(v) {
 m.extra = "more"
 print(m.extra)
 m.id = pass("no")
+# test: no-strict
 # CASE data cannot have field types
 data D { a: int }
 # CASE an unknown type name on a template field
@@ -219,6 +223,7 @@ func pass(v) {
 }
 let leaf = pass(Node("id", null))
 print(leaf.l.k)
+# test: no-strict
 
 # CASE a bloc field may not be empty
 bloc P { x: int, y: int }
@@ -245,3 +250,6 @@ let n = 5
 n = null
 let names: list<string> = []
 append(names, null)
+# CASE a bloc made with ints and one made with floats are not compared
+bloc V { x, y }
+print(V{1, 2} == V{1.0, 2.0})

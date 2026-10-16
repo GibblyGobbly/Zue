@@ -28,14 +28,17 @@ template Scope { types: map<string>, fns: map<Node>, empties: map<Node>, homes: 
 
 let SCOPES: list<Scope> = []
 
-# Strict mode, per file: a "# strict" comment among the first lines turns every value whose type the
-# checker cannot tell into an error where it is used, and every untyped parameter into an error.
-let STRICT = false
+# Strict mode is the rule: a value whose type the checker cannot tell is an error where its type matters,
+# and so is an untyped parameter of a function value.
 
 # Above 0 while the body of a named function with an untyped parameter is checked once with that
 # parameter unknown. Such a body is checked again for the argument types of every call, and those
 # checks report what strict mode finds; the pass with unknown parameters reports only proven errors.
 let GENERIC = 0
+
+# zue --no-strict, a switch for the test suite only: strict mode stays silent, so a test can hide the
+# type of a value and reach the check the runtime makes itself. It is not part of the language.
+export const NO_STRICT = [false]
 
 # zue check --list-types: for each list that starts empty (let xs = []), the types of the values appended
 # to it, so that a tool can write the element type: "file:line" -> the list's name and the types.
@@ -69,6 +72,7 @@ func note_list_type(a: Node, t: string) {
 
 # A list that starts empty (let xs = []) takes the type of the first value appended to it: xs is a
 # list<int> after append(xs, 1). A value of another type appended later makes it a list of mixed items.
+# A map that starts empty (let m = {}) takes the type of the first value stored in it, m[k] = v.
 # Returns true when a is such a list, so the append needs no other check.
 func grow_list(a: Node, t: string, vt: string) -> bool {
     if (a.k != "id") {
@@ -79,12 +83,13 @@ func grow_list(a: Node, t: string, vt: string) -> bool {
         return false
     }
     let types = SCOPES[idx].types
+    let kind = kind_of(types[a.name])
     let v = settle(vt)
-    if (types[a.name] == "list" and v != "any" and v != "null" and v != "unset") {
-        types[a.name] = "list<{v}>"
-    } else if (types[a.name] != "list<{v}>") {
-        # a second type, or a value of unknown type: a list of mixed items from here on
-        types[a.name] = "list"
+    if (types[a.name] == kind and v != "any" and v != "null" and v != "unset") {
+        types[a.name] = "{kind}<{v}>"
+    } else if (types[a.name] != "{kind}<{v}>") {
+        # a second type, or a value of unknown type: a list (or map) of mixed items from here on
+        types[a.name] = kind
         SCOPES[idx].empties[a.name] = null
     }
     return true
@@ -101,7 +106,7 @@ func print_list_types() {
 }
 
 func strict_on() -> bool {
-    return STRICT and GENERIC == 0
+    return GENERIC == 0 and not NO_STRICT[0]
 }
 
 # Per-call checking of user functions. A function body is checked once for each distinct list of
@@ -202,6 +207,29 @@ func ck_init_results() {
     RESULTS["file_exists"] = "bool"
     # an open file, or null when it cannot be opened
     RESULTS["open"] = "file"
+    # Strict mode is the rule, so every builtin has a result type. Those that give nothing give null.
+    for (let nm in split("print write flush close map_set yield send channel_close srand exit free store defer shape ssort shuffle tshuffle", " ")) {
+        RESULTS[nm] = "null"
+    }
+    for (let nm in split("assert remove_file map_delete", " ")) {
+        RESULTS[nm] = "bool"
+    }
+    RESULTS["read_line"] = "string"
+    # the values of a map of mixed items (a map with a value type gives a list of that type, see ck_builtin)
+    RESULTS["map_values"] = "list"
+    RESULTS["input"] = "string"
+    for (let nm in split("alloc ptr_add ptr_offset address_of addr", " ")) {
+        RESULTS[nm] = "pointer"
+    }
+    RESULTS["channel"] = "channel"
+    RESULTS["spawn"] = "thread"
+    for (let nm in split("map vec_add vec_sub vec_mul vec_div vec_mul_inline mat_mul", " ")) {
+        RESULTS[nm] = "list"
+    }
+    # What these give depends on what was stored, sent or returned: the program says it, let v: int = recv(ch).
+    for (let nm in split("load deref wait recv reduce", " ")) {
+        RESULTS[nm] = "any"
+    }
 }
 
 ck_init_results()
@@ -244,7 +272,8 @@ func ck_init_sigs() {
     # Conversions keep the value: an int from a whole float or from text, a float from an int or from text.
     # A char or a bool is not a number (code(c) gives a character's code).
     sig("float", "int>float|float>float|string>float")
-    sig("int", "float>int|int>int|string>int")
+    # int(p) of a pointer gives its address, inside unsafe
+    sig("int", "float>int|int>int|string>int|pointer>int")
     sig("to_string", "any>string|float,int>string")
     sig("string", "any>string")
     sig("code", "char>int")
@@ -599,6 +628,9 @@ func annot_in(text: string, span: Span, strict: bool, ds: map<Node>) -> string {
     if (text == "list" or text == "map" or text == "function") {
         return text
     }
+    if (text == "pointer" or text == "channel" or text == "thread" or text == "file") {
+        return text
+    }
     let td = map_get(ds, text, null)
     if (td != null) {
         if (td.is_bloc == true or td.is_template == true) {
@@ -609,7 +641,7 @@ func annot_in(text: string, span: Span, strict: bool, ds: map<Node>) -> string {
     if (strict and lookup(text) == null) {
         let d = fail_at(span, "unknown type '{text}'")
         diag_text(d, "not a type")
-        diag_hint(d, "The types are int, float, bool, char, string, list, map, function, and the names of your own bloc and template types")
+        diag_hint(d, "The types are int, float, bool, char, string, list, map, function, pointer, channel, thread, file, and the names of your own bloc and template types")
     }
     return "any"
 }
@@ -760,6 +792,8 @@ func check_name(n: Node, what: string) -> bool {
         return false
     }
     append(PENDING, Pending(node_span(n), name, what, cut(SCOPES, 0, len(SCOPES))))
+    # a name declared nowhere is reported at the end; strict mode does not also report its unknown type
+    append(ERROR_SPANS, ErrorAt(ST.src_file, node_span(n)))
     return true
 }
 
@@ -835,6 +869,7 @@ func fail_at(span: Span, msg: string, kind: string = "Type Error") -> Diag {
         return null
     }
     REPORTED[key] = true
+    append(ERROR_SPANS, ErrorAt(ST.src_file, span))
     let d = diag_new(kind, span, msg)
     let i = len(CALLS) - 1
     while (i >= 0) {
@@ -886,9 +921,42 @@ func convert_hint(want: string, got: string, n: Node = null) -> string {
     return ""
 }
 
+# Where errors were reported. A value whose expression holds one of them has the type any because of that
+# error, and strict mode does not report it again.
+template ErrorAt { file: string, span: Span }
+let ERROR_SPANS: list<ErrorAt> = []
+
+# Names whose type is unknown because of an error already reported: names a use statement asked for that
+# their file does not export, and variables whose first value had an error.
+let BAD_IMPORTS: map<bool> = {}
+
+# Whether an error was reported inside the place of node n, or n uses a name in BAD_IMPORTS.
+func error_inside(n: Node) -> bool {
+    if (len(map_keys(BAD_IMPORTS)) > 0) {
+        for (let x in nodes_under([n])) {
+            if (x.k == "id" and map_has(BAD_IMPORTS, x.name)) {
+                return true
+            }
+        }
+    }
+    let at = node_span(n)
+    for (let e in ERROR_SPANS) {
+        if (e.file != ST.src_file) {
+            continue
+        }
+        let sp = e.span
+        let after_start = sp.line > at.line or (sp.line == at.line and sp.col >= at.col)
+        let before_end = sp.line < at.eline or (sp.line == at.eline and (sp.col < at.ecol or at.col == 0))
+        if (after_start and before_end) {
+            return true
+        }
+    }
+    return false
+}
+
 # In strict mode a value of type any may not be used where its type matters.
 func strict_known(t: string, n: Node, what: string) {
-    if (strict_on() and t == "any") {
+    if (strict_on() and t == "any" and not error_inside(n)) {
         let d = fail_node(n, "strict mode: the type of {what} is not known. Give it a type, for example let x: int = ...")
         diag_text(d, "type not known")
     }
@@ -1003,7 +1071,8 @@ func ck_bin(n: Node) -> string {
             }
             return "bool"
         }
-        if (a == b and (a == "string" or a == "char")) {
+        # two pointers into one allocation are ordered (the runtime checks that they are)
+        if (a == b and (a == "string" or a == "char" or a == "pointer")) {
             return "bool"
         }
         operand_error(n, a, b)
@@ -1238,8 +1307,13 @@ func ck_builtin_call(n: Node, name: string, alts: list<Alt>, argtypes: list<stri
 
 # A builtin that wants a particular type is not given a value of unknown type.
 func ck_strict_args(n: Node, name: string, alts: list<Alt>, argtypes: list<string>) {
+    # x as int and x as float (int(x), float(x)) take a value of any type: converting a value whose type is
+    # not known (an item of a mixed list) is what they are for, and they check it when the program runs
+    if ((name == "int" or name == "float") and len(argtypes) == 1) {
+        return null
+    }
     for (let i = 0; i < len(argtypes); i++) {
-        if (argtypes[i] != "any") {
+        if (argtypes[i] != "any" or error_inside(n.args[i])) {
             continue
         }
         for (let alt in alts) {
@@ -1293,16 +1367,13 @@ func field_index(td: Node, field: string) -> int {
     return -1
 }
 
-# The definition t names when t is a bloc or template type, else null.
+# The definition t names when t is a bloc, template or data type, else null.
 func object_def(t: string) -> Node {
     let td = map_get(TYPEDEFS, kind_of(t), null)
     if (td == null) {
         td = map_get(ALL_TYPEDEFS, kind_of(t), null)
     }
-    if (td != null and (td.is_bloc == true or td.is_template == true)) {
-        return td
-    }
-    return null
+    return td
 }
 
 # Constructing a type with typed fields: a whole-number literal given to a float field becomes a
@@ -1337,9 +1408,7 @@ func ck_typed_construct(n: Node, name: string, argtypes: list<string>) -> string
             diag_hint(d, convert_hint(want, got, n.args[i]))
         }
     }
-    if (td.is_template != true) {
-        return name
-    }
+    # A field without a type takes the type of the value it is made with, in a template or a bloc.
     let args: list<string> = []
     let known = false
     for (let i = 0; i < len(td.fields); i++) {
@@ -1417,9 +1486,7 @@ func ck_call(n: Node) -> string {
         return "any"
     }
     if (map_has(TYPEDEFS, name) and known == "type") {
-        if (TYPEDEFS[name].is_bloc == true or TYPEDEFS[name].is_template == true) {
-            return ck_typed_construct(n, name, argtypes)
-        }
+        return ck_typed_construct(n, name, argtypes)
     }
     if (name == "print" and known == null) {
         check_print_holes(n)
@@ -1478,6 +1545,24 @@ func ck_builtin(n: Node, name: string, argtypes: list<string>) -> string {
         return "any"
     }
     if (name == "sort" and len(argtypes) == 1 and kind_of(first) == "list") {
+        return first
+    }
+    if (name == "map_set" and len(argtypes) == 3 and kind_of(first) == "map") {
+        grow_list(n.args[0], first, argtypes[2])
+    }
+    # alloc(Player(...)) makes a template or bloc by hand: it is used as that type
+    if (name == "alloc" and len(argtypes) == 1 and object_def(first) != null) {
+        return first
+    }
+    # slice and reverse of a string give a string; the element-wise list operations give the list type
+    if ((name == "slice" or name == "reverse") and first == "string") {
+        return "string"
+    }
+    if ((name == "vec_add" or name == "vec_sub" or name == "vec_mul" or name == "vec_div" or name == "mat_mul") and kind_of(first) == "list") {
+        return first
+    }
+    # filter keeps the items it is given; debug gives back its value
+    if ((name == "filter" and kind_of(first) == "list") or (name == "debug" and len(argtypes) == 1)) {
         return first
     }
     # Results that follow the element type of the first argument.
@@ -1723,13 +1808,38 @@ func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call
         return "any"
     }
     INPROG[mkey] = true
+    # A function that calls itself: while its body is first checked, the result of the call to itself is not
+    # known yet, so that pass reports only proven errors (strict mode is silent, as for an untyped parameter).
+    # Once the result type is settled, one more pass reports what strict mode finds, with the calls to
+    # itself of that type.
+    let selfcall = calls_itself(fn, name)
+    let reporting = strict_on()
+    if (selfcall) {
+        GENERIC += 1
+    }
     let rets1 = check_body(name, fn, idx, types, line, home)
+    if (selfcall) {
+        GENERIC -= 1
+    }
     let result = join_returns(rets1)
     if (fn.rtype != null) {
         result = sig_annot(fn.rtype, span_or(fn.rspan, fn), home)
     }
     if (map_has(RECURSIVE, mkey) and not is_scalar(result)) {
         result = try_assume(name, fn, idx, types, line, mkey, rets1, result, home)
+    }
+    if (selfcall and reporting) {
+        # the calls to itself have the settled type, or else the type of the returns that do not recurse,
+        # so that a mistake in using them is reported as what it is
+        let assumed = result
+        if (assumed == "any") {
+            assumed = common_scalar(rets1)
+        }
+        if (assumed != null and assumed != "any") {
+            ASSUME[mkey] = assumed
+        }
+        check_body(name, fn, idx, types, line, home)
+        map_delete(ASSUME, mkey)
     }
     MEMO[mkey] = result
     if (LOG != null) {
@@ -1740,6 +1850,23 @@ func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call
         spec_site(call, fn, idx, types, result)
     }
     return result
+}
+
+# Whether the body of fn calls name, the name fn has where it is called.
+let SELF_CALLS: map<bool> = {}
+
+func calls_itself(fn: Node, name: string) -> bool {
+    let key = "{fn.line}:{fn.col}:{name}"
+    if (not map_has(SELF_CALLS, key)) {
+        let found = false
+        for (let x in nodes_under(fn.body)) {
+            if (x.k == "call" and x.callee.k == "id" and x.callee.name == name) {
+                found = true
+            }
+        }
+        SELF_CALLS[key] = found
+    }
+    return SELF_CALLS[key]
 }
 
 # A type written in the signature of a function: read in its own file (home) when it is another file's.
@@ -1760,11 +1887,36 @@ func always_returns(stmts: list<Node>) -> bool {
     if (last.k == "return") {
         return true
     }
+
     if (last.k == "if") {
         return len(last.els) > 0 and always_returns(last.then) and always_returns(last.els)
     }
     if (last.k == "block") {
         return always_returns(last.body)
+    }
+    return false
+}
+
+# Whether every way through stmts ends in a return or a call of exit: no way gives null. (A direct call
+# needs a return on every way, see spec_site, so always_returns does not count exit.)
+func returns_or_exits(stmts: list<Node>) -> bool {
+    if (len(stmts) == 0) {
+        return false
+    }
+    let last = stmts[len(stmts) - 1]
+    if (last.k == "return") {
+        return true
+    }
+    # exit(...) ends the program (when exit is the builtin)
+    if (last.k == "call" and last.callee.k == "id" and last.callee.name == "exit" and lookup("exit") == null) {
+        return true
+    }
+
+    if (last.k == "if") {
+        return len(last.els) > 0 and returns_or_exits(last.then) and returns_or_exits(last.els)
+    }
+    if (last.k == "block" or last.k == "unsafe") {
+        return returns_or_exits(last.body)
     }
     return false
 }
@@ -1831,7 +1983,7 @@ func check_body(name: string, fn: Node, idx: int, types: list<string>, line: int
     remove(RESULT_TYPES, len(RESULT_TYPES) - 1)
     let rets = remove(RETS, len(RETS) - 1)
     # A way through the body that does not end in a return gives null.
-    if (not always_returns(fn.body)) {
+    if (not returns_or_exits(fn.body)) {
         append(rets, "null")
     }
     remove(CALLS, len(CALLS) - 1)
@@ -2080,6 +2232,18 @@ func ck_expr(n: Node) -> string {
         if (t == "string") {
             return "char"
         }
+        # a byte of a box
+        if (t == "box") {
+            return "int"
+        }
+        # p["x"] reads the field x of a bloc, template or data value
+        let od = object_def(t)
+        if (od != null and n.index.k == "str") {
+            let fi = field_index(od, n.index.v)
+            if (fi >= 0) {
+                return object_field_type(od, t, fi)
+            }
+        }
         let el = elem_of(t)
         if (el != null) {
             return el
@@ -2118,6 +2282,9 @@ func ck_expr(n: Node) -> string {
             if (fi >= 0) {
                 return object_field_type(td, ft, fi)
             }
+        }
+        if (ft == "box" and (n.field == "len" or n.field == "cap")) {
+            return "int"
         }
         # m.key reads the key "key" of a map
         if (kind_of(ft) == "map" and elem_of(ft) != null) {
@@ -2261,12 +2428,16 @@ func ck_stmt(n: Node) {
         } else {
             let it = settle(ck_expr(n.init))
             strict_known(it, n.init, "the value given to '{n.name}'")
+            if (it == "any" and error_inside(n.init)) {
+                # its value had an error: a use of the variable is not reported again as unknown
+                BAD_IMPORTS[n.name] = true
+            }
             if (it == "null") {
                 # A variable that starts as null takes the type of its first real value.
                 it = "unset"
             }
             declare(n.name, it, node_span(n.init))
-            if (n.init.k == "list" and len(n.init.items) == 0) {
+            if ((n.init.k == "list" and len(n.init.items) == 0) or (n.init.k == "map" and len(n.init.keys) == 0)) {
                 declare_empty(n.name, n)
             } else if (empty_index(n.name) == len(SCOPES) - 1) {
                 declare_empty(n.name, null)
@@ -2398,6 +2569,10 @@ func ck_stmt(n: Node) {
             # a list that started empty: a value of another type makes it a list of mixed items
             return null
         }
+        if (n.op == null and kind_of(tt) == "map" and grow_list(n.target, tt, et)) {
+            # a map that started empty takes the type of its first value
+            return null
+        }
         if (el != null and n.op == null) {
             et = adapt_expr(n.e, et, el)
             if (not fits_slot(et, el) and not (et == "null" and template_or_null([el]) != null)) {
@@ -2526,7 +2701,7 @@ func check_result(n: Node, rt: string) -> string {
 
 # A function with a written result type that is not a template must return on every way through its body.
 func check_result_paths(fn: Node) {
-    if (fn.rtype == null or always_returns(fn.body)) {
+    if (fn.rtype == null or returns_or_exits(fn.body)) {
         return null
     }
     let want = annot(fn.rtype, span_or(fn.rspan, fn), true)
@@ -2546,7 +2721,13 @@ func check_result_paths(fn: Node) {
 # The name type(v) gives for a value of checker type t, or null when t does not tell.
 func runtime_name(t: string) {
     let k = kind_of(t)
-    if (k == "int" or k == "float" or k == "bool" or k == "string" or k == "char" or k == "list" or k == "map" or k == "function") {
+    if (k == "bool") {
+        return "boolean"
+    }
+    if (k == "int" or k == "float" or k == "string" or k == "char" or k == "list" or k == "map" or k == "function") {
+        return k
+    }
+    if (k == "pointer" or k == "channel" or k == "thread" or k == "file" or k == "box") {
         return k
     }
     let od = object_def(t)
@@ -2697,23 +2878,6 @@ func undo_marks(log: list<MarkEntry>) {
     }
 }
 
-# Whether a line "# strict" (or "// strict") comes before the first line of code.
-func file_is_strict(lines: list<string>) -> bool {
-    for (let line in lines) {
-        let t = trim(line)
-        if (t == "") {
-            continue
-        }
-        if (t == "# strict" or t == "// strict") {
-            return true
-        }
-        if (not starts_with(t, "#") and not starts_with(t, "//")) {
-            return false
-        }
-    }
-    return false
-}
-
 # Reports the names that were read or assigned and that nothing in the program declares.
 func report_undefined() {
     if (OPEN_IMPORT) {
@@ -2735,7 +2899,7 @@ func report_undefined() {
 # error inside the other file names that file.
 template CkFile {
     canon: string, lines: list<string>, scopes: list<Scope>, typedefs: map<Node>, assigned: map<bool>,
-    hoisted: map<bool>, strict: bool, exports: map<bool>, done: bool
+    hoisted: map<bool>, exports: map<bool>, done: bool
 }
 
 # Canonical path -> CkFile, or an empty item for a file that cannot be read.
@@ -2747,12 +2911,12 @@ let CUR_CANON = ""
 # The checker state that belongs to one file, so that another file can be checked in between.
 template FileState {
     scopes: list<Scope>, typedefs: map<Node>, assigned: map<bool>, hoisted: map<bool>, pending: list<Pending>,
-    open: bool, strict: bool, file: string, lines: list<string>, canon: string, calls: list<Call>,
+    open: bool, file: string, lines: list<string>, canon: string, calls: list<Call>,
     rets: list<list<string>>
 }
 
 func save_file_state() -> FileState {
-    return FileState(SCOPES, TYPEDEFS, ASSIGNED, HOISTED, PENDING, OPEN_IMPORT, STRICT, ST.src_file,
+    return FileState(SCOPES, TYPEDEFS, ASSIGNED, HOISTED, PENDING, OPEN_IMPORT, ST.src_file,
         ST.src_lines, CUR_CANON, CALLS, RETS)
 }
 
@@ -2763,7 +2927,6 @@ func restore_file_state(st: FileState) {
     HOISTED = st.hoisted
     PENDING = st.pending
     OPEN_IMPORT = st.open
-    STRICT = st.strict
     ST.src_file = st.file
     ST.src_lines = st.lines
     CUR_CANON = st.canon
@@ -2782,7 +2945,6 @@ func enter_file(cf: CkFile) -> FileState {
     HOISTED = cf.hoisted
     PENDING = []
     OPEN_IMPORT = true
-    STRICT = cf.strict
     ST.src_file = cf.canon
     ST.src_lines = cf.lines
     CUR_CANON = cf.canon
@@ -2828,7 +2990,7 @@ func check_file(canon: string) -> CkFile {
     ST.src_lines = lines
     let stmts = parse_source(text)
     resolve_named_args(stmts, canon)
-    let cf = CkFile(canon, lines, [], {}, {}, {}, file_is_strict(lines), {}, false)
+    let cf = CkFile(canon, lines, [], {}, {}, {}, {}, false)
     FILES[canon] = cf
     collect_file_exports(stmts, cf.exports)
     SCOPES = []
@@ -2837,7 +2999,6 @@ func check_file(canon: string) -> CkFile {
     HOISTED = {}
     PENDING = []
     OPEN_IMPORT = false
-    STRICT = cf.strict
     CUR_CANON = canon
     CALLS = []
     RETS = []
@@ -2874,6 +3035,10 @@ func bind_use(n: Node) {
     for (let nm in names) {
         if (cf == null or not cf.done or not map_has(cf.exports, nm)) {
             declare(nm, "any")
+            if (cf != null and cf.done) {
+                # the code generator reports the import; strict mode does not also report the unknown type
+                BAD_IMPORTS[nm] = true
+            }
             continue
         }
         let top = cf.scopes[0]
@@ -2895,9 +3060,8 @@ func bind_use(n: Node) {
 export func check_program(stmts: list<Node>, canon: string) {
     CUR_CANON = canon
     if (canon != "" and not map_has(FILES, canon)) {
-        FILES[canon] = CkFile(canon, ST.src_lines, [], {}, {}, {}, false, {}, false)
+        FILES[canon] = CkFile(canon, ST.src_lines, [], {}, {}, {}, {}, false)
     }
-    STRICT = file_is_strict(ST.src_lines)
     SCOPES = []
     TYPEDEFS = {}
     MEMO = {}
@@ -2905,6 +3069,8 @@ export func check_program(stmts: list<Node>, canon: string) {
     CALLS = []
     RETS = []
     REPORTED = {}
+    ERROR_SPANS = []
+    BAD_IMPORTS = {}
     HOISTED = {}
     PENDING = []
     OPEN_IMPORT = false

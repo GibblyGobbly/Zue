@@ -22,7 +22,7 @@ for (let round = 0; round < 40; round++) {
 let bad = 0
 for (let i = 0; i < 20000; i++) {
     let r = live[i]
-    if (len(r) != 3 or r[0] != "a" or r[1] != i or r[2] != "x{i}") {
+    if (len(r) != 3 or r[0] as string != "a" or r[1] as int != i or r[2] as string != "x{i}") {
         bad += 1
     }
 }
@@ -44,11 +44,11 @@ let bad = 0
 let at = 0
 for (let round = 0; round < 30; round++) {
     for (let i = 0; i < 300; i++) {
-        if (keep[at] != "keep{round}-{i}") {
+        if (keep[at] as string != "keep{round}-{i}") {
             bad += 1
         }
-        let r = keep[at + 1]
-        if (r[0] != round or r[1] != i or r[2] != "n{i}") {
+        let r: list = keep[at + 1]
+        if (r[0] as int != round or r[1] as int != i or r[2] as string != "n{i}") {
             bad += 1
         }
         at += 2

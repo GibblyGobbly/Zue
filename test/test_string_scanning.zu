@@ -40,11 +40,13 @@ func pass(v) {
     return [v, null][0]
 }
 print(skip_chars("abc", "a", pass("1")))
+# test: no-strict
 # CASE set must be a string
 func pass(v) {
     return [v, null][0]
 }
 print(skip_chars("abc", pass(5)))
+# test: no-strict
 # CASE index_of from a start finds nothing after it
 print(index_of("banana", "an", 4))
 # CASE index_of in an empty string

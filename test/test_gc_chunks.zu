@@ -32,7 +32,7 @@ for (let i = 0; i < 600000; i++) {
 }
 let bad = 0
 for (let j = 0; j < len(keep); j++) {
-    if (keep[j][1] != "s{keep[j][0]}") {
+    if (keep[j][1] as string != "s{keep[j][0]}") {
         bad += 1
     }
 }

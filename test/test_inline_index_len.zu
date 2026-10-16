@@ -19,24 +19,28 @@ for (let i = 0; i < len(xs); i++) {
     total += xs[i]
 }
 print(total)
+# test: no-strict
 # CASE an index past the end
 func pass(v) {
     return [v, null][0]
 }
 let xs = pass([1, 2, 3])
 print(xs[3])
+# test: no-strict
 # CASE an index before the start
 func pass(v) {
     return [v, null][0]
 }
 let xs = pass([1, 2, 3])
 print(xs[-4])
+# test: no-strict
 # CASE an index that is not an int
 func pass(v) {
     return [v, null][0]
 }
 let xs = pass([1, 2, 3])
 print(xs[pass("a")])
+# test: no-strict
 # CASE strings, maps and dense lists are indexed by the runtime
 func pass(v) {
     return [v, null][0]
@@ -48,6 +52,7 @@ let m = pass({"k": 7})
 print(m["k"])
 let d = pass(dense_list(3, 1.5))
 print(len(d))
+# test: no-strict
 # CASE len of every kind it takes
 func pass(v) {
     return [v, null][0]
@@ -58,16 +63,19 @@ print(len(pass("")))
 print(len(pass("héllo")))
 print(len(pass({"a": 1, "b": 2})))
 print(len(pass([[1], [2, 3]])))
+# test: no-strict
 # CASE len of something that has no length
 func pass(v) {
     return [v, null][0]
 }
 print(len(pass(5)))
+# test: no-strict
 # CASE len with the wrong number of arguments
 func pass(v) {
     return [v, null][0]
 }
 print(len(pass([1]), 2))
+# test: no-strict
 # CASE nested index and len
 func pass(v) {
     return [v, null][0]
@@ -76,3 +84,4 @@ let grid = pass([[1, 2, 3], [4, 5, 6]])
 print(grid[1][2])
 print(len(grid[0]))
 print(grid[-1][-1])
+# test: no-strict

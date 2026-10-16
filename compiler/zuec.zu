@@ -28,7 +28,7 @@ use { dump_program } from "ast_dump.zu"
 use { unparse_program } from "ast_unparse.zu"
 use { GC_LOWMEM, dbg_enable } from "ll_state.zu"
 use { SPEC_ON } from "ll_spec.zu"
-use { LIST_TYPES_ON } from "check.zu"
+use { LIST_TYPES_ON, NO_STRICT } from "check.zu"
 use { diag_set_format } from "diag.zu"
 use { ERROR_CODES } from "error_codes.zu"
 use { cut } from "ranges.zu"
@@ -311,6 +311,11 @@ func positional_main(a) {
 
 func main() {
     let a = args()
+    if (len(a) >= 1 and a[0] == "--no-strict") {
+        # for the test suite: see NO_STRICT in check.zu
+        NO_STRICT[0] = true
+        a = cut(a, 1, len(a))
+    }
     if (len(a) < 1) {
         usage()
     }

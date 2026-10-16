@@ -9,6 +9,7 @@ print([1, [2, "x"]] == [1, [2, "x"]], [[1]] == [[2]])
 print(pass([1]) == pass([1.0]), [] == [])
 let a = [1, 2]
 print(a == a)
+# test: no-strict
 # CASE maps compare their keys and values in any order
 print({"a": 1, "b": 2} == {"b": 2, "a": 1}, {"a": 1} == {"a": 2}, {"a": 1} == {"b": 1})
 print({"a": [1]} == {"a": [1]}, {"a": 1} == {"a": 1, "b": 2}, {} == {})
@@ -52,6 +53,7 @@ for (let i = 0; i < 100000; i++) {
 print(d1 == d2)
 append(c2, 5)
 print(d1 == d2)
+# test: no-strict
 # CASE sort and append give back the list
 let xs = [3, 1, 2]
 print(sort(xs))

@@ -42,7 +42,7 @@ for (let round = 0; round < 6; round++) {
 }
 let total = 0
 for (let i = 0; i < len(kept); i += 2) {
-    let s = kept[i]
+    let s: string = kept[i]
     if (char_at(s, 0) != "a" or char_at(s, len(s) - 1) != "a") {
         print("kept string damaged")
         exit(1)

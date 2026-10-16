@@ -10,6 +10,7 @@ func pass(v) {
 }
 print(substring(pass("abc"), 1, pass(9223372036854775807)))
 print(substring("abc", 3, 5) == "")
+# test: no-strict
 # CASE substring with a negative start
 print(substring("abc", -5, 2))
 # CASE strings with NUL bytes compare by every byte
@@ -48,14 +49,14 @@ print(range(hi, lo, -hi))
 print(range(0, 9223372036854775807))
 # CASE map takes the count once
 let xs = [1, 2, 3]
-print(map(xs, func(v) {
+print(map(xs, func(v: int) {
     append(xs, v)
     return v * 2
 }))
 print(len(xs))
 # CASE filter on a list the callback shortens
 let ws = [1, 2, 3, 4]
-print(filter(ws, func(v) {
+print(filter(ws, func(v: int) {
     remove(ws, 0)
     return true
 }))
@@ -75,6 +76,7 @@ func pass(v) {
     return [v, null][0]
 }
 print(int(pass(1e19)))
+# test: no-strict
 # CASE dense_list too large to hold
 print(dense_list(100000000000000, 0.0))
 # CASE substring with a negative length

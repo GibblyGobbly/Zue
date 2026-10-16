@@ -1,0 +1,8 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
+  float() cannot be called with (pointer); use (int) or (float) or (string)
+
+   4 |     let f = float(a)
+     |             -----^^^ no form takes (pointer)
+     |             |
+     |             float
+

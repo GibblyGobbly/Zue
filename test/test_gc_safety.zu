@@ -7,9 +7,17 @@ func make_keeper(base) {
         append(items, base + "-" + to_string(i))
     }
 
-    return func(idx) {
-        return map_get(meta, "tag") + ":" + map_get(meta, "items")[idx]
+    return func(idx: int) {
+        let tag: string = map_get(meta, "tag")
+        let parts: list<string> = map_get(meta, "items")
+        return tag + ":" + parts[idx]
     }
+}
+
+# The text a keeper gives for idx (a function value's result has no known type, so it is written here).
+func text_of(keeper, idx) {
+    let s: string = keeper(idx)
+    return s
 }
 
 let keepers = []
@@ -33,15 +41,15 @@ for (let round = 0; round < 80; round++) {
     }
 
     if (round % 20 == 0) {
-        assert(keepers[0](1) == "k0:k0-1")
-        assert(keepers[16](2) == "k16:k16-2")
-        assert(keepers[31](31) == "k31:k31-31")
+        assert(text_of(keepers[0], 1) == "k0:k0-1")
+        assert(text_of(keepers[16], 2) == "k16:k16-2")
+        assert(text_of(keepers[31], 31) == "k31:k31-31")
         assert(roots[10][3] == "r10-3")
         assert(roots[15][7] == "r15-7")
     }
 }
 
-assert(keepers[5](4) == "k5:k5-4")
+assert(text_of(keepers[5], 4) == "k5:k5-4")
 assert(roots[1][1] == "r1-1")
 
 print("GC safety tests passed!")

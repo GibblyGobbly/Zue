@@ -79,7 +79,7 @@ func add(a, b) {
 }
 # strict
 print(add(1, 2))
-# CASE without the comment nothing changes
+# CASE strict mode is the rule, also without the comment
 let xs = [1, "two"]
 let y = xs[0]
 print(y)

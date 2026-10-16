@@ -92,7 +92,7 @@ This is the usual flow:
 | `alloc(n)` | Allocates `n` Zue value slots and returns a pointer | `let buf = alloc(4)` |
 | `free(ptr)` | Frees an allocation pointer manually | `free(buf)` |
 | `defer(ptr)` | Schedules a pointer to be freed when the current `unsafe` block ends | `defer(buf)` |
-| `load(ptr)` | Reads the value stored at a pointer | `let x = load(buf)` |
+| `load(ptr)` | Reads the value stored at a pointer. Memory holds values of any type, so the program says which: `let x: int = load(buf)` or `load(buf) as int` | `let x: int = load(buf)` |
 | `store(ptr, value)` | Writes a value to a pointer slot | `store(buf, 10)` |
 | `ptr_offset(ptr, offset)` | Moves `offset` slots forward inside the same allocation | `let p2 = ptr_offset(buf, 2)` |
 | `address_of(name)` | Takes the address of a named variable | `let p = address_of(score)` |
@@ -361,7 +361,7 @@ let score = 5
 
 unsafe {
     let p = address_of(score)
-    let current = load(p)
+    let current: int = load(p)
     store(p, current + 10)
 }
 
