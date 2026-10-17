@@ -491,7 +491,7 @@ a `Type Error` with the line, and the program is not built.
   `x = 2.5` are errors. A variable that starts as `null` or has no value (`let x`) takes the type
   of the first value assigned to it.
 - A number written in the source adapts to the type it is used as: `sqrt(16)`, `2.5 * 2`, `min(1, 2.5)`
-  and `mod(5.5, 2)` are fine (a builtin form the arguments fit as they are wins: `round(5, 2)` is the int
+  and `mod(5.5, 2)` are fine, and so is `f ** 2` for a float `f` (a builtin form the arguments fit as they are wins: `round(5, 2)` is the int
   form). A whole number adapts to a float only when the float is exact: `floor(9007199254740993)` is an
   error, since the nearest float is 9007199254740992. A variable never converts: with `let n = 16`,
   `sqrt(n)` and `n + 1.5` are errors. Write `sqrt(float(n))` or `sqrt(n as float)` to convert on purpose.
@@ -500,7 +500,8 @@ a `Type Error` with the line, and the program is not built.
 - A variable declared `int`, `float` or `bool` cannot start as `null` (`let x: int = null` is an error).
 - Operators need operands of the same type. `"a" + 1`, `"a" * 2`, `-"a"`, `1 == "a"` and
   `3 == 3.0` for a variable are errors, and so is dividing by a zero written in the source.
-- `if`, `while`, `for`, `not`, `and` and `or` need a `bool`.
+- `if`, `while`, `for`, `not`, `and`, `or` and `assert` need a `bool`.
+- A `switch` whose cases and `default` all end in a `return` (with no `break`) counts as returning.
 - The math builtins check their arguments: `sqrt(float)`, `pow(int, int)` or `pow(float, float)`,
   `floor(float)` giving an int, `rand(int)`, and so on.
 - A function you write is checked at each call, with its parameters bound to the argument types:

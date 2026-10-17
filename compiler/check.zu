@@ -279,6 +279,8 @@ func ck_init_sigs() {
     sig("code", "char>int")
     sig("char", "int>char")
     sig("fixed", "float,int>string")
+    # a condition is a bool, as for if and while
+    sig("assert", "bool>bool")
 }
 
 ck_init_sigs()
@@ -1060,7 +1062,7 @@ func ck_bin(n: Node) -> string {
     # x < 1.0. The runtime never mixes an int with a float.
     # Next to a value whose type is not known here the literal takes that value's number type at run time.
     let bitwise = op == "&" or op == "|" or op == "^" or op == "<<" or op == ">>"
-    if (op != "and" and op != "or" and op != "**" and not bitwise and n.unary == null) {
+    if (op != "and" and op != "or" and not bitwise and n.unary == null) {
         if (a == "int~" and (b == "float" or b == "float~")) {
             a = adapt_expr(n.l, a, "float")
         } else if (b == "int~" and (a == "float" or a == "float~")) {
@@ -1981,7 +1983,36 @@ func always_returns(stmts: list<Node>) -> bool {
     if (last.k == "block") {
         return always_returns(last.body)
     }
+    if (last.k == "switch") {
+        return switch_ends(last, false)
+    }
     return false
+}
+
+# Whether every way through switch n ends in a return (or, with exits, a call of exit): it has a default,
+# and each case and the default end so, with no break that would leave the switch first.
+func switch_ends(n: Node, exits: bool) -> bool {
+    if (n.dflt == null or len(n.dflt) == 0) {
+        return false
+    }
+    let bodies: list<list<Node>> = [n.dflt]
+    for (let c in n.cases) {
+        append(bodies, c.body)
+    }
+    for (let body in bodies) {
+        for (let x in nodes_under(body)) {
+            if (x.k == "break") {
+                return false
+            }
+        }
+        if (exits and not returns_or_exits(body)) {
+            return false
+        }
+        if (not exits and not always_returns(body)) {
+            return false
+        }
+    }
+    return true
 }
 
 # Whether every way through stmts ends in a return or a call of exit: no way gives null. (A direct call
@@ -2004,6 +2035,9 @@ func returns_or_exits(stmts: list<Node>) -> bool {
     }
     if (last.k == "block" or last.k == "unsafe") {
         return returns_or_exits(last.body)
+    }
+    if (last.k == "switch") {
+        return switch_ends(last, true)
     }
     return false
 }

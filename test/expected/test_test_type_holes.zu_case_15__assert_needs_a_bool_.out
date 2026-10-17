@@ -1,0 +1,9 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 3:
+  assert() argument 1 must be a bool, got int
+
+   3 | assert(n)
+     | ------ ^ expected bool, found int
+     | |
+     | argument 1 of assert()
+
+Hint: Make a bool with a comparison, for example x != 0 or len(s) > 0

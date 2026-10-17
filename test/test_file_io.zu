@@ -7,13 +7,13 @@ if (file_exists(filename)) {
 }
 
 let f = open(filename, "w")
-assert(f)
+assert(f != null)
 write(f, "Hello Zue\nSecond Line\n")
 close(f)
 
 func write_with_defer(path, text) {
     let handle = open(path, "w")
-    assert(handle)
+    assert(handle != null)
     defer(close(handle))
     write(handle, text)
 }
@@ -23,7 +23,7 @@ write_with_defer(filename, "Deferred Hello\n")
 assert(file_exists(filename))
 
 f = open(filename, "r")
-assert(f)
+assert(f != null)
 let content = read(f)
 assert(str_len(content) > 0)
 assert(content == "Deferred Hello\n")

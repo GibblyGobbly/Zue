@@ -34,7 +34,7 @@ as `sqrt() argument 1 must be a number, got string`.
 | `char(n)` | The character with code `n`, 0 to 255: `char(66)` is `'B'` |
 | `to_string(v)` | `string(v)`, with `to_string(x, digits)` for floats (see [string](builtins.md#strings)). The older `to_int` and `to_float` were removed: write `s as int` and `s as float` |
 | `debug(v)` | Prints `value = <v>` and returns `v` unchanged, so it can wrap an expression |
-| `assert(cond)` | Stops the program with `Assertion failed` when `cond` is false |
+| `assert(cond)` | Stops the program with `Assertion failed` when `cond` is false. `cond` must be a `bool` (`assert(f != null)`, not `assert(f)`) |
 | `len(v)` | Length of a string, list, dense list, map or box; anything else is a `Type Error` |
 | `clock()` | Monotonic time in seconds, as a float. The zero point is arbitrary: subtract two readings |
 | `args()` | The command-line arguments after the program name, as a list of strings |

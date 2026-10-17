@@ -65,3 +65,45 @@ let ys: list<float> = [1.5, 2]
 let m: map<float> = {"a": 1.5, "b": 2}
 let zz: list<list<int>> = [[1], [2, 3]]
 print(ys, m, zz)
+# CASE a whole-number literal next to a float in ** is a float
+let f = 1.5
+print(f ** 2, 2 ** f, 2 ** 3)
+func p(x) {
+    return x ** 2
+}
+print(p(1.5), p(3))
+# CASE a switch whose cases and default all return counts as returning
+func g(n: int) -> int {
+    switch (n) {
+        case 1:
+            return 1
+        default:
+            return 2
+    }
+}
+func h(n) {
+    switch (n) {
+        case 1:
+            return 10
+        default:
+            return 20
+    }
+}
+print(g(1) + 1, g(5) + 1, h(1) + 1)
+# CASE a switch with a break does not count as returning
+func k(n: int) -> int {
+    switch (n) {
+        case 1:
+            if (n > 0) {
+                break
+            }
+            return 1
+        default:
+            return 2
+    }
+}
+print(k(1))
+# CASE assert needs a bool
+let n = 1
+assert(n == 1)
+assert(n)
