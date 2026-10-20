@@ -71,7 +71,7 @@ func collect_assigned(stmts: list<Node>, out: map<bool>) {
 
 # A statement list opens a scope that holds its functions, types, variables and imports from the start,
 # so a function can be called above the line that declares it.
-func declare_all(stmts: list<Node>, scope: map<Decl>) {
+func declare_all(stmts: list<Node>, scope: map<Decl>, ps: Pass) {
     for (let s in stmts) {
         if (s == null) {
             continue
@@ -82,9 +82,16 @@ func declare_all(stmts: list<Node>, scope: map<Decl>) {
         } else if (k == "let") {
             scope[s.name] = Decl("var", null, null, null)
         } else if (k == "group") {
-            declare_all(s.items, scope)
-        } else if (k == "use") {
+            declare_all(s.items, scope, ps)
+        } else if (k == "use" and s.names != null and len(s.names) > 0) {
             for (let nm in s.names) {
+                scope[nm] = Decl("import", null, s.path, nm)
+            }
+        } else if (k == "use") {
+            # use "x.zu" without a list of names brings in every name the file exports
+            let names: list<string> = []
+            exported_names(imported_stmts(ps, s.path), names)
+            for (let nm in names) {
                 scope[nm] = Decl("import", null, s.path, nm)
             }
         }
@@ -109,7 +116,7 @@ func walk_list(xs: list<Node>, ps: Pass) {
         return null
     }
     let scope: map<Decl> = {}
-    declare_all(xs, scope)
+    declare_all(xs, scope, ps)
     append(ps.scopes, scope)
     for (let y in xs) {
         walk(y, ps)
@@ -148,7 +155,7 @@ func walk(x: Node, ps: Pass) {
         # one scope holds the variable of the init, the condition, the step and the body
         let scope: map<Decl> = {}
         if (x.init != null) {
-            declare_all([x.init], scope)
+            declare_all([x.init], scope, ps)
         }
         append(ps.scopes, scope)
         walk(x.init, ps)
@@ -180,7 +187,12 @@ func lookup(ps: Pass, name: string) -> Decl {
 
 # The exported function or type called name in an imported file, or null.
 func imported_def(ps: Pass, ent: Decl) -> Node {
-    let canon = path_norm(path_join(path_dir(ps.canon), ent.path))
+    return find_def(imported_stmts(ps, ent.path), ent.name)
+}
+
+# The top-level statements of the file path, as the file being read imports it ([] when it cannot be read).
+func imported_stmts(ps: Pass, path: string) -> list<Node> {
+    let canon = path_norm(path_join(path_dir(ps.canon), path))
     if (not map_has(IMPORTED, canon)) {
         let f = open(canon, "r")
         if (f == null) {
@@ -197,7 +209,19 @@ func imported_def(ps: Pass, ent: Decl) -> Node {
             ST.src_lines = saved_lines
         }
     }
-    return find_def(IMPORTED[canon], ent.name)
+    return IMPORTED[canon]
+}
+
+# The names of the functions, types and variables stmts export, added to out.
+func exported_names(stmts: list<Node>, out: list<string>) {
+    for (let s in stmts) {
+        let k = s.k
+        if ((k == "func" or k == "typedef" or k == "let") and s.name != null and s.exported == true) {
+            append(out, s.name)
+        } else if (k == "group") {
+            exported_names(s.items, out)
+        }
+    }
 }
 
 func find_def(stmts: list<Node>, name: string) -> Node {

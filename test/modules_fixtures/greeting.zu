@@ -1,0 +1,6 @@
+// Fixture for test_use_named_args.zu: a function with a default and a template, used by named arguments.
+export func greet(name: string, punct: string = "!") {
+    return "Hi {name}{punct}"
+}
+
+export template Pt { x: int, y: int }

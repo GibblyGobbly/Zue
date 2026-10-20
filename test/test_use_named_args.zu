@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Named arguments work for the names a whole-file use brings in, as for use { ... } from.
+use "modules_fixtures/greeting.zu"
+print(greet("Ann", punct: "?"))
+print(greet(name: "Bo"))
+let p = Pt(x: 1, y: 2)
+print(p.x + p.y)
