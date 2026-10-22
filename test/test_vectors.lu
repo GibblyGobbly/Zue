@@ -1,0 +1,130 @@
+print("=== Running Vector/Array Tests ===")
+
+# SECTION 1: Array Mutation
+print("\n[1] Testing Array Mutation...")
+
+# Basic mutation
+let arr = [10, 20, 30]
+assert(arr[1] == 20)
+arr[1] = 500
+assert(arr[1] == 500)
+
+# Type switching (dynamic typing)
+arr[2] = "hello"
+assert(arr[2] == "hello")
+
+# Mutation inside a loop
+let list = [1, 1, 1]
+let i = 0
+while (i < 3) {
+    list[i] = i
+    i = i + 1
+}
+assert(list[0] == 0)
+assert(list[2] == 2)
+
+# Nested lists (matrices)
+let grid = [[0, 0], [0, 0]]
+grid[0][0] = 1
+grid[1][1] = 1
+# Should be identity matrix [[1,0],[0,1]]
+assert(grid[0][0] == 1)
+assert(grid[0][1] == 0)
+assert(grid[1][1] == 1)
+
+print("  ✓ Array Mutation passed")
+
+# SECTION 2: Vector Math Functions
+print("\n[2] Testing Vector Math Functions...")
+
+let A = [10, 20, 30, 40]
+let B = [2, 4, 5, 8]
+
+# Addition: vec_add
+let sum = vec_add(A, B)
+# 10+2=12, 20+4=24, 30+5=35, 40+8=48
+assert(sum[0] == 12)
+assert(sum[3] == 48)
+
+# Subtraction: vec_sub
+let sub = vec_sub(A, B)
+# 10-2=8, 20-4=16
+assert(sub[0] == 8)
+assert(sub[1] == 16)
+
+# Multiplication: vec_mul
+let mul = vec_mul(A, B)
+# 10*2=20, 40*8=320
+assert(mul[0] == 20)
+assert(mul[3] == 320)
+
+# Division: vec_div
+let div = vec_div(A, B)
+# 10/2=5, 20/4=5
+assert(div[0] == 5)
+assert(div[1] == 5)
+
+print("  ✓ Vector Math Functions passed")
+
+# SECTION 3: Operator Overloading
+print("\n[3] Testing Operator Overloading...")
+
+let X = [1, 2, 3, 4]
+let Y = [2, 2, 2, 2]
+
+# Use operators directly on arrays
+let Sum = X + Y
+let Sub = X - Y
+let Mul = X * Y
+let Div = X / Y
+
+# Verify results
+#print("DEBUG Sum array:")
+#print(Sum)
+#print("DEBUG Sum[0]:")
+#print(Sum[0])
+
+assert(Sum[0] == 3)   # 1 + 2 = 3
+assert(Sub[0] == -1)  # 1 - 2 = -1
+assert(Mul[0] == 2)   # 1 * 2 = 2
+assert(Div[0] == 0.5) # 1 / 2 = 0.5
+
+assert(Sum[3] == 6)   # 4 + 2 = 6
+assert(Mul[3] == 8)   # 4 * 2 = 8
+
+print("  ✓ Operator Overloading passed")
+
+# SECTION 4: Performance Benchmark
+print("\n[4] Running Performance Benchmark...")
+
+let size = 50000
+let BigA = []
+let BigB = []
+
+# Generate 50,000 items
+for (let j = 0; j < size; j++) {
+    append(BigA, j + 1)
+    append(BigB, 2)
+}
+
+let start = clock()
+
+# Test with operator overloading
+let BenchSum = BigA + BigB
+let BenchSub = BigA - BigB
+let BenchMul = BigA * BigB
+let BenchDiv = BigA / BigB
+
+let end = clock()
+
+print("  Benchmark ran, clock moved forward:", end >= start)
+
+# Verification
+assert(BenchSum[0] == 3)           # 1 + 2 = 3
+assert(BenchSub[0] == -1)          # 1 - 2 = -1
+assert(BenchMul[size-1] == 100000) # 50000 * 2 = 100000
+assert(BenchDiv[0] == 0.5)         # 1 / 2 = 0.5
+
+print("  ✓ Benchmark passed")
+
+print("\n=== All Vector Tests Passed! ===")

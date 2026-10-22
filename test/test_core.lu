@@ -1,0 +1,216 @@
+print("=== Running Core Language Tests ===")
+
+# SECTION 1: Variables & Types
+print("\n[1] Testing Variables & Types...")
+
+# Basic variable declaration
+let x = 10
+let y = 1.5
+let flag = true
+let name = "Luna"
+let empty = null
+
+assert(x == 10)
+assert(y == 1.5)
+assert(flag == true)
+assert(name == "Luna")
+
+# Multiple assignments in one line
+let a, b, myc = 10, 1.1, "Hello"
+assert(a == 10)
+assert(b == 1.1)
+assert(myc == "Hello")
+
+# Type checking
+assert(type(10) == "int")
+assert(type(1.5) == "float")
+assert(type(true) == "boolean")
+assert(type(null) == "null")
+
+# Long Integer (bigger than 32-bit)
+let big = 9999999999
+assert(type(big) == "long")
+
+# Characters
+let ch = 'A'
+assert(type(ch) == "char")
+assert(ch == 'A')
+assert(ch != 'B')
+
+# Char to ASCII conversion
+let ascii = int('A')
+assert(ascii == 65)
+
+# String vs Char
+let s = "A"
+assert(type(s) == "string")
+
+# Escape sequences
+let newline = "Line1\nLine2"
+let tab = "Col1\tCol2"
+let quote = "She said \"Hello\""
+assert(len(newline) > 5)
+assert(len(tab) > 5)
+assert(len(quote) > 10)
+
+# Float conversion
+let f = float(100)
+assert(type(f) == "float")
+
+print("  ✓ Variables & Types passed")
+
+# SECTION 2: IF / ELSE Conditionals
+print("\n[2] Testing IF/ELSE...")
+
+let a = 10
+
+# Basic if/else
+if (a == 10) {
+    assert(true)
+} else {
+    assert(false) 
+}
+
+if (a == 5) {
+    assert(false) 
+} else {
+    assert(true)
+}
+
+# Nested if
+if (a > 5) {
+    if (a < 20) {
+        assert(true)
+    } else {
+        assert(false)
+    }
+} else {
+    assert(false)
+}
+
+print("  ✓ IF/ELSE passed")
+
+# SECTION 3: While Loops
+print("\n[3] Testing WHILE loops...")
+
+let i = 0
+while (i < 5) {
+    i++
+}
+assert(i == 5)
+
+# While with break
+i = 0
+while (true) {
+    if (i == 3) {
+        break
+    }
+    i++
+}
+assert(i == 3)
+
+# While with continue
+i = 0
+let sum = 0
+while (i < 5) {
+    i++
+    if (i == 3) {
+        continue 
+    }
+    sum = sum + i
+}
+# Expected: 1 + 2 + 4 + 5 = 12
+assert(sum == 12)
+
+print("  ✓ WHILE loops passed")
+
+# SECTION 4: For Loops
+print("\n[4] Testing FOR loops...")
+
+let count = 0
+let my_list = [1, 2, 3]
+
+# Basic for loop
+for (let j = 0; j < len(my_list); j++) {
+    let item = my_list[j]
+    count = count + item
+}
+assert(count == 6)
+
+# For loop with break
+count = 0
+let list2 = [10, 20, 30, 40]
+
+for (let k = 0; k < len(list2); k++) {
+    let val = list2[k]
+    
+    if (val == 30) {
+        break
+    }
+    count = count + 1
+}
+assert(count == 2) 
+
+print("  ✓ FOR loops passed")
+
+# SECTION 5: Switch Statements
+print("\n[5] Testing SWITCH...")
+
+let choice = 2
+
+switch (choice) {
+    case 1:
+        assert(false)
+        break
+    case 2:
+        assert(true)
+        break
+    case 3:
+        assert(false)
+        break
+    default:
+        assert(false)
+}
+
+# Switch with default
+let unknown = 99
+let result = 0
+
+switch (unknown) {
+    case 1:
+        result = 1
+        break
+    case 2:
+        result = 2
+        break
+    default:
+        result = -1
+}
+assert(result == -1)
+
+print("  ✓ SWITCH passed")
+
+# SECTION 6: Basic Operators
+print("\n[6] Testing Basic Operators...")
+
+# Assignment and reassignment
+let value = 100
+assert(value == 100)
+value = 200
+assert(value == 200)
+
+# Increment/Decrement
+let n = 5
+n++
+assert(n == 6)
+n--
+assert(n == 5)
+
+# Compound assignment would go here if supported
+# value += 10
+# value -= 5
+# etc.
+
+print("  ✓ Basic Operators passed")
+
+print("\n=== All Core Tests Passed! ===")
