@@ -1,9 +1,9 @@
-Runtime Error [E0452] in /tmp/zue_test_case.zu at line 2:
+Runtime Error [E0452] in /tmp/zue_test_case.zu at line 3:
   a blue thread cannot wait for itself
 
-   2 |     return wait(cell[0])
-     |            ^^^^^^^^^^^^^
+   3 |     return wait(t)
+     |            ^^^^^^^
 
 Hint: Wait for another thread.
 Call stack, innermost call first:
-  in me(), called at line 5: holder[0] = spawn(me, holder)
+  in me(), called at line 6: holder[0] = spawn(me, holder)

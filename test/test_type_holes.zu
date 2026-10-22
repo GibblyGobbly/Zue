@@ -107,3 +107,19 @@ print(k(1))
 let n = 1
 assert(n == 1)
 assert(n)
+# CASE a builtin's argument of the wrong type is an error when the program is built
+print("start")
+print(len(2.5))
+# CASE a builtin given the wrong number of arguments is an error when the program is built
+print("start")
+print(trim())
+# CASE a builtin's argument of unknown type is an error
+let person = ["Ann", 30]
+print(to_upper(person[0]))
+# CASE builtins take the argument types they are made for
+let s = "a,b"
+let parts = split(s, ',')
+print(len(parts), to_upper('x'), pad_left("7", 3, '0'), is_digit('5'), contains("abc", 'b'))
+print(dense_list(2, 1), len(reverse([])), input("") == "")
+template T { a: int, b: int }
+print(len(T(1, 2)))

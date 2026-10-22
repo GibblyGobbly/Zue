@@ -1,0 +1,9 @@
+Type Error [E0203] in /tmp/zue_test_case.zu at line 2:
+  trim() expects 1 argument, but got 0
+
+   2 | print(trim())
+     |       ----^^ found 0
+     |       |
+     |       trim takes 1
+
+Hint: Usage: trim(string)

@@ -285,6 +285,102 @@ func ck_init_sigs() {
 
 ck_init_sigs()
 
+# The argument lists the other builtins take, for checking their arguments only (their results come from
+# RESULTS and ck_builtin). Forms are separated by |, an empty form takes no argument. "text" is a string or
+# a char. The builtins of unsafe code, print and spawn are checked elsewhere.
+let ARGS: map<list<Alt>> = {}
+
+func args_of(name: string, text: string) {
+    let alts: list<Alt> = []
+    for (let form in split(text, "|")) {
+        let params: list<string> = []
+        if (form != "-") {
+            params = split(form, ",")
+        }
+        append(alts, Alt(params, "any"))
+    }
+    ARGS[name] = alts
+}
+
+func ck_init_args() {
+    # len of a template, bloc or data value is its number of fields
+    args_of("len", "string|list|map|box|record")
+    args_of("str_len", "string")
+    args_of("append", "list,any")
+    args_of("list_append", "list,any")
+    for (let nm in split("type shape debug", " ")) {
+        args_of(nm, "any")
+    }
+    args_of("input", "-|string")
+    args_of("range", "int|int,int|int,int,int")
+    args_of("args", "-")
+    args_of("clock", "-")
+    args_of("yield", "-")
+    args_of("exit", "-|int")
+    args_of("system", "string")
+    args_of("map_set", "map,string,any")
+    args_of("map_get", "map,string|map,string,any")
+    args_of("map_has", "map,string")
+    args_of("map_delete", "map,string")
+    for (let nm in split("map_keys map_values map_items", " ")) {
+        args_of(nm, "map")
+    }
+    args_of("remove", "list,int")
+    args_of("find", "list,any")
+    args_of("slice", "list,int,int|string,int,int")
+    for (let nm in split("sort shuffle tshuffle ssort", " ")) {
+        args_of(nm, "list")
+    }
+    args_of("map", "list,function")
+    args_of("filter", "list,function")
+    args_of("reduce", "list,function,any")
+    args_of("is_empty", "string")
+    args_of("concat", "string,string")
+    args_of("substring", "string,int,int")
+    args_of("char_at", "string,int")
+    args_of("index_of", "string,text|string,text,int")
+    args_of("index_of_any", "string,text|string,text,int")
+    args_of("skip_chars", "string,text|string,text,int")
+    args_of("last_index_of", "string,text")
+    args_of("contains", "string,text|list,any")
+    args_of("starts_with", "string,text")
+    args_of("ends_with", "string,text")
+    for (let nm in split("to_upper to_lower", " ")) {
+        args_of(nm, "text")
+    }
+    for (let nm in split("trim trim_left trim_right", " ")) {
+        args_of(nm, "string")
+    }
+    args_of("replace", "string,text,text")
+    args_of("reverse", "string|list")
+    args_of("repeat", "text,int")
+    args_of("pad_left", "string,int,text")
+    args_of("pad_right", "string,int,text")
+    args_of("split", "string,text")
+    args_of("join", "list,string")
+    for (let nm in split("is_digit is_alpha is_alnum is_space", " ")) {
+        args_of(nm, "text")
+    }
+    args_of("open", "string,string")
+    for (let nm in split("close read read_line flush", " ")) {
+        args_of(nm, "file")
+    }
+    args_of("write", "file,string")
+    args_of("file_exists", "string")
+    args_of("remove_file", "string")
+    args_of("dense_list", "int,float")
+    for (let nm in split("vec_add vec_sub vec_mul vec_div vec_mul_inline mat_mul", " ")) {
+        args_of(nm, "list,list")
+    }
+    args_of("wait", "thread")
+    args_of("channel", "-|int")
+    args_of("send", "channel,any")
+    args_of("recv", "channel")
+    args_of("channel_close", "channel")
+}
+
+ck_init_args()
+
 # Types
 
 func is_const(t: string) -> bool {
@@ -1181,7 +1277,15 @@ func match_alt(alt: Alt, argtypes: list<string>) -> Miss {
     for (let i = 0; i < len(params); i++) {
         let p = params[i]
         let a = argtypes[i]
-        if (p == "T") {
+        if (p == "text") {
+            if (a != "any" and a != "string" and a != "char") {
+                return Miss(i, "string")
+            }
+        } else if (p == "record") {
+            if (a != "any" and object_def(a) == null) {
+                return Miss(i, "template")
+            }
+        } else if (p == "T") {
             if (a == "any") {
                 continue
             }
@@ -1224,7 +1328,8 @@ func adapt_builtin_args(n: Node, alt: Alt, argtypes: list<string>) {
 
 func fits_without_adapting(alt: Alt, argtypes: list<string>) -> bool {
     for (let i = 0; i < len(alt.params); i++) {
-        if (alt.params[i] != "T" and not fits_slot(argtypes[i], alt.params[i])) {
+        let p = alt.params[i]
+        if (p != "T" and p != "text" and p != "record" and not fits_slot(argtypes[i], alt.params[i])) {
             return false
         }
     }
@@ -1253,8 +1358,40 @@ func alt_result(alt: Alt, argtypes: list<string>) -> string {
 }
 
 func alt_text(alt: Alt) -> string {
+    let shown: list<string> = []
+    for (let p in alt.params) {
+        if (p == "text") {
+            p = "string"
+        } else if (p == "record") {
+            p = "template"
+        }
+        append(shown, p)
+    }
     let sep = ", "
-    return "({join(alt.params, sep)})"
+    return "({join(shown, sep)})"
+}
+
+# Whether some form of alts takes argtypes.
+func args_fit(alts: list<Alt>, argtypes: list<string>) -> bool {
+    for (let alt in alts) {
+        if (len(alt.params) == len(argtypes) and match_alt(alt, argtypes) == null) {
+            return true
+        }
+    }
+    return false
+}
+
+# The arguments of a builtin listed in ARGS: their number and types. False when they do not fit (the
+# error is reported).
+func ck_builtin_args(n: Node, name: string, argtypes: list<string>) -> bool {
+    if (not map_has(ARGS, name)) {
+        return true
+    }
+    if (strict_on()) {
+        ck_strict_args(n, name, ARGS[name], argtypes)
+    }
+    ck_builtin_call(n, name, ARGS[name], argtypes)
+    return args_fit(ARGS[name], argtypes)
 }
 
 # The place of the argument list of a call node, parentheses included.
@@ -1275,7 +1412,9 @@ func ck_builtin_call(n: Node, name: string, alts: list<Alt>, argtypes: list<stri
     if (len(same_count) == 0) {
         let counts: list<string> = []
         for (let alt in alts) {
-            append(counts, "{len(alt.params)}")
+            if (not contains(counts, "{len(alt.params)}")) {
+                append(counts, "{len(alt.params)}")
+            }
         }
         let last = remove(counts, len(counts) - 1)
         let wanted = last
@@ -1537,6 +1676,7 @@ func ck_call(n: Node) -> string {
         return "null"
     }
     if (name == "input" and known == null) {
+        ck_builtin_args(n, name, argtypes)
         return "string"
     }
     # The body of a function is trusted only for the declaration the name stands for here (a parameter or a
@@ -1560,6 +1700,9 @@ func ck_call(n: Node) -> string {
 # Calls of builtins: the signature table where there is one, a fixed result type where there is
 # one, and the element type of a list argument for append, remove, min and max.
 func ck_builtin(n: Node, name: string, argtypes: list<string>) -> string {
+    if (not ck_builtin_args(n, name, argtypes)) {
+        return "any"
+    }
     let first = "any"
     if (len(argtypes) > 0) {
         first = argtypes[0]
@@ -1593,6 +1736,10 @@ func ck_builtin(n: Node, name: string, argtypes: list<string>) -> string {
     }
     if (name == "sort" and len(argtypes) == 1 and kind_of(first) == "list") {
         return first
+    }
+    # reverse and slice of a list give a list (of the same element type, below)
+    if ((name == "reverse" or name == "slice") and kind_of(first) == "list" and el == null) {
+        return "list"
     }
     if (name == "map_set" and len(argtypes) == 3 and kind_of(first) == "map") {
         grow_list(n.args[0], first, argtypes[2])

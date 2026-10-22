@@ -1,0 +1,8 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 2:
+  len() cannot be called with (float); use (string) or (list) or (map) or (box) or (template)
+
+   2 | print(len(2.5))
+     |       ---^^^^^ no form takes (float)
+     |       |
+     |       len
+

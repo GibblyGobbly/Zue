@@ -1,0 +1,9 @@
+Type Error [E0203] in /tmp/zue_test_case.zu at line 4:
+  shuffle() expects 1 argument, but got 2
+
+   4 | shuffle(pass([1]), [2])
+     | -------^^^^^^^^^^^^^^^^ found 2
+     | |
+     | shuffle takes 1
+
+Hint: Usage: shuffle(list)

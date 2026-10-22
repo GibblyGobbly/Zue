@@ -1,0 +1,9 @@
+Type Error [E0203] in /tmp/zue_test_case.zu at line 4:
+  tshuffle() expects 1 argument, but got 0
+
+   4 | tshuffle()
+     | --------^^ found 0
+     | |
+     | tshuffle takes 1
+
+Hint: Usage: tshuffle(list)

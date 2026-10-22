@@ -1,0 +1,9 @@
+Type Error [E0203] in /tmp/zue_test_case.zu at line 4:
+  sort() expects 1 argument, but got 2
+
+   4 | sort(pass([1]), [2])
+     | ----^^^^^^^^^^^^^^^^ found 2
+     | |
+     | sort takes 1
+
+Hint: Usage: sort(list)

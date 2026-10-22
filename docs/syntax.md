@@ -502,8 +502,10 @@ a `Type Error` with the line, and the program is not built.
   `3 == 3.0` for a variable are errors, and so is dividing by a zero written in the source.
 - `if`, `while`, `for`, `not`, `and`, `or` and `assert` need a `bool`.
 - A `switch` whose cases and `default` all end in a `return` (with no `break`) counts as returning.
-- The math builtins check their arguments: `sqrt(float)`, `pow(int, int)` or `pow(float, float)`,
-  `floor(float)` giving an int, `rand(int)`, and so on.
+- Every builtin checks the number and types of its arguments when the program is built: `sqrt(float)`,
+  `pow(int, int)` or `pow(float, float)`, `len(5)`, `append(5, 1)` and `trim()` are errors. Text builtins
+  that take a string also take a char where the runtime does (`split(s, ',')`, `to_upper('a')`).
+  `print`, `spawn` and the builtins of `unsafe` code are checked in their own way.
 - A function you write is checked at each call, with its parameters bound to the argument types:
   `area(2, "a")` is an error at the call when the body does `w * h`, and the message names the
   call (`in area(int, string), called at line 3`). A call with a number written in the source gives

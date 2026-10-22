@@ -112,11 +112,13 @@ recv(ch)
 
 # CASE a thread waiting for itself
 func me(cell) {
-    return wait(cell[0])
+    let t: thread = cell[0]
+    return wait(t)
 }
 let holder = [null]
 holder[0] = spawn(me, holder)
-wait(holder[0])
+let first: thread = holder[0]
+wait(first)
 
 # CASE wait needs a thread
 wait(5)

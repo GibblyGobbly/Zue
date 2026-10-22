@@ -1,0 +1,6 @@
+Type Error [E0208] in /tmp/zue_test_case.zu at line 2:
+  strict mode: the type of argument 1 of to_upper() is not known. Give it a type, for example let x: float = ...
+
+   2 | print(to_upper(person[0]))
+     |                ^^^^^^^^^ type not known
+

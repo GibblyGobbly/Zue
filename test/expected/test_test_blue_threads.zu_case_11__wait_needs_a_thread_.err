@@ -1,6 +1,0 @@
-Type Error [E0202] in /tmp/zue_test_case.zu at line 1:
-  wait() argument 1 must be a thread, got int
-
-   1 | wait(5)
-     |      ^ expected thread, found int
-

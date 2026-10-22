@@ -1,0 +1,9 @@
+Type Error [E0203] in /tmp/zue_test_case.zu at line 4:
+  len() expects 1 argument, but got 2
+
+   4 | print(len(pass([1]), 2))
+     |       ---^^^^^^^^^^^^^^ found 2
+     |       |
+     |       len takes 1
+
+Hint: Usage: len(string) or len(list) or len(map) or len(box) or len(template)
