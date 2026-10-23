@@ -61,7 +61,7 @@ print(h())
 func g(n) {
     return n + 1
 }
-func h(n) {
+func h(n: int) {
     return "x"
 }
 g = h
@@ -74,7 +74,7 @@ func g(n) {
 func f(n) {
     return g(n)
 }
-func h(n) {
+func h(n: int) {
     return "s{n}"
 }
 print(f(1))
@@ -87,7 +87,7 @@ func g(n) {
 func f(n) {
     return g(n)
 }
-func h(n) {
+func h(n: float) {
     return 7
 }
 print(f(1.0))

@@ -12,7 +12,7 @@ Call stack, innermost call first:
   in forever(), called at line 2: return forever(n + 1) + 1
   in forever(), called at line 2: return forever(n + 1) + 1
   in forever(), called at line 2: return forever(n + 1) + 1
-  ... 1233 more calls ...
+  ... 8141 more calls ...
   in forever(), called at line 2: return forever(n + 1) + 1
   in forever(), called at line 2: return forever(n + 1) + 1
   in forever(), called at line 4: wait(spawn(forever, 0))

@@ -31,7 +31,7 @@ func area(w, h) {
 print(area(w: 2.0, h: 3.0))
 
 # CASE a function value called later still uses its defaults
-func tag(text, open = "<", close = ">") {
+func tag(text: string, open: string = "<", close: string = ">") {
     return open + text + close
 }
 print(tag("b", close: "]"))

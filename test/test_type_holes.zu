@@ -123,3 +123,39 @@ print(len(parts), to_upper('x'), pad_left("7", 3, '0'), is_digit('5'), contains(
 print(dense_list(2, 1), len(reverse([])), input("") == "")
 template T { a: int, b: int }
 print(len(T(1, 2)))
+# CASE a named function with untyped parameters used as a value is an error
+func add(a, b) {
+    return a + b
+}
+let h = add
+# CASE a named function given to map is checked for the items of the list
+func dbl(x) {
+    return x * 2
+}
+print(map(["a"], dbl))
+# CASE a named function given to spawn is checked for the arguments
+func work(a: int) {
+    return a + 1
+}
+let t = spawn(work, "s")
+# CASE named functions given to map, filter, reduce and spawn
+func dbl(x) {
+    return x * 2
+}
+func even(x) {
+    return x % 2 == 0
+}
+func plus(acc, x) {
+    return acc + x
+}
+func work(a) {
+    return a + 1
+}
+let xs = [1, 2, 3]
+print(map(xs, dbl), filter(xs, even), reduce(xs, plus, 0))
+let r: int = wait(spawn(work, 41))
+func g(x: string) {
+    return x
+}
+let k = g
+print(r, k("ok"))

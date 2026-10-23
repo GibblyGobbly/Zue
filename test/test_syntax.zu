@@ -191,7 +191,7 @@ print(c2())
 func apply(f, x) {
     return f(x)
 }
-func double(n) {
+func double(n: int) {
     return n * 2
 }
 print(apply(double, 4))

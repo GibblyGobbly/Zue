@@ -528,6 +528,9 @@ a `Type Error` with the line, and the program is not built.
   error, and `func f(b: float = 2)` gives `2.0`.
 - A function declared inside another is checked for each call of its parent, with the types it takes
   from that call.
+- A named function given to `map`, `filter`, `reduce` or `spawn` is checked for the types it will be
+  called with: `map(["a"], dbl)` with `func dbl(x) { return x * 2 }` is an error. Used as a value anywhere
+  else (`let h = add`, `apply(add, 1)`, `g = h`), its parameters need types, as a `func` value's do.
 - A list that starts empty takes the type of the first value appended to it: after `let xs = []` and
   `append(xs, 1)`, `xs` is a `list<int>`. A value of another type appended or stored later makes it a list
   of mixed items. Write the type (`let xs: list<int> = []`) to have such a value rejected instead.

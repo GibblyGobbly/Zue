@@ -1,0 +1,7 @@
+Type Error [E0208] in /tmp/zue_test_case.zu at line 4:
+  strict mode: 'add' is used as a value, so its parameter 'a' needs a type, for example a: int
+
+   4 | let h = add
+     |         ^^^ used as a value
+
+Hint: A function called by its name is checked for the types of each call; one passed around as a value is not

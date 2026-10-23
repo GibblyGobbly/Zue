@@ -1,0 +1,10 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
+  work() argument 1 must be an int, got string
+
+   1 | func work(a: int) {
+     |              --- parameter 'a' is int
+...
+   4 | let t = spawn(work, "s")
+     |               ^^^^ expected int, found string
+
+Hint: Convert text to a number with s as int or s as float

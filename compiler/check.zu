@@ -16,7 +16,7 @@ use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
 use { Diag, Span, diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, suggest } from "diag.zu"
 use { cut } from "ranges.zu"
-use { Node, node_span, nodes_under } from "ast_nodes.zu"
+use { Node, mk_call, node_span, nodes_under } from "ast_nodes.zu"
 use { parse_source } from "parser.zu"
 use { resolve_named_args } from "named_args.zu"
 use { path_dir, path_join, path_norm, split_lines } from "util.zu"
@@ -1654,7 +1654,109 @@ func check_print_holes(n: Node) {
     }
 }
 
+# Builtins that call a function they are given: the place of that argument, or -1.
+func fn_arg_index(name: string) -> int {
+    if (name == "map" or name == "filter" or name == "reduce") {
+        return 1
+    }
+    if (name == "spawn") {
+        return 0
+    }
+    return -1
+}
+
+# The place of a node, as a key.
+func node_key(n: Node) -> string {
+    return "{ST.src_file}:{n.line}:{n.col}"
+}
+
+# Names of named functions given to map, filter, reduce or spawn, by place: checked there for the
+# types they are called with (ck_fn_value_call), so they may have untyped parameters.
+let FN_ARG_OK: map<bool> = {}
+
+# The node of the named function that name stands for here, or null (a variable holding a function,
+# or a name assigned somewhere, is not followed).
+func named_fn(name: string) -> Node {
+    if (lookup(name) != "function" or map_has(ASSIGNED, name)) {
+        return null
+    }
+    let fidx = fn_index(name)
+    if (fidx < 0 or fidx != scope_index(name)) {
+        return null
+    }
+    return SCOPES[fidx].fns[name]
+}
+
+# The first untyped parameter of fn, or "".
+func untyped_param(fn: Node) -> string {
+    for (let i = 0; i < len(fn.params); i++) {
+        if (fn.ptypes == null or fn.ptypes[i] == "") {
+            return fn.params[i]
+        }
+    }
+    return ""
+}
+
+# A named function with an untyped parameter used as a value: what calls it later is not followed.
+func fn_value_error(n: Node, fn: Node, why: string) {
+    let p = untyped_param(fn)
+    let d = fail_node(n, "strict mode: '{n.name}' is used as a value, so its parameter '{p}' needs a type, for example {p}: int")
+    diag_text(d, why)
+    diag_hint(d, "A function called by its name is checked for the types of each call; one passed around as a value is not")
+}
+
+# map(xs, f), filter(xs, f), reduce(xs, f, init) and spawn(f, args...) with a named function f: f is
+# checked for the types it will be called with, as a direct call is.
+func ck_fn_value_call(n: Node, name: string, argtypes: list<string>) {
+    let fi = fn_arg_index(name)
+    if (fi < 0 or fi >= len(n.args) or n.args[fi].k != "id") {
+        return null
+    }
+    let a = n.args[fi]
+    let fn = named_fn(a.name)
+    if (fn == null) {
+        return null
+    }
+    let types: list<string> = []
+    if (name == "spawn") {
+        for (let i = 1; i < len(argtypes); i++) {
+            append(types, settle(argtypes[i]))
+        }
+    } else {
+        let el = elem_of(argtypes[0])
+        if (kind_of(argtypes[0]) != "list" or el == null) {
+            el = "any"
+        }
+        if (name == "reduce" and len(argtypes) == 3) {
+            append(types, settle(argtypes[2]))
+        }
+        append(types, el)
+    }
+    if (contains(types, "any")) {
+        if (strict_on() and untyped_param(fn) != "") {
+            fn_value_error(a, fn, "the types it is called with are not known here")
+        }
+        return null
+    }
+    let fidx = fn_index(a.name)
+    let home: CkFile = null
+    if (home_index(a.name) == fidx) {
+        home = SCOPES[fidx].homes[a.name]
+    }
+    let nodes: list<Node> = []
+    for (let t in types) {
+        append(nodes, a)
+    }
+    ck_user_call(a.name, fn, fidx, types, mk_call(a, a, a, nodes, a), home, true)
+}
+
 func ck_call(n: Node) -> string {
+    if (n.callee.k == "id" and lookup(n.callee.name) == null) {
+        let fi = fn_arg_index(n.callee.name)
+        if (fi >= 0 and fi < len(n.args) and n.args[fi].k == "id") {
+            FN_ARG_OK[node_key(n.args[fi])] = true
+        }
+    }
     let argtypes = []
     for (let a in n.args) {
         append(argtypes, ck_expr(a))
@@ -1692,6 +1794,7 @@ func ck_call(n: Node) -> string {
         }
     }
     if (known == null and map_has(BUILTIN_NAMES, name)) {
+        ck_fn_value_call(n, name, argtypes)
         return ck_builtin(n, name, argtypes)
     }
     return "any"
@@ -1909,7 +2012,7 @@ func param_span(fn: Node, i: int) -> Span {
     return fn.pspans[i]
 }
 
-func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call: Node, home: CkFile = null) -> string {
+func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call: Node, home: CkFile = null, fixed: bool = false) -> string {
     let argnodes = call.args
     let line = call.line
     let np = len(fn.params)
@@ -1947,8 +2050,12 @@ func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call
         if (i < len(argtypes) and argtypes[i] != "absent") {
             let at = argtypes[i]
             if (want != null) {
-                strict_known(at, argnodes[i], "argument {i + 1} of {name}()")
-                at = adapt_expr(argnodes[i], at, want)
+                # fixed: the types come from where a function value is used (the items of a list given to
+                # map), not from expressions that a literal could adapt in
+                if (not fixed) {
+                    strict_known(at, argnodes[i], "argument {i + 1} of {name}()")
+                    at = adapt_expr(argnodes[i], at, want)
+                }
                 # a parameter of a template type may be given an empty value, as a field of that type may
                 if (not fits_slot(at, want) and not (at == "null" and template_or_null([want]) != null)) {
                     let d = fail_node(argnodes[i], "{name}() argument {i + 1} must be {article(want)} {want}, got {describe(at)}")
@@ -2480,6 +2587,12 @@ func ck_expr(n: Node) -> string {
         }
         if (t == null or t == "unset") {
             return "any"
+        }
+        if (t == "function" and strict_on() and not map_has(FN_ARG_OK, node_key(n))) {
+            let fn = named_fn(n.name)
+            if (fn != null and untyped_param(fn) != "") {
+                fn_value_error(n, fn, "used as a value")
+            }
         }
         return t
     }

@@ -20,13 +20,13 @@ print(g())
 func f(x) { return x + 1 }
 # CASE a name given another function calls the other function
 func a(x) { return x + 1 }
-func b(x) { return x + 100 }
+func b(x: int) { return x + 100 }
 print(a(1))
 a = b
 print(a(1))
 # CASE a function name reassigned from inside a function
 func f(x) { return x + 1 }
-func g(x) { return x * 10 }
+func g(x: int) { return x * 10 }
 func swap() { f = g }
 print(f(2))
 swap()
@@ -78,7 +78,7 @@ print(even(7))
 let b = even(2) and even(4)
 print(b)
 # CASE a function used as a value
-func fib(n) {
+func fib(n: int) {
     if (n < 2) { return n }
     return fib(n - 1) + fib(n - 2)
 }
