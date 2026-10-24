@@ -8,6 +8,7 @@ prog.lu
   |  compiler/lexer.lu        tokens
   |  compiler/parser.lu       AST (maps and lists)
   |  compiler/lint.lu         static check (rule R12)
+  |  compiler/check.lu        compile-time type check
   |  compiler/analysis.lu     names used, exports, closure captures
   |  compiler/emit_llvm.lu    LLVM IR text
   v
@@ -34,6 +35,7 @@ compiler in detail.
 | `lexer.lu`, `token.lu` | Source text to tokens; keyword and operator tables, including the keyword aliases |
 | `parser.lu` | Recursive descent with precedence climbing; produces the AST as maps |
 | `lint.lu` | The static check for `free()` in conditional flow inside `unsafe` (rule R12) |
+| `check.lu` | The compile-time type checker for the main program: variable types, operators, conditions and the signatures of the math builtins. See [syntax](syntax.md#type-checking) |
 | `analysis.lu` | Which names a function reads and writes, exports, and which variables closures capture |
 | `emit_llvm.lu`, `ll_state.lu`, `ll_scope.lu` | The LLVM IR backend: expressions, statements, functions, modules, scopes and deferred calls |
 | `emit_native.lu` | The native backend, used to compile the runtime (see [lunac](architecture.md)) |

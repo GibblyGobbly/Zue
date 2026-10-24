@@ -39,7 +39,7 @@ $(BINDIR)/luna: $(SEED) $(SEED_RT) $(COMPILER_LU) $(RT_LU)
 	@$(OUT)/luna_stage1 compiler/lunac.lu $(OUT)/boot2.ll .
 	@cmp $(OUT)/boot1.ll $(OUT)/boot2.ll
 	@cp $(OUT)/luna_stage1 $@
-	@echo "[OK] built $@ (stage 1 and stage 2 emit identical IR)"
+	@echo "[OK] built $@"
 	@cmp -s $(SEED) $(OUT)/boot1.ll || echo "[WARN] the compiler seed is older than compiler/*.lu; run make seed"
 	@cmp -s $(SEED_RT) $(OUT)/boot_rt.ll || echo "[WARN] the runtime seed is older than compiler/runtime/*.lu; run make seed"
 

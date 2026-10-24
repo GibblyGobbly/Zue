@@ -22,21 +22,27 @@ LUNAC="$ROOT/bin/luna"
 [ -x "$LUNAC" ] || { echo "[ERROR] $LUNAC is not built; run make"; exit 1; }
 pass=0; fail=0; skip=0
 
-# check_one <source> <label>: compiles and runs <source> on both engines.
+# check_one <source> <label>: compiles and runs <source> on both engines. A compile-time error
+# ("Type Error in ..." and so on) counts as the program's output: its text is recorded as
+# stdout with exit status 1, and the program is not built.
 check_one() {
     src=$1; label=$2; name=bin_$$
+    key=$(printf '%s' "$label" | sed 's/[^A-Za-z0-9._-]/_/g')
     if ! "$LUNAC" "$src" "$TMP/$name.$EXT" . > "$TMP/cerr" 2>&1; then
         if grep -q "not supported by lunac" "$TMP/cerr"; then
             skip=$((skip + 1)); echo "[SKIP] $label"; return
         fi
-        fail=$((fail + 1)); echo "[FAIL] $label (lunac)"; head -3 "$TMP/cerr"; return
+        if ! head -1 "$TMP/cerr" | grep -q '^[A-Za-z ]* Error in '; then
+            fail=$((fail + 1)); echo "[FAIL] $label (lunac)"; head -3 "$TMP/cerr"; return
+        fi
+        cp "$TMP/cerr" "$TMP/c.out"; : > "$TMP/c.err"; cc=1
+    else
+        if ! $CC -O1 -w "$TMP/$name.$EXT" "$RTSRC" \
+             -lm -lpthread -ldl -o "$TMP/$name" 2> "$TMP/gerr"; then
+            fail=$((fail + 1)); echo "[FAIL] $label (clang)"; head -5 "$TMP/gerr"; return
+        fi
+        timeout 60 "$TMP/$name" > "$TMP/c.out" 2> "$TMP/c.err" < /dev/null; cc=$?
     fi
-    if ! $CC -O1 -w "$TMP/$name.$EXT" "$RTSRC" \
-         -lm -lpthread -ldl -o "$TMP/$name" 2> "$TMP/gerr"; then
-        fail=$((fail + 1)); echo "[FAIL] $label (clang)"; head -5 "$TMP/gerr"; return
-    fi
-    key=$(printf '%s' "$label" | sed 's/[^A-Za-z0-9._-]/_/g')
-    timeout 60 "$TMP/$name" > "$TMP/c.out" 2> "$TMP/c.err" < /dev/null; cc=$?
     # Error messages name the source file; the recorded outputs use this fixed name.
     sed -i "s|$CASE_FILE|/tmp/luna_test_case.lu|g" "$TMP/c.out" "$TMP/c.err"
     if [ -n "$RECORD" ]; then

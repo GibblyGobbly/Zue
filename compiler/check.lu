@@ -1,0 +1,640 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 Bharath
+#
+# check.lu: compile-time type checking of the main program.
+#
+# Every expression gets a type, a string: int, float, bool, char, string, null, list, map, box,
+# function, or any. "any" means the checker cannot tell, and nothing is reported about it; the
+# runtime checks still apply. int~ and float~ are untyped number constants: a literal adapts to
+# the type its context needs (sqrt(16) is fine), while a variable never converts.
+#
+# A variable has the type of its first value and keeps it. Function parameters are any for now.
+
+use { ST } from "state.lu"
+
+let SCOPES = []
+
+# Builtin signatures: name -> alternatives of [parameter types, result]. T stands for a number
+# type (int or float) that must be the same everywhere it appears.
+let SIGS = {}
+
+func sig(name, alts) {
+    SIGS[name] = alts
+}
+
+func ck_init_sigs() {
+    for (let nm in split("sqrt cbrt exp ln log10 sin cos tan asin acos atan sinh cosh tanh fract deg_to_rad rad_to_deg", " ")) {
+        sig(nm, [[["float"], "float"]])
+    }
+    sig("atan2", [[["float", "float"], "float"]])
+    sig("mod", [[["float", "float"], "float"]])
+    sig("lerp", [[["float", "float", "float"], "float"]])
+    for (let nm in split("floor ceil round trunc", " ")) {
+        sig(nm, [[["float"], "int"]])
+    }
+    sig("pow", [[["int", "int"], "int"], [["float", "float"], "float"]])
+    sig("abs", [[["T"], "T"]])
+    sig("min", [[["T", "T"], "T"]])
+    sig("max", [[["T", "T"], "T"]])
+    sig("clamp", [[["T", "T", "T"], "T"]])
+    sig("sign", [[["int"], "int"], [["float"], "int"]])
+    sig("rand", [[[], "float"], [["int"], "int"], [["int", "int"], "int"]])
+    sig("srand", [[[], "null"], [["int"], "null"]])
+    sig("trand", [[[], "int"]])
+}
+
+ck_init_sigs()
+
+# ---- types ----------------------------------------------------------------------------------
+
+func is_const(t) {
+    return ends_with(t, "~")
+}
+
+func is_number(t) {
+    return t == "int" or t == "float" or t == "int~" or t == "float~"
+}
+
+# A constant takes its natural type when nothing else decides.
+func settle(t) {
+    if (t == "int~") {
+        return "int"
+    }
+    if (t == "float~") {
+        return "float"
+    }
+    return t
+}
+
+# Whether a value of type t can be used where type target is required.
+func fits(t, target) {
+    if (t == "any" or target == "any" or t == target) {
+        return true
+    }
+    if (t == "int~") {
+        return target == "int" or target == "float"
+    }
+    if (t == "float~") {
+        return target == "float"
+    }
+    return false
+}
+
+func describe(t) {
+    if (t == "int~") {
+        return "an int constant"
+    }
+    if (t == "float~") {
+        return "a float constant"
+    }
+    return t
+}
+
+# The type of an operation on two numbers, or null when they do not fit.
+func unify(a, b) {
+    if (not is_number(a) or not is_number(b)) {
+        return null
+    }
+    if (is_const(a) and is_const(b)) {
+        if (a == "float~" or b == "float~") {
+            return "float~"
+        }
+        return "int~"
+    }
+    if (is_const(a)) {
+        if (fits(a, b)) {
+            return b
+        }
+        return null
+    }
+    if (is_const(b)) {
+        if (fits(b, a)) {
+            return a
+        }
+        return null
+    }
+    if (a == b) {
+        return a
+    }
+    return null
+}
+
+# ---- scopes ---------------------------------------------------------------------------------
+
+func push_scope() {
+    append(SCOPES, {})
+}
+
+func pop_scope() {
+    remove(SCOPES, len(SCOPES) - 1)
+}
+
+func declare(name, t) {
+    SCOPES[len(SCOPES) - 1][name] = t
+}
+
+# The scope map that holds name, or null.
+func scope_of(name) {
+    let i = len(SCOPES) - 1
+    while (i >= 0) {
+        if (SCOPES[i][name] != null) {
+            return SCOPES[i]
+        }
+        i -= 1
+    }
+    return null
+}
+
+func lookup(name) {
+    let s = scope_of(name)
+    if (s == null) {
+        return null
+    }
+    return s[name]
+}
+
+# ---- errors ---------------------------------------------------------------------------------
+
+# Reports a compile-time type error in the layout of a runtime error: the message, then the
+# source line.
+func fail(line, msg) {
+    print("Type Error in {ST.src_file} at line {line}:\n  {msg}")
+    if (line >= 1 and line <= len(ST.src_lines)) {
+        let num = pad_left(to_string(line), 4, " ")
+        print("\n{num} | {ST.src_lines[line - 1]}\n")
+    }
+    exit(1)
+}
+
+func operand_error(op, a, b, line) {
+    fail(line, "cannot use '{op}' on {describe(a)} and {describe(b)}")
+}
+
+# Names the operands of a binary node; unary minus is stored as 0 - x.
+func bin_error(n, a, b) {
+    if (n.unary == true) {
+        fail(n.line, "cannot negate {describe(b)}")
+    }
+    operand_error(n.op, a, b, n.line)
+}
+
+# ---- expressions ----------------------------------------------------------------------------
+
+func is_zero_literal(n) {
+    return (n.k == "num" and n.v == "0") or (n.k == "float" and (n.v == "0.0" or n.v == "0"))
+}
+
+func ck_bin(n) {
+    let a = ck_expr(n.l)
+    let b = ck_expr(n.r)
+    let op = n.op
+    if (op == "and" or op == "or") {
+        if (a != "any" and a != "bool") {
+            fail(n.line, "'{op}' needs bool operands, got {describe(a)}")
+        }
+        if (b != "any" and b != "bool") {
+            fail(n.line, "'{op}' needs bool operands, got {describe(b)}")
+        }
+        return "bool"
+    }
+    if (op == "==" or op == "!=") {
+        if (a == "any" or b == "any" or a == "null" or b == "null") {
+            return "bool"
+        }
+        if (is_number(a) or is_number(b)) {
+            if (unify(a, b) == null) {
+                operand_error(op, a, b, n.line)
+            }
+            return "bool"
+        }
+        if (a != b) {
+            operand_error(op, a, b, n.line)
+        }
+        return "bool"
+    }
+    if (op == "<" or op == ">" or op == "<=" or op == ">=") {
+        if (a == "any" or b == "any") {
+            return "bool"
+        }
+        if (is_number(a) or is_number(b)) {
+            if (unify(a, b) == null) {
+                operand_error(op, a, b, n.line)
+            }
+            return "bool"
+        }
+        if (a == b and (a == "string" or a == "char")) {
+            return "bool"
+        }
+        operand_error(op, a, b, n.line)
+    }
+    # + - * / %
+    if (a == "any" or b == "any") {
+        return "any"
+    }
+    if (op == "+" and a == "string" and b == "string") {
+        return "string"
+    }
+    if (a == "list" and b == "list") {
+        return "any"
+    }
+    let t = unify(a, b)
+    if (t == null) {
+        bin_error(n, a, b)
+    }
+    if ((op == "/" or op == "%") and is_zero_literal(n.r)) {
+        fail(n.line, "division by zero")
+    }
+    return t
+}
+
+# The first mismatch of args against one signature alternative: null when it fits, else
+# [argument index, expected type]. T is bound to the number type seen first.
+func match_alt(alt, argtypes) {
+    let bound = null
+    let params = alt[0]
+    for (let i = 0; i < len(params); i++) {
+        let p = params[i]
+        let a = argtypes[i]
+        if (p == "T") {
+            if (a == "any") {
+                continue
+            }
+            if (not is_number(a)) {
+                return [i, "number"]
+            }
+            if (bound == null) {
+                bound = a
+            } else {
+                let u = unify(bound, a)
+                if (u == null) {
+                    return [i, settle(bound)]
+                }
+                bound = u
+            }
+        } else if (not fits(a, p)) {
+            return [i, p]
+        }
+    }
+    return null
+}
+
+func alt_result(alt, argtypes) {
+    let r = alt[1]
+    if (r != "T") {
+        return r
+    }
+    let bound = null
+    for (let i = 0; i < len(alt[0]); i++) {
+        if (alt[0][i] == "T" and argtypes[i] != "any") {
+            if (bound == null) {
+                bound = argtypes[i]
+            } else {
+                bound = unify(bound, argtypes[i])
+            }
+        }
+    }
+    if (bound == null) {
+        return "any"
+    }
+    return settle(bound)
+}
+
+func alt_text(alt) {
+    let sep = ", "
+    return "({join(alt[0], sep)})"
+}
+
+func ck_builtin_call(name, alts, argtypes, line) {
+    let same_count = []
+    for (let alt in alts) {
+        if (len(alt[0]) == len(argtypes)) {
+            append(same_count, alt)
+        }
+    }
+    if (len(same_count) == 0) {
+        let counts = []
+        for (let alt in alts) {
+            append(counts, "{len(alt[0])}")
+        }
+        let last = remove(counts, len(counts) - 1)
+        let wanted = last
+        if (len(counts) > 0) {
+            let sep = ", "
+            wanted = "{join(counts, sep)} or {last}"
+        }
+        let plural = "s"
+        if (wanted == "1") {
+            plural = ""
+        }
+        fail(line, "{name}() expects {wanted} argument{plural}, but got {len(argtypes)}")
+    }
+    let first_miss = null
+    for (let alt in same_count) {
+        let miss = match_alt(alt, argtypes)
+        if (miss == null) {
+            return alt_result(alt, argtypes)
+        }
+        if (first_miss == null) {
+            first_miss = miss
+        }
+    }
+    if (len(same_count) == 1) {
+        let idx = first_miss[0]
+        fail(line, "{name}() argument {idx + 1} must be {article(first_miss[1])} {first_miss[1]}, got {describe(argtypes[idx])}")
+    }
+    let forms = []
+    for (let alt in same_count) {
+        append(forms, alt_text(alt))
+    }
+    let got = []
+    for (let t in argtypes) {
+        append(got, settle(t))
+    }
+    let sep = ", "
+    let or_text = " or "
+    fail(line, "{name}() cannot be called with ({join(got, sep)}); use {join(forms, or_text)}")
+}
+
+func article(t) {
+    if (t == "int" or t == "any") {
+        return "an"
+    }
+    return "a"
+}
+
+func ck_call(n) {
+    let argtypes = []
+    for (let a in n.args) {
+        append(argtypes, ck_expr(a))
+    }
+    if (n.callee.k != "id") {
+        ck_expr(n.callee)
+        return "any"
+    }
+    let name = n.callee.name
+    if (lookup(name) == null and SIGS[name] != null) {
+        return ck_builtin_call(name, SIGS[name], argtypes, n.line)
+    }
+    return "any"
+}
+
+func ck_func(n) {
+    push_scope()
+    for (let i = 0; i < len(n.params); i++) {
+        if (n.defaults[i] != null) {
+            ck_expr(n.defaults[i])
+        }
+        declare(n.params[i], "any")
+    }
+    ck_block(n.body)
+    pop_scope()
+}
+
+func ck_expr(n) {
+    let k = n.k
+    if (k == "num") {
+        return "int~"
+    }
+    if (k == "float") {
+        return "float~"
+    }
+    if (k == "str") {
+        return "string"
+    }
+    if (k == "tmpl") {
+        for (let part in n.parts) {
+            if (type(part) == "map") {
+                ck_expr(part)
+            }
+        }
+        return "string"
+    }
+    if (k == "char") {
+        return "char"
+    }
+    if (k == "bool") {
+        return "bool"
+    }
+    if (k == "id") {
+        if (n.name == "null") {
+            return "null"
+        }
+        let t = lookup(n.name)
+        if (t == null or t == "unset") {
+            return "any"
+        }
+        return t
+    }
+    if (k == "list") {
+        for (let item in n.items) {
+            ck_expr(item)
+        }
+        return "list"
+    }
+    if (k == "map") {
+        for (let v in n.vals) {
+            ck_expr(v)
+        }
+        return "map"
+    }
+    if (k == "func") {
+        ck_func(n)
+        return "function"
+    }
+    if (k == "call") {
+        return ck_call(n)
+    }
+    if (k == "index") {
+        let t = ck_expr(n.target)
+        ck_expr(n.index)
+        if (t == "string") {
+            return "char"
+        }
+        return "any"
+    }
+    if (k == "field") {
+        ck_expr(n.target)
+        return "any"
+    }
+    if (k == "incdec") {
+        let t = lookup(n.name)
+        if (t != null and t != "any" and t != "unset" and t != "int" and t != "float") {
+            fail(n.line, "cannot use '{n.op}' on {n.name}, which is {t}")
+        }
+        if (t == null or t == "unset") {
+            return "any"
+        }
+        return t
+    }
+    if (k == "not") {
+        let t = ck_expr(n.e)
+        if (t != "any" and t != "bool") {
+            fail(n.line, "'not' needs a bool, got {describe(t)}")
+        }
+        return "bool"
+    }
+    if (k == "bin") {
+        return ck_bin(n)
+    }
+    if (k == "box") {
+        ck_expr(n.size)
+        return "box"
+    }
+    if (k == "input") {
+        return "string"
+    }
+    return "any"
+}
+
+# ---- statements -----------------------------------------------------------------------------
+
+func ck_cond(e, what) {
+    let t = ck_expr(e)
+    if (t != "any" and t != "bool") {
+        fail(e.line, "{what} needs a bool, got {describe(t)}")
+    }
+}
+
+func ck_assign(n) {
+    let et = ck_expr(n.e)
+    let s = scope_of(n.name)
+    if (s == null) {
+        return null
+    }
+    let vt = s[n.name]
+    if (vt == "unset") {
+        s[n.name] = settle(et)
+        return null
+    }
+    if (not fits(et, vt)) {
+        fail(n.line, "cannot assign {describe(et)} to '{n.name}', which is {vt}")
+    }
+    return null
+}
+
+func ck_stmt(n) {
+    let k = n.k
+    if (k == "let") {
+        if (n.init == null) {
+            declare(n.name, "unset")
+        } else {
+            let it = settle(ck_expr(n.init))
+            if (it == "null") {
+                # A variable that starts as null takes the type of its first real value.
+                it = "unset"
+            }
+            declare(n.name, it)
+        }
+    } else if (k == "group") {
+        for (let item in n.items) {
+            ck_stmt(item)
+        }
+    } else if (k == "assign") {
+        ck_assign(n)
+    } else if (k == "func") {
+        if (n.name != null) {
+            declare(n.name, "function")
+        }
+        ck_func(n)
+    } else if (k == "if") {
+        ck_cond(n.cond, "'if'")
+        push_scope()
+        ck_block(n.then)
+        pop_scope()
+        push_scope()
+        ck_block(n.els)
+        pop_scope()
+    } else if (k == "while") {
+        ck_cond(n.cond, "'while'")
+        push_scope()
+        ck_block(n.body)
+        pop_scope()
+    } else if (k == "for") {
+        push_scope()
+        ck_stmt(n.init)
+        ck_cond(n.cond, "'for'")
+        ck_stmt(n.incr)
+        push_scope()
+        ck_block(n.body)
+        pop_scope()
+        pop_scope()
+    } else if (k == "forin") {
+        let t = ck_expr(n.iter)
+        push_scope()
+        if (t == "string") {
+            declare(n.name, "char")
+        } else {
+            declare(n.name, "any")
+        }
+        ck_block(n.body)
+        pop_scope()
+    } else if (k == "switch") {
+        ck_expr(n.e)
+        for (let c in n.cases) {
+            ck_expr(c.value)
+            push_scope()
+            ck_block(c.body)
+            pop_scope()
+        }
+        push_scope()
+        ck_block(n.dflt)
+        pop_scope()
+    } else if (k == "return") {
+        if (n.e != null) {
+            ck_expr(n.e)
+        }
+    } else if (k == "print") {
+        for (let a in n.args) {
+            ck_expr(a)
+        }
+    } else if (k == "setidx") {
+        ck_expr(n.target)
+        ck_expr(n.index)
+        ck_expr(n.e)
+    } else if (k == "unsafe") {
+        push_scope()
+        ck_block(n.body)
+        pop_scope()
+    } else if (k == "typedef") {
+        declare(n.name, "type")
+    } else if (k == "use") {
+        for (let nm in n.names) {
+            declare(nm, "any")
+        }
+    } else if (k == "break" or k == "continue") {
+        return null
+    } else {
+        ck_expr(n)
+    }
+    return null
+}
+
+# Names of functions and types are known before their definition runs.
+func ck_hoist(stmts) {
+    for (let s in stmts) {
+        if (s.k == "func" and s.name != null) {
+            declare(s.name, "function")
+        } else if (s.k == "typedef") {
+            declare(s.name, "type")
+        } else if (s.k == "use") {
+            for (let nm in s.names) {
+                declare(nm, "any")
+            }
+        }
+    }
+}
+
+func ck_block(stmts) {
+    ck_hoist(stmts)
+    for (let s in stmts) {
+        ck_stmt(s)
+    }
+}
+
+# Stops with a Type Error at the first problem it can prove.
+export func check_program(stmts) {
+    SCOPES = []
+    push_scope()
+    ck_block(stmts)
+    pop_scope()
+}

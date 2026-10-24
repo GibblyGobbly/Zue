@@ -1,11 +1,23 @@
 # CASE string plus int
-let s = "a" + 1
+func pass(v) {
+    return v
+}
+let s = pass("a") + 1
 # CASE int plus bool
-let s = 1 + true
+func pass(v) {
+    return v
+}
+let s = pass(1) + true
 # CASE null plus int
-let s = null + 1
+func pass(v) {
+    return v
+}
+let s = pass(null) + 1
 # CASE list plus int
-let s = [1, 2] + 1
+func pass(v) {
+    return v
+}
+let s = pass([1, 2]) + 1
 # CASE integer overflow
 let big = 9223372036854775807
 let s = big + 1
@@ -22,17 +34,38 @@ let s = 1.5 / z
 let z = 0
 let s = 5 % z
 # CASE if on an int
-if (5) { print("no") }
+func pass(v) {
+    return v
+}
+if (pass(5)) { print("no") }
 # CASE while on a string
-while ("x") { print("no") }
+func pass(v) {
+    return v
+}
+while (pass("x")) { print("no") }
 # CASE not on an int
-let s = not 0
+func pass(v) {
+    return v
+}
+let s = not pass(0)
 # CASE and on an int
-let s = 1 and true
+func pass(v) {
+    return v
+}
+let s = pass(1) and true
 # CASE compare int with string
-let s = 1 == "1"
+func pass(v) {
+    return v
+}
+let s = pass(1) == "1"
 # CASE order int and string
-let s = 1 < "a"
+func pass(v) {
+    return v
+}
+let s = pass(1) < "a"
 # CASE negate a string
-let t = "x"
+func pass(v) {
+    return v
+}
+let t = pass("x")
 let s = -t

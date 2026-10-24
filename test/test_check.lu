@@ -1,0 +1,124 @@
+# CASE assigning a string to an int variable
+let x = 10
+x = "a"
+# CASE assigning a float constant to an int variable
+let x = 10
+x = 2.5
+# CASE assigning an int constant to a float variable is fine
+let x = 10.0
+x = 2
+print(x)
+# CASE a variable first set later keeps that type
+let x
+x = 1
+x = "s"
+# CASE a variable that starts as null takes its first real type
+let x = null
+x = 5
+x = "s"
+# CASE sqrt of a constant adapts to float
+print(sqrt(16))
+# CASE sqrt of an int variable
+let n = 16
+print(sqrt(n))
+# CASE sqrt of a converted int variable
+let n = 16
+print(sqrt(float(n)))
+# CASE sqrt of a string
+print(sqrt("4"))
+# CASE sqrt of a bool
+print(sqrt(true))
+# CASE sqrt with two arguments
+print(sqrt(1.0, 2.0))
+# CASE constants adapt in arithmetic
+let r = 2.5 * 2
+print(r)
+print(3 + 1.5)
+# CASE int variable plus float constant
+let a = 3
+print(a + 1.5)
+# CASE int variable times float variable
+let a = 3
+let b = 1.5
+print(a * b)
+# CASE compound assignment of a float constant to an int
+let i = 0
+i += 1.5
+# CASE compound assignment of an int constant to a float
+let i = 0.0
+i += 1
+print(i)
+# CASE string times int
+print("a" * 2)
+# CASE string plus int
+print("a" + 1)
+# CASE negating a string
+let s = "a"
+print(-s)
+# CASE comparing int with string
+print(1 == "a")
+# CASE ordering string and int
+print("a" < 1)
+# CASE comparing int variable with a float constant
+let i = 1
+print(i == 1.5)
+# CASE comparing constants of different kinds
+print(1 == 1.0)
+# CASE division by a zero constant
+print(1 / 0)
+# CASE modulo by a zero constant
+print(5 % 0)
+# CASE if on an int
+let k = 3
+if (k) { print(1) }
+# CASE while on an int
+let k = 3
+while (k) { k = 0 }
+# CASE not on an int
+print(not 1)
+# CASE and on an int
+print(1 and true)
+# CASE pow of two ints gives an int
+print(pow(2, 3))
+# CASE pow of an int and a float
+print(pow(2, 3.0))
+# CASE pow of two floats
+print(pow(2.5, 2))
+# CASE pow of an int variable and a float variable
+let a = 2
+let b = 3.0
+print(pow(a, b))
+# CASE min of an int and a float variable
+let a = 1
+let b = 2.5
+print(min(a, b))
+# CASE abs of an int variable
+let a = -3
+print(abs(a))
+# CASE floor of an int variable
+let i = 5
+print(floor(i))
+# CASE rand with a float
+print(rand(5.5))
+# CASE rand with three arguments
+print(rand(1, 2, 3))
+# CASE trand with an argument
+print(trand(5))
+# CASE srand with a string
+srand("x")
+# CASE incrementing a string
+let s = "a"
+s++
+# CASE a function body is checked
+func f() {
+    let x = 1
+    x = "a"
+    return x
+}
+print(f())
+# CASE a closure sees the type of an outer variable
+let n = 5
+let f = func() {
+    n = "a"
+}
+f()

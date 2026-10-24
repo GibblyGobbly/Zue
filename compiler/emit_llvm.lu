@@ -21,6 +21,7 @@ use { ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } from "ll_state.lu"
 use { at_top, cap_cell, declare, pop_scope, push_scope, resolve, run_defers } from "ll_scope.lu"
 use { var_get, var_set } from "ll_scope.lu"
 use { lint_program } from "lint.lu"
+use { check_program } from "check.lu"
 use { ST } from "state.lu"
 
 let LL_BINOPS = {
@@ -1005,6 +1006,7 @@ export func compile_program_ll(stmts) {
         ll("ret void")
         finish_function("define internal void @entry() \{", ST.ctx)
     } else {
+        check_program(stmts)
         collect_exports(stmts, m.exports)
         compile_module_body(m, stmts, "entry")
     }

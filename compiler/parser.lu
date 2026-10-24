@@ -342,12 +342,13 @@ func p_unary() {
     }
     if (p_eat("-")) {
         let r = p_unary()
-        if (r.k == "num") {
-            r.v = "-{r.v}"
-            return r
-        }
-        if (r.k == "float") {
-            r.v = "-{r.v}"
+        if (r.k == "num" or r.k == "float") {
+            # A literal that is already negative (as in -(-3)) turns positive.
+            if (starts_with(r.v, "-")) {
+                r.v = slice(r.v, 1, len(r.v))
+            } else {
+                r.v = "-{r.v}"
+            }
             return r
         }
         let n = node("bin", line)
@@ -355,6 +356,7 @@ func p_unary() {
         n.l = node("num", line)
         n.l.v = "0"
         n.r = r
+        n.unary = true
         return n
     }
     if (p_eat("+")) {

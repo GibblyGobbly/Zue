@@ -18,10 +18,10 @@ as `sqrt() argument 1 must be a number, got string`.
 |---|---|
 | `print(a, ...)` | Prints each argument on its own line (a statement keyword, not a value) |
 | `input(prompt)` | One line read from standard input, without the newline, as a string; `""` at end of input. The prompt is optional (`input()`), and `input` is a keyword like `print` |
-| `type(v)` | Type name: `"int"`, `"long"` (an integer outside the 32-bit range), `"float"`, `"char"`, `"string"`, `"boolean"`, `"null"`, `"list"`, `"map"`, `"function"`, `"native_function"`, `"file"`, `"bloc"`, `"box"`, `"template"`, `"pointer"`. A dense list reports `"list"` and a `data` value reports `"map"` |
+| `type(v)` | Type name: `"int"`, `"float"`, `"char"`, `"string"`, `"boolean"`, `"null"`, `"list"`, `"map"`, `"function"`, `"native_function"`, `"file"`, `"bloc"`, `"box"`, `"template"`, `"pointer"`. A dense list reports `"list"` and a `data` value reports `"map"` |
 | `shape(v)` | Constructor name of a `data` / `bloc` / `template` value, for example `"Vec2"`; `null` for other values |
-| `int(v)` | Integer from a float (truncated toward zero), char (its code), boolean (0 or 1) or string (leading digits; `0` if there are none). Also the only allowed pointer cast |
-| `float(v)` | Float from an int, char, boolean or string |
+| `int(v)` | Integer from a float (truncated toward zero), char (its code), boolean (0 or 1) or string (the whole text must be a base-10 integer, otherwise an error). Also the only allowed pointer cast |
+| `float(v)` | Float from an int, char, boolean or string (the whole text must be a number such as `"3.5"` or `"1e3"`, otherwise an error) |
 | `to_string(v)`, `to_int(s)`, `to_float(s)` | Conversions (see [string](builtins.md#strings)) |
 | `debug(v)` | Prints `value = <v>` and returns `v` unchanged, so it can wrap an expression |
 | `assert(cond)` | Stops the program with `Assertion failed` when `cond` is false |
@@ -123,7 +123,7 @@ work with `contains`, `index_of`, `starts_with` and `ends_with`.
 | `pad_right(s, w, ch)` | Pads the end of `s` | `pad_right("Ok", 5, ".")` is `"Ok..."` |
 | `format(s, ...)` | Replaces each `{}` with the next argument; extra placeholders stay as `{}` | `format("Hi {}", "Luna")` is `"Hi Luna"` |
 | `to_string(v)` | Text of any value | `to_string(12)` is `"12"` |
-| `to_int(s)`, `to_float(s)` | Parse a number; `0` when the text has no leading number | `to_int("12")` is `12` |
+| `to_int(s)`, `to_float(s)` | Parse the whole text as a number (spaces around it are allowed). Text that is not a number, a value outside the 64-bit range, and the names `nan`, `inf` and hex digits are errors | `to_int("12")` is `12` |
 
 `replace` always replaces every match; there is no single-occurrence version. `+` joins two
 strings only: `"a" + 1` is a `Type Error`, so write `"a{1}"` or `"a" + to_string(1)`.
@@ -224,7 +224,10 @@ print(censor_text("This is a darn good example", "darn"))
 ## Math
 Numeric functions, random numbers, and vector math. All of these are builtins. Arguments must
 be numbers (an int or a float); anything else is a `Type Error` such as
-`sqrt() argument 1 must be a number, got string`. Results that are not whole numbers print
+`sqrt() argument 1 must be a number, got string`. Luna has no infinity and no NaN: a call whose
+argument is outside the function's domain is an `Argument Error` (`sqrt() argument must not be
+negative`), and a float result that is too large is a `Runtime Error` (`float overflow in
+exp()`, `float overflow in '*'`). Results that are not whole numbers print
 with up to six significant digits, so `sqrt(2)` prints `1.41421`, and a float without a
 fractional part prints without `.0` (`sqrt(16)` prints `4`). The `4.0` shown below means "a float".
 
@@ -235,25 +238,26 @@ fractional part prints without `.0` (`sqrt(16)` prints `4`). The `4.0` shown bel
 | `abs(x)` | Absolute value, same type as `x` | `abs(-10)` is `10` |
 | `min(a, b)` | The smaller of two values | `min(10, 5)` is `5` |
 | `max(a, b)` | The larger of two values | `max(10, 5)` is `10` |
-| `clamp(x, lo, hi)` | Constrains `x` to the range `[lo, hi]` | `clamp(15, 0, 10)` is `10` |
+| `clamp(x, lo, hi)` | Constrains `x` to the range `[lo, hi]`; `lo` greater than `hi` is an `Argument Error` | `clamp(15, 0, 10)` is `10` |
 | `sign(x)` | `-1`, `0` or `1` | `sign(-50)` is `-1` |
 
 ### Powers and roots
 
-These always return a float.
+All return a float except `pow` with two ints.
 
 | Function | Description | Example |
 |---|---|---|
-| `pow(base, exp)` | `base` raised to `exp` | `pow(2, 3)` is `8.0` |
-| `sqrt(x)` | Square root; a negative argument gives `nan` | `sqrt(16)` is `4.0` |
+| `pow(base, exp)` | `base` raised to `exp`. Two ints with `exp >= 0` give an exact int (`integer overflow in 'pow'` when it does not fit); otherwise a float. `pow(0, -1)` is a division-by-zero error, and a negative base with a fractional exponent is an `Argument Error` | `pow(2, 3)` is `8` (int), `pow(2.0, 0.5)` is `1.414...` |
+| `sqrt(x)` | Square root; a negative argument is an `Argument Error` | `sqrt(16)` is `4.0` |
 | `cbrt(x)` | Cube root | `cbrt(27)` is `3.0` |
-| `exp(x)` | e raised to `x` | `exp(1)` is `2.718...` |
-| `ln(x)` | Natural logarithm | `ln(10)` is `2.302...` |
-| `log10(x)` | Base-10 logarithm | `log10(100)` is `2.0` |
+| `exp(x)` | e raised to `x`; too large is a float overflow error | `exp(1)` is `2.718...` |
+| `ln(x)` | Natural logarithm; `x <= 0` is an `Argument Error` | `ln(10)` is `2.302...` |
+| `log10(x)` | Base-10 logarithm; `x <= 0` is an `Argument Error` | `log10(100)` is `2.0` |
 
 ### Rounding
 
-`floor`, `ceil`, `round` and `trunc` return an int. `fract` and `mod` return a float.
+`floor`, `ceil`, `round` and `trunc` return an int; a result outside the 64-bit int range is a
+`Runtime Error` (`floor() result does not fit in a 64-bit int`). `fract` and `mod` return a float.
 
 | Function | Description | Example |
 |---|---|---|
@@ -271,7 +275,7 @@ Angles are in radians. All of these return a float.
 | Function | Description |
 |---|---|
 | `sin(x)`, `cos(x)`, `tan(x)` | Sine, cosine, tangent |
-| `asin(x)`, `acos(x)`, `atan(x)` | Inverse functions |
+| `asin(x)`, `acos(x)`, `atan(x)` | Inverse functions; `asin` and `acos` need `x` between -1 and 1, otherwise an `Argument Error` |
 | `atan2(y, x)` | Arc tangent of `y / x` with the correct quadrant: `atan2(10, 10)` is `0.785...` |
 | `sinh(x)`, `cosh(x)`, `tanh(x)` | Hyperbolic functions |
 | `deg_to_rad(d)`, `rad_to_deg(r)` | Angle conversion: `deg_to_rad(180)` is `3.14159...` |
@@ -282,9 +286,9 @@ Angles are in radians. All of these return a float.
 | Function | Description |
 |---|---|
 | `rand()` | A float in `[0, 1)` |
-| `rand(max)` | An integer from `0` to `max`, both ends included |
-| `rand(min, max)` | An integer from `min` to `max`, both ends included (swapped if `min > max`) |
-| `srand(seed)` | Seeds the generator, for reproducible sequences. `srand()` reseeds from the OS |
+| `rand(max)` | An integer from `0` to `max`, both ends included; `max` must be an int |
+| `rand(min, max)` | An integer from `min` to `max`, both ends included (swapped if `min > max`); both must be ints |
+| `srand(seed)` | Seeds the generator, for reproducible sequences; `seed` must be an int. `srand()` reseeds from the OS |
 | `trand()` | A 64-bit integer read from the OS entropy source (`/dev/urandom`) |
 
 The generator is xoroshiro128++, and `srand` expands the seed with SplitMix64. Without `srand`,
@@ -309,8 +313,8 @@ list, and its size is fixed: `append` does not accept it.
 | Function | Description |
 |---|---|
 | `dense_list(size, fill)` | `dense_list(3, 1.5)` is `d[1.5, 1.5, 1.5]` |
-| `vec_add(a, b)`, `vec_sub(a, b)`, `vec_mul(a, b)`, `vec_div(a, b)` | Element-wise operation on two lists of numbers; returns a new dense list as long as the shorter input |
-| `vec_mul_inline(a, b)` | Multiplies `a` by `b` in place, without allocating |
+| `vec_add(a, b)`, `vec_sub(a, b)`, `vec_mul(a, b)`, `vec_div(a, b)` | Element-wise operation on two lists of numbers of the same length; returns a new dense list. Different lengths, a non-number element, a division by zero and a float overflow are errors |
+| `vec_mul_inline(a, b)` | Multiplies dense list `a` by dense list `b` in place, without allocating; both must have the same length |
 | `mat_mul(a, b)` | Matrix product of two lists of rows (lists or dense lists); returns a list of dense rows |
 
 `+ - * /` between two lists of numbers do the same as the `vec_*` functions:
@@ -322,8 +326,7 @@ print(mat_mul([[1, 2], [3, 4]], [[5, 6], [7, 8]]))  # [d[19, 22], d[43, 50]]
 ```
 
 `mat_mul` is a plain triple loop that runs on one thread. If the column count of `a` does not
-equal the row count of `b`, it prints `Runtime Error: Matrix dimension mismatch` and returns
-`null` without stopping the program.
+equal the row count of `b`, it is an `Argument Error` (`mat_mul() dimension mismatch`).
 
 ### Example: distance between two points
 
