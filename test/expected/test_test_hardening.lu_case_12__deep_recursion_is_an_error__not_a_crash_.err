@@ -1,6 +1,0 @@
-Runtime Error in /tmp/luna_test_case.lu at line 5:
-  stack overflow: recursion is too deep
-
-   5 |     return 1 + f(n - 1)
-
-Hint: Luna allows 100000 nested calls. Check for a recursion that never stops.
