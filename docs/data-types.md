@@ -12,6 +12,35 @@ Luna has four ways to define your own structured values:
 Their rules are checked at run time by the runtime library; a violation stops the program with
 the messages shown below. `make test` checks every rule (`test/test_unsafe_errors.lu`).
 
+## Typed fields
+
+A `bloc` or `template` field can be given a type after a colon:
+
+```javascript
+bloc Vec { x: float, y: float }
+template Player { name: string, hp: int, pos: Vec, items: list }
+bloc Packet { id: int, payload: box[16] }
+```
+
+A field type is `int`, `float`, `bool`, `char`, `string`, `list`, `map`, `function`, the name of a
+`bloc` or `template`, or `box[N]`. A value of another type is an error when the object is built
+and when a field is assigned: `Template 'Player' field 'hp' must be an int, got string`. A whole
+number written in the source adapts to a float field (`Vec{1, 2}` has floats); a variable never
+does. A `bloc` types all its fields or none. `data` fields have no types.
+
+What a type may hold:
+
+| Type | Holds |
+|---|---|
+| `box` | bytes only |
+| `bloc` | `int`, `float`, `bool`, `char`, `string`, other blocs, `box[N]` (a read-only copy). Not lists, maps, functions or templates. At most 64 bytes in total |
+| `template` | anything, including blocs, boxes and other templates |
+
+A `box` stored in a `bloc` is a copy owned by the bloc and cannot be changed. Assigning a box with
+`let b = a` copies its bytes; passing it to a function lends it.
+
+Fields without a type still work, and then accept any value.
+
 ## data
 
 ```javascript
@@ -115,7 +144,8 @@ print(p.bytes[0])           # 9
 ## Inside unsafe blocks
 
 `box` and `bloc` values may not be created inside `unsafe { }`
-(`box and bloc values are not allowed inside unsafe blocks`). Use `alloc()` for raw memory there.
+(`box values are not allowed inside unsafe blocks`); a `bloc` and a `template` can be made there and
+managed by hand with `alloc(object)`. See [unsafe](unsafe.md).
 See [unsafe](unsafe.md).
 
 ## How it works

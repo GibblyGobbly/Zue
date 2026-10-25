@@ -6,9 +6,10 @@
 # follow src/value.c, src/unsafe_runtime.c and src/luna_vm.c. Validation is done by
 # the rule functions in luna_rt_rules.lu (luna_data_* and luna_mem_*).
 
-# ---- layouts ---------------------------------------------------------------------------------
+# Layouts
 
-# LvBlocDesc { name, int nfields, fields, kinds, nested, int total_size, int locked, next }
+# LvBlocDesc { name, int nfields, fields, kinds, nested, int total_size, int locked, next, ftypes, fextra }
+# ftypes and fextra are the declared field types (see FK_*), or 0 for a bloc without types.
 const BD_NAME = 0
 const BD_NFIELDS = 8
 const BD_FIELDS = 16
@@ -17,16 +18,20 @@ const BD_NESTED = 32
 const BD_TOTAL = 40
 const BD_LOCKED = 44
 const BD_NEXT = 48
-const BD_SIZE = 56
+const BD_FTYPES = 56
+const BD_FEXTRA = 64
+const BD_SIZE = 72
 # LvBloc { desc, LV vals[] }
 const BL_DESC = 0
 const BL_VALS = 8
-# LvDType { name, int nfields, fields, int is_template }
+# LvDType { name, int nfields, fields, int is_template, ftypes, fextra }
 const DT_NAME = 0
 const DT_NFIELDS = 8
 const DT_FIELDS = 16
 const DT_TEMPLATE = 24
-const DT_SIZE = 32
+const DT_FTYPES = 32
+const DT_FEXTRA = 40
+const DT_SIZE = 48
 # DataSchema { name, fields, int nfields, int is_template, next }
 const DS_NAME = 0
 const DS_FIELDS = 8
@@ -42,10 +47,13 @@ const TP_FIELDS = 16
 const BS_IN_USE = 0
 const BS_GEN = 4
 const BS_OWNED = 8
+const BS_STACK = 12
 const BS_SCOPE = 16
 const BS_LEN = 24
 const BS_BYTES = 32
-const BS_SIZE = 40
+const BS_INDEX = 40
+const BS_NEXT = 44
+const BS_SIZE = 48
 # PointerMeta { ptr, base, cells, int kind, int owns_allocation, int freed, init_flags }
 const PM_PTR = 0
 const PM_BASE = 8
@@ -54,9 +62,25 @@ const PM_KIND = 24
 const PM_OWNS = 28
 const PM_FREED = 32
 const PM_FLAGS = 40
-const PM_SIZE = 48
+const PM_LINE = 48
+const PM_OBJ = 52
+const PM_SIZE = 56
 
-const BLOC_MAX_BYTES = 32
+const BLOC_MAX_BYTES = 64
+
+# Declared field types. A field without a type is FK_ANY. fextra holds the size of a box field or
+# the name of a named type.
+const FK_ANY = 0
+const FK_INT = 1
+const FK_FLOAT = 2
+const FK_BOOL = 3
+const FK_CHAR = 4
+const FK_STRING = 5
+const FK_LIST = 6
+const FK_MAP = 7
+const FK_FUNC = 8
+const FK_NAMED = 9
+const FK_BOX = 10
 const BLOC_SLOT_BYTES = 8
 const BK_UNSET = 0
 const BK_INT = 1
@@ -65,14 +89,23 @@ const BK_BOOL = 3
 const BK_CHAR = 4
 const BK_BLOC = 5
 const BK_PRIM = 6
-const BOX_SLOT_MAX = 4096
+# The box table grows in chunks of 4096 slots that never move, so a slot address stays valid while
+# more boxes are made. Freed slots are reused through a free list.
+const BOX_CHUNK = 4096
+const BOX_CHUNKS_MAX = 4096
 const PTR_ALLOC = 0
 const PTR_ADDR = 1
 
-space("_box_slots", 163840)
+space("_box_chunks", 32768)
 let g_bloc_registry = 0
+let g_fk_extra = 0
+let g_fk_extras = 0
 let g_schema_registry = 0
-let g_box_high_water = 0
+let g_box_count = 0
+let g_box_free = 0
+let g_box_stack = 0
+let g_box_stack_n = 0
+let g_box_stack_cap = 0
 let g_scope_counter = 0
 let g_owners = 0
 let g_owner_count = 0
@@ -89,7 +122,226 @@ func _wrap(o, tag) {
     _set(o, tag, 0)
 }
 
-# ---- blocs --------------------------------------------------------------------------------------
+# Declared field types
+
+# The code for a field type written as text in a declaration, or FK_ANY for no type. The size of a
+# box field or the name of a named type is left in g_fk_extra.
+func _fk_parse(text) {
+    g_fk_extra = 0
+    if (text == 0) {
+        return FK_ANY
+    }
+    if (strcmp(text, cstr("int")) == 0) {
+        return FK_INT
+    }
+    if (strcmp(text, cstr("float")) == 0) {
+        return FK_FLOAT
+    }
+    if (strcmp(text, cstr("bool")) == 0) {
+        return FK_BOOL
+    }
+    if (strcmp(text, cstr("char")) == 0) {
+        return FK_CHAR
+    }
+    if (strcmp(text, cstr("string")) == 0) {
+        return FK_STRING
+    }
+    if (strcmp(text, cstr("list")) == 0) {
+        return FK_LIST
+    }
+    if (strcmp(text, cstr("map")) == 0) {
+        return FK_MAP
+    }
+    if (strcmp(text, cstr("function")) == 0) {
+        return FK_FUNC
+    }
+    if (ld8(text) == 98 and ld8(text + 1) == 111 and ld8(text + 2) == 120 and ld8(text + 3) == 58) {
+        let n = 0
+        let p = text + 4
+        while (ld8(p) >= 48 and ld8(p) <= 57) {
+            n = n * 10 + (ld8(p) - 48)
+            p += 1
+        }
+        g_fk_extra = n
+        return FK_BOX
+    }
+    g_fk_extra = text
+    return FK_NAMED
+}
+
+# The codes of n declared field types (an array of bytes), and in g_fk_extras their extras. texts is
+# an array of n C strings, some of them 0, or 0 for a type without any field types.
+func _fk_build(n, texts) {
+    g_fk_extras = 0
+    if (texts == 0 or n == 0) {
+        return 0
+    }
+    let codes = lv_alloc_atomic(n)
+    let extras = lv_alloc(8 * n)
+    for (let i = 0; i < n; i++) {
+        st8(codes + i, _fk_parse(ld64(texts + i * 8)))
+        st64(extras + i * 8, g_fk_extra)
+    }
+    g_fk_extras = extras
+    return codes
+}
+
+func _fk_name(code) {
+    if (code == FK_INT) {
+        return cstr("int")
+    }
+    if (code == FK_FLOAT) {
+        return cstr("float")
+    }
+    if (code == FK_BOOL) {
+        return cstr("bool")
+    }
+    if (code == FK_CHAR) {
+        return cstr("char")
+    }
+    if (code == FK_STRING) {
+        return cstr("string")
+    }
+    if (code == FK_LIST) {
+        return cstr("list")
+    }
+    if (code == FK_MAP) {
+        return cstr("map")
+    }
+    if (code == FK_FUNC) {
+        return cstr("function")
+    }
+    return cstr("value")
+}
+
+# Writes a declared type as source text, such as int or box[16], into buf.
+func _fk_text(buf, code, extra) {
+    if (code == FK_BOX) {
+        snprintf(buf, 64, cstr("box[%lld]"), extra)
+        return 0
+    }
+    if (code == FK_NAMED) {
+        snprintf(buf, 64, cstr("%s"), extra)
+        return 0
+    }
+    snprintf(buf, 64, cstr("%s"), _fk_name(code))
+}
+
+# The name of the bloc, template or data type of a value, or 0.
+func _shape_cstr(v) {
+    let t = _tag(v)
+    if (t == T_BLOC) {
+        return _bloc_name(v)
+    }
+    if (t == T_TEMPLATE) {
+        return ld64(ld64(_val(v) + TP_DT) + DT_NAME)
+    }
+    if (t == T_MAP) {
+        let key = stack_buf(16)
+        let o = stack_buf(16)
+        _str(key, cstr("__tag"))
+        _map_get(o, v, _val(key))
+        if (g_found != 0 and _tag(o) == T_STR) {
+            return _val(o) + S_DATA
+        }
+    }
+    return 0
+}
+
+# Whether the value v has the declared type.
+func _fk_matches(code, extra, v) {
+    let t = _tag(v)
+    if (code == FK_ANY) {
+        return 1
+    }
+    if (code == FK_INT) {
+        return t == T_INT
+    }
+    if (code == FK_FLOAT) {
+        return t == T_FLOAT
+    }
+    if (code == FK_BOOL) {
+        return t == T_BOOL
+    }
+    if (code == FK_CHAR) {
+        return t == T_CHAR
+    }
+    if (code == FK_STRING) {
+        return t == T_STR
+    }
+    if (code == FK_LIST) {
+        return t == T_LIST or t == T_DENSE
+    }
+    if (code == FK_MAP) {
+        return t == T_MAP
+    }
+    if (code == FK_FUNC) {
+        return t == T_FUNC
+    }
+    if (code == FK_BOX) {
+        if (t != T_BOX) {
+            return 0
+        }
+        let s = _box_slot(_val(v))
+        return s != 0 and ld64(s + BS_LEN) == extra
+    }
+    let name = _shape_cstr(v)
+    return name != 0 and strcmp(name, extra) == 0
+}
+
+# What a value is, for an error message: its type name, or box[N] for a box.
+func _fk_value_text(buf, v) {
+    if (_tag(v) == T_BOX) {
+        let s = _box_slot(_val(v))
+        if (s != 0) {
+            snprintf(buf, 64, cstr("box[%lld]"), ld64(s + BS_LEN))
+            return 0
+        }
+    }
+    let name = _shape_cstr(v)
+    if (name != 0) {
+        snprintf(buf, 64, cstr("%s"), name)
+        return 0
+    }
+    snprintf(buf, 64, cstr("%s"), _type_name(v))
+}
+
+func _field_error(kind, tname, fname, code, extra, v) {
+    let want = stack_buf(64)
+    let got = stack_buf(64)
+    let msg = stack_buf(320)
+    _fk_text(want, code, extra)
+    _fk_value_text(got, v)
+    snprintf(msg, 320, cstr("%s '%s' field '%s' must be %s %s, got %s"), kind, tname, fname, _article(want), want, got)
+    lv_error(E_TYPE, msg, cstr("Give the field a value of its declared type. A whole number written in the source is an int; write 2.0 for a float."))
+}
+
+# Checks argc values against the declared field types.
+func _fk_check_values(kind, tname, fields, codes, extras, argc, argv) {
+    for (let i = 0; i < argc; i++) {
+        let code = ld8(codes + i)
+        if (code != FK_ANY) {
+            let v = argv + 16 * i
+            let extra = ld64(extras + i * 8)
+            if (_fk_matches(code, extra, v) == 0) {
+                _field_error(kind, tname, ld64(fields + i * 8), code, extra, v)
+            }
+        }
+    }
+}
+
+func _schema_find(name) {
+    let d = g_schema_registry
+    while (d != 0) {
+        if (strcmp(ld64(d + DS_NAME), name) == 0) {
+            return d
+        }
+        d = ld64(d + DS_NEXT)
+    }
+    return 0
+}
+
+# Blocs
 
 func _bloc_kind_of(v) {
     let t = _tag(v)
@@ -135,10 +387,77 @@ func _bloc_same_schema(d, fields, n) {
 }
 
 func _bloc_hint() {
-    return cstr("A bloc holds at most 32 bytes of unique fields; each name keeps one field list")
+    return cstr("A bloc holds at most 64 bytes of unique fields; each name keeps one field list")
 }
 
-func lv_define_bloc(name, n_i, fields) {
+func _bloc_field_error(name, fname, what) {
+    let msg = stack_buf(320)
+    snprintf(msg, 320, cstr("Bloc '%s' field '%s' %s"), name, fname, what)
+    lv_error(E_TYPE, msg, cstr("A bloc holds int, float, bool, char, string, another bloc or a box, in at most 64 bytes"))
+}
+
+# The size in bytes of a typed bloc, checking that every field type may live in a bloc: not a
+# list, map or function, not a template or data type, and the nested blocs and boxes must fit.
+func _bloc_typed_size(name, n, fields, codes, extras) {
+    let total = 0
+    for (let i = 0; i < n; i++) {
+        let code = ld8(codes + i)
+        let extra = ld64(extras + i * 8)
+        let fname = ld64(fields + i * 8)
+        let size = 8
+        if (code == FK_LIST or code == FK_MAP or code == FK_FUNC) {
+            _bloc_field_error(name, fname, cstr("cannot be a list, map or function: a bloc is an immutable value"))
+        }
+        if (code == FK_NAMED) {
+            let nested = _bloc_find(extra)
+            if (nested == 0) {
+                if (_schema_find(extra) != 0) {
+                    _bloc_field_error(name, fname, cstr("cannot hold a template or data value: a bloc may only hold a box"))
+                }
+                _bloc_field_error(name, fname, cstr("uses a type that is not a bloc; define a bloc before the bloc that holds it"))
+            }
+            size = ld32(nested + BD_TOTAL)
+        }
+        if (code == FK_BOX) {
+            if (extra < 1) {
+                _bloc_field_error(name, fname, cstr("needs a box of at least 1 byte"))
+            }
+            size = (extra + 7) / 8 * 8
+        }
+        total += size
+    }
+    if (total > BLOC_MAX_BYTES) {
+        let msg = stack_buf(320)
+        snprintf(msg, 320, cstr("Bloc '%s' needs %d bytes but a bloc holds at most %d"), name, total, BLOC_MAX_BYTES)
+        lv_error(E_TYPE, msg, _bloc_hint())
+    }
+    return total
+}
+
+func _same_field_types(a_codes, a_extras, b_codes, b_extras, n) {
+    if (a_codes == 0 and b_codes == 0) {
+        return 1
+    }
+    if (a_codes == 0 or b_codes == 0) {
+        return 0
+    }
+    for (let i = 0; i < n; i++) {
+        let code = ld8(a_codes + i)
+        if (code != ld8(b_codes + i)) {
+            return 0
+        }
+        if (code == FK_NAMED) {
+            if (strcmp(ld64(a_extras + i * 8), ld64(b_extras + i * 8)) != 0) {
+                return 0
+            }
+        } else if (ld64(a_extras + i * 8) != ld64(b_extras + i * 8)) {
+            return 0
+        }
+    }
+    return 1
+}
+
+func _define_bloc(name, n_i, fields, ftypes) {
     let msg = stack_buf(256)
     let o = stack_buf(16)
     let code = luna_data_bloc_validate(name, fields, n_i)
@@ -146,14 +465,20 @@ func lv_define_bloc(name, n_i, fields) {
         luna_data_error_message(code, msg, 256)
         lv_error(E_TYPE, msg, _bloc_hint())
     }
+    let codes = _fk_build(n_i, ftypes)
+    let extras = g_fk_extras
     let existing = _bloc_find(name)
     if (existing != 0) {
-        if (_bloc_same_schema(existing, fields, n_i) == 0) {
+        if (_bloc_same_schema(existing, fields, n_i) == 0 or _same_field_types(ld64(existing + BD_FTYPES), ld64(existing + BD_FEXTRA), codes, extras, n_i) == 0) {
             snprintf(msg, 256, cstr("bloc '%s' is already defined with different fields"), name)
             lv_error(E_TYPE, msg, _bloc_hint())
         }
         _set(o, T_BLOC_TYPE, existing)
         retp(o)
+    }
+    let typed_size = 0
+    if (codes != 0) {
+        typed_size = _bloc_typed_size(name, n_i, fields, codes, extras)
     }
     let d = lv_alloc(BD_SIZE)
     st64(d + BD_NAME, name)
@@ -166,9 +491,28 @@ func lv_define_bloc(name, n_i, fields) {
     for (let i = 0; i < n_i; i++) {
         st64(ld64(d + BD_FIELDS) + i * 8, ld64(fields + i * 8))
     }
+    if (codes != 0) {
+        st64(d + BD_FTYPES, codes)
+        st64(d + BD_FEXTRA, extras)
+        st32(d + BD_TOTAL, typed_size)
+        st32(d + BD_LOCKED, 1)
+    }
     st64(d + BD_NEXT, g_bloc_registry)
     g_bloc_registry = d
     _set(o, T_BLOC_TYPE, d)
+    retp(o)
+}
+
+# The entry points of generated code: a type without field types, and a type with them.
+func lv_define_bloc(name, n_i, fields) {
+    let o = stack_buf(16)
+    callv(o, _define_bloc, name, n_i, fields, 0)
+    retp(o)
+}
+
+func lv_define_bloc_typed(name, n_i, fields, ftypes) {
+    let o = stack_buf(16)
+    callv(o, _define_bloc, name, n_i, fields, ftypes)
     retp(o)
 }
 
@@ -240,12 +584,15 @@ func _bloc_validate(d, argc, argv, msg) {
 
 func _bloc_construct(o, type, argc, argv) {
     let msg = stack_buf(256)
-    if (_unsafe_depth() > 0) {
-        lv_error(E_TYPE, cstr("box and bloc values are not allowed inside unsafe blocks"),
-                 cstr("Bloc values must stay inline and only use int, float, bool, char, or nested blocs"))
-    }
     let d = _val(type)
-    if (_bloc_validate(d, argc, argv, msg) == 0) {
+    let codes = ld64(d + BD_FTYPES)
+    if (codes != 0) {
+        if (argc != ld32(d + BD_NFIELDS)) {
+            snprintf(msg, 256, cstr("Bloc '%s' expects %d field value(s), but got %d"), ld64(d + BD_NAME), ld32(d + BD_NFIELDS), argc)
+            lv_error(E_TYPE, msg, _bloc_hint())
+        }
+        _fk_check_values(cstr("Bloc"), ld64(d + BD_NAME), ld64(d + BD_FIELDS), codes, ld64(d + BD_FEXTRA), argc, argv)
+    } else if (_bloc_validate(d, argc, argv, msg) == 0) {
         lv_error(E_TYPE, msg, cstr("Bloc values must stay inline and only use int, float, bool, char, or nested blocs"))
     }
     let n = argc
@@ -255,7 +602,11 @@ func _bloc_construct(o, type, argc, argv) {
     let b = lv_alloc(BL_VALS + 16 * n)
     st64(b + BL_DESC, d)
     for (let i = 0; i < argc; i++) {
-        _cp(b + BL_VALS + 16 * i, argv + 16 * i)
+        if (codes != 0 and ld8(codes + i) == FK_BOX) {
+            _box_clone_owned(b + BL_VALS + 16 * i, argv + 16 * i, b, 2)
+        } else {
+            _cp(b + BL_VALS + 16 * i, argv + 16 * i)
+        }
     }
     _set(o, T_BLOC, b)
 }
@@ -292,6 +643,19 @@ func _bloc_equal(a, b) {
             if (_bloc_equal(x, y) == 0) {
                 return 0
             }
+        } else if (t == T_STR) {
+            if (_str_same(_val(x), _val(y)) == 0) {
+                return 0
+            }
+        } else if (t == T_BOX) {
+            let sx = _box_slot(_val(x))
+            let sy = _box_slot(_val(y))
+            if (sx == 0 or sy == 0 or ld64(sx + BS_LEN) != ld64(sy + BS_LEN)) {
+                return 0
+            }
+            if (memcmp(ld64(sx + BS_BYTES), ld64(sy + BS_BYTES), ld64(sx + BS_LEN)) != 0) {
+                return 0
+            }
         } else {
             return 0
         }
@@ -307,9 +671,9 @@ func _bloc_name(v) {
     return cstr("bloc")
 }
 
-# ---- data and template types ------------------------------------------------------------------------
+# Data and template types
 
-func lv_define_data(name, n_i, fields, is_template_i) {
+func _define_data(name, n_i, fields, is_template_i, ftypes) {
     let msg = stack_buf(256)
     let o = stack_buf(16)
     let hint = cstr("Each data or template name must keep one field list")
@@ -367,7 +731,26 @@ func lv_define_data(name, n_i, fields, is_template_i) {
         st64(ld64(t + DT_FIELDS) + i * 8, ld64(fields + i * 8))
     }
     st32(t + DT_TEMPLATE, is_template_i)
+    if (is_template_i != 0) {
+        let codes = _fk_build(n_i, ftypes)
+        if (codes != 0) {
+            st64(t + DT_FTYPES, codes)
+            st64(t + DT_FEXTRA, g_fk_extras)
+        }
+    }
     _set(o, T_DTYPE, t)
+    retp(o)
+}
+
+func lv_define_data(name, n_i, fields, is_template_i) {
+    let o = stack_buf(16)
+    callv(o, _define_data, name, n_i, fields, is_template_i, 0)
+    retp(o)
+}
+
+func lv_define_data_typed(name, n_i, fields, is_template_i, ftypes) {
+    let o = stack_buf(16)
+    callv(o, _define_data, name, n_i, fields, is_template_i, ftypes)
     retp(o)
 }
 
@@ -378,6 +761,10 @@ func _data_construct(o, type, argc, argv) {
                cstr("Data constructor '%s' expects %d field value(s), but got %d"), ld64(t + DT_NAME), ld32(t + DT_NFIELDS), argc, 0)
     }
     if (ld32(t + DT_TEMPLATE) != 0) {
+        let codes = ld64(t + DT_FTYPES)
+        if (codes != 0) {
+            _fk_check_values(cstr("Template"), ld64(t + DT_NAME), ld64(t + DT_FIELDS), codes, ld64(t + DT_FEXTRA), argc, argv)
+        }
         let n = argc
         if (n == 0) {
             n = 1
@@ -432,37 +819,102 @@ func _missing_field(target, field) {
           cstr("Field '%s' does not exist on this bloc value"), field, 0, 0)
 }
 
-# ---- boxes ---------------------------------------------------------------------------------------------
+# Boxes
 
 func _box_handle_make(index, gen) {
     return bor(shl(gen, 32), index + 1)
 }
 
+func _box_slot_at(index) {
+    return ld64(addr_of("_box_chunks") + (index / BOX_CHUNK) * 8) + (index % BOX_CHUNK) * BS_SIZE
+}
+
 # The slot of a live box handle, or 0.
 func _box_slot(handle) {
     let index = band(handle, 4294967295)
-    if (index == 0 or index > BOX_SLOT_MAX) {
+    if (index == 0 or index > g_box_count) {
         return 0
     }
-    let s = addr_of("_box_slots") + (index - 1) * BS_SIZE
+    let s = _box_slot_at(index - 1)
     if (ld32(s + BS_IN_USE) == 0 or ld32(s + BS_GEN) != shr(handle, 32)) {
         return 0
     }
     return s
 }
 
+# Why a handle is not live: 5 when its box was freed (the slot has moved to a newer generation),
+# otherwise 6.
+func _box_state_code(handle) {
+    let index = band(handle, 4294967295)
+    if (index == 0 or index > g_box_count) {
+        return 6
+    }
+    let s = _box_slot_at(index - 1)
+    if (shr(handle, 32) < ld32(s + BS_GEN)) {
+        return 5
+    }
+    return 6
+}
+
 func _box_free_slot(s) {
     if (s == 0 or ld32(s + BS_IN_USE) == 0) {
         return 0
     }
-    luna_data_box_free_ok(_box_handle_make((s - addr_of("_box_slots")) / BS_SIZE, ld32(s + BS_GEN)))
-    free(ld64(s + BS_BYTES))
+    if (ld32(s + BS_STACK) == 0) {
+        free(ld64(s + BS_BYTES))
+    }
+    st32(s + BS_STACK, 0)
     st64(s + BS_BYTES, 0)
     st64(s + BS_LEN, 0)
     st32(s + BS_IN_USE, 0)
     st32(s + BS_GEN, ld32(s + BS_GEN) + 1)
     st32(s + BS_OWNED, 0)
     st64(s + BS_SCOPE, 0)
+    st32(s + BS_NEXT, g_box_free)
+    g_box_free = ld32(s + BS_INDEX) + 1
+}
+
+# A slot that is not in use: a freed one, or the first of a new chunk.
+func _box_alloc_slot() {
+    if (g_box_free != 0) {
+        let s = _box_slot_at(g_box_free - 1)
+        g_box_free = ld32(s + BS_NEXT)
+        return s
+    }
+    if (g_box_count % BOX_CHUNK == 0) {
+        let chunk = g_box_count / BOX_CHUNK
+        if (chunk >= BOX_CHUNKS_MAX) {
+            lv_error(E_RUNTIME, cstr("too many boxes are live at once"), cstr("Free boxes you no longer need."))
+        }
+        let mem = calloc(BOX_CHUNK, BS_SIZE)
+        if (mem == 0) {
+            lv_error(E_RUNTIME, cstr("out of memory"), 0)
+        }
+        st64(addr_of("_box_chunks") + chunk * 8, mem)
+    }
+    let s = _box_slot_at(g_box_count)
+    st32(s + BS_INDEX, g_box_count)
+    g_box_count += 1
+    return s
+}
+
+# Boxes made in a scope are freed when it ends. They are remembered in creation order with the
+# generation of their slot, so ending a scope only looks at the newest ones.
+func _box_stack_push(index, gen) {
+    if (g_box_stack_n == g_box_stack_cap) {
+        let cap = 64
+        if (g_box_stack_cap != 0) {
+            cap = g_box_stack_cap * 2
+        }
+        g_box_stack = realloc(g_box_stack, cap * 8)
+        if (g_box_stack == 0) {
+            lv_error(E_RUNTIME, cstr("out of memory"), 0)
+        }
+        g_box_stack_cap = cap
+    }
+    st32(g_box_stack + g_box_stack_n * 8, index)
+    st32(g_box_stack + g_box_stack_n * 8 + 4, gen)
+    g_box_stack_n += 1
 }
 
 func lv_scope_new() {
@@ -470,49 +922,101 @@ func lv_scope_new() {
     return g_scope_counter
 }
 
-func lvp_box_new(o, size, scope_id) {
+# Makes a box of the given size. mem is where its bytes live: 0 for a new heap buffer, or the
+# address of space in the caller's stack frame, which this zeroes. A box on the stack needs no
+# allocation and no free; its bytes go away with the frame, and the handle stops being valid
+# when its scope ends.
+func _box_new(o, size, scope_id, mem) {
     if (_tag(size) != T_INT) {
         lv_error(E_TYPE, cstr("box[...] expects an integer byte size"), cstr("Use box[128] or another positive integer size"))
     }
-    let hint = cstr("Use box[n] with n between 1 and 4096; at most 4096 boxes can be live at once")
+    let hint = cstr("Use box[n] with n between 1 and 16777216")
     if (_unsafe_depth() > 0) {
-        lv_error(E_ARGUMENT, cstr("box and bloc values are not allowed inside unsafe blocks"), hint)
+        lv_error(E_ARGUMENT, cstr("box values are not allowed inside unsafe blocks"), cstr("A box lives on the stack and frees itself. Make it outside the unsafe block."))
     }
     if (_val(size) < 0 or luna_data_box_size_ok(_val(size)) != 0) {
-        lv_error(E_ARGUMENT, cstr("box size must be between 1 and 4096 bytes"), hint)
+        lv_error(E_ARGUMENT, cstr("box size must be between 1 and 16777216 bytes"), hint)
     }
-    for (let i = 0; i < BOX_SLOT_MAX; i++) {
-        let s = addr_of("_box_slots") + i * BS_SIZE
-        if (ld32(s + BS_IN_USE) != 0) {
-            continue
-        }
+    let s = _box_alloc_slot()
+    if (mem == 0) {
         st64(s + BS_BYTES, calloc(_val(size), 1))
-        if (ld64(s + BS_BYTES) == 0) {
-            lv_error(E_RUNTIME, cstr("out of memory"), 0)
-        }
-        st32(s + BS_IN_USE, 1)
-        st32(s + BS_OWNED, 0)
-        st64(s + BS_SCOPE, scope_id)
-        st64(s + BS_LEN, _val(size))
-        if (i + 1 > g_box_high_water) {
-            g_box_high_water = i + 1
-        }
-        let handle = _box_handle_make(i, ld32(s + BS_GEN))
-        luna_data_box_track(handle)
-        _set(o, T_BOX, handle)
+        st32(s + BS_STACK, 0)
+    } else {
+        memset(mem, 0, _val(size))
+        st64(s + BS_BYTES, mem)
+        st32(s + BS_STACK, 1)
+    }
+    if (ld64(s + BS_BYTES) == 0) {
+        lv_error(E_RUNTIME, cstr("out of memory"), 0)
+    }
+    st32(s + BS_IN_USE, 1)
+    st32(s + BS_OWNED, 0)
+    st64(s + BS_SCOPE, scope_id)
+    st64(s + BS_LEN, _val(size))
+    let index = ld32(s + BS_INDEX)
+    if (scope_id != 0) {
+        _box_stack_push(index, ld32(s + BS_GEN))
+    }
+    _set(o, T_BOX, _box_handle_make(index, ld32(s + BS_GEN)))
+}
+
+func lvp_box_new(o, size, scope_id) {
+    _box_new(o, size, scope_id, 0)
+}
+
+func lvp_box_new_stack(o, size, scope_id, mem) {
+    _box_new(o, size, scope_id, mem)
+}
+
+# slot holds a value read from a variable: if it is a box, it becomes a copy of that box, made in
+# the scope scope_id.
+func lvp_box_assign_copy(slot, scope_id) {
+    if (_tag(slot) != T_BOX) {
         return 0
     }
-    lv_error(E_ARGUMENT, cstr("box allocation failed: more than 4096 boxes are live at once"), hint)
+    let s = _box_slot(_val(slot))
+    if (s == 0) {
+        return 0
+    }
+    let size = stack_buf(16)
+    _int(size, ld64(s + BS_LEN))
+    let out = stack_buf(16)
+    _box_new(out, size, scope_id, 0)
+    let ns = _box_slot(_val(out))
+    memcpy(ld64(ns + BS_BYTES), ld64(s + BS_BYTES), ld64(s + BS_LEN))
+    _cp(slot, out)
+}
+
+# Makes a heap box with the bytes of the live box src, owned by the object owner, and puts it in
+# out. owned_as is 1 for a template and 2 for a bloc, where the bytes may not be changed. The
+# original box is not touched.
+func _box_clone_owned(out, src, owner, owned_as) {
+    let ss = _box_slot(_val(src))
+    let len = ld64(ss + BS_LEN)
+    let size = stack_buf(16)
+    _int(size, len)
+    _box_new(out, size, 0, 0)
+    let ns = _box_slot(_val(out))
+    memcpy(ld64(ns + BS_BYTES), ld64(ss + BS_BYTES), len)
+    _box_promote_owned(out, owner)
+    st32(ns + BS_OWNED, owned_as)
 }
 
 func lv_box_release_scope(scope_id) {
     if (scope_id == 0) {
         return 0
     }
-    for (let i = 0; i < g_box_high_water and i < BOX_SLOT_MAX; i++) {
-        let s = addr_of("_box_slots") + i * BS_SIZE
-        if (ld32(s + BS_IN_USE) != 0 and ld32(s + BS_OWNED) == 0 and ld64(s + BS_SCOPE) == scope_id) {
+    while (g_box_stack_n > 0) {
+        let top = g_box_stack + (g_box_stack_n - 1) * 8
+        let s = _box_slot_at(ld32(top))
+        if (ld32(s + BS_IN_USE) == 0 or ld32(s + BS_GEN) != ld32(top + 4) or ld32(s + BS_OWNED) != 0) {
+            # Freed early, reused, or handed to a template or bloc: no longer tied to a scope.
+            g_box_stack_n -= 1
+        } else if (ld64(s + BS_SCOPE) == scope_id) {
             _box_free_slot(s)
+            g_box_stack_n -= 1
+        } else {
+            return 0
         }
     }
 }
@@ -521,6 +1025,16 @@ func _box_promote(bx) {
     let s = _box_slot(_val(bx))
     if (s == 0) {
         return 0
+    }
+    if (ld32(s + BS_STACK) != 0) {
+        # A template takes the box with it past the end of the frame, so its bytes move to the heap.
+        let heap = calloc(ld64(s + BS_LEN), 1)
+        if (heap == 0) {
+            lv_error(E_RUNTIME, cstr("out of memory"), 0)
+        }
+        memcpy(heap, ld64(s + BS_BYTES), ld64(s + BS_LEN))
+        st64(s + BS_BYTES, heap)
+        st32(s + BS_STACK, 0)
     }
     st32(s + BS_OWNED, 1)
     st64(s + BS_SCOPE, 0)
@@ -580,7 +1094,7 @@ func _box_live(bx) {
     if (_box_slot(_val(bx)) != 0) {
         return 0
     }
-    let code = luna_data_box_access_ok(_val(bx))
+    let code = _box_state_code(_val(bx))
     if (code == 5) {
         lv_error(E_RUNTIME, cstr("box was already freed (use-after-free)"), cstr("Do not use a box after it is freed."))
     }
@@ -594,7 +1108,7 @@ func _box_byte_slot(bx, index, type_hint, hint) {
     }
     let s = _box_slot(_val(bx))
     if (s == 0) {
-        let code = luna_data_box_access_ok(_val(bx))
+        let code = _box_state_code(_val(bx))
         if (code == 5) {
             lv_error(E_RUNTIME, cstr("box was already freed (use-after-free)"), hint)
         }
@@ -614,11 +1128,35 @@ func _box_byte_slot(bx, index, type_hint, hint) {
 
 let g_box_index = 0
 
-# ---- operations hooked into the core runtime ------------------------------------------------------------
+# Operations hooked into the core runtime
 
 # Reads target[index] for a template, bloc or box into out. Returns 1 when handled.
 func _data_index(t, idx, out) {
     let tt = _tag(t)
+    if (tt == T_PTR and _tag(idx) == T_STR) {
+        let m = _object_meta(_val(t))
+        if (m == 0) {
+            return 0
+        }
+        let obj = _val(t)
+        if (ld32(m + PM_OBJ) == 1) {
+            let i = _tpl_find(obj, _val(idx) + S_DATA)
+            if (i < 0) {
+                _errf(E_NAME, cstr("Access only declared fields for this template"), cstr("Template field '%s' does not exist"), _val(idx) + S_DATA, 0, 0)
+            }
+            _cp(out, obj + TP_FIELDS + 16 * i)
+            return 1
+        }
+        let d = ld64(obj + BL_DESC)
+        for (let i = 0; i < ld32(d + BD_NFIELDS); i++) {
+            if (strcmp(ld64(ld64(d + BD_FIELDS) + i * 8), _val(idx) + S_DATA) == 0) {
+                _cp(out, obj + BL_VALS + 16 * i)
+                return 1
+            }
+        }
+        _errf(E_NAME, cstr("Use dot access with a declared bloc field such as point.x"),
+              cstr("Field '%s' does not exist on this bloc value"), _val(idx) + S_DATA, 0, 0)
+    }
     if (tt == T_TEMPLATE and _tag(idx) == T_STR) {
         let i = _tpl_find(_val(t), _val(idx) + S_DATA)
         if (i < 0) {
@@ -648,7 +1186,7 @@ func _data_index(t, idx, out) {
 # Reads target.field for a template, bloc or box. Returns 1 when handled.
 func _data_field(t, key, out) {
     let tt = _tag(t)
-    if (tt == T_TEMPLATE or tt == T_BLOC) {
+    if (tt == T_TEMPLATE or tt == T_BLOC or tt == T_PTR) {
         return _data_index(t, key, out)
     }
     if (tt == T_BOX) {
@@ -668,9 +1206,34 @@ func _data_field(t, key, out) {
 # Writes target[index] = val for a template, bloc or box. Returns 1 when handled.
 func _data_index_set(t, idx, val) {
     let tt = _tag(t)
+    if (tt == T_PTR and _tag(idx) == T_STR) {
+        let m = _object_meta(_val(t))
+        if (m == 0) {
+            return 0
+        }
+        if (ld32(m + PM_OBJ) == 2) {
+            lv_error(E_TYPE, cstr("bloc values are immutable"), cstr("Build a new bloc, or use a template for data that changes"))
+        }
+        if (_tag(val) == T_BOX) {
+            lv_error(E_TYPE, cstr("a box cannot be stored in an object made with alloc()"), cstr("Keep boxes in objects under the garbage collector."))
+        }
+        let obj = _val(t)
+        let i = _tpl_find(obj, _val(idx) + S_DATA)
+        if (i < 0) {
+            _errf(E_NAME, cstr("Assign only to declared template fields"),
+                  cstr("Template field '%s' does not exist"), _val(idx) + S_DATA, 0, 0)
+        }
+        _tpl_check_field(obj, i, val)
+        _cp(obj + TP_FIELDS + 16 * i, val)
+        return 1
+    }
     if (tt == T_BOX) {
         let hint = cstr("Use b[i] = byte with 0 <= i < b.len and 0 <= byte <= 255")
         let s = _box_byte_slot(t, idx, cstr("Use b[i] = byte with 0 <= i < b.len"), hint)
+        if (ld32(s + BS_OWNED) == 2) {
+            lv_error(E_TYPE, cstr("this box belongs to a bloc, and a bloc is immutable"),
+                     cstr("Copy the bytes into a new box, or build a new bloc"))
+        }
         if (_tag(val) != T_INT or _val(val) < 0 or _val(val) > 255) {
             lv_error(E_RUNTIME, cstr("box bytes must be integers from 0 to 255"), hint)
         }
@@ -688,6 +1251,7 @@ func _data_index_set(t, idx, val) {
             _errf(E_NAME, cstr("Assign only to declared template fields"),
                   cstr("Template field '%s' does not exist"), _val(idx) + S_DATA, 0, 0)
         }
+        _tpl_check_field(_val(t), i, val)
         _cp(_val(t) + TP_FIELDS + 16 * i, val)
         if (_tag(val) == T_BOX) {
             _box_promote_owned(val, _val(t))
@@ -698,6 +1262,18 @@ func _data_index_set(t, idx, val) {
         lv_error(E_TYPE, cstr("bloc values are immutable"), cstr("Build a new bloc, or use a template for data that changes"))
     }
     return 0
+}
+
+# Checks val against the declared type of field i of the template object tp.
+func _tpl_check_field(tp, i, val) {
+    let dt = ld64(tp + TP_DT)
+    let codes = ld64(dt + DT_FTYPES)
+    if (codes != 0 and ld8(codes + i) != FK_ANY) {
+        let extra = ld64(ld64(dt + DT_FEXTRA) + i * 8)
+        if (_fk_matches(ld8(codes + i), extra, val) == 0) {
+            _field_error(cstr("Template"), ld64(dt + DT_NAME), ld64(ld64(dt + DT_FIELDS) + i * 8), ld8(codes + i), extra, val)
+        }
+    }
 }
 
 func _data_equal(a, b) {
@@ -754,7 +1330,7 @@ func _data_tostring(b, v) {
     } else if (t == T_BOX) {
         let s = _box_slot(_val(v))
         if (s == 0) {
-            if (luna_data_box_access_ok(_val(v)) == 5) {
+            if (_box_state_code(_val(v)) == 5) {
                 snprintf(tmp, 96, cstr("<box freed>"))
             } else {
                 snprintf(tmp, 96, cstr("<box invalid>"))
@@ -832,7 +1408,7 @@ func _data_len(v, out) {
     return 1
 }
 
-# ---- unsafe blocks and pointers (port of src/unsafe_runtime.c) ----------------------------------------
+# Unsafe blocks and pointers (port of src/unsafe_runtime.c)
 
 func _unsafe_depth() {
     return g_block_depth
@@ -854,22 +1430,28 @@ func _ptrs_reserve() {
     g_ptr_cap = next
 }
 
+# The newest record of a pointer: a freed address can be handed out again, and then the newest
+# record is the live one.
 func _find_exact(p) {
-    for (let i = 0; i < g_ptr_count; i++) {
+    let i = g_ptr_count - 1
+    while (i >= 0) {
         if (ld64(g_ptrs + i * PM_SIZE + PM_PTR) == p) {
             return g_ptrs + i * PM_SIZE
         }
+        i -= 1
     }
     return 0
 }
 
 func _find_owner(p) {
-    for (let i = 0; i < g_ptr_count; i++) {
+    let i = g_ptr_count - 1
+    while (i >= 0) {
         let m = g_ptrs + i * PM_SIZE
         let end = ld64(m + PM_BASE) + ld64(m + PM_CELLS) * 16
         if (uge(p, ld64(m + PM_BASE)) and ult(p, end)) {
             return m
         }
+        i -= 1
     }
     return 0
 }
@@ -899,6 +1481,8 @@ func _register_alloc_meta(p, cells) {
     st32(m + PM_OWNS, 1)
     st32(m + PM_FREED, 0)
     st64(m + PM_FLAGS, calloc(cells, 1))
+    st32(m + PM_LINE, ld32(addr_of("lv_pos_line")))
+    st32(m + PM_OBJ, 0)
 }
 
 func _register_addr_meta(p) {
@@ -918,6 +1502,8 @@ func _register_addr_meta(p) {
     st32(m + PM_OWNS, 0)
     st32(m + PM_FREED, 0)
     st64(m + PM_FLAGS, 0)
+    st32(m + PM_LINE, 0)
+    st32(m + PM_OBJ, 0)
 }
 
 func _register_alias_meta(p, owner) {
@@ -940,6 +1526,8 @@ func _register_alias_meta(p, owner) {
     st32(m + PM_OWNS, 0)
     st32(m + PM_FREED, ld32(owner + PM_FREED))
     st64(m + PM_FLAGS, ld64(owner + PM_FLAGS))
+    st32(m + PM_LINE, 0)
+    st32(m + PM_OBJ, 0)
 }
 
 func _unsafe_hint(code) {
@@ -958,9 +1546,6 @@ func _unsafe_hint(code) {
     if (code == 5) {
         return cstr("address_of() needs a variable name such as address_of(x), not a temporary expression.")
     }
-    if (code == 6) {
-        return cstr("Nested unsafe blocks are not supported. Merge the inner block into the outer one.")
-    }
     if (code == 7) {
         return cstr("Pointers cannot go into lists or maps because those values are GC-managed.")
     }
@@ -973,11 +1558,8 @@ func _unsafe_hint(code) {
     if (code == 10) {
         return cstr("Only int(ptr) is allowed for pointer casts.")
     }
-    if (code == 11) {
-        return cstr("Inside unsafe, call builtins only. Move user-defined function calls outside the block.")
-    }
     if (code == 12) {
-        return cstr("Do not put free(ptr) inside if/while/for/switch branches. Use defer(ptr) or free it unconditionally.")
+        return cstr("Every alloc() needs a free(ptr) or defer(ptr) before its block ends. Write defer(ptr) right after alloc().")
     }
     if (code == 13) {
         return cstr("Use a pointer returned by alloc(), address_of(), or ptr_add().")
@@ -1027,8 +1609,9 @@ func _free_alloc_meta(m) {
     st32(m + PM_FREED, 1)
 }
 
-func _process_deferred_frees() {
-    while (g_defer_count > 0) {
+# Frees the pointers deferred since the block began; mark is how many were pending then.
+func _process_deferred_frees(mark) {
+    while (g_defer_count > mark) {
         g_defer_count -= 1
         let p = ld64(g_defer_ptrs + g_defer_count * 8)
         let m = _find_exact(p)
@@ -1038,17 +1621,60 @@ func _process_deferred_frees() {
     }
 }
 
+# Per open unsafe block: the number of pending deferred frees and of registered pointers when it
+# began, so that nested blocks clean up only their own work.
+const BLK_MAX = 64
+space("g_blk_marks", 1024)
+
 func lv_unsafe_begin() {
+    if (g_block_depth >= BLK_MAX) {
+        lv_error(E_RUNTIME, cstr("unsafe blocks are nested more than 64 deep"), cstr("Flatten the nesting."))
+    }
     _unsafe_check(luna_mem_begin())
+    let marks = addr_of("g_blk_marks") + g_block_depth * 16
+    st64(marks, g_defer_count)
+    st64(marks + 8, g_ptr_count)
     g_block_depth += 1
 }
 
-func lv_unsafe_end() {
-    if (g_block_depth > 0) {
-        g_block_depth -= 1
+# R9: memory from alloc() that is still live when its block ends is a leak.
+func _check_leaks(first) {
+    let leaks = 0
+    let line = 0
+    for (let i = first; i < g_ptr_count; i++) {
+        let m = g_ptrs + i * PM_SIZE
+        if (ld32(m + PM_KIND) == PTR_ALLOC and ld32(m + PM_OWNS) != 0 and ld32(m + PM_FREED) == 0) {
+            if (leaks == 0) {
+                line = ld32(m + PM_LINE)
+            }
+            leaks += 1
+        }
     }
+    if (leaks != 0) {
+        st32(addr_of("lv_pos_line"), line)
+        let msg = stack_buf(256)
+        snprintf(msg, 256, cstr("%d alloc() call(s) in this unsafe block were never freed; the first is at line %d"), leaks, line)
+        lv_error(E_RUNTIME, msg, _unsafe_hint(12))
+    }
+}
+
+func lv_unsafe_end() {
+    if (g_block_depth == 0) {
+        return 0
+    }
+    g_block_depth -= 1
+    let marks = addr_of("g_blk_marks") + g_block_depth * 16
     luna_mem_end()
-    _process_deferred_frees()
+    _process_deferred_frees(ld64(marks))
+    _check_leaks(ld64(marks + 8))
+}
+
+# R2: a pointer may not leave the block it was made in. Generated code calls this when a value is
+# assigned to a variable declared outside the block, or returned from inside it.
+func lvp_ptr_escape_check(v) {
+    if (g_block_depth > 0 and _tag(v) == T_PTR and _is_pointer(v) != 0) {
+        _unsafe_check(luna_mem_escape_ok(_val(v)))
+    }
 }
 
 # R7: a pointer may not be stored in a GC-managed value.
@@ -1092,11 +1718,6 @@ func _ptr_cast_check(v, target) {
     _unsafe_check(luna_mem_cast_ok(_val(v), target))
 }
 
-# R11: inside unsafe only builtins may be called.
-func _unsafe_call_check(is_builtin) {
-    _unsafe_check(luna_mem_call_ok(is_builtin))
-}
-
 func _need_unsafe(fn) {
     if (g_block_depth > 0) {
         return 0
@@ -1104,10 +1725,83 @@ func _need_unsafe(fn) {
     _errf(E_RUNTIME, cstr("Wrap pointer operations in unsafe \{ ... }"), cstr("%s() may only be used inside unsafe blocks"), fn, 0, 0)
 }
 
+# alloc(object) for a template or bloc value: a copy of the object on the C heap, outside the
+# garbage collector, freed by hand like any other allocation. Fields are read and written through
+# the pointer (p.hp, p.hp = 5). The values the fields refer to stay alive while it exists.
+func _alloc_object(o, src_v) {
+    let src = _val(src_v)
+    let is_template = _tag(src_v) == T_TEMPLATE
+    let n = 0
+    let bytes = 0
+    if (is_template) {
+        n = ld32(src + TP_N)
+        bytes = TP_FIELDS + 16 * n
+        if (n == 0) {
+            bytes = TP_FIELDS + 16
+        }
+    } else {
+        n = ld32(ld64(src + BL_DESC) + BD_NFIELDS)
+        bytes = BL_VALS + 16 * n
+        if (n == 0) {
+            bytes = BL_VALS + 16
+        }
+    }
+    for (let i = 0; i < n; i++) {
+        let cell = src + BL_VALS + 16 * i
+        if (is_template) {
+            cell = src + TP_FIELDS + 16 * i
+        }
+        if (_tag(cell) == T_BOX) {
+            lv_error(E_TYPE, cstr("alloc() cannot copy an object that holds a box"),
+                     cstr("Make the box inside the unsafe block, or keep this object under the garbage collector."))
+        }
+    }
+    let cells = (bytes + 15) / 16
+    let mem = calloc(cells, 16)
+    if (mem == 0) {
+        lv_error(E_RUNTIME, cstr("alloc() failed to reserve memory"), cstr("Try a smaller allocation."))
+    }
+    memcpy(mem, src, bytes)
+    lv_gc_root_add(mem, mem + 16 * cells)
+    _register_alloc_meta(mem, cells)
+    let m = g_ptrs + (g_ptr_count - 1) * PM_SIZE
+    if (is_template) {
+        st32(m + PM_OBJ, 1)
+    } else {
+        st32(m + PM_OBJ, 2)
+    }
+    luna_mem_track_alloc(mem, cells * 16)
+    _set(o, T_PTR, mem)
+}
+
+# The metadata of a pointer to a manually allocated object, or 0. A freed object is an error.
+func _object_meta(p) {
+    let m = _find_exact(p)
+    if (m == 0 or ld32(m + PM_OBJ) == 0) {
+        return 0
+    }
+    _unsafe_check(luna_mem_deref_ok(p))
+    return m
+}
+
+# load and store work on slots; an object made with alloc(template) is read and written by field.
+func _refuse_whole_object(ptr_v, fn) {
+    let m = _find_exact(_val(ptr_v))
+    if (m != 0 and ld32(m + PM_OBJ) != 0) {
+        _errf(E_TYPE, cstr("Read or write a field instead, for example p.name or p.name = value"),
+              cstr("%s() cannot be used on a whole object"), fn, 0, 0)
+    }
+}
+
 func lb_alloc(self_p, argc_i, argv_p) {
     _need_unsafe(cstr("alloc"))
     if (argc_i != 1) {
-        lv_error(E_ARGUMENT, cstr("alloc() expects exactly 1 argument"), cstr("Use alloc(slotCount)"))
+        lv_error(E_ARGUMENT, cstr("alloc() expects exactly 1 argument"), cstr("Use alloc(slotCount), or alloc(object) for a template or bloc"))
+    }
+    if (_tag(argv_p) == T_TEMPLATE or _tag(argv_p) == T_BLOC) {
+        let obj = stack_buf(16)
+        _alloc_object(obj, argv_p)
+        retp(obj)
     }
     let is_int = _tag(argv_p) == T_INT
     let cells = 0
@@ -1136,7 +1830,7 @@ func lb_free(self_p, argc_i, argv_p) {
     if (_tag(argv_p) == T_BOX) {
         let s = _box_slot(_val(argv_p))
         if (s == 0) {
-            let code = luna_data_box_access_ok(_val(argv_p))
+            let code = _box_state_code(_val(argv_p))
             if (code == 5) {
                 lv_error(E_RUNTIME, cstr("box was already freed (double free)"), cstr("A box must be freed exactly once"))
             }
@@ -1170,6 +1864,7 @@ func lb_load(self_p, argc_i, argv_p) {
     if (_is_pointer(argv_p) == 0) {
         _report_unsafe(13)
     }
+    _refuse_whole_object(argv_p, cstr("load"))
     let p = _val(argv_p)
     let m = _find_owner(p)
     let am = _resolve_alloc_meta(m)
@@ -1204,6 +1899,7 @@ func lb_store(self_p, argc_i, argv_p) {
     if (_is_pointer(argv_p) == 0) {
         _report_unsafe(13)
     }
+    _refuse_whole_object(argv_p, cstr("store"))
     let p = _val(argv_p)
     let m = _find_owner(p)
     let am = _resolve_alloc_meta(m)

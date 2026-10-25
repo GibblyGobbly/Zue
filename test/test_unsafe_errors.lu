@@ -1,17 +1,52 @@
 # CASE R1 address_of a pointer
 unsafe {
     let a = alloc(1)
+    defer(a)
     let b = address_of(a)
 }
-# CASE R2 pointer escapes the block
+# CASE R2 pointer assigned to a global
 let g = null
 unsafe {
     let a = alloc(1)
+    defer(a)
     g = a
+}
+# CASE R2 pointer assigned to an outer local variable
+func keep_outside() {
+    let outer = null
+    unsafe {
+        let a = alloc(1)
+        defer(a)
+        outer = a
+    }
+    return 0
+}
+keep_outside()
+# CASE R2 pointer returned from the block
+func return_inside() {
+    unsafe {
+        let a = alloc(1)
+        defer(a)
+        return a
+    }
+}
+return_inside()
+# CASE R2 pointer stored in a list
+unsafe {
+    let a = alloc(1)
+    defer(a)
+    let l = [a]
+}
+# CASE R2 pointer stored in a map
+unsafe {
+    let a = alloc(1)
+    defer(a)
+    let m = {"k": a}
 }
 # CASE R3 ptr_offset out of bounds
 unsafe {
     let a = alloc(1)
+    defer(a)
     let b = ptr_offset(a, 1)
 }
 # CASE R4 use after free
@@ -20,59 +55,78 @@ unsafe {
     free(a)
     print(load(a))
 }
+# CASE R4 double free
+unsafe {
+    let a = alloc(1)
+    free(a)
+    free(a)
+}
 # CASE R5 address_of a temporary
 unsafe {
     let p = address_of(1 + 2)
 }
 # CASE R5 address_of outside unsafe
 let p = address_of(1 + 2)
-# CASE R6 nested unsafe
+# CASE R7 invalid alloc size
 unsafe {
+    let a = alloc(0)
+}
+# CASE R8 compare pointers from different allocations
+unsafe {
+    let a = alloc(1)
+    let b = alloc(1)
+    defer(a)
+    defer(b)
+    let bad = a < b
+}
+# CASE R9 invalid pointer cast
+unsafe {
+    let a = alloc(1)
+    defer(a)
+    let f = float(a)
+}
+# CASE R10 alloc never freed
+unsafe {
+    let a = alloc(1)
+    store(a, 5)
+}
+# CASE R10 several allocs never freed
+unsafe {
+    let a = alloc(1)
+    let b = alloc(2)
+    let c = alloc(3)
+    free(b)
+}
+# CASE R6 unsafe block inside an unsafe block
+unsafe {
+    let outer = alloc(1)
+    defer(outer)
+    unsafe {
+        let inner = alloc(1)
+        defer(inner)
+    }
+}
+# CASE R10 leak in a function called from an unsafe block
+func wrapper() {
+    unsafe {
+        let inner = alloc(1)
+    }
+}
+unsafe {
+    let outer = alloc(1)
+    defer(outer)
+    wrapper()
+}
+# CASE R10 alloc inside a called function
+func make_leak() {
     unsafe {
         let a = alloc(1)
     }
 }
-# CASE R7 pointer stored in a list
-unsafe {
-    let a = alloc(1)
-    let l = [a]
-}
-# CASE R8 invalid alloc size
-unsafe {
-    let a = alloc(0)
-}
-# CASE R9 compare pointers from different allocations
-unsafe {
-    let a = alloc(1)
-    let b = alloc(1)
-    let bad = a < b
-}
-# CASE R10 invalid pointer cast
-unsafe {
-    let a = alloc(1)
-    let f = float(a)
-}
-# CASE R11 user call inside unsafe
-func touch(x) {
-    return 1
-}
-unsafe {
-    let a = alloc(1)
-    touch(a)
-}
-# CASE R12 conditional free
-unsafe {
-    let a = alloc(1)
-    if (true) { free(a) }
-}
+make_leak()
 # CASE box inside unsafe
 unsafe {
     let b = box[8]
-}
-# CASE bloc inside unsafe
-bloc V { x }
-unsafe {
-    let v = V{1}
 }
 # CASE box returned from a function
 func mk() {
@@ -112,7 +166,7 @@ b[2] = 1
 let b = box[2]
 b[0] = 256
 # CASE box size too large
-let b = box[5000]
+let b = box[16777217]
 # CASE bloc is immutable
 bloc P { x, y }
 let p = P{1, 2}
@@ -130,8 +184,8 @@ let p = P{1}
 # CASE bloc duplicate field
 bloc B { x, x }
 # CASE bloc oversize
-bloc B { a, b, c, d, e }
-# CASE bloc redefined with different fields
+bloc B { a, b, c, d, e, f, g, h, i }
+# CASE bloc redefined with different fields in the same scope
 bloc W { x }
 bloc W { y }
 # CASE template unknown field read
@@ -142,7 +196,7 @@ print(t.z)
 template T { x, y }
 let t = T(1, 2)
 t.z = 3
-# CASE template redefined with different fields
+# CASE template redefined with different fields in the same scope
 template A { x }
 template A { y }
 # CASE template wrong arity

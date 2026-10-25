@@ -120,7 +120,7 @@ func _gc_setup() {
     }
 }
 
-# ---- page table ------------------------------------------------------------
+# Page table
 
 func _slot_hash(key, cap) {
     let k = bxor(key, shr(key, 17))
@@ -180,7 +180,7 @@ func _table_find(key) {
     return 0
 }
 
-# ---- pages ---------------------------------------------------------------------
+# Pages
 
 func _note_heap(lo, n) {
     if (ult(lo, g_heap_lo)) {
@@ -390,7 +390,7 @@ func lv_realloc(p, n) {
     return q
 }
 
-# ---- marking -------------------------------------------------------------------
+# Marking
 
 func _push(p, n) {
     if (g_mtop == g_mcap) {
@@ -494,7 +494,7 @@ func _scan_stack_and_registers() {
     _drain()
 }
 
-# ---- sweeping ------------------------------------------------------------------
+# Sweeping
 
 func _rebuild_lists() {
     memset(addr_of("_class_list"), 0, 512)

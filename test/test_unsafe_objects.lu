@@ -1,0 +1,110 @@
+# CASE a template made by hand
+template Player { name: string, hp: int }
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    defer(p)
+    print(p.name)
+    p.hp = p.hp - 20
+    print(p.hp)
+}
+# CASE a typed field is still checked through the pointer
+template Player { name: string, hp: int }
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    defer(p)
+    p.hp = "dead"
+}
+# CASE an unknown field
+template Player { name: string, hp: int }
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    defer(p)
+    print(p.mana)
+}
+# CASE use after free
+template Player { name: string, hp: int }
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    free(p)
+    print(p.hp)
+}
+# CASE double free
+template Player { name: string, hp: int }
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    free(p)
+    free(p)
+}
+# CASE leak
+template Player { name: string, hp: int }
+unsafe {
+    let p = alloc(Player("Astra", 100))
+}
+# CASE a pointer to an object cannot leave the block
+template Player { name: string, hp: int }
+let keep = null
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    defer(p)
+    keep = p
+}
+# CASE load and store refuse a whole object
+template Player { name: string, hp: int }
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    defer(p)
+    print(load(p))
+}
+# CASE your own functions can work on the object
+template Player { name: string, hp: int }
+func heal(p, amount) {
+    p.hp = p.hp + amount
+}
+unsafe {
+    let p = alloc(Player("Astra", 100))
+    defer(p)
+    heal(p, 25)
+    heal(p, 5)
+    print(p.hp)
+}
+# CASE a bloc made by hand is read-only
+bloc V { x: float, y: float }
+unsafe {
+    let v = alloc(V{1, 2})
+    defer(v)
+    print(v.x + v.y)
+    v.x = 5.0
+}
+# CASE a bloc can be made inside unsafe
+bloc V { x: float, y: float }
+unsafe {
+    let v = V{3, 4}
+    print(v.x * v.y)
+}
+# CASE a box cannot be made inside unsafe
+unsafe {
+    let b = box[4]
+}
+# CASE many objects
+template Cell { value: int }
+unsafe {
+    let total = 0
+    for (let i = 0; i < 100; i++) {
+        let c = alloc(Cell(i))
+        total += c.value
+        free(c)
+    }
+    print(total)
+}
+# CASE objects hold GC values that stay alive
+template Item { label: string, tags: list }
+unsafe {
+    let it = alloc(Item("sword", ["sharp", "heavy"]))
+    defer(it)
+    let junk = []
+    for (let i = 0; i < 20000; i++) {
+        append(junk, "garbage {i}")
+    }
+    print(it.label)
+    print(it.tags)
+}

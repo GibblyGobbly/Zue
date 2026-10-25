@@ -8,7 +8,7 @@
 | [data-types](data-types.md) | `data`, `template`, `bloc`, `box` |
 | [builtins](builtins.md) | Every builtin function: core, strings, math, files |
 | [memory](memory.md) | Where values live, the stack, the heap, boxes, raw memory, limits |
-| [unsafe](unsafe.md) | `unsafe` blocks and the 12 safety rules |
+| [unsafe](unsafe.md) | `unsafe` blocks and the 10 safety rules |
 | [architecture](architecture.md) | How a program becomes a binary; the compiler, the runtime, the bootstrap |
 | [gc](gc.md) | The garbage collector |
 | [testing](testing.md) | The test runner, how to add a test |

@@ -7,7 +7,6 @@ This page describes how a program becomes a binary. The only external pieces are
 prog.lu
   |  compiler/lexer.lu        tokens
   |  compiler/parser.lu       AST (maps and lists)
-  |  compiler/lint.lu         static check (rule R12)
   |  compiler/check.lu        compile-time type check
   |  compiler/analysis.lu     names used, exports, closure captures
   |  compiler/emit_llvm.lu    LLVM IR text
@@ -34,7 +33,6 @@ compiler in detail.
 | `lunac.lu` | Driver: `build`, `run`, `emit`, and the internal `--native` and positional forms. Builds the clang command line |
 | `lexer.lu`, `token.lu` | Source text to tokens; keyword and operator tables, including the keyword aliases |
 | `parser.lu` | Recursive descent with precedence climbing; produces the AST as maps |
-| `lint.lu` | The static check for `free()` in conditional flow inside `unsafe` (rule R12) |
 | `check.lu` | The compile-time type checker for the main program: variable types, operators, conditions and the signatures of the math builtins. See [syntax](syntax.md#type-checking) |
 | `analysis.lu` | Which names a function reads and writes, exports, and which variables closures capture |
 | `emit_llvm.lu`, `ll_state.lu`, `ll_scope.lu` | The LLVM IR backend: expressions, statements, functions, modules, scopes and deferred calls |
@@ -59,7 +57,7 @@ and linked into every program.
 | `luna_rt_lib.lu` | Builtins: conversions, maps, lists, strings, `args`, `exit`, `system`, `clock` |
 | `luna_rt_math.lu` | Math, files, dense lists, vector math, random numbers |
 | `luna_rt_data.lu` | `data`, `template`, `bloc`, `box` and `unsafe` |
-| `luna_rt_rules.lu` | The validation rules behind them: bloc and template schemas, the box handle table, the allocation table and the twelve pointer rules. Each rule returns 0 or an error code, which `luna_rt_data.lu` turns into the error message |
+| `luna_rt_rules.lu` | The validation rules behind them: bloc and template schemas, the box handle table, the allocation table and the ten pointer rules. Each rule returns 0 or an error code, which `luna_rt_data.lu` turns into the error message |
 
 Every builtin `name` listed in `compiler/shared.lu` is a runtime function `lb_name(self, argc,
 argv)` that returns a value. Operators are runtime calls too (`lvp_add_fast`, `lvp_lt_fast` and

@@ -1,0 +1,57 @@
+# CASE duplicate parameter names
+func f(a, a) {
+    return a
+}
+# CASE required parameter after a default
+func f(a = 1, b) {
+    return a
+}
+# CASE variable declared twice in the same scope
+let x = 1
+let x = 2
+# CASE function declared twice
+func g() {
+    return 1
+}
+func g() {
+    return 2
+}
+# CASE function and variable share a name
+let h = 1
+func h() {
+    return 2
+}
+# CASE local variable named like a parameter
+func p(a) {
+    let a = 1
+    return a
+}
+# CASE loop variable shadows an outer variable
+let i = 0
+for (let i = 0; i < 2; i++) {
+    print(i)
+}
+print(i)
+# CASE not after a comparison operator
+print(1 == not true)
+# CASE not after an arithmetic operator
+print(1 + not true)
+# CASE declaration after use list name
+use { missing } from "nowhere.lu"
+let missing = 1
+# CASE decrement of something that is not a variable
+let xs = [1]
+xs[0]--
+# CASE prefix increment applied to a list
+let xs = [1]
+++xs[0]
+# CASE unclosed bracket
+let xs = [1, 2
+# CASE unclosed parenthesis
+print((1 + 2)
+# CASE unclosed block
+if (true) {
+    print(1)
+# CASE missing closing brace of a function
+func f() {
+    return 1

@@ -60,21 +60,11 @@ export func walk_nested(x, out) {
     return null
 }
 
-export func p_prompt_text(parts) {
-    let pieces = []
-    for (let part in parts) {
-        if (type(part) == "string") {
-            append(pieces, part)
-        }
-    }
-    return join(pieces, "")
-}
-
 export func collect_exports(stmts, out) {
     for (let s in stmts) {
         if (s.k == "group") {
             collect_exports(s.items, out)
-        } else if ((s.k == "let" or s.k == "func") and s.exported and s.name != null) {
+        } else if ((s.k == "let" or s.k == "func" or s.k == "typedef") and s.exported and s.name != null) {
             append(out, s.name)
         }
     }

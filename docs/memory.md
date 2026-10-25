@@ -75,8 +75,11 @@ exits. Reading or writing a closed file is an error (`read() on a closed file`).
 
 ## Boxes: fixed buffers with an owner
 
-`box[n]` makes a zeroed buffer of 1 to 4096 bytes, outside the collected heap. At most 4096
-boxes exist at once, and freed slots are reused. A box is freed when:
+`box[n]` makes a zeroed buffer of 1 to 4096 bytes, outside the collected heap. When `n` is a
+number written in the source (`box[16]`), the bytes live in the function's own stack frame, so
+making a box costs no allocation. When the size is a variable (`box[n]`) the bytes come from the
+C heap instead. Either way a table of 4096 handles tracks the live boxes, and freed slots are
+reused. A box is freed when:
 
 - the scope that made it ends,
 - you call `free(box)` (once; freeing twice is an error), or
@@ -84,7 +87,8 @@ boxes exist at once, and freed slots are reused. A box is freed when:
 
 A box may not outlive its scope: returning it, storing it in a list or map, or assigning it to a
 global from inside a function is an error. Putting it in a `template` hands ownership to the
-template. After a free, any use is a use-after-free error.
+template. After a free, any use is a use-after-free error. A template that takes a box copies
+the bytes of a stack box to the heap, so the box stays valid after the function returns.
 
 ## Blocs: small values stored inline
 

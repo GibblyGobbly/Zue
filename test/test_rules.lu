@@ -4,7 +4,7 @@ func say(t) {
     print(t)
 }
 
-# --- bloc: GC-allocated, no 4096 limit, per-instance kinds ---
+# Bloc: GC-allocated, no 4096 limit, per-instance kinds
 bloc V { x, y }
 let made = 0
 for (let i in range(10000)) {
@@ -26,7 +26,7 @@ assert(r.lo.y == 0.5)
 assert(r.hi.y == true)
 assert(r.hi.x == 10)
 
-# --- box: slot reuse, byte access, template ownership ---
+# Box: slot reuse, byte access, template ownership
 let boxes = 0
 for (let i in range(10000)) {
     let b = box[8]
@@ -55,14 +55,13 @@ let kept = [h]
 assert(kept[0].bytes[2] == 9)
 assert(kept[0].bytes.len == 4)
 
-# --- template: identical redefinition is allowed ---
-template Point { x, y }
+# Template: fields are read and written by name
 template Point { x, y }
 let p = Point(1, 2)
 p.x = 5
 assert(p.x == 5)
 
-# --- loop scopes: continue and break unwind correctly ---
+# Loop scopes: continue and break unwind correctly
 let odd = 0
 for (let j = 0; j < 10; j++) {
     if (j % 2 == 0) { continue }
@@ -96,7 +95,7 @@ func defer_in_loop() {
 }
 defer_in_loop()
 
-# --- unsafe: aliases and same-allocation compares ---
+# Unsafe: aliases and same-allocation compares
 unsafe {
     let a = alloc(4)
     defer(a)

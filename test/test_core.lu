@@ -62,7 +62,7 @@ print("  ✓ Variables & Types passed")
 # SECTION 2: IF / ELSE Conditionals
 print("\n[2] Testing IF/ELSE...")
 
-let a = 10
+a = 10
 
 # Basic if/else
 if (a == 10) {

@@ -5,6 +5,9 @@
 #
 #   make            build bin/luna from the seeds in bootstrap/ (needs clang 18)
 #   make test       compile and run every test, compare with test/expected/
+#   make verify-ir  run the tests and check every generated IR file with LLVM's verifier (opt-18)
+#   make fuzz       compare random expressions and programs with an independent model (needs python3)
+#   make round-trip parse every Luna file, print it back with luna unparse, and compare the trees
 #   make seed       refresh the seeds after changing compiler/ or compiler/runtime/
 #   make clean      remove build output
 #
@@ -53,7 +56,21 @@ test: $(BINDIR)/luna
 	@compiler/run_tests.sh
 	@sh test/native/run.sh
 
+verify-ir: $(BINDIR)/luna
+	@VERIFY_IR=1 compiler/run_tests.sh
+	@for f in examples/*.lu; do \
+	    $(BINDIR)/luna emit $$f -o $(OUT)/verify.ll > /dev/null && opt-18 -passes=verify -disable-output $(OUT)/verify.ll \
+	        && echo "[PASS] $$f (IR verifier)" || { echo "[FAIL] $$f (IR verifier)"; exit 1; }; \
+	done
+
+fuzz: $(BINDIR)/luna
+	@python3 tools/fuzz_expressions.py --programs 30 --per-program 100
+	@python3 tools/fuzz_programs.py --programs 40
+
+round-trip: $(BINDIR)/luna
+	@tools/check_round_trip.sh
+
 clean:
 	rm -rf $(BINDIR) $(OUT)
 
-.PHONY: all seed test clean
+.PHONY: all seed test verify-ir fuzz round-trip clean

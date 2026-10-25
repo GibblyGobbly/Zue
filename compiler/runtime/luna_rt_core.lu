@@ -119,7 +119,7 @@ func _stdin() {
     return ld64(addr_of("stdin"))
 }
 
-# ---- LV cells -------------------------------------------------------------------
+# LV cells
 
 func _tag(p) {
     return ld32(p)
@@ -179,7 +179,7 @@ func _is_listish(p) {
     return _tag(p) == T_LIST or _tag(p) == T_DENSE
 }
 
-# ---- errors ---------------------------------------------------------------------
+# Errors
 
 func _err_name(k) {
     if (k == E_RUNTIME) {
@@ -309,7 +309,7 @@ func _type_name(v) {
     return cstr("unknown")
 }
 
-# ---- constructors -----------------------------------------------------------------
+# Constructors
 
 func _str_n(o, s, n) {
     let st = lv_alloc_atomic(S_DATA + n + 1)
@@ -450,7 +450,7 @@ func lvp_cell(init) {
     return c
 }
 
-# ---- maps ---------------------------------------------------------------------------
+# Maps
 
 func _hash(s, n) {
     let h = 1469598103934665603
@@ -577,7 +577,7 @@ func _map_del(map, key) {
     return 1
 }
 
-# ---- strings ---------------------------------------------------------------------------
+# Strings
 
 func _buf_init(b) {
     st64(b + B_CAP, 64)
@@ -603,11 +603,23 @@ func _buf_cstr(b, s) {
     _buf_add(b, s, strlen(s))
 }
 
-# The text of the double whose bits are f, printed like %.6g.
+# The text of the double whose bits are f, printed like %.6g, with ".0" added when the text has
+# neither a point nor an exponent, so that a float never prints like an int.
 func _buf_float(b, f) {
     let tmp = stack_buf(64)
     snprintf(tmp, 64, cstr("%.6g"), dbl(f))
     _buf_cstr(b, tmp)
+    let p = tmp
+    let plain = 1
+    while (ld8(p) != 0) {
+        if (ld8(p) == 46 or ld8(p) == 101) {
+            plain = 0
+        }
+        p += 1
+    }
+    if (plain != 0) {
+        _buf_cstr(b, cstr(".0"))
+    }
 }
 
 func _buf_value(b, v) {

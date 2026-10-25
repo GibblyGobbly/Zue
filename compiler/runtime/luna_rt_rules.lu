@@ -3,7 +3,7 @@
 #
 # luna_rt_rules.lu: the validation rules behind data, template, bloc, box and unsafe blocks.
 # The luna_data_* functions hold the bloc and template schemas, the box handle table and the
-# containment rules. The luna_mem_* functions hold the allocation table and the twelve pointer
+# containment rules. The luna_mem_* functions hold the allocation table and the ten pointer
 # rules.
 #
 # Every rule is a function that returns 0 for "allowed" or a non-zero error code; the
@@ -17,7 +17,7 @@ extern("free", "void", "ptr")
 extern("calloc", "ptr", "i64,i64")
 extern("realloc", "ptr", "ptr,i64")
 
-# ---- shared helpers ----------------------------------------------------------------------------
+# Shared helpers
 
 # A hash map from a word key to a non-zero word value (0 means "absent"). The record is
 # { keys, vals, cap, count }; cap is a power of two and the table stays at most half full.
@@ -267,7 +267,7 @@ func _rl_duplicate_field(list) {
     return 0
 }
 
-# ---- data runtime: error codes and text -----------------------------------------------------------
+# Data runtime: error codes and text
 
 const DERR_BLOC_EMPTY_NAME = 1
 const DERR_BLOC_DUPLICATE_FIELD = 2
@@ -282,8 +282,8 @@ const DERR_TEMPLATE_ARITY = 10
 const DERR_TEMPLATE_UNKNOWN_FIELD = 11
 const DERR_CONTAINMENT = 12
 
-const BLOC_MAX_INLINE_BYTES = 32
-const BOX_MAX_BYTES = 4096
+const BLOC_MAX_INLINE_BYTES = 64
+const BOX_MAX_BYTES = 16777216
 const KIND_BLOC = 1
 const KIND_BOX = 2
 const KIND_TEMPLATE = 3
@@ -299,10 +299,10 @@ func _rl_data_message(code) {
         return cstr("bloc has duplicate field names")
     }
     if (code == DERR_BLOC_OVERSIZE) {
-        return cstr("bloc exceeds the cache-line size limit (32 bytes)")
+        return cstr("bloc exceeds the cache-line size limit (64 bytes)")
     }
     if (code == DERR_BOX_INVALID_SIZE) {
-        return cstr("box size must be between 1 and 4096 bytes")
+        return cstr("box size must be between 1 and 16777216 bytes")
     }
     if (code == DERR_BOX_USE_AFTER_FREE) {
         return cstr("box was already freed (use-after-free)")
@@ -335,7 +335,7 @@ func luna_data_error_message(code, buf, buf_len) {
     _rl_copy_message(_rl_data_message(code), buf, buf_len)
 }
 
-# ---- data runtime: state ------------------------------------------------------------------------
+# Data runtime: state
 
 space("rl_box_map", 32)
 # Template schemas { next, name, nfields, fields } in a list, newest first.
@@ -374,7 +374,7 @@ func _rl_schema_find(name) {
     return 0
 }
 
-# ---- data runtime: bloc, box, template rules ------------------------------------------------------
+# Data runtime: bloc, box, template rules
 
 # Name not blank, no duplicate fields, and the fields (8 bytes each, the worst case) fit in 32
 # bytes. Duplicates are checked before the size at each field, as the layout builder did.
@@ -499,30 +499,32 @@ func luna_data_template_field_ok(name, field) {
 }
 
 # Containment: a template holds blocs and boxes, a box holds blocs, a bloc is a leaf.
+# What a type may hold: a box holds nothing, a bloc may hold a box, a template may hold a bloc, a box
+# or another template (a reference to it).
 func luna_data_containment_ok(outer, inner) {
-    if (outer == KIND_TEMPLATE and (inner == KIND_BLOC or inner == KIND_BOX)) {
+    if (outer == KIND_TEMPLATE and (inner == KIND_BLOC or inner == KIND_BOX or inner == KIND_TEMPLATE)) {
         return 0
     }
-    if (outer == KIND_BOX and inner == KIND_BLOC) {
+    if (outer == KIND_BLOC and inner == KIND_BOX) {
         return 0
     }
     return DERR_CONTAINMENT
 }
 
-# ---- unsafe runtime: error codes and text ---------------------------------------------------------
+# Unsafe runtime: error codes and text
 
 const MERR_POINTER_TO_POINTER = 1
 const MERR_ESCAPE = 2
 const MERR_OUT_OF_BOUNDS = 3
 const MERR_USE_AFTER_FREE = 4
 const MERR_ADDR_TEMPORARY = 5
-const MERR_NESTED_UNSAFE = 6
+const MERR_NESTED_UNSAFE = 6    # no longer produced: unsafe blocks may nest
 const MERR_GC_STORE = 7
 const MERR_ALLOC_SIZE = 8
 const MERR_CMP_BASE = 9
 const MERR_CAST = 10
-const MERR_CALL = 11
-const MERR_CONDITIONAL_FREE = 12
+const MERR_CALL = 11            # no longer produced: any function may be called inside unsafe
+const MERR_LEAK = 12
 const MERR_UNKNOWN_POINTER = 13
 
 func _rl_mem_message(code) {
@@ -544,9 +546,6 @@ func _rl_mem_message(code) {
     if (code == MERR_ADDR_TEMPORARY) {
         return cstr("address_of() only works on named values")
     }
-    if (code == MERR_NESTED_UNSAFE) {
-        return cstr("nested unsafe blocks are not allowed")
-    }
     if (code == MERR_GC_STORE) {
         return cstr("pointers cannot be stored inside GC-managed values")
     }
@@ -559,11 +558,8 @@ func _rl_mem_message(code) {
     if (code == MERR_CAST) {
         return cstr("pointers may only be cast to int")
     }
-    if (code == MERR_CALL) {
-        return cstr("only builtin calls are allowed inside unsafe blocks")
-    }
-    if (code == MERR_CONDITIONAL_FREE) {
-        return cstr("free() may not appear inside conditional control flow")
+    if (code == MERR_LEAK) {
+        return cstr("memory from alloc() was not freed before the unsafe block ended")
     }
     if (code == MERR_UNKNOWN_POINTER) {
         return cstr("unsafe error: pointer is not registered in the runtime")
@@ -575,7 +571,7 @@ func luna_mem_error_message(code, buf, buf_len) {
     _rl_copy_message(_rl_mem_message(code), buf, buf_len)
 }
 
-# ---- unsafe runtime: allocation table -------------------------------------------------------------
+# Unsafe runtime: allocation table
 
 # One entry per allocation { base, size in bytes, poisoned } in registration order, and a map
 # from base to entry number + 1. A freed allocation stays in the table, poisoned.
@@ -592,6 +588,8 @@ let rl_defers = 0
 let rl_defer_n = 0
 let rl_defer_cap = 0
 let rl_inside = 0
+let rl_marks = 0
+let rl_mark_cap = 0
 
 func luna_mem_init() {
     _rl_hm_clear(addr_of("rl_alloc_map"))
@@ -653,19 +651,30 @@ func _rl_owner(ptr) {
     return 0
 }
 
-# ---- unsafe runtime: rules ----------------------------------------------------------------------
+# Unsafe runtime: rules
 
+# Unsafe blocks nest. Each block remembers how many deferred frees were pending when it began, and
+# at its end frees only the ones added since.
 func luna_mem_begin() {
-    if (rl_inside != 0) {
-        return MERR_NESTED_UNSAFE
+    if (rl_inside == rl_mark_cap) {
+        let cap = 8
+        if (rl_mark_cap != 0) {
+            cap = rl_mark_cap * 2
+        }
+        rl_marks = realloc(rl_marks, cap * 8)
+        rl_mark_cap = cap
     }
-    rl_inside = 1
+    rl_marks[rl_inside] = rl_defer_n
+    rl_inside += 1
     return 0
 }
 
 func luna_mem_end() {
-    luna_mem_run_defers()
-    rl_inside = 0
+    if (rl_inside == 0) {
+        return 0
+    }
+    rl_inside -= 1
+    luna_mem_run_defers(rl_marks[rl_inside])
 }
 
 # R4: free marks the allocation freed; a second free is an error.
@@ -762,14 +771,6 @@ func luna_mem_cast_ok(ptr, target_type) {
     return MERR_CAST
 }
 
-# R11: only builtins are called inside unsafe.
-func luna_mem_call_ok(is_builtin) {
-    if (is_builtin != 0) {
-        return 0
-    }
-    return MERR_CALL
-}
-
 # R8: alloc takes a positive integer.
 func luna_mem_alloc_size_ok(n, is_integer) {
     if (is_integer == 0 or n <= 0) {
@@ -792,8 +793,8 @@ func luna_mem_defer(ptr) {
     rl_defer_n += 1
 }
 
-func luna_mem_run_defers() {
-    while (rl_defer_n > 0) {
+func luna_mem_run_defers(mark) {
+    while (rl_defer_n > mark) {
         rl_defer_n -= 1
         luna_mem_free_ok(rl_defers[rl_defer_n])
     }
