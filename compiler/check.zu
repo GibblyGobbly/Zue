@@ -1670,6 +1670,11 @@ func node_key(n: Node) -> string {
     return "{ST.src_file}:{n.line}:{n.col}"
 }
 
+# Named functions whose typed parameters are checked when the program runs, by file and place: those used
+# as a value (the calls through the value are not followed) and those whose name is assigned elsewhere.
+# A function without a name always checks them (see compile_function in emit_llvm.zu).
+export const RT_PARAM_CHECKS: map<bool> = {}
+
 # Names of named functions given to map, filter, reduce or spawn, by place: checked there for the
 # types they are called with (ck_fn_value_call), so they may have untyped parameters.
 let FN_ARG_OK: map<bool> = {}
@@ -2502,6 +2507,9 @@ func ck_default(fn: Node, i: int, dt: string, want: string) {
 # known where the function is used. A function value (func without a name) is called through
 # variables the checker does not follow, so in strict mode its parameters need types.
 func ck_func(n: Node) {
+    if (n.name != null and map_has(ASSIGNED, n.name)) {
+        RT_PARAM_CHECKS["{CUR_CANON}:{n.line}:{n.col}"] = true
+    }
     let untyped = false
     for (let i = 0; i < len(n.params); i++) {
         if (n.ptypes == null or n.ptypes[i] == "") {
@@ -2588,10 +2596,20 @@ func ck_expr(n: Node) -> string {
         if (t == null or t == "unset") {
             return "any"
         }
-        if (t == "function" and strict_on() and not map_has(FN_ARG_OK, node_key(n))) {
+        if (t == "function" and not map_has(FN_ARG_OK, node_key(n))) {
             let fn = named_fn(n.name)
             if (fn != null and untyped_param(fn) != "") {
-                fn_value_error(n, fn, "used as a value")
+                if (strict_on()) {
+                    fn_value_error(n, fn, "used as a value")
+                }
+            } else if (fn != null) {
+                # its calls through the value are not checked here: the function checks its parameters
+                let fidx = fn_index(n.name)
+                let canon = CUR_CANON
+                if (home_index(n.name) == fidx) {
+                    canon = SCOPES[fidx].homes[n.name].canon
+                }
+                RT_PARAM_CHECKS["{canon}:{fn.line}:{fn.col}"] = true
             }
         }
         return t
@@ -2791,6 +2809,11 @@ func ck_typed_let(n: Node) {
     let at = annot(n.type, span_or(n.tspan, n), true)
     if (n.init != null) {
         let et = adapt_expr(n.init, ck_expr(n.init), at)
+        # a value whose type the checker cannot tell (recv(ch), an item of a mixed list) is given its type
+        # here, and the program checks it when it runs
+        if (et == "any") {
+            n.chk = "1"
+        }
         # A variable declared int, float or bool holds a raw machine value, which null is not.
         if (et == "null" and is_scalar(at)) {
             let d = fail_node(n.init, "cannot assign null to '{n.name}', which is {at}")
@@ -3088,6 +3111,9 @@ func check_result(n: Node, rt: string) -> string {
     let r = RESULT_TYPES[len(RESULT_TYPES) - 1]
     let want = r.t
     if (n.e != null) {
+        if (want != "any") {
+            strict_known(rt, n.e, "the value returned by {r.who}")
+        }
         rt = adapt_expr(n.e, rt, want)
     }
     let od = object_def(want)

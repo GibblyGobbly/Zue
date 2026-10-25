@@ -1,0 +1,7 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 3:
+  variable 's' must be a string, got int
+
+   3 | let s: string = recv(ch)
+     |                 ^^^^^^^^
+
+Hint: The type checker could not follow where this value came from

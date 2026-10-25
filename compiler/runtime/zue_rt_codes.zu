@@ -283,6 +283,9 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("the default value of parameter")) != 0) {
         return cstr("E0204")
     }
+    if (strstr(msg, cstr("the argument for '")) != 0) {
+        return cstr("E0204")
+    }
     if (strstr(msg, cstr("needs a bool")) != 0) {
         return cstr("E0205")
     }

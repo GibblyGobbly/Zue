@@ -31,7 +31,7 @@ export template Node {
     keys: list<string>, vals: list<Node>, parts: list<Node>, size: Node, lo: Node, hi: Node, cases: list<Node>,
     dflt: list<Node>, is_template: bool, is_bloc: bool, fields: list<string>, ftypes: list<string>, path: string,
     names: list<string>, col: int, eline: int, ecol: int, nspan: Span, ospan: Span, aspan: Span, fspan: Span,
-    pspan: Span, tspan: Span, nspans: list<Span>, pspans: list<Span>, tspans: list<Span>, fspans: list<Span>, rtype: string, rspan: Span
+    pspan: Span, tspan: Span, nspans: list<Span>, pspans: list<Span>, tspans: list<Span>, fspans: list<Span>, rtype: string, rspan: Span, chk: string
 }
 
 # A node of kind k from token (or node) st to en, every other field empty.
@@ -40,7 +40,7 @@ func node(k, st, en) {
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
         null, null, st.col, en.eline, en.ecol, null, null, null, null, null, null, null, null, null,
-        null, null, null)
+        null, null, null, null)
 }
 
 # The place of a token, a Span or a node as a Span, or null.
@@ -57,7 +57,7 @@ export const NODE_FIELDS: map<list<string>> = {
     "tmpl": ["parts"],
     "list": ["items"],
     "map": ["keys", "vals"],
-    "func": ["name", "params", "defaults", "ptypes", "body", "exported", "rtype"],
+    "func": ["name", "params", "defaults", "ptypes", "body", "exported", "rtype", "chk"],
     "box": ["size"],
     "call": ["callee", "args", "spec", "names"],
     "absent": [],
@@ -67,7 +67,7 @@ export const NODE_FIELDS: map<list<string>> = {
     "incdec": ["name", "op", "prefix"],
     "bin": ["op", "l", "r", "unary", "kc"],
     "not": ["e"],
-    "let": ["name", "init", "exported", "const_decl", "type", "sty", "stys", "orelse"],
+    "let": ["name", "init", "exported", "const_decl", "type", "sty", "stys", "orelse", "chk"],
     "group": ["items"],
     "if": ["cond", "then", "els"],
     "forin": ["name", "iter", "body", "sty", "stys"],
@@ -85,7 +85,7 @@ export const NODE_FIELDS: map<list<string>> = {
 }
 
 # Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
-export const OPTIONAL_FIELDS: list<string> = ["rtype", "ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad", "orelse", "names"]
+export const OPTIONAL_FIELDS: list<string> = ["rtype", "ptypes", "type", "const_decl", "unary", "kc", "sty", "stys", "spec", "ads", "ad", "orelse", "names", "chk"]
 
 # The constructors take st and en, the first and the last token of the node (a node can stand for
 # either: anything with line, col, eline and ecol). The node starts at st and ends where en ends, and

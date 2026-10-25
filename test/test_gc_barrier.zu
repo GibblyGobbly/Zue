@@ -72,7 +72,7 @@ func case_closure_cell() {
         let get = cells[i][0]
         let put = cells[i][1]
         let x: list = get()
-        put(0)
+        put(null)
         let junk = make_obj(0 - i)
         append(saved, x)
     }

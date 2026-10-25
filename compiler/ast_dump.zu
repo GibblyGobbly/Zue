@@ -134,6 +134,8 @@ func field_text(n: Node, key: string) -> string {
         return str_text(n.path)
     } else if (key == "rtype") {
         return str_text(n.rtype)
+    } else if (key == "chk") {
+        return str_text(n.chk)
     } else if (key == "exported") {
         return bool_text(n, "exported")
     } else if (key == "unary") {

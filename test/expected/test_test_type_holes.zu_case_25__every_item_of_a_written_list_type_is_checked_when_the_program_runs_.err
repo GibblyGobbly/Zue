@@ -1,0 +1,7 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 3:
+  variable 'xs' must be a list<int>, got a list holding string
+
+   3 | let xs: list<int> = recv(ch)
+     |                     ^^^^^^^^
+
+Hint: The type checker could not follow where this value came from

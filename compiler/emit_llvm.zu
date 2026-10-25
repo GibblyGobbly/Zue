@@ -23,7 +23,7 @@ use { declare_typed, var_get, var_set } from "ll_scope.zu"
 use { box_raw, ty_load, ty_store, unbox_checked, uses_address } from "ll_unbox.zu"
 use { call_spec, lit_int, math_spec, skind, spec_float_lit, tex, tex_step } from "ll_typed.zu"
 use { clear_kc, machine_type, parse_sig, spec_closure_global, spec_key_of, spec_prescan, spec_symbol } from "ll_spec.zu"
-use { check_program } from "check.zu"
+use { RT_PARAM_CHECKS, check_program } from "check.zu"
 use { resolve_named_args } from "named_args.zu"
 use { Ctx, Defer, FnSpec, Loop, Module, ST } from "state.zu"
 use { cut } from "ranges.zu"
@@ -894,6 +894,11 @@ func finish_function(header: string, ctx: Ctx) {
     append(LL_FUNCS, join(lines, "\n"))
 }
 
+# A call that checks, when the program runs, that the value in slot has the written type text.
+func type_check(slot: string, text: string, what: string) {
+    ll("call void @lvv_check_type(ptr {slot}, ptr {ll_cstr(text)}, ptr {ll_cstr(what)})")
+}
+
 func compile_function(n: Node) -> string {
     let fid = uid()
     let fname = "fn_{fid}"
@@ -938,6 +943,9 @@ func compile_function(n: Node) -> string {
     }
     ll("store ptr @mod_{ST.mod.id}, ptr @lv_pos_mod")
     ll("call void @lv_arity(ptr %self, i32 %argc, i32 {min_args}, i32 {len(n.params)})")
+    # The typed parameters of a function called through a value are checked here: such calls are not
+    # followed by the type checker (see RT_PARAM_CHECKS in check.zu).
+    let check_params = n.name == null or map_has(RT_PARAM_CHECKS, "{ST.mod.canon}:{n.line}:{n.col}")
     for (let i = 0; i < len(n.params); i++) {
         let slot = ll_reg()
         ll("{slot} = getelementptr inbounds %LV, ptr %argv, i64 {i}")
@@ -947,9 +955,13 @@ func compile_function(n: Node) -> string {
                 pk = n.ptypes[i]
             }
         }
+        let checked = check_params and pk == null and n.ptypes != null and n.ptypes[i] != ""
         if (n.defaults[i] == null and pk != null) {
             declare_typed(n.params[i], pk, unbox_checked(slot, pk, n.params[i]))
         } else if (n.defaults[i] == null) {
+            if (checked) {
+                type_check(slot, n.ptypes[i], "the argument for '{n.params[i]}'")
+            }
             declare(n.params[i], slot)
         } else {
             let v = declare(n.params[i], ll_null())
@@ -969,6 +981,9 @@ func compile_function(n: Node) -> string {
             ll("{absent} = icmp ne i64 {ar}, 0")
             ll_condbr(absent, no, yes)
             ll_label(yes)
+            if (checked) {
+                type_check(slot, n.ptypes[i], "the argument for '{n.params[i]}'")
+            }
             var_set(v, slot)
             ll_br(done)
             ll_label(no)
@@ -1241,6 +1256,9 @@ func st_let(n: Node) {
     let init_ptr = ll_null()
     if (n.init != null) {
         init_ptr = copy_if_box(n.init, ex(n.init))
+        if (n.chk != null and n.type != null) {
+            type_check(init_ptr, n.type, "variable '{n.name}'")
+        }
     }
     if (at_top()) {
         ll_reg_global(n.name)
@@ -1969,6 +1987,7 @@ func declarations() -> list<string> {
     append(d, "declare %LV @lv_addr(ptr, i32)")
     append(d, "declare %LV @lvv_binop_lit(i64, i64, i64, i64, i64, i64)")
     append(d, "declare void @lvp_num_like(ptr, ptr, ptr)")
+    append(d, "declare void @lvv_check_type(ptr, ptr, ptr)")
     append(d, "declare void @lvv_return_check(i64, i64, ptr)")
     append(d, "declare i64 @lv_try_convert(ptr, ptr, i64)")
     append(d, "declare i64 @lv_try_index(ptr, ptr, ptr)")

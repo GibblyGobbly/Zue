@@ -1977,3 +1977,125 @@ func lv_data_init() {
     zue_mem_init()
 }
 
+
+# Written types checked when the program runs
+
+# The value that did not fit in the last _fits_type: the value itself or an item inside it.
+let g_type_bad = 0
+
+# Whether the text from s to e is the C string name.
+func _type_word_is(text, s, e, name) {
+    let n = strlen(name)
+    return n == e - s and memcmp(text + s, name, n) == 0
+}
+
+# Whether the value at v fits the written type text[s..e), such as int, list<int>, map<list<string>> or
+# the name of a template or bloc. A value of a type whose values may be empty (all but int, float, bool
+# and char) may be null, as the checker allows. Each item of a list or map is checked.
+func _fits_type(v, text, s, e) {
+    g_type_bad = v
+    let t = _tag(v)
+    let lt = s
+    while (lt < e and ld8(text + lt) != 60) {
+        lt = lt + 1
+    }
+    let has_inner = lt < e
+    if (_type_word_is(text, s, lt, cstr("int"))) {
+        return t == T_INT
+    }
+    if (_type_word_is(text, s, lt, cstr("float"))) {
+        return t == T_FLOAT
+    }
+    if (_type_word_is(text, s, lt, cstr("bool"))) {
+        return t == T_BOOL
+    }
+    if (_type_word_is(text, s, lt, cstr("char"))) {
+        return t == T_CHAR
+    }
+    if (t == T_NULL) {
+        return 1
+    }
+    if (_type_word_is(text, s, lt, cstr("string"))) {
+        return t == T_STR
+    }
+    if (_type_word_is(text, s, lt, cstr("list"))) {
+        if (t == T_DENSE) {
+            return has_inner == 0 or _type_word_is(text, lt + 1, e - 1, cstr("float"))
+        }
+        if (t != T_LIST) {
+            return 0
+        }
+        if (has_inner) {
+            let l = _val(v)
+            for (let i = 0; i < ld64(l + L_COUNT); i++) {
+                if (_fits_type(ld64(l + L_ITEMS) + i * 16, text, lt + 1, e - 1) == 0) {
+                    return 0
+                }
+            }
+        }
+        g_type_bad = v
+        return 1
+    }
+    if (_type_word_is(text, s, lt, cstr("map"))) {
+        if (t != T_MAP) {
+            return 0
+        }
+        if (has_inner) {
+            let m = _val(v)
+            for (let i = 0; i < ld64(m + M_USED); i++) {
+                let en = ld64(m + M_ENTRIES) + i * E_SIZE
+                if (ld32(en + E_LIVE) != 0 and _fits_type(en + E_VAL, text, lt + 1, e - 1) == 0) {
+                    return 0
+                }
+            }
+        }
+        g_type_bad = v
+        return 1
+    }
+    if (_type_word_is(text, s, lt, cstr("function"))) {
+        return t == T_FUNC
+    }
+    if (_type_word_is(text, s, lt, cstr("file"))) {
+        return t == T_FILE
+    }
+    if (_type_word_is(text, s, lt, cstr("pointer"))) {
+        return t == T_PTR
+    }
+    if (_type_word_is(text, s, lt, cstr("channel"))) {
+        return t == T_CHAN
+    }
+    if (_type_word_is(text, s, lt, cstr("thread"))) {
+        return t == T_THREAD
+    }
+    if (_type_word_is(text, s, lt, cstr("box"))) {
+        return t == T_BOX
+    }
+    # the name of a template or a bloc
+    if (t == T_TEMPLATE) {
+        return _type_word_is(text, s, lt, ld64(ld64(_val(v) + TP_DT) + DT_NAME))
+    }
+    if (t == T_BLOC) {
+        return _type_word_is(text, s, lt, _bloc_name(v))
+    }
+    return 0
+}
+
+# The check of a written type the checker could not prove (let s: string = recv(ch), a typed parameter of
+# a function called through a value). what names the variable or parameter, for example "variable 's'".
+func lvv_check_type(v, text, what) {
+    if (_fits_type(v, text, 0, strlen(text)) != 0) {
+        return 0
+    }
+    let article = cstr("a")
+    let c = ld8(text)
+    if (c == 97 or c == 101 or c == 105 or c == 111 or c == 117) {
+        article = cstr("an")
+    }
+    let hint = cstr("The type checker could not follow where this value came from")
+    if (g_type_bad == v) {
+        _errf4(E_TYPE, hint, cstr("%s must be %s %s, got %s"), what, article, text, _type_name(v))
+    }
+    let got = stack_buf(64)
+    snprintf(got, 64, cstr("a %s holding %s"), _type_name(v), _type_name(g_type_bad))
+    _errf4(E_TYPE, hint, cstr("%s must be %s %s, got %s"), what, article, text, got)
+}

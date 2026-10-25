@@ -159,3 +159,45 @@ func g(x: string) {
 }
 let k = g
 print(r, k("ok"))
+# CASE a written type on a value from a channel is checked when the program runs
+let ch = channel(2)
+send(ch, 5)
+let s: string = recv(ch)
+print(len(s))
+# CASE every item of a written list type is checked when the program runs
+let ch = channel(2)
+send(ch, ["a"])
+let xs: list<int> = recv(ch)
+# CASE a typed parameter of a function value is checked when the program runs
+let f = func(x: string) {
+    return x
+}
+print(f("fine"))
+print(f(5))
+# CASE a typed parameter of a named function used as a value is checked when the program runs
+func g(x: string) {
+    return x
+}
+let h = g
+print(h("fine"))
+print(h(5))
+# CASE a value of unknown type returned from a typed function needs as
+let person = ["Ann", 30]
+func f() -> int {
+    return person[0]
+}
+# CASE written types that fit pass the check
+template P { x: int }
+let ch = channel(4)
+send(ch, [1, 2])
+send(ch, {"a": [1], "b": [2, 3]})
+send(ch, P(7))
+send(ch, null)
+let xs: list<int> = recv(ch)
+let m: map<list<int>> = recv(ch)
+let p: P = recv(ch)
+let s: string = recv(ch)
+let count = func(v: list<float>) {
+    return len(v)
+}
+print(xs, m, p.x, s, count(dense_list(3, 1.0)))

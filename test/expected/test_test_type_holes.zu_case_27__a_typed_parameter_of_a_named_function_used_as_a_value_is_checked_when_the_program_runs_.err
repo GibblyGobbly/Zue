@@ -1,0 +1,9 @@
+Type Error [E0204] in /tmp/zue_test_case.zu at line 6:
+  the argument for 'x' must be a string, got int
+
+   6 | print(h(5))
+     |       ^^^^
+
+Hint: The type checker could not follow where this value came from
+Call stack, innermost call first:
+  in g(), called at line 6: print(h(5))

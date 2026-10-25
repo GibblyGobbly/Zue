@@ -655,7 +655,12 @@ Output of the first `print`:
 ```
 
 A written type on a `let` is checked when the program runs where the value comes from code the checker
-cannot see (`let n: int = recv(ch)` stops with a precise error if the value is not an int).
+cannot see: `let n: int = recv(ch)` stops with a precise error if the value is not an int, and
+`let xs: list<int> = recv(ch)` checks every item (`variable 'xs' must be a list<int>, got a list holding
+string`). The typed parameters of a function called through a value (a `func` value, or a named function
+stored in a variable or reassigned) are checked the same way when it is called. A value whose type the
+checker proves is never checked again. A value of unknown type returned from a function with a result
+type needs `as`, as an assignment does.
 
 A parameter of a named function may stay untyped: the body is checked for the argument types of each
 call, and strict mode reports what is unknown in those checks. The parameters of a function value
