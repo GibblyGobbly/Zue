@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+# Sieve of Eratosthenes: every prime up to a limit.
+func primes_up_to(limit) {
+    let is_prime = []
+    for (let i = 0; i <= limit; i++) {
+        append(is_prime, true)
+    }
+    let found = []
+    for (let n = 2; n <= limit; n++) {
+        if (is_prime[n]) {
+            append(found, n)
+            for (let m = n * n; m <= limit; m += n) {
+                is_prime[m] = false
+            }
+        }
+    }
+    return found
+}
+
+print(primes_up_to(50))
+print("primes below 100000: {len(primes_up_to(100000))}")

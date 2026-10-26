@@ -1,12 +1,12 @@
 # Syntax
 
-Luna's syntax looks like JavaScript, without semicolons. One statement per line; blocks use
+Zue's syntax looks like JavaScript, without semicolons. One statement per line; blocks use
 `{ }`. Comments start with `#` or `//`.
 
 ```javascript
 # comment
 // also a comment
-let name = "Luna"
+let name = "Zue"
 print("Hello, {name}!")
 ```
 
@@ -87,8 +87,8 @@ nothing between is kept as it is). The expression inside `{ }` may contain strin
 one escape: `'a'`, `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\\'`, `'\''`. Only ASCII characters are allowed
 outside strings and comments.
 
-Indexing a string returns a `char`, and negative indices count from the end: `"Luna"[0]` is
-`'L'` and `"Luna"[-1]` is `'a'`. The library is in [string](builtins.md#strings).
+Indexing a string returns a `char`, and negative indices count from the end: `"Zue"[0]` is
+`'Z'` and `"Zue"[-1]` is `'e'`. The library is in [string](builtins.md#strings).
 
 ## Operators
 
@@ -266,7 +266,7 @@ grab_balls area(w, h) {
 }
 ```
 
-`test/balls.lu` covers them.
+`test/balls.zu` covers them.
 
 ## Names to avoid
 
@@ -320,7 +320,38 @@ a `Type Error` with the line, and the program is not built.
   call (`in area(int, string), called at line 3`). A call with a number written in the source gives
   that parameter the plain type (`16` is an int, `16.0` a float). The type of a call is the type
   its `return` statements give; a recursive call needs a base case that returns first.
-- Where the checker cannot tell a type (list items, the result of a function whose returns differ,
-  function values), it says nothing and the runtime checks still apply.
+- A list or map literal whose items all have one type has that element type: `[1, 2, 3]` is a
+  `list<int>` and `{"a": 1.5}` is a `map<float>`. Reading an item gives the element type, and storing
+  or appending another type is an error: after `let xs = [1, 2]`, `xs[0] = "a"` and `append(xs, "a")`
+  fail. A list of mixed items, or an empty list, is a plain `list` whose items are not checked.
+- A type can be written after a colon on a variable, a parameter or a field: `let xs: list<float> = [1, 2]`,
+  `func total(v: list<int>, n: int = 0)`, `template Bag { items: list<int> }`. `list` and `map` take an
+  element type in angle brackets and may nest (`map<list<int>>`). The type names are `int`, `float`,
+  `bool`, `char`, `string`, `list`, `map`, `function` and the name of a `bloc` or `template`. A plain
+  `list` annotation keeps the items unchecked. Whole numbers in the source become floats where a
+  float is wanted, so `let xs: list<float> = [1, 2]` holds floats.
+- Fields of a typed `bloc` or `template` have their declared types when read (`p.hp` is an int) and
+  when assigned (`p.hp = "a"` is an error).
+- Builtins with a fixed result type give it: `len` is an int, `split` is a `list<string>`, `range` is a
+  `list<int>`, `min`, `max` and `sum` of a `list<int>` are ints.
+- Imported modules are checked too, with the error naming the module's file.
+- Where the checker cannot tell a type (items of a plain list, the result of a function whose returns
+  differ, function values, values from imported modules), it says nothing and the runtime checks
+  still apply. The element types are not checked at run time: a list that was handed over by code the
+  checker cannot see may hold other items.
 
-Only the main file is checked for now; imported modules are not.
+### Strict mode
+
+A file whose first lines, before any code, include the comment `# strict` is checked more strictly.
+Every parameter needs a type, and a value whose type the checker cannot tell is an error where it is
+used: as an operand, in a condition, as an argument of a builtin or of a typed parameter, as the value
+given to an untyped `let`, or as the target of an index or a field read. Writing the type
+(`let y: int = xs[0]`) is the way to say what the value is. Comparing with `null` is allowed.
+
+### Raw values
+
+A local variable that the checker proves to be an `int`, `float` or `bool`, and that no nested function
+uses and no `address_of` call touches, is kept as a raw machine value instead of a 16-byte value.
+Expressions made only of such variables and literals are computed without type tests. The results,
+errors and line numbers are the same as for the general code. A value that comes from code the checker
+cannot see is tested when it is stored: `variable 'n' must be an int, got string`.

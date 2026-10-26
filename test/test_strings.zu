@@ -1,0 +1,64 @@
+print("--- Starting String Library Tests ---")
+
+let s = "  Hello World  "
+
+print("Testing inspection...")
+assert(len(s) == 15) 
+assert(is_empty(s) == false)
+
+print("Testing trimming...")
+assert(trim(s) == "Hello World")
+assert(trim_left("  a") == "a")
+
+print("Testing slicing...")
+assert(char_at("ABC", 1) == "B")
+assert(substring("Hello", 0, 2) == "He")
+assert(slice("Hello", -3, -1) == "ll")
+
+print("Testing transformations...")
+assert(to_upper("abc") == "ABC")
+assert(to_lower("ABC") == "abc")
+assert(reverse("Zue") == "euZ")
+assert(repeat("Na", 4) == "NaNaNaNa")
+assert(concat("He", "llo") == "Hello")
+
+print("Testing padding...")
+assert(pad_left("7", 3, "0") == "007")
+assert(pad_right("Ok", 5, ".") == "Ok...")
+
+print("Testing searching...")
+assert(contains("Team", "ea") == true)
+assert(index_of("banana", "nan") == 2)
+assert(last_index_of("banana", "a") == 5)
+assert(starts_with("file.txt", "file") == true)
+assert(ends_with("file.txt", ".txt") == true)
+
+print("Testing split/join...")
+let csv = "apple,banana,cherry"
+let list = split(csv, ",")
+assert(len(list) == 3)
+assert(list[0] == "apple")
+
+let joined = join(list, " | ")
+assert(joined == "apple | banana | cherry")
+
+print("Testing conversions...")
+assert(to_int("123") == 123)
+assert(is_digit("123") == true)
+assert(is_alpha("abc") == true)
+assert(format("Hi {}", "Zue") == "Hi Zue")
+
+print("Testing interpolation...")
+let pilot = "Zue"
+let hp = 42
+let items = [7, 11]
+func plus(a, b) {
+    return a + b
+}
+assert("Hello {pilot}" == "Hello Zue")
+assert("hp={hp}" == "hp=42")
+assert("sum={1 + 2}" == "sum=3")
+assert("slot={items[0]}" == "slot=7")
+assert("call={plus(3, 4)}" == "call=7")
+
+print("String Tests Passed!")

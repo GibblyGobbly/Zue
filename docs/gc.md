@@ -1,7 +1,7 @@
 # Garbage Collector
 
-Every compiled Luna program carries a garbage collector. It is part of the runtime, written in
-Luna: `compiler/runtime/luna_gc.lu`. It is a conservative, non-moving, stop-the-world
+Every compiled Zue program carries a garbage collector. It is part of the runtime, written in
+Zue: `compiler/runtime/zue_gc.zu`. It is a conservative, non-moving, stop-the-world
 mark-and-sweep collector. It does not need type maps from the compiler: it treats every
 aligned word it scans as a possible pointer.
 
@@ -31,7 +31,7 @@ aligned word it scans as a possible pointer.
 
 A collection is triggered inside an allocation. It happens when the bytes allocated since the
 last collection exceed a threshold: 16 MiB at the start, and after each collection the larger
-of 16 MiB and the live bytes that survived. (With `LUNA_RT_GC_STRESS`, see below, also every
+of 16 MiB and the live bytes that survived. (With `ZUE_RT_GC_STRESS`, see below, also every
 Nth allocation.)
 
 1. **Roots.** The data segment (all module-level variables and constants of the program and the
@@ -57,19 +57,19 @@ Read once at program start, by the compiled program itself:
 
 | Variable | Effect |
 |---|---|
-| `LUNA_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
-| `LUNA_RT_GC_STATS=1` | At exit, print `LUNA_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns` to standard error |
+| `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
+| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<pages> pages,<ns> total pause ns,<ns> max pause ns` to standard error |
 
 ```bash
-LUNA_RT_GC_STATS=1 ./prog
-LUNA_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_safety.lu
+ZUE_RT_GC_STATS=1 ./prog
+ZUE_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_safety.zu
 ```
 
 ## Testing the collector
 
-`test_gc_safety.lu`, `test_gc_large_safety.lu`, `test_gc_callbacks.lu` and
-`test_gc_recursion.lu` build and drop many objects and check that live data stays intact. Run
-them under `LUNA_RT_GC_STRESS=1` after any change to `luna_gc.lu`, to a runtime function that
+`test_gc_safety.zu`, `test_gc_large_safety.zu`, `test_gc_callbacks.zu` and
+`test_gc_recursion.zu` build and drop many objects and check that live data stays intact. Run
+them under `ZUE_RT_GC_STRESS=1` after any change to `zue_gc.zu`, to a runtime function that
 allocates, or to how generated code keeps values in memory. `make` also exercises the collector:
 the compiler compiles itself twice, and the two outputs must be identical.
 

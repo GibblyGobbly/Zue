@@ -1,0 +1,115 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+# A file with "# strict" before its first line of code may not use a value whose type the checker
+# cannot tell. Every case below starts with that comment.
+# CASE a fully typed program runs
+# strict
+template Player { name: string, hp: int }
+func heal(p: Player, amount: int) {
+    p.hp = p.hp + amount
+    return p.hp
+}
+let p = Player("Ana", 10)
+print(heal(p, 5))
+let xs: list<int> = [1, 2, 3]
+let total = 0
+for (let x in xs) {
+    total += x
+}
+print(total)
+# CASE an untyped parameter
+# strict
+func add(a, b: int) {
+    return b
+}
+# CASE an untyped parameter of a function value
+# strict
+let f = func(x) {
+    return x
+}
+# CASE a value of unknown type in arithmetic
+# strict
+let xs = [1, "two"]
+let y = xs[0] + 1
+# CASE a value of unknown type given to a variable
+# strict
+let xs = [1, "two"]
+let y = xs[0]
+# CASE a typed variable accepts a value of unknown type
+# strict
+let xs = [1, 2]
+let ys: list = [1, "two"]
+let y: int = 5
+print(y)
+# CASE a value of unknown type in a condition
+# strict
+let xs: list = [true]
+if (xs[0]) {
+    print("yes")
+}
+# CASE a value of unknown type as an argument of a typed parameter
+# strict
+func double(n: int) {
+    return n * 2
+}
+let xs: list = [1]
+print(double(xs[0]))
+# CASE a value of unknown type for a math builtin
+# strict
+let xs: list = [4.0]
+print(sqrt(xs[0]))
+# CASE a value of unknown type that is indexed
+# strict
+let m: map = {"a": [1]}
+let v: list<int> = m["a"]
+print(v[0])
+let w = m["a"][0]
+# CASE comparing with null is allowed
+# strict
+let m: map = {"a": 1}
+if (m["a"] != null) {
+    print("set")
+}
+# CASE the comment must come before the code
+func add(a, b) {
+    return a
+}
+# strict
+print(add(1, 2))
+# CASE without the comment nothing changes
+let xs = [1, "two"]
+let y = xs[0]
+print(y)
+# CASE an untyped parameter is fine outside strict mode
+func add(a, b) {
+    return a + b
+}
+print(add(1, 2))
+# CASE field types are known
+template Player { name: string, hp: int }
+let p = Player("Ana", 10)
+let hp: int = p.hp
+let n: string = p.hp
+# CASE a bloc inside a template
+bloc V { x: float, y: float }
+template Body { pos: V, mass: float }
+let b = Body(V{1, 2}, 3)
+print(b.pos.x + 0.5)
+let bad = b.pos.x + 1
+print(bad)
+let worse: int = b.pos.y
+# CASE assigning the wrong type to a typed field
+template Player { name: string, hp: int }
+let p = Player("Ana", 10)
+p.hp = "dead"
+# CASE a bloc of one type where another is wanted
+bloc A { v: int }
+bloc B { v: int }
+func take(a: A) {
+    return a.v
+}
+print(take(B{1}))
+# CASE an unknown field is not typed
+template Player { name: string, hp: int }
+let p = Player("Ana", 10)
+let z: int = p.mana

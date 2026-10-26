@@ -4,41 +4,41 @@ This page describes how a program becomes a binary. The only external pieces are
 (LLVM 18), libc and libm.
 
 ```
-prog.lu
-  |  compiler/lexer.lu        tokens
-  |  compiler/parser.lu       AST (maps and lists)
-  |  compiler/check.lu        compile-time type check
-  |  compiler/analysis.lu     names used, exports, closure captures
-  |  compiler/emit_llvm.lu    LLVM IR text
+prog.zu
+  |  compiler/lexer.zu        tokens
+  |  compiler/parser.zu       AST (maps and lists)
+  |  compiler/check.zu        compile-time type check
+  |  compiler/analysis.zu     names used, exports, closure captures
+  |  compiler/emit_llvm.zu    LLVM IR text
   v
 C/prog.ll ----------------+
                           |   clang -O1
-C/luna_rt_native.o -------+-------------->  prog   (native executable, links libc and libm)
+C/zue_rt_native.o -------+-------------->  prog   (native executable, links libc and libm)
   ^
   |  clang -c
-C/luna_rt_native.ll
+C/zue_rt_native.ll
   ^
-  |  luna --native compiler/runtime/*.lu    (compiler/emit_native.lu)
-compiler/runtime/*.lu
+  |  zue --native compiler/runtime/*.zu    (compiler/emit_native.zu)
+compiler/runtime/*.zu
 ```
 
-`luna build`, `luna run` and `luna emit` are the driver, `compiler/lunac.lu`. See
-[getting-started](getting-started.md) for the commands and [lunac](architecture.md) for the
+`zue build`, `zue run` and `zue emit` are the driver, `compiler/zuec.zu`. See
+[getting-started](getting-started.md) for the commands and [zuec](architecture.md) for the
 compiler in detail.
 
 ## The compiler (`compiler/`)
 
 | File | Role |
 |---|---|
-| `lunac.lu` | Driver: `build`, `run`, `emit`, and the internal `--native` and positional forms. Builds the clang command line |
-| `lexer.lu`, `token.lu` | Source text to tokens; keyword and operator tables, including the keyword aliases |
-| `parser.lu` | Recursive descent with precedence climbing; produces the AST as maps |
-| `check.lu` | The compile-time type checker for the main program: variable types, operators, conditions and the signatures of the math builtins. See [syntax](syntax.md#type-checking) |
-| `analysis.lu` | Which names a function reads and writes, exports, and which variables closures capture |
-| `emit_llvm.lu`, `ll_state.lu`, `ll_scope.lu` | The LLVM IR backend: expressions, statements, functions, modules, scopes and deferred calls |
-| `emit_native.lu` | The native backend, used to compile the runtime (see [lunac](architecture.md)) |
-| `state.lu`, `shared.lu`, `util.lu` | Shared state, the list of builtin names (`BUILTINS`), path and file helpers, error formatting |
-| `build_runtime.sh` | Builds `C/luna_rt_native.o` from the runtime sources when they changed and prints the link input |
+| `zuec.zu` | Driver: `build`, `run`, `emit`, and the internal `--native` and positional forms. Builds the clang command line |
+| `lexer.zu`, `token.zu` | Source text to tokens; keyword and operator tables, including the keyword aliases |
+| `parser.zu` | Recursive descent with precedence climbing; produces the AST as maps |
+| `check.zu` | The compile-time type checker for the main program and imported modules: variable types, operators, conditions and the signatures of the math builtins. See [syntax](syntax.md#type-checking) |
+| `analysis.zu` | Which names a function reads and writes, exports, and which variables closures capture |
+| `emit_llvm.zu`, `ll_state.zu`, `ll_scope.zu` | The LLVM IR backend: expressions, statements, functions, modules, scopes and deferred calls |
+| `emit_native.zu` | The native backend, used to compile the runtime (see [zuec](architecture.md)) |
+| `state.zu`, `shared.zu`, `util.zu` | Shared state, the list of builtin names (`BUILTINS`), path and file helpers, error formatting |
+| `build_runtime.sh` | Builds `C/zue_rt_native.o` from the runtime sources when they changed and prints the link input |
 | `run_tests.sh` | The test runner behind `make test` |
 
 The compiler reads imported modules while compiling, so one IR file holds the program and every
@@ -46,26 +46,26 @@ module it uses.
 
 ## The runtime (`compiler/runtime/`)
 
-The runtime is compiled by the native backend into `C/luna_rt_native.ll`, then to an object,
+The runtime is compiled by the native backend into `C/zue_rt_native.ll`, then to an object,
 and linked into every program.
 
 | File | Contents |
 |---|---|
-| `luna_gc.lu` | The garbage collector. See [gc](gc.md) |
-| `luna_rt_core.lu` | Value layouts, errors, strings, lists, maps, `to_string` |
-| `luna_rt_ops.lu` | Operators, indexing, iteration, calls, recursion limit, program entry |
-| `luna_rt_lib.lu` | Builtins: conversions, maps, lists, strings, `args`, `exit`, `system`, `clock` |
-| `luna_rt_math.lu` | Math, files, dense lists, vector math, random numbers |
-| `luna_rt_data.lu` | `data`, `template`, `bloc`, `box` and `unsafe` |
-| `luna_rt_rules.lu` | The validation rules behind them: bloc and template schemas, the box handle table, the allocation table and the ten pointer rules. Each rule returns 0 or an error code, which `luna_rt_data.lu` turns into the error message |
+| `zue_gc.zu` | The garbage collector. See [gc](gc.md) |
+| `zue_rt_core.zu` | Value layouts, errors, strings, lists, maps, `to_string` |
+| `zue_rt_ops.zu` | Operators, indexing, iteration, calls, recursion limit, program entry |
+| `zue_rt_lib.zu` | Builtins: conversions, maps, lists, strings, `args`, `exit`, `system`, `clock` |
+| `zue_rt_math.zu` | Math, files, dense lists, vector math, random numbers |
+| `zue_rt_data.zu` | `data`, `template`, `bloc`, `box` and `unsafe` |
+| `zue_rt_rules.zu` | The validation rules behind them: bloc and template schemas, the box handle table, the allocation table and the ten pointer rules. Each rule returns 0 or an error code, which `zue_rt_data.zu` turns into the error message |
 
-Every builtin `name` listed in `compiler/shared.lu` is a runtime function `lb_name(self, argc,
+Every builtin `name` listed in `compiler/shared.zu` is a runtime function `lb_name(self, argc,
 argv)` that returns a value. Operators are runtime calls too (`lvp_add_fast`, `lvp_lt_fast` and
 so on), which is where the type checks and the overflow checks live.
 
 ### Values
 
-Every Luna value is a 16-byte cell, `%LV = { i64 tag, i64 payload }`. Generated code keeps each
+Every Zue value is a 16-byte cell, `%LV = { i64 tag, i64 payload }`. Generated code keeps each
 value in a stack slot and passes pointers to the runtime.
 
 | Tag | Kind | Payload |
@@ -87,34 +87,34 @@ value in a stack slot and passes pointers to the runtime.
 | 15 | box | a handle with a slot index and a generation |
 | 16 | pointer | a raw pointer, only inside `unsafe` |
 
-The tags are constants at the top of `luna_rt_core.lu`.
+The tags are constants at the top of `zue_rt_core.zu`.
 
 ### Program start
 
-`lv_main` (in `luna_rt_ops.lu`) initializes the data runtime, seeds the random generator from OS
+`lv_main` (in `zue_rt_ops.zu`) initializes the data runtime, seeds the random generator from OS
 entropy, then runs the program on a new thread with a 1 GiB stack, so deep recursion works. The
 program thread registers its stack with the collector, runs the generated `entry` function, and
 flushes standard output. The recursion limit is 100000 nested calls.
 
 ### Errors
 
-Runtime errors are raised by `lv_error` in `luna_rt_core.lu`: it prints the error class
+Runtime errors are raised by `lv_error` in `zue_rt_core.zu`: it prints the error class
 (`Type Error`, `Runtime Error`, ...), the source file and line, the message, the source line and
 a hint, to standard error, and exits with status 1. The line comes from position data that
 generated code stores before calls and operations.
 
 ## Bootstrap
 
-`bootstrap/lunac.ll` and `bootstrap/luna_rt_native.ll` are the LLVM IR of the compiler and the
+`bootstrap/zuec.ll` and `bootstrap/zue_rt_native.ll` are the LLVM IR of the compiler and the
 runtime, kept in git. They are the only way to build the first compiler without an existing
-`luna`. `make` builds from the seeds, then from its own output, and requires the second output
-to equal the first; `make seed` refreshes the seeds. See [lunac](architecture.md#bootstrap).
+`zue`. `make` builds from the seeds, then from its own output, and requires the second output
+to equal the first; `make seed` refreshes the seeds. See [zuec](architecture.md#bootstrap).
 
 ## The native dialect
 
-The runtime is written in Luna syntax with one type, the 64-bit word, and memory intrinsics.
+The runtime is written in Zue syntax with one type, the 64-bit word, and memory intrinsics.
 
-A native file is ordinary Luna syntax with one type, the 64-bit word. Integers, pointers and
+A native file is ordinary Zue syntax with one type, the 64-bit word. Integers, pointers and
 doubles (as bit patterns) are words, and memory is read and written through intrinsics.
 
 ```javascript
@@ -165,13 +165,13 @@ func lb_len(self_p, argc_i, argv_p) {    // _p is a pointer parameter, _i a C in
 
 | Target | Effect |
 | --- | --- |
-| `make` | build `bin/luna` from the seeds with clang only; stage 1 and stage 2 must emit identical IR |
-| `make seed` | refresh `bootstrap/lunac.ll` and `bootstrap/luna_rt_native.ll` |
+| `make` | build `bin/zue` from the seeds with clang only; stage 1 and stage 2 must emit identical IR |
+| `make seed` | refresh `bootstrap/zuec.ll` and `bootstrap/zue_rt_native.ll` |
 | `make test` | run every test in `test/` against the recorded output, then the native unit tests |
 | `make clean` | remove `bin/` and `C/` |
 
-In a compiled program, `LUNA_RT_GC_STRESS=N` collects every N allocations and
-`LUNA_RT_GC_STATS=1` prints counts at exit. `opt-18 -passes=verify x.ll -disable-output` checks IR.
+In a compiled program, `ZUE_RT_GC_STRESS=N` collects every N allocations and
+`ZUE_RT_GC_STATS=1` prints counts at exit. `opt-18 -passes=verify x.ll -disable-output` checks IR.
 
 ## Repository layout
 
@@ -182,4 +182,4 @@ In a compiled program, `LUNA_RT_GC_STRESS=N` collects every N allocations and
 | `test/` | Test programs, `test/expected/`, and `test/native/` (unit tests of runtime functions) |
 | `docs/` | Documentation |
 | `assets/` | The logo |
-| `bin/`, `C/` | Build output: the `luna` binary, and generated IR and objects (git-ignored) |
+| `bin/`, `C/` | Build output: the `zue` binary, and generated IR and objects (git-ignored) |

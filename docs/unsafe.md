@@ -1,12 +1,12 @@
 # Unsafe Memory
 
-`unsafe { ... }` gives Luna manual memory: raw buffers you allocate, read, write and free
+`unsafe { ... }` gives Zue manual memory: raw buffers you allocate, read, write and free
 yourself. Most programs never need it. Lists, maps, strings and `dense_list` cover normal work.
 
-The runtime side is `compiler/runtime/luna_rt_data.lu`, which performs allocation, loads,
+The runtime side is `compiler/runtime/zue_rt_data.zu`, which performs allocation, loads,
 stores and frees. Every operation is first checked by the rule functions in
-`compiler/runtime/luna_rt_rules.lu` (the allocation table and the ten pointer rules). The
-`address_of` call is compiled specially by the compiler (`compiler/emit_llvm.lu`), which also
+`compiler/runtime/zue_rt_rules.zu` (the allocation table and the ten pointer rules). The
+`address_of` call is compiled specially by the compiler (`compiler/emit_llvm.zu`), which also
 inserts the check that stops a pointer from leaving its block.
 
 Your own functions may be called inside a block. A pointer is always tied to the block that made it,
@@ -35,9 +35,9 @@ Outside `unsafe`, `defer(call(...))` schedules a call for scope exit, for exampl
 ## Boundary with the GC
 
 - A buffer from `alloc()` is memory from `calloc`, not from the GC heap: the collector never
-  frees it, only `free` or `defer` does. It is registered as a root range, so Luna values
+  frees it, only `free` or `defer` does. It is registered as a root range, so Zue values
   stored in its slots stay alive while the buffer exists.
-- Normal Luna values inside an `unsafe` block are still GC-managed as usual.
+- Normal Zue values inside an `unsafe` block are still GC-managed as usual.
 - A raw pointer may not be stored in a list, map or other GC value (R2), so the collector
   never sees one.
 
@@ -88,7 +88,7 @@ This is the usual flow:
 
 | Function | Description | Example |
 |----------|-------------|---------|
-| `alloc(n)` | Allocates `n` Luna value slots and returns a pointer | `let buf = alloc(4)` |
+| `alloc(n)` | Allocates `n` Zue value slots and returns a pointer | `let buf = alloc(4)` |
 | `free(ptr)` | Frees an allocation pointer manually | `free(buf)` |
 | `defer(ptr)` | Schedules a pointer to be freed when the current `unsafe` block ends | `defer(buf)` |
 | `load(ptr)` | Reads the value stored at a pointer | `let x = load(buf)` |
@@ -99,7 +99,7 @@ This is the usual flow:
 
 ## Scope Defer
 
-Deferred calls are available in normal Luna code and are separate from pointer
+Deferred calls are available in normal Zue code and are separate from pointer
 cleanup in `unsafe`.
 
 ```javascript
@@ -191,8 +191,8 @@ idea of "the block" simple: there is one block at a time in the source.
 allowed, with pointers as arguments or results, as long as R2 holds. A function that returns a
 pointer it made returns it into the block that called it.
 
-`test/test_unsafe_errors.lu` has one case per rule, compared against the recorded output in
-`test/expected/` (see [testing](testing.md)), and `test/test_unsafe_blocks.lu` shows what is allowed.
+`test/test_unsafe_errors.zu` has one case per rule, compared against the recorded output in
+`test/expected/` (see [testing](testing.md)), and `test/test_unsafe_blocks.zu` shows what is allowed.
 
 ## Error Cases
 

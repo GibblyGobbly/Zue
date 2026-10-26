@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+# Count how often each word appears in a piece of text.
+let text = "the quick brown fox jumps over the lazy dog the end"
+let counts = {}
+for (let word in split(text, " ")) {
+    if (map_has(counts, word)) {
+        map_set(counts, word, map_get(counts, word) + 1)
+    } else {
+        map_set(counts, word, 1)
+    }
+}
+for (let word in map_keys(counts)) {
+    print("{word}: {map_get(counts, word)}")
+}

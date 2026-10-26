@@ -1,18 +1,18 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (c) 2026 Bharath
+# Copyright (c) 2026 GibblyGobbly
 #
-# check_round_trip.sh: parses every Luna file, writes it back with `luna unparse`, parses that, and
+# check_round_trip.sh: parses every Zue file, writes it back with `zue unparse`, parses that, and
 # requires the same syntax tree (line numbers are ignored because the layout changes).
-#   tools/check_round_trip.sh [file.lu ...]     default: every .lu file in the project
+#   tools/check_round_trip.sh [file.zu ...]     default: every .zu file in the project
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || exit 1
-LUNA=bin/luna
+ZUE=bin/zue
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 if [ $# -eq 0 ]; then
-    set -- $(find compiler test examples bench -name '*.lu' | sort)
+    set -- $(find compiler test examples bench -name '*.zu' | sort)
 fi
 same=0; bad=0
 for f in "$@"; do
@@ -22,13 +22,13 @@ for f in "$@"; do
         i=0
         while [ $i -lt $total ]; do
             i=$((i + 1))
-            awk -v idx=$i '/^# CASE /{n++; next} n==idx{print}' "$f" > "$TMP/case.lu"
+            awk -v idx=$i '/^# CASE /{n++; next} n==idx{print}' "$f" > "$TMP/case.zu"
             label="$f case $i"
-            src="$TMP/case.lu"
-            if ! $LUNA ast "$src" > "$TMP/a1.txt" 2> /dev/null; then
+            src="$TMP/case.zu"
+            if ! $ZUE ast "$src" > "$TMP/a1.txt" 2> /dev/null; then
                 continue    # the case is meant to be rejected by the parser
             fi
-            if ! $LUNA unparse "$src" > "$TMP/round.lu" 2> "$TMP/err.txt" || ! $LUNA ast "$TMP/round.lu" > "$TMP/a2.txt" 2>> "$TMP/err.txt"; then
+            if ! $ZUE unparse "$src" > "$TMP/round.zu" 2> "$TMP/err.txt" || ! $ZUE ast "$TMP/round.zu" > "$TMP/a2.txt" 2>> "$TMP/err.txt"; then
                 bad=$((bad + 1)); echo "[FAIL] $label: $(head -2 "$TMP/err.txt" | tr '\n' ' ')"; continue
             fi
             sed 's/@[0-9]*//g' "$TMP/a1.txt" > "$TMP/b1.txt"; sed 's/@[0-9]*//g' "$TMP/a2.txt" > "$TMP/b2.txt"
@@ -36,10 +36,10 @@ for f in "$@"; do
         done
         continue
     fi
-    if ! $LUNA ast "$f" > "$TMP/a1.txt" 2> /dev/null; then
+    if ! $ZUE ast "$f" > "$TMP/a1.txt" 2> /dev/null; then
         continue
     fi
-    if ! $LUNA unparse "$f" > "$TMP/round.lu" 2> "$TMP/err.txt" || ! $LUNA ast "$TMP/round.lu" > "$TMP/a2.txt" 2>> "$TMP/err.txt"; then
+    if ! $ZUE unparse "$f" > "$TMP/round.zu" 2> "$TMP/err.txt" || ! $ZUE ast "$TMP/round.zu" > "$TMP/a2.txt" 2>> "$TMP/err.txt"; then
         bad=$((bad + 1)); echo "[FAIL] $f: $(head -2 "$TMP/err.txt" | tr '\n' ' ')"; continue
     fi
     sed 's/@[0-9]*//g' "$TMP/a1.txt" > "$TMP/b1.txt"; sed 's/@[0-9]*//g' "$TMP/a2.txt" > "$TMP/b2.txt"

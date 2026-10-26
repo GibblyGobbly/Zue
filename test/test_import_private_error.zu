@@ -1,0 +1,2 @@
+import "import_helper.zu"
+private_func()

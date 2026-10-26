@@ -1,6 +1,6 @@
 # Memory Management
 
-Luna manages memory for you. You allocate by writing values; the runtime frees what is no
+Zue manages memory for you. You allocate by writing values; the runtime frees what is no
 longer reachable. Four places hold data, and each has its own rules.
 
 | Where | What lives there | Who frees it |
@@ -64,8 +64,8 @@ Details of the collector (size classes, pages, roots, tuning) are in [gc](gc.md)
 
 | Variable | Effect |
 |---|---|
-| `LUNA_RT_GC_STATS=1` | At exit, print the number of collections, live bytes, pages and pause times to standard error |
-| `LUNA_RT_GC_STRESS=N` | Collect on every Nth allocation, to find bugs in how a program keeps values |
+| `ZUE_RT_GC_STATS=1` | At exit, print the number of collections, live bytes, pages and pause times to standard error |
+| `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation, to find bugs in how a program keeps values |
 
 ## Files
 
@@ -106,7 +106,7 @@ Twelve safety rules are checked at run time and give an error instead of memory 
 bounds, use after free, double free, pointers escaping the block, pointers stored in lists or
 maps, bad casts, and more. They are listed in [unsafe](unsafe.md).
 
-The collector scans `alloc()` buffers, so a Luna value stored in one stays alive.
+The collector scans `alloc()` buffers, so a Zue value stored in one stays alive.
 
 ## Scope cleanup: `defer`
 
@@ -134,4 +134,4 @@ write(f, "saved")
 | Integer | 64-bit signed | `integer overflow in '+'` (and `-`, `*`, ...) |
 
 When the machine runs out of real memory the program stops with `Runtime Error: out of memory`
-or is ended by the operating system; Luna does not recover from that.
+or is ended by the operating system; Zue does not recover from that.

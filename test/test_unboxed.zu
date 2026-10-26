@@ -1,0 +1,505 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+# Variables the checker proves to be int, float or bool are kept as raw machine values inside
+# functions. These cases pin the results, the error messages and the line numbers, which must be
+# exactly those of the boxed code path.
+# CASE add overflow
+func f() {
+    let x = 9223372036854775800
+    for (let i = 0; i < 20; i++) {
+        x = x + 1
+    }
+    return x
+}
+print(f())
+# CASE address of fn
+func f() {
+    let n = 5
+    let p = address_of(n)
+    n = n + 1
+    print(n)
+}
+f()
+# CASE assign other type error
+func f() {
+    let x = 5
+    x = "s"
+    return x
+}
+print(f())
+# CASE big literal
+func f() {
+    let big = 9223372036854775807
+    let small = -9223372036854775807
+    print(big)
+    print(small)
+    print(big + small)
+}
+f()
+# CASE bitops
+func f() {
+    let a = 12
+    let b = 10
+    print(a & b)
+    print(a | b)
+    print(a ^ b)
+    print(a << 2)
+    print(a >> 1)
+    print(a ** 2)
+    print(~a)
+}
+f()
+# CASE closure capture
+func make() {
+    let n = 0
+    let inc = func() {
+        n = n + 1
+        return n
+    }
+    let m = 10
+    m = m + n
+    inc()
+    inc()
+    print(m)
+    return inc
+}
+let g = make()
+print(g())
+# CASE compare chain
+func f() {
+    let a = 1
+    let b = 2
+    let c = 3
+    print(a < b and b < c)
+    print(a < b == true)
+    print((a < b) == (b < c))
+    print(a == 1 and b == 2 and c == 3)
+}
+f()
+# CASE defer typed
+func f() {
+    let n = 3
+    defer(print(n))
+    n = 99
+    print(n)
+}
+f()
+# CASE div minus one
+func f() {
+    let a = 7
+    let b = -1
+    print(a / b)
+    print(a % b)
+    let m = -9223372036854775807 - 1
+    print(m / b)
+}
+f()
+# CASE div zero
+func f() {
+    let a = 10
+    let b = 0
+    return a / b
+}
+print(f())
+# CASE float accumulate
+func f() {
+    let s = 0.0
+    for (let i = 0; i < 1000; i++) {
+        s += 0.1
+    }
+    return s
+}
+print(f())
+# CASE float basic
+func f() {
+    let x = 0.1
+    let y = 0.2
+    print(x + y)
+    print(x * y)
+    print(y / x)
+    print(x - y)
+    print(x < y)
+    print(x == 0.1)
+    print(x != y)
+    print(x >= y)
+    let z = 0.0
+    print(-z)
+    print(0.0 - 0.0)
+}
+f()
+# CASE float div zero
+func f() {
+    let x = 1.5
+    let z = 0.0
+    return x / z
+}
+print(f())
+# CASE float overflow
+func f() {
+    let x = 1e308
+    x = x * 10.0
+    return x
+}
+print(f())
+# CASE forin
+func f() {
+    let s = 0
+    for (let i in range(10)) {
+        s += i
+    }
+    print(s)
+    let fs = 0.0
+    for (let v in [1.5, 2.5, 3.0]) {
+        fs += v
+    }
+    print(fs)
+    for (let b in [true, false, true]) {
+        print(not b)
+    }
+}
+f()
+# CASE global read
+let G = 5
+let H = 2.5
+func f() {
+    let a = G + 1
+    let b = H * 2.0
+    print(a)
+    print(b)
+    G = a * 2
+    print(G)
+}
+f()
+print(G)
+# CASE incdec
+func f() {
+    let a = 5
+    let b = a++
+    print(a)
+    print(b)
+    let c = ++a
+    print(a)
+    print(c)
+    let d = a--
+    print(a)
+    print(d)
+    let e = --a
+    print(a)
+    print(e)
+    let x = 1.5
+    x++
+    print(x)
+    ++x
+    print(x)
+    x--
+    print(x)
+}
+f()
+# CASE incdec overflow
+func f() {
+    let a = 9223372036854775807
+    a++
+    return a
+}
+print(f())
+# CASE index call
+func sq(v) {
+    return v * v
+}
+func f() {
+    let xs = [10, 20, 30]
+    let i = 1
+    print(xs[i])
+    print(xs[i + 1])
+    print(sq(i + 4))
+    xs[i] = i * 100
+    print(xs)
+    print(len(xs) - i)
+}
+f()
+# CASE interp
+func f() {
+    let i = 3
+    let x = 2.5
+    let b = true
+    print("i={i} x={x} b={b} sum={i * 2} f={x * 2.0}")
+}
+f()
+# CASE line numbers
+func f() {
+    let a = 1
+    let b = 0
+    let c = (a +
+        2) /
+        b
+    return c
+}
+print(f())
+# CASE main block locals
+let total = 0
+for (let i = 0; i < 5; i++) {
+    let sq = i * i
+    total += sq
+}
+print(total)
+{
+    let q = 2.5
+    q = q * q
+    print(q)
+}
+# CASE mixed literal
+func f() {
+    let x = 2.5
+    print(x * 2)
+    print(3 * x)
+    print(x + 1)
+    print(x > 2)
+    print(x == 5 / 2.0)
+    let n = 7
+    print(n * 2)
+    print(n / 2)
+}
+f()
+# CASE mod zero
+func f() {
+    let a = 10
+    let b = 0
+    return a % b
+}
+print(f())
+# CASE modules style global fn
+func f() {
+    let a = 7
+    let f2 = func(x) { return x + a }
+    print(f2(1))
+    a = 8
+    print(f2(1))
+}
+f()
+# CASE mul overflow
+func f() {
+    let x = 4611686018427387904
+    let k = 2
+    return x * k
+}
+print(f())
+# CASE neg min
+func f() {
+    let m = -9223372036854775807 - 1
+    print(m)
+    let n = 0 - m
+    return n
+}
+print(f())
+# CASE neg mod
+func f() {
+    let a = -7
+    let b = 3
+    print(a % b)
+    print(a / b)
+    let c = 7
+    let d = -3
+    print(c % d)
+    print(c / d)
+}
+f()
+# CASE neg zero
+func f() {
+    let a = 0.0
+    let b = -a
+    print(b)
+    let c = 5.0 * 0.0
+    print(c)
+    let d = -5.0 * 0.0
+    print(d)
+    print(b == 0.0)
+}
+f()
+# CASE nested loops
+func f() {
+    let total = 0
+    for (let i = 0; i < 10; i++) {
+        if (i == 7) {
+            break
+        }
+        for (let j = 0; j < 10; j++) {
+            if (j % 2 == 0) {
+                continue
+            }
+            if (j > 6) {
+                break
+            }
+            total += i * j
+        }
+    }
+    return total
+}
+print(f())
+# CASE param default
+func f(a, b = 2) {
+    let c = a * b
+    return c + 1
+}
+print(f(3))
+print(f(3, 4))
+print(f(1.5, 2.0))
+# CASE recursion
+func fact(n) {
+    if (n <= 1) {
+        return 1
+    }
+    let r = n * fact(n - 1)
+    return r
+}
+print(fact(20))
+print(fact(21))
+# CASE shadowing
+func f() {
+    let x = 1
+    if (x == 1) {
+        let x = 2.5
+        x = x * 2.0
+        print(x)
+    }
+    print(x)
+    for (let i = 0; i < 3; i++) {
+        let x = i * 10
+        print(x)
+    }
+}
+f()
+# CASE short circuit
+func f() {
+    let x = 0
+    let ok = x != 0 and 10 / x > 1
+    print(ok)
+    let ok2 = x == 0 or 10 / x > 1
+    print(ok2)
+    let y = 5
+    print(y > 1 and y < 10)
+    print(y < 1 or y > 4)
+    print(not (y > 1))
+}
+f()
+# CASE short circuit error
+func f() {
+    let x = 0
+    let ok = x == 0 and 10 / x > 1
+    return ok
+}
+print(f())
+# CASE sqrt mix
+func f() {
+    let x = 16.0
+    let r = sqrt(x)
+    let k = 3
+    let y = r * 2.0 + float(k)
+    print(y)
+    print(floor(y))
+    let n = floor(y)
+    print(n + 1)
+}
+f()
+# CASE sub overflow
+func f() {
+    let x = -9223372036854775800
+    let y = 100
+    x = x - y
+    return x
+}
+print(f())
+# CASE switch var
+func f() {
+    let k = 2
+    switch (k) {
+        case 1:
+            print("one")
+        case 2:
+            print("two")
+        default:
+            print("other")
+    }
+    let t = k * 2
+    switch (t) {
+        case 4:
+            print("four")
+        default:
+            print("d")
+    }
+}
+f()
+# CASE unsafe typed
+func f() {
+    let n = 3
+    unsafe {
+        let b = box[8]
+        n = n + 1
+    }
+    print(n)
+}
+f()
+# CASE while countdown
+func f() {
+    let n = 1000000
+    let acc = 0
+    while (n > 0) {
+        acc = acc + n % 7
+        n -= 1
+    }
+    return acc
+}
+print(f())
+# CASE while flag
+func f() {
+    let done = false
+    let n = 0
+    while (not done) {
+        n += 3
+        done = n > 10
+    }
+    print(n)
+    print(done)
+    print(done == true)
+    print(done != false)
+}
+f()
+# CASE a parameter with a scalar type rejects another type at run time
+func inc(n: int) {
+    return n + 1
+}
+let g = inc
+print(g(1))
+print(g("a"))
+# CASE a float parameter
+func half(x: float) {
+    return x / 2.0
+}
+print(half(5.0))
+let g = half
+print(g(3))
+# CASE a bool parameter
+func flip(b: bool) {
+    return not b
+}
+print(flip(true))
+let g = flip
+print(g(0))
+# CASE a list element from untyped code is checked when it is stored in a typed variable
+func make() {
+    return [1, "a"]
+}
+let xs: list<int> = make()
+func second() {
+    let y = xs[1]
+    return y
+}
+print(second())
+# CASE a typed local keeps its type across a loop
+func f() {
+    let s = 0
+    for (let i = 0; i < 5; i++) {
+        s += i
+    }
+    s = 1.5
+}
+f()

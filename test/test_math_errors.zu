@@ -1,0 +1,107 @@
+# CASE negating a negative literal
+print(-(-3))
+print(- -1.5)
+print(2 - -3)
+# CASE floor of a float just outside the int range
+print(floor(pow(2.0, 63.0)))
+# CASE ceil of a float far outside the int range
+print(ceil(pow(10.0, 30.0)))
+# CASE round of a float far below the int range
+print(round(0.0 - pow(10.0, 30.0)))
+# CASE floor just inside the int range
+print(floor(pow(2.0, 62.0)))
+# CASE int of text beyond 64 bits
+print(int("99999999999999999999"))
+# CASE int of the smallest 64-bit text
+print(int("-9223372036854775808"))
+# CASE int of one past the largest 64-bit text
+print(int("9223372036854775808"))
+# CASE int of text that is not a number
+print(int("12abc"))
+# CASE to_int of an empty string
+print(to_int(""))
+# CASE int of text with spaces and a sign
+print(int("  -42  "))
+print(int("+7"))
+# CASE rand with a string
+func pass(v) {
+    return [v, null][0]
+}
+print(rand(pass("a")))
+# CASE rand with a float
+func pass(v) {
+    return [v, null][0]
+}
+print(rand(pass(5.9)))
+# CASE srand with a string
+func pass(v) {
+    return [v, null][0]
+}
+srand(pass("x"))
+# CASE rand over every 64-bit value
+let r = rand(-9223372036854775807 - 1, 9223372036854775807)
+print(type(r))
+# CASE sqrt of a negative number
+print(sqrt(-4))
+# CASE ln of zero
+print(ln(0))
+# CASE log10 of a negative number
+print(log10(-5))
+# CASE asin outside its domain
+print(asin(2))
+# CASE acos outside its domain
+print(acos(-2))
+# CASE exp overflow
+print(exp(710))
+# CASE sinh overflow
+print(sinh(1000))
+# CASE pow stays an exact int
+print(pow(2, 62))
+print(type(pow(2, 62)))
+print(pow(-3, 3))
+print(pow(7, 0))
+# CASE pow int overflow
+print(pow(2, 63))
+# CASE pow of zero to a negative power
+print(pow(0, -1))
+# CASE pow of a negative base to a fractional power
+print(pow(-8.0, 0.5))
+# CASE pow float overflow
+print(pow(10.0, 400.0))
+# CASE clamp with low above high
+print(clamp(5, 10, 0))
+# CASE float multiply overflow
+print(pow(10.0, 300.0) * pow(10.0, 300.0))
+# CASE float add overflow
+print(pow(10.0, 308.0) + pow(10.0, 308.0))
+# CASE vec_add with different lengths
+print(vec_add([1, 2], [1, 2, 3]))
+# CASE vec_add with a non-number
+print(vec_add([1, "a"], [1, 2]))
+# CASE vec_div by zero
+print(vec_div([1, 2], [0, 1]))
+# CASE vec_mul_inline with plain lists
+print(vec_mul_inline([1, 2], [3, 4]))
+# CASE mat_mul with mismatched dimensions
+print(mat_mul([[1, 2]], [[1, 2]]))
+# CASE dense_list with an int fill
+print(dense_list(3, 0))
+# CASE dense_list with a negative size
+print(dense_list(-1, 0.0))
+# CASE storing a string in a dense list
+let d = dense_list(2, 0.0)
+d[0] = "s"
+# CASE float of nan text
+print(float("nan"))
+# CASE float of inf text
+print(float("inf"))
+# CASE float of hex text
+print(float("0x10"))
+# CASE float of text with trailing junk
+print(float("1.5x"))
+# CASE float of text beyond the float range
+print(float("1e999"))
+# CASE float of spaced scientific text
+print(float(" -2.5e2 "))
+# CASE type of a large int
+print(type(3000000000))

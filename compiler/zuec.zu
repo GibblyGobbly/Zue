@@ -1,0 +1,249 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# zue: the Zue compiler, written in Zue. It turns a .zu program into LLVM IR and has clang
+# build a native binary against the runtime in compiler/runtime (also written in Zue and
+# compiled by emit_native.zu).
+#
+#   zue build prog.zu -o prog [-S]     build a binary; -S keeps C/prog.ll and stops
+#   zue run prog.zu [args...]          build into C/run/ and run it
+#   zue emit prog.zu [-o out.ll]       write the LLVM IR only
+#   zue ast prog.zu                    print the syntax tree as text
+#   zue unparse prog.zu                print the program as source again
+#   zue --native a.zu b.zu -o out.ll   compile runtime source (see emit_native.zu)
+#
+# The compiler is split into the modules next to this file. This one is the driver.
+# Note for readers: these files must themselves be written in the subset the compiler
+# compiles, so identifiers such as data, from, in, input, print and box are never used as
+# names, and a literal { inside a string is written \{.
+
+use { read_file, split_lines } from "util.zu"
+use { lex } from "lexer.zu"
+use { parse_program } from "parser.zu"
+use { compile_program_ll } from "emit_llvm.zu"
+use { compile_native } from "emit_native.zu"
+use { ST } from "state.zu"
+use { dump_program } from "ast_dump.zu"
+use { unparse_program } from "ast_unparse.zu"
+
+# Name of a file without its directory and extension: "dir/prog.zu" is "prog".
+func base_name(path) {
+    let slash = last_index_of(path, "/")
+    let name = slice(path, slash + 1, len(path))
+    if (ends_with(name, ".zu") or ends_with(name, ".zu")) {
+        name = slice(name, 0, len(name) - 3)
+    }
+    return name
+}
+
+# A shell word for one argument, in single quotes.
+func shell_quote(text) {
+    let q = "'"
+    # Each ' becomes '\'' : close the quote, a quoted quote, reopen.
+    return q + replace(text, q, "'\\''") + q
+}
+
+# The shell command that turns generated IR into a binary. The compiler's own files are
+# found through ZUE_HOME, or else from the place of the running zue binary (bin/zue is
+# one level below the tree). CC overrides the C compiler.
+func build_command(code_path, out_path) {
+    let home = "$\{ZUE_HOME:-$(dirname \"$(dirname \"$(readlink -f /proc/$PPID/exe)\")\")}"
+    let rt = "\"$(H=\"{home}\"; \"$H/compiler/build_runtime.sh\")\""
+    return "$\{CC:-clang} -O1 -w {shell_quote(code_path)} {rt} -lm -lpthread -ldl -o {shell_quote(out_path)}"
+}
+
+func usage() {
+    print("usage: zue build prog.zu -o program [-S]")
+    print("       zue run prog.zu [args...]")
+    print("       zue emit prog.zu [-o out.ll]")
+    print("       zue ast prog.zu")
+    print("       zue unparse prog.zu")
+    print("")
+    print("  build  compile to a native binary through LLVM IR")
+    print("  run    build into C/run/ and run it with the given arguments")
+    print("  emit   write LLVM IR only (default C/<name>.ll)")
+    print("  ast    print the parsed syntax tree, one statement per line")
+    print("  unparse  print the parsed program as source again")
+    print("  -o     where to write the program or the IR")
+    print("  -S     with build: write C/<name>.ll and do not build")
+    exit(1)
+}
+
+# Parses and compiles one program; returns the LLVM IR text.
+func compile_file(path) {
+    ST.src_file = path
+    let text = read_file(path)
+    ST.src_lines = split_lines(text)
+    return compile_program_ll(parse_program(lex(text, 1)))
+}
+
+func write_text(path, text) {
+    let f = open(path, "w")
+    if (f == null) {
+        print("[ERROR] cannot write {path}")
+        exit(1)
+    }
+    write(f, text)
+    close(f)
+}
+
+# Compiles path to C/<name>.ll and, unless stop is set, builds out_path from it.
+func build_program(path, out_path, stop) {
+    let name = base_name(path)
+    let code = compile_file(path)
+    system("mkdir -p C")
+    let code_path = "C/{name}.ll"
+    write_text(code_path, code)
+    if (stop) {
+        print("[OK] wrote {code_path}")
+        return null
+    }
+    let rc = system(build_command(code_path, out_path))
+    if (rc != 0) {
+        print("[ERROR] build failed (exit {rc}); the generated IR is in {code_path}")
+        exit(1)
+    }
+    print("[OK] built {out_path} from {code_path}")
+}
+
+# zue build prog.zu -o program [-S]
+func build_main(a) {
+    let out_path = ""
+    let stop = false
+    let i = 1
+    while (i < len(a)) {
+        if (a[i] == "-o" and i + 1 < len(a)) {
+            out_path = a[i + 1]
+            i += 2
+        } else if (a[i] == "-S") {
+            stop = true
+            i += 1
+        } else {
+            usage()
+        }
+    }
+    if (out_path == "") {
+        out_path = base_name(a[0])
+    }
+    build_program(a[0], out_path, stop)
+}
+
+# zue run prog.zu [args...]: the program's exit status is this command's.
+func run_main(a) {
+    let name = base_name(a[0])
+    system("mkdir -p C/run")
+    let out_path = "C/run/{name}"
+    let code = compile_file(a[0])
+    system("mkdir -p C")
+    write_text("C/{name}.ll", code)
+    let rc = system(build_command("C/{name}.ll", out_path))
+    if (rc != 0) {
+        print("[ERROR] build failed (exit {rc}); the generated IR is in C/{name}.ll")
+        exit(1)
+    }
+    let words = [shell_quote("./{out_path}")]
+    for (let i = 1; i < len(a); i++) {
+        append(words, shell_quote(a[i]))
+    }
+    exit(system(join(words, " ")))
+}
+
+# zue emit prog.zu [-o out.ll]
+func emit_main(a) {
+    let out_path = "C/{base_name(a[0])}.ll"
+    let i = 1
+    while (i < len(a)) {
+        if (a[i] == "-o" and i + 1 < len(a)) {
+            out_path = a[i + 1]
+            i += 2
+        } else {
+            usage()
+        }
+    }
+    let code = compile_file(a[0])
+    system("mkdir -p C")
+    write_text(out_path, code)
+    print("[OK] wrote {out_path}")
+}
+
+# zue ast prog.zu: the syntax tree as text (see ast_dump.zu).
+func ast_main(a) {
+    ST.src_file = a[0]
+    let text = read_file(a[0])
+    ST.src_lines = split_lines(text)
+    print(dump_program(parse_program(lex(text, 1))))
+}
+
+# zue unparse prog.zu: the program written back as source (see ast_unparse.zu).
+func unparse_main(a) {
+    ST.src_file = a[0]
+    let text = read_file(a[0])
+    ST.src_lines = split_lines(text)
+    print(unparse_program(parse_program(lex(text, 1))))
+}
+
+# zue --native a.zu b.zu ... -o out.ll: compiles runtime files (emit_native.zu).
+func native_main(a) {
+    let files = []
+    let out_path = ""
+    let i = 1
+    while (i < len(a)) {
+        if (a[i] == "-o" and i + 1 < len(a)) {
+            out_path = a[i + 1]
+            i += 2
+        } else {
+            ST.src_file = a[i]
+            let text = read_file(a[i])
+            ST.src_lines = split_lines(text)
+            append(files, {"path": a[i], "stmts": parse_program(lex(text, 1))})
+            i += 1
+        }
+    }
+    if (out_path == "" or len(files) == 0) {
+        usage()
+    }
+    write_text(out_path, compile_native(files))
+}
+
+# zuec input.zu output.ll [cwd]: the form the test runner and the bootstrap use. The cwd
+# is the directory that relative paths in the program resolve against.
+func positional_main(a) {
+    ST.src_file = a[0]
+    let text = read_file(a[0])
+    ST.src_lines = split_lines(text)
+    if (len(a) >= 3) {
+        ST.cwd = a[2]
+    }
+    let code = compile_program_ll(parse_program(lex(text, 1)))
+    if (len(a) >= 2) {
+        write_text(a[1], code)
+    } else {
+        print(code)
+    }
+}
+
+func main() {
+    let a = args()
+    if (len(a) < 1) {
+        usage()
+    }
+    let cmd = a[0]
+    let rest = slice(a, 1, len(a))
+    if (cmd == "--native") {
+        native_main(a)
+    } else if (cmd == "build" and len(rest) >= 1) {
+        build_main(rest)
+    } else if (cmd == "run" and len(rest) >= 1) {
+        run_main(rest)
+    } else if (cmd == "emit" and len(rest) >= 1) {
+        emit_main(rest)
+    } else if (cmd == "ast" and len(rest) == 1) {
+        ast_main(rest)
+    } else if (cmd == "unparse" and len(rest) == 1) {
+        unparse_main(rest)
+    } else if (ends_with(cmd, ".zu") or ends_with(cmd, ".zu")) {
+        positional_main(a)
+    } else {
+        usage()
+    }
+}

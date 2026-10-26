@@ -1,0 +1,1067 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# parser.zu: tokens to AST.
+
+use { die } from "util.zu"
+use { lex } from "lexer.zu"
+use { KEYWORDS } from "token.zu"
+
+let P_toks = []
+let P_pos = 0
+
+# Number of ( [ and literal { currently open. Inside them a line break is only white space.
+let P_depth = 0
+
+# Names declared so far in each open scope, innermost last; a name may be declared once per scope.
+let P_scopes = [{}]
+
+func p_scope_push() {
+    append(P_scopes, {})
+}
+
+func p_scope_pop() {
+    remove(P_scopes, len(P_scopes) - 1)
+}
+
+func p_declare(name, line) {
+    let top = P_scopes[len(P_scopes) - 1]
+    if (top[name] != null) {
+        die("Syntax Error", line, "'{name}' is already declared in this scope")
+    }
+    top[name] = true
+}
+
+# The current token and its kind. While a bracket is open, line breaks are skipped before either is
+# set, so the parser never sees them there. p_sync must run whenever P_pos or P_depth changes.
+let P_tk = null
+let P_kind = ""
+
+func p_sync() {
+    if (P_depth > 0) {
+        while (P_toks[P_pos].t == "nl") {
+            P_pos += 1
+        }
+    }
+    P_tk = P_toks[P_pos]
+    P_kind = P_tk.t
+}
+
+func p_tok() {
+    return P_tk
+}
+
+func p_at(t) {
+    return P_kind == t
+}
+
+func p_next() {
+    let tk = P_tk
+    if (P_pos < len(P_toks) - 1) {
+        P_pos += 1
+    }
+    p_sync()
+    return tk
+}
+
+func p_eat(t) {
+    if (P_kind == t) {
+        p_next()
+        return true
+    }
+    return false
+}
+
+# Counts one more open bracket, after its opening token has been consumed.
+func p_enter() {
+    P_depth += 1
+    p_sync()
+}
+
+# Words that are keywords only where they mean something: in (for loops), from (use lists) and
+# data (data declarations). Elsewhere they are ordinary names.
+func p_at_word(w) {
+    let tk = P_tk
+    return tk.t == "id" and tk.v == w
+}
+
+func p_eat_word(w) {
+    if (p_at_word(w)) {
+        p_next()
+        return true
+    }
+    return false
+}
+
+func p_expect_word(w, msg) {
+    if (not p_at_word(w)) {
+        p_fail(msg)
+    }
+    return p_next()
+}
+
+# data Name { ... }: the word data, a name, then an opening brace.
+func p_at_data() {
+    if (not p_at_word("data")) {
+        return false
+    }
+    let i = P_pos + 1
+    return i + 1 < len(P_toks) and P_toks[i].t == "id" and P_toks[i + 1].t == "\{"
+}
+
+# Consumes the opening bracket t, and line breaks stop mattering until p_close.
+func p_open(t, msg) {
+    p_expect(t, msg)
+    p_enter()
+}
+
+# The closing bracket is checked first and the depth lowered before it is consumed, so a line break
+# after it still ends the statement.
+func p_close(t, msg) {
+    if (P_kind != t) {
+        p_fail(msg)
+    }
+    P_depth -= 1
+    p_next()
+}
+
+func p_skip_nl() {
+    while (P_kind == "nl") {
+        p_next()
+    }
+}
+
+func p_fail(msg) {
+    die("Syntax Error", P_tk.line, msg)
+}
+
+func p_expect(t, msg) {
+    if (P_kind != t) {
+        p_fail(msg)
+    }
+    return p_next()
+}
+
+func node(k, line) {
+    return {"k": k, "line": line}
+}
+
+# Parses source text with its own token stream, then restores the parser.
+func parse_inline(text, line) {
+    let saved_toks = P_toks
+    let saved_pos = P_pos
+    let saved_depth = P_depth
+    P_toks = lex(text, line)
+    P_pos = 0
+    P_depth = 1
+    p_sync()
+    let e = p_expr()
+    if (not (P_kind == "eof")) {
+        p_fail("Invalid expression inside string interpolation")
+    }
+    P_toks = saved_toks
+    P_pos = saved_pos
+    P_depth = saved_depth
+    p_sync()
+    return e
+}
+
+func p_string(tk) {
+    let parts = tk.v
+    let has_expr = false
+    for (let part in parts) {
+        if (type(part) == "map") {
+            has_expr = true
+        }
+    }
+    if (not has_expr) {
+        let s = node("str", tk.line)
+        s.v = parts[0]
+        return s
+    }
+    let t = node("tmpl", tk.line)
+    let items = []
+    for (let part in parts) {
+        if (type(part) == "map") {
+            append(items, parse_inline(part.expr, part.line))
+        } else {
+            append(items, part)
+        }
+    }
+    t.parts = items
+    return t
+}
+
+func p_list_literal(line) {
+    p_enter()
+    let items = []
+    while (not (P_kind == "]")) {
+        append(items, p_expr())
+        if (not p_eat(",")) {
+            break
+        }
+    }
+    p_close("]", "Expected ']' at end of list")
+    let n = node("list", line)
+    n.items = items
+    return n
+}
+func p_map_literal(line) {
+    p_enter()
+    let keys = []
+    let vals = []
+    while (not (P_kind == "}")) {
+        if (not (P_kind == "str")) {
+            p_fail("Map literal keys must be strings")
+        }
+        let kt = p_next()
+        if (len(kt.v) != 1 or type(kt.v[0]) != "string") {
+            p_fail("Map literal keys must be plain strings")
+        }
+        append(keys, kt.v[0])
+        p_expect(":", "Expected ':' after map key")
+        append(vals, p_expr())
+        if (not p_eat(",")) {
+            break
+        }
+    }
+    p_close("}", "Expected '}' at end of map literal")
+    let n = node("map", line)
+    n.keys = keys
+    n.vals = vals
+    return n
+}
+# A type annotation after ':' on a variable, a parameter or a field: a type name, and for list and
+# map an element type in angle brackets, as in list<int> or map<list<float>>. Returned as text.
+func p_type(what) {
+    if (not (P_kind == "id")) {
+        p_fail("Expected a type after ':' in {what}")
+    }
+    let name = p_next().v
+    if (not (P_kind == "<")) {
+        return name
+    }
+    if (name != "list" and name != "map") {
+        p_fail("Only list and map take an element type, for example list<int>")
+    }
+    p_next()
+    let inner = p_type(what)
+    p_close_angle()
+    return "{name}<{inner}>"
+}
+
+# The '>' that ends an element type. A '>>' or '>=' token is split: the first '>' is used up and the
+# rest stays as the current token.
+func p_close_angle() {
+    if (P_kind == ">") {
+        p_next()
+        return null
+    }
+    if (P_kind == ">>" or P_kind == ">=") {
+        let rest = ">"
+        if (P_kind == ">=") {
+            rest = "="
+        }
+        P_tk.t = rest
+        P_tk.v = rest
+        P_kind = rest
+        return null
+    }
+    p_fail("Expected '>' to close the element type")
+}
+
+func p_func_rest(name, line, is_export) {
+    p_open("(", "Expected '('")
+    p_scope_push()
+    let params = []
+    let defaults = []
+    let ptypes = []
+    let has_default = false
+    let has_type = false
+    while (not (P_kind == ")")) {
+        if (not (P_kind == "id")) {
+            p_fail("Expected parameter name")
+        }
+        let pt = p_next()
+        p_declare(pt.v, pt.line)
+        append(params, pt.v)
+        if (p_eat(":")) {
+            append(ptypes, p_type("a parameter"))
+            has_type = true
+        } else {
+            append(ptypes, null)
+        }
+        if (p_eat("=")) {
+            append(defaults, p_expr())
+            has_default = true
+        } else {
+            if (has_default) {
+                die("Syntax Error", pt.line, "Parameter '{pt.v}' needs a default value because an earlier parameter has one")
+            }
+            append(defaults, null)
+        }
+        if (not p_eat(",")) {
+            break
+        }
+    }
+    p_close(")", "Expected ')'")
+    p_expect("\{", "Expected '\{'")
+    let n = node("func", line)
+    n.name = name
+    n.params = params
+    n.defaults = defaults
+    if (has_type) {
+        n.ptypes = ptypes
+    }
+    n.body = p_block_body()
+    p_scope_pop()
+    n.exported = is_export
+    return n
+}
+func p_primary() {
+    let tk = P_tk
+    let line = tk.line
+    let t = tk.t
+    if (t == "num") {
+        p_next()
+        let n = node("num", line)
+        n.v = tk.v
+        return n
+    }
+    if (t == "float") {
+        p_next()
+        let n = node("float", line)
+        n.v = tk.v
+        return n
+    }
+    if (t == "str") {
+        p_next()
+        return p_string(tk)
+    }
+    if (t == "char") {
+        p_next()
+        let n = node("char", line)
+        n.v = tk.v
+        return n
+    }
+    if (t == "true" or t == "false") {
+        p_next()
+        let n = node("bool", line)
+        n.v = t == "true"
+        return n
+    }
+    if (t == "id") {
+        p_next()
+        let n = node("id", line)
+        n.name = tk.v
+        return n
+    }
+    if (t == "(") {
+        p_next()
+        p_enter()
+        let e = p_expr()
+        p_close(")", "Expected ')' after expression")
+        return e
+    }
+    if (t == "[") {
+        p_next()
+        return p_list_literal(line)
+    }
+    if (t == "\{") {
+        p_next()
+        return p_map_literal(line)
+    }
+    if (t == "func") {
+        p_next()
+        return p_func_rest(null, line, false)
+    }
+    if (t == "box") {
+        p_next()
+        p_expect("[", "Expected '[' after 'box'")
+        let n = node("box", line)
+        n.size = p_expr()
+        p_expect("]", "Expected ']' after box size")
+        return n
+    }
+    if (t == ";") {
+        p_fail("Unexpected semicolon ';'")
+    }
+    p_fail("Unexpected token '{t}': expected an expression")
+}
+
+func p_args(closer, msg) {
+    p_enter()
+    let args = []
+    while (not p_at(closer)) {
+        append(args, p_expr())
+        if (not p_eat(",")) {
+            break
+        }
+    }
+    p_close(closer, msg)
+    return args
+}
+
+func p_postfix() {
+    let line = P_tk.line
+    let e = p_primary()
+    while (true) {
+        if ((P_kind == "(")) {
+            p_next()
+            let c = node("call", line)
+            c.callee = e
+            c.args = p_args(")", "Expected ')' after arguments")
+            e = c
+        } else if ((P_kind == "\{") and e.k == "id") {
+            p_next()
+            let c = node("call", line)
+            c.callee = e
+            c.args = p_args("}", "Expected '}' after typed constructor arguments")
+            e = c
+        } else if ((P_kind == "[")) {
+            p_next()
+            p_enter()
+            let idx = p_expr()
+            p_close("]", "Expected ']' after index")
+            let n = node("index", line)
+            n.target = e
+            n.index = idx
+            e = n
+        } else if ((P_kind == ".")) {
+            p_next()
+            let tk = P_tk
+            let is_word = tk.t == "id" or (type(tk.v) == "string" and KEYWORDS[tk.v] != null)
+            if (not is_word) {
+                p_fail("Expected field name after '.'")
+            }
+            let n = node("field", line)
+            n.target = e
+            n.field = p_next().v
+            e = n
+        } else if ((P_kind == "++") or (P_kind == "--")) {
+            let op = p_next().t
+            if (e.k != "id") {
+                p_fail("'{op}' can only be applied to variables")
+            }
+            let n = node("incdec", line)
+            n.name = e.name
+            n.op = op
+            n.prefix = false
+            e = n
+        } else {
+            break
+        }
+    }
+    return e
+}
+func p_unary() {
+    let line = P_tk.line
+    if (p_eat("-")) {
+        let r = p_unary()
+        if (r.k == "num" or r.k == "float") {
+            # A literal that is already negative (as in -(-3)) turns positive.
+            if (starts_with(r.v, "-")) {
+                r.v = slice(r.v, 1, len(r.v))
+            } else {
+                r.v = "-{r.v}"
+            }
+            return r
+        }
+        let n = node("bin", line)
+        n.op = "-"
+        n.l = node("num", line)
+        n.l.v = "0"
+        n.r = r
+        n.unary = true
+        return n
+    }
+    if ((P_kind == "++") or (P_kind == "--")) {
+        let op = p_next().t
+        if (not (P_kind == "id")) {
+            p_fail("'{op}' can only be applied to variables")
+        }
+        let n = node("incdec", line)
+        n.name = p_next().v
+        n.op = op
+        n.prefix = true
+        return n
+    }
+    if (p_eat("+")) {
+        return p_unary()
+    }
+    if (P_kind == "~") {
+        # ~x is x ^ -1
+        p_next()
+        let flip = node("bin", line)
+        flip.op = "^"
+        flip.l = p_unary()
+        flip.r = node("num", line)
+        flip.r.v = "-1"
+        return flip
+    }
+    let base = p_postfix()
+    if (P_kind == "**") {
+        # ** binds tighter than a unary minus on its left and is right-associative: -2 ** 2 is -4
+        p_next()
+        p_skip_nl()
+        let power = node("bin", line)
+        power.op = "**"
+        power.l = base
+        power.r = p_unary()
+        return power
+    }
+    return base
+}
+
+# Binding power of each binary operator; a higher number binds tighter. All are left-associative.
+let BINARY = {
+    "or": 1, "and": 2,
+    "==": 3, "!=": 3,
+    "<": 4, ">": 4, "<=": 4, ">=": 4,
+    "|": 5, "^": 6, "&": 7, "<<": 8, ">>": 8,
+    "+": 9, "-": 9,
+    "*": 10, "/": 10, "%": 10
+}
+
+# Parses an expression whose operators all bind at least as tight as min_bp.
+func p_expr_bp(min_bp) {
+    let line = P_tk.line
+    let left = null
+    if (min_bp <= 3 and (P_kind == "not")) {
+        # not binds looser than a comparison and tighter than and: not a == b is not (a == b).
+        p_next()
+        left = node("not", line)
+        left.e = p_expr_bp(3)
+    } else {
+        left = p_unary()
+    }
+    while (true) {
+        let bp = BINARY[P_tk.t]
+        if (bp == null or bp < min_bp) {
+            break
+        }
+        let op = p_next().t
+        p_skip_nl()
+        let n = node("bin", line)
+        n.op = op
+        n.l = left
+        n.r = p_expr_bp(bp + 1)
+        left = n
+    }
+    return left
+}
+
+func p_expr() {
+    return p_expr_bp(1)
+}
+
+func p_block() {
+    p_scope_push()
+    let stmts = p_block_body()
+    p_scope_pop()
+    return stmts
+}
+
+func p_block_body() {
+    let saved_depth = P_depth
+    P_depth = 0
+    p_sync()
+    let stmts = []
+    while (not (P_kind == "}") and not (P_kind == "eof")) {
+        if (p_eat("nl")) {
+            continue
+        }
+        append(stmts, p_statement())
+    }
+    p_expect("}", "Expected '}'")
+    P_depth = saved_depth
+    p_sync()
+    return stmts
+}
+
+func p_declaration(is_const, is_export) {
+    let line = P_tk.line
+    let names = []
+    let types = []
+    let more = true
+    while (more) {
+        if (not (P_kind == "id")) {
+            p_fail("Expected variable name after 'let' or ','")
+        }
+        let nt = p_next()
+        p_declare(nt.v, nt.line)
+        append(names, nt.v)
+        if (p_eat(":")) {
+            append(types, p_type("a variable"))
+        } else {
+            append(types, null)
+        }
+        more = p_eat(",")
+        if (more) {
+            p_skip_nl()
+        }
+    }
+    let vals = []
+    if (p_eat("=")) {
+        p_skip_nl()
+        more = true
+        while (more) {
+            append(vals, p_expr())
+            more = p_eat(",")
+            if (more) {
+                p_skip_nl()
+            }
+        }
+    }
+    if (is_const and len(vals) != len(names)) {
+        p_fail("const declarations require an initializer for every name")
+    }
+    if (len(vals) > 0 and len(vals) != len(names)) {
+        p_fail("Variable count ({len(names)}) does not match value count ({len(vals)})")
+    }
+    let lets = []
+    for (let i = 0; i < len(names); i++) {
+        let n = node("let", line)
+        n.name = names[i]
+        n.init = null
+        if (len(vals) > 0) {
+            n.init = vals[i]
+        }
+        n.exported = is_export
+        n.const_decl = is_const
+        if (types[i] != null) {
+            n.type = types[i]
+        }
+        append(lets, n)
+    }
+    if (len(lets) == 1) {
+        return lets[0]
+    }
+    let g = node("group", line)
+    g.items = lets
+    return g
+}
+
+func p_cond_paren(what) {
+    p_open("(", "Expected '(' after {what}")
+    let c = p_expr()
+    p_close(")", "Expected ')' after condition")
+    return c
+}
+
+func p_if(line) {
+    let cond = p_cond_paren("if")
+    p_eat("nl")
+    p_expect("\{", "Expected '\{'")
+    let n = node("if", line)
+    n.cond = cond
+    n.then = p_block()
+    n.els = []
+    p_eat("nl")
+    if (p_eat("else")) {
+        p_eat("nl")
+        if ((P_kind == "if")) {
+            n.els = [p_statement()]
+        } else {
+            p_expect("\{", "Expected '\{'")
+            n.els = p_block()
+        }
+    }
+    return n
+}
+
+func p_for(line) {
+    p_scope_push()
+    let n = p_for_header(line)
+    p_scope_pop()
+    return n
+}
+
+func p_for_header(line) {
+    p_open("(", "Expected '(' after for")
+    if ((P_kind == "let")) {
+        p_next()
+        if (not (P_kind == "id")) {
+            p_fail("Expected loop variable name in for loop")
+        }
+        let nt = p_next()
+        let name = nt.v
+        p_declare(name, nt.line)
+        if (p_eat_word("in")) {
+            let iter = p_expr()
+            p_close(")", "Expected ')' after for-in iterable")
+            p_eat("nl")
+            p_expect("\{", "Expected '\{' for loop body")
+            let n = node("forin", line)
+            n.name = name
+            n.iter = iter
+            n.body = p_block()
+            return n
+        }
+        let init = node("let", line)
+        init.name = name
+        init.init = null
+        init.exported = false
+        if (p_eat(":")) {
+            init.type = p_type("a variable")
+        }
+        if (p_eat("=")) {
+            init.init = p_expr()
+        }
+        return p_for_rest(line, init)
+    }
+    if ((P_kind == ";")) {
+        return p_for_rest(line, null)
+    }
+    return p_for_rest(line, p_statement())
+}
+
+func p_for_rest(line, init) {
+    p_expect(";", "Expected ';' after loop initializer")
+    let cond = null
+    if (not (P_kind == ";")) {
+        cond = p_expr()
+    }
+    p_expect(";", "Expected ';' after loop condition")
+    let incr = null
+    if (not (P_kind == ")")) {
+        incr = p_statement()
+    }
+    p_close(")", "Expected ')' after loop increment")
+    p_eat("nl")
+    p_expect("\{", "Expected '\{' for loop body")
+    let n = node("for", line)
+    n.init = init
+    n.cond = cond
+    n.incr = incr
+    n.body = p_block()
+    return n
+}
+
+func p_switch(line) {
+    p_open("(", "Expected '(' after switch")
+    let e = p_expr()
+    p_close(")", "Expected ')'")
+    p_expect("\{", "Expected '\{' starting switch block")
+    let cases = []
+    let dflt = []
+    while (not (P_kind == "}") and not (P_kind == "eof")) {
+        let cline = P_tk.line
+        if (p_eat("case")) {
+            let v = p_expr()
+            p_expect(":", "Expected ':' after case value")
+            let body = p_case_body()
+            append(cases, {"value": v, "body": body, "line": cline})
+        } else if (p_eat("default")) {
+            p_expect(":", "Expected ':' after default")
+            dflt = p_case_body()
+        } else if (p_eat("nl")) {
+            continue
+        } else {
+            p_fail("Expected 'case' or 'default' inside switch")
+        }
+    }
+    p_expect("}", "Expected '}' ending switch")
+    let n = node("switch", line)
+    n.e = e
+    n.cases = cases
+    n.dflt = dflt
+    return n
+}
+
+func p_case_body() {
+    p_scope_push()
+    let body = []
+    while (not (P_kind == "case") and not (P_kind == "default") and not (P_kind == "}")) {
+        if (p_eat("nl")) {
+            continue
+        }
+        append(body, p_statement())
+    }
+    p_scope_pop()
+    return body
+}
+
+func compound_op(t) {
+    if (t == "+=") {
+        return "+"
+    }
+    if (t == "-=") {
+        return "-"
+    }
+    if (t == "*=") {
+        return "*"
+    }
+    if (t == "/=") {
+        return "/"
+    }
+    if (t == "%=") {
+        return "%"
+    }
+    return null
+}
+
+func p_simple(line) {
+    let e = p_expr()
+    if (p_eat("=")) {
+        p_skip_nl()
+        let v = p_expr()
+        if (e.k == "id") {
+            let n = node("assign", line)
+            n.name = e.name
+            n.e = v
+            return n
+        }
+        return make_setidx(e, v, null, line)
+    }
+    let op = compound_op(P_tk.t)
+    if (op != null) {
+        p_next()
+        p_skip_nl()
+        let rhs = p_expr()
+        if (e.k == "id") {
+            let b = node("bin", line)
+            b.op = op
+            b.l = e
+            b.r = rhs
+            let n = node("assign", line)
+            n.name = e.name
+            n.e = b
+            return n
+        }
+        return make_setidx(e, rhs, op, line)
+    }
+    return e
+}
+
+# target[index] = value  /  target.field = value, with an optional compound op.
+func make_setidx(e, v, op, line) {
+    let n = node("setidx", line)
+    if (e.k == "index") {
+        n.target = e.target
+        n.index = e.index
+    } else if (e.k == "field") {
+        n.target = e.target
+        n.index = node("str", line)
+        n.index.v = e.field
+    } else {
+        p_fail("Invalid assignment target")
+    }
+    n.e = v
+    n.op = op
+    return n
+}
+
+func p_typedef(line, word, is_export) {
+    if (not (P_kind == "id")) {
+        p_fail("Expected a name after '{word}'")
+    }
+    let n = node("typedef", line)
+    n.exported = is_export
+    n.name = p_next().v
+    p_declare(n.name, line)
+    n.is_template = word == "template"
+    n.is_bloc = word == "bloc"
+    n.fields = []
+    n.ftypes = []
+    p_expect("\{", "Expected '\{' after type name")
+    while (not (P_kind == "}") and not (P_kind == "eof")) {
+        p_skip_nl()
+        if (not (P_kind == "id")) {
+            p_fail("Expected field name in {word} declaration")
+        }
+        append(n.fields, p_next().v)
+        if (P_kind == ":") {
+            p_next()
+            append(n.ftypes, p_field_type(word))
+        } else {
+            append(n.ftypes, null)
+        }
+        p_skip_nl()
+        if (not p_eat(",")) {
+            break
+        }
+    }
+    p_expect("}", "Expected '}' after {word} fields")
+    p_check_field_types(n, word)
+    return n
+}
+
+# The type after "name:" in a bloc or template field: int, float, bool, char, string, list, map,
+# function, the name of another type, or box[N]. Returned as text: "box:16" for box[16].
+func p_field_type(word) {
+    if (P_kind == "box") {
+        p_next()
+        p_expect("[", "Expected '[' after box in a field type")
+        if (not (P_kind == "num")) {
+            p_fail("A box field needs its size written as a number, for example box[16]")
+        }
+        let size = p_next().v
+        p_expect("]", "Expected ']' after the box size")
+        return "box:{size}"
+    }
+    return p_type("a {word} field")
+}
+
+# A data type has no field types. A bloc has types on all its fields or on none.
+func p_check_field_types(n, word) {
+    let typed = 0
+    for (let t in n.ftypes) {
+        if (t != null) {
+            typed += 1
+        }
+    }
+    if (typed == 0) {
+        return null
+    }
+    if (word == "data") {
+        die("Syntax Error", n.line, "data fields cannot have types; use a template for typed fields")
+    }
+    if (word == "bloc" and typed != len(n.fields)) {
+        die("Syntax Error", n.line, "bloc '{n.name}': give a type to every field or to none")
+    }
+    return null
+}
+
+func p_use(line, word) {
+    let n = node("use", line)
+    n.names = []
+    if ((P_kind == "\{")) {
+        p_next()
+        p_enter()
+        while (not (P_kind == "}") and not (P_kind == "eof")) {
+            if (not (P_kind == "id")) {
+                p_fail("Expected exported name inside use list")
+            }
+            let ut = p_next()
+            p_declare(ut.v, ut.line)
+            append(n.names, ut.v)
+            if (not p_eat(",")) {
+                break
+            }
+        }
+        p_close("}", "Expected '}' after use list")
+        p_expect_word("from", "Expected 'from' after use list")
+    }
+    if (not (P_kind == "str")) {
+        p_fail("Expected string path after {word}")
+    }
+    n.path = p_next().v[0]
+    return n
+}
+
+func p_statement() {
+    let tk = P_tk
+    let line = tk.line
+    let t = tk.t
+    if (t == "func") {
+        p_next()
+        if (not (P_kind == "id")) {
+            p_fail("Expected function name after 'func'")
+        }
+        let nt = p_next()
+        p_declare(nt.v, nt.line)
+        return p_func_rest(nt.v, line, false)
+    }
+    if (t == "let" or t == "const") {
+        p_next()
+        return p_declaration(t == "const", false)
+    }
+    if (t == "export") {
+        p_next()
+        if ((P_kind == "let") or (P_kind == "const")) {
+            let is_const = (P_kind == "const")
+            p_next()
+            return p_declaration(is_const, true)
+        }
+        if ((P_kind == "func")) {
+            p_next()
+            let nt = p_next()
+            p_declare(nt.v, nt.line)
+            return p_func_rest(nt.v, line, true)
+        }
+        if (p_at_data() or (P_kind == "template") or (P_kind == "bloc")) {
+            let word = p_next().v
+            return p_typedef(line, word, true)
+        }
+        p_fail("export can only be used with let, const, func, data or bloc declarations")
+    }
+    if (t == "use" or t == "import") {
+        p_next()
+        return p_use(line, t)
+    }
+    if (p_at_data() or t == "template" or t == "bloc") {
+        p_next()
+        return p_typedef(line, tk.v, false)
+    }
+    if (t == "\{") {
+        p_next()
+        let n = node("block", line)
+        n.body = p_block()
+        return n
+    }
+    if (t == "unsafe") {
+        p_next()
+        p_eat("nl")
+        p_expect("\{", "Expected '\{' after unsafe")
+        let n = node("unsafe", line)
+        n.body = p_block()
+        return n
+    }
+    if (t == "return") {
+        p_next()
+        let n = node("return", line)
+        n.e = null
+        if (not (P_kind == "}") and not (P_kind == "nl") and not (P_kind == "eof")) {
+            n.e = p_expr()
+        }
+        return n
+    }
+    if (t == "break") {
+        p_next()
+        return node("break", line)
+    }
+    if (t == "continue") {
+        p_next()
+        return node("continue", line)
+    }
+    if (t == "if") {
+        p_next()
+        return p_if(line)
+    }
+    if (t == "while") {
+        p_next()
+        let cond = p_cond_paren("while")
+        p_eat("nl")
+        p_expect("\{", "Expected '\{'")
+        let n = node("while", line)
+        n.cond = cond
+        n.body = p_block()
+        return n
+    }
+    if (t == "for") {
+        p_next()
+        return p_for(line)
+    }
+    if (t == "switch") {
+        p_next()
+        return p_switch(line)
+    }
+    return p_simple(line)
+}
+
+export func parse_program(toks) {
+    P_toks = toks
+    P_pos = 0
+    P_depth = 0
+    P_scopes = [{}]
+    p_sync()
+    let stmts = []
+    while (not (P_kind == "eof")) {
+        if (p_eat("nl")) {
+            continue
+        }
+        append(stmts, p_statement())
+    }
+    return stmts
+}

@@ -1,0 +1,1467 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# emit_llvm.zu: the LLVM IR backend: expressions, statements, functions and modules.
+#
+# It calls the runtime
+# (compiler/runtime/zue_rt_*.zu) through its pointer entry points (lvp_*). Every
+# expression compiles to the name of a pointer to an LV; arguments are hoisted into
+# slots so the order of evaluation is exactly the order of the source.
+
+use { die, path_dir, path_join, path_norm, split_lines } from "util.zu"
+use { lex } from "lexer.zu"
+use { parse_program } from "parser.zu"
+use { MODULES, MOD_LIST, uid } from "shared.zu"
+use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analysis.zu"
+use { LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_KSTRS, LL_MODDECLS } from "ll_state.zu"
+use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.zu"
+use { ll_call_out, ll_char, ll_condbr, ll_copy, ll_cstr, ll_float, ll_gname, ll_int } from "ll_state.zu"
+use { ll_kstr, ll_label, ll_mark, ll_new_ctx, ll_new_label, ll_null, ll_reg } from "ll_state.zu"
+use { ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } from "ll_state.zu"
+use { at_top, cap_cell, declare, find_local_index, pop_scope, push_scope, resolve, run_defers } from "ll_scope.zu"
+use { declare_typed, find_local, var_get, var_set } from "ll_scope.zu"
+use { box_raw, ty_load, ty_store, unbox_checked, uses_address } from "ll_unbox.zu"
+use { lit_int, skind, tex, tex_step } from "ll_typed.zu"
+use { check_program } from "check.zu"
+use { ST } from "state.zu"
+
+let LL_BINOPS = {
+    "+": "lvp_add_fast", "-": "lvp_sub_fast", "*": "lvp_mul_fast", "/": "lvp_div", "%": "lvp_mod",
+    "==": "lvp_eq_fast", "!=": "lvp_ne_fast", "<": "lvp_lt_fast", "<=": "lvp_le_fast",
+    ">": "lvp_gt_fast", ">=": "lvp_ge_fast",
+    "&": "lvp_band", "|": "lvp_bor", "^": "lvp_bxor", "<<": "lvp_shl", ">>": "lvp_shr"
+}
+let LL_VALUE_CALL = {
+    "+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod", "<": "lt", "<=": "le",
+    ">": "gt", ">=": "ge", "==": "eq", "!=": "ne", "&": "band", "|": "bor", "^": "bxor",
+    "<<": "shl", ">>": "shr"
+}
+let LL_FLOAT_ARITH = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv"}
+let LL_FLOAT_COMPARE = {"==": "oeq", "!=": "une", "<": "olt", "<=": "ole", ">": "ogt", ">=": "oge"}
+let LL_INT_BITWISE = {"&": "and", "|": "or", "^": "xor"}
+
+let LL_INT_ARITH = {"+": "sadd", "-": "ssub", "*": "smul"}
+let LL_INT_DIVIDE = {"/": "sdiv", "%": "srem"}
+let LL_INT_COMPARE = {"==": "eq", "!=": "ne", "<": "slt", "<=": "sle", ">": "sgt", ">=": "sge"}
+
+# Integer operations are done in line when both operands are ints (tag 2) and an arithmetic
+# result does not overflow. Everything else, including the errors, goes to the runtime call.
+# Constant operands are folded by LLVM because their tags are known.
+func ll_binop(op, a, b) {
+    let arith = LL_INT_ARITH[op]
+    let compare = LL_INT_COMPARE[op]
+    let divide = LL_INT_DIVIDE[op]
+    let bitwise = LL_INT_BITWISE[op]
+    if (arith == null and compare == null and divide == null and bitwise == null) {
+        return ll_call_out(LL_BINOPS[op], "ptr {a}, ptr {b}")
+    }
+    let t = ll_slot()
+    let ta = ll_reg()
+    let tb = ll_reg()
+    ll("{ta} = load i64, ptr {a}")
+    ll("{tb} = load i64, ptr {b}")
+    let ia = ll_reg()
+    let ib = ll_reg()
+    ll("{ia} = icmp eq i64 {ta}, 2")
+    ll("{ib} = icmp eq i64 {tb}, 2")
+    let both = ll_reg()
+    ll("{both} = and i1 {ia}, {ib}")
+    let fast = ll_new_label("ifast")
+    let fcheck = ll_new_label("fcheck")
+    let slow = ll_new_label("islow")
+    let done = ll_new_label("idone")
+    let float_arith = LL_FLOAT_ARITH[op]
+    let float_compare = LL_FLOAT_COMPARE[op]
+    let float_op = float_arith != null or float_compare != null
+    if (float_op) {
+        ll_condbr(both, fast, fcheck)
+    } else {
+        ll_condbr(both, fast, slow)
+    }
+    ll_label(fast)
+    let pa_ptr = ll_reg()
+    let pb_ptr = ll_reg()
+    ll("{pa_ptr} = getelementptr inbounds i8, ptr {a}, i64 8")
+    ll("{pb_ptr} = getelementptr inbounds i8, ptr {b}, i64 8")
+    let pa = ll_reg()
+    let pb = ll_reg()
+    ll("{pa} = load i64, ptr {pa_ptr}")
+    ll("{pb} = load i64, ptr {pb_ptr}")
+    let out_tag = ll_reg()
+    let out_ptr = ll_reg()
+    ll("{out_ptr} = getelementptr inbounds i8, ptr {t}, i64 8")
+    if (divide != null) {
+        # a divisor of 0 or -1 (the two that raise or overflow) is left to the runtime
+        let shifted = ll_reg()
+        let usable = ll_reg()
+        ll("{shifted} = add i64 {pb}, 1")
+        ll("{usable} = icmp ugt i64 {shifted}, 1")
+        let store_it = ll_new_label("istore")
+        ll_condbr(usable, store_it, slow)
+        ll_label(store_it)
+        let value = ll_reg()
+        ll("{value} = {divide} i64 {pa}, {pb}")
+        ll("store i64 2, ptr {t}")
+        ll("store i64 {value}, ptr {out_ptr}")
+    } else if (bitwise != null) {
+        let value = ll_reg()
+        ll("{value} = {bitwise} i64 {pa}, {pb}")
+        ll("store i64 2, ptr {t}")
+        ll("store i64 {value}, ptr {out_ptr}")
+    } else if (arith != null) {
+        let pair = ll_reg()
+        ll("{pair} = call \{ i64, i1 } @llvm.{arith}.with.overflow.i64(i64 {pa}, i64 {pb})")
+        let value = ll_reg()
+        let overflow = ll_reg()
+        ll("{value} = extractvalue \{ i64, i1 } {pair}, 0")
+        ll("{overflow} = extractvalue \{ i64, i1 } {pair}, 1")
+        let store_it = ll_new_label("istore")
+        ll_condbr(overflow, slow, store_it)
+        ll_label(store_it)
+        ll("store i64 2, ptr {t}")
+        ll("store i64 {value}, ptr {out_ptr}")
+    } else {
+        let flag = ll_reg()
+        let widened = ll_reg()
+        ll("{flag} = icmp {compare} i64 {pa}, {pb}")
+        ll("{widened} = zext i1 {flag} to i64")
+        ll("store i64 1, ptr {t}")
+        ll("store i64 {widened}, ptr {out_ptr}")
+    }
+    ll_br(done)
+    if (float_op) {
+        # Both operands floats: done in line. A result that is not finite, or a zero divisor, goes
+        # to the runtime, which raises the error. Adding 0.0 turns -0.0 into 0.0.
+        ll_label(fcheck)
+        let fa = ll_reg()
+        let fb = ll_reg()
+        ll("{fa} = icmp eq i64 {ta}, 3")
+        ll("{fb} = icmp eq i64 {tb}, 3")
+        let fboth = ll_reg()
+        ll("{fboth} = and i1 {fa}, {fb}")
+        let ffast = ll_new_label("ffast")
+        ll_condbr(fboth, ffast, slow)
+        ll_label(ffast)
+        let fpa_ptr = ll_reg()
+        let fpb_ptr = ll_reg()
+        let fpa = ll_reg()
+        let fpb = ll_reg()
+        let xa = ll_reg()
+        let xb = ll_reg()
+        let fout = ll_reg()
+        ll("{fpa_ptr} = getelementptr inbounds i8, ptr {a}, i64 8")
+        ll("{fpb_ptr} = getelementptr inbounds i8, ptr {b}, i64 8")
+        ll("{fpa} = load i64, ptr {fpa_ptr}")
+        ll("{fpb} = load i64, ptr {fpb_ptr}")
+        ll("{xa} = bitcast i64 {fpa} to double")
+        ll("{xb} = bitcast i64 {fpb} to double")
+        ll("{fout} = getelementptr inbounds i8, ptr {t}, i64 8")
+        if (float_compare != null) {
+            let fflag = ll_reg()
+            let fwide = ll_reg()
+            ll("{fflag} = fcmp {float_compare} double {xa}, {xb}")
+            ll("{fwide} = zext i1 {fflag} to i64")
+            ll("store i64 1, ptr {t}")
+            ll("store i64 {fwide}, ptr {fout}")
+            ll_br(done)
+        } else {
+            let fstore = ll_new_label("fstore")
+            if (op == "/") {
+                let zero = ll_reg()
+                let nonzero = ll_new_label("fdiv")
+                ll("{zero} = fcmp oeq double {xb}, 0.0")
+                ll_condbr(zero, slow, nonzero)
+                ll_label(nonzero)
+            }
+            let fres = ll_reg()
+            let fabsv = ll_reg()
+            let fok = ll_reg()
+            ll("{fres} = {float_arith} double {xa}, {xb}")
+            ll("{fabsv} = call double @llvm.fabs.f64(double {fres})")
+            ll("{fok} = fcmp olt double {fabsv}, 0x7FF0000000000000")
+            ll_condbr(fok, fstore, slow)
+            ll_label(fstore)
+            let fclean = ll_reg()
+            let fbits = ll_reg()
+            ll("{fclean} = fadd double {fres}, 0.0")
+            ll("{fbits} = bitcast double {fclean} to i64")
+            ll("store i64 3, ptr {t}")
+            ll("store i64 {fbits}, ptr {fout}")
+            ll_br(done)
+        }
+    }
+    ll_label(slow)
+    # The slow path passes the operands by value, so no operand slot has its address taken.
+    let sa = ll_reg()
+    let sb = ll_reg()
+    let sa_ptr = ll_reg()
+    let sb_ptr = ll_reg()
+    ll("{sa_ptr} = getelementptr inbounds i8, ptr {a}, i64 8")
+    ll("{sb_ptr} = getelementptr inbounds i8, ptr {b}, i64 8")
+    ll("{sa} = load i64, ptr {sa_ptr}")
+    ll("{sb} = load i64, ptr {sb_ptr}")
+    let sres = ll_reg()
+    let res_tag = ll_reg()
+    let res_val = ll_reg()
+    let res_ptr = ll_reg()
+    ll("{sres} = call %LV @lvv_{LL_VALUE_CALL[op]}(i64 {ta}, i64 {sa}, i64 {tb}, i64 {sb})")
+    ll("{res_tag} = extractvalue %LV {sres}, 0")
+    ll("{res_val} = extractvalue %LV {sres}, 1")
+    ll("store i64 {res_tag}, ptr {t}")
+    ll("{res_ptr} = getelementptr inbounds i8, ptr {t}, i64 8")
+    ll("store i64 {res_val}, ptr {res_ptr}")
+    ll_br(done)
+    ll_label(done)
+    return t
+}
+
+# The i1 for a condition held in slot. A boolean is read in place; anything else goes to the
+# runtime, which reports the error. 1 is the runtime's T_BOOL tag.
+func ll_truth_flag(slot) {
+    let tag = ll_reg()
+    ll("{tag} = load i64, ptr {slot}")
+    let is_bool = ll_reg()
+    ll("{is_bool} = icmp eq i64 {tag}, 1")
+    let bad = ll_new_label("tbad")
+    let ok = ll_new_label("tbool")
+    ll_condbr(is_bool, ok, bad)
+    ll_label(bad)
+    let bad_ptr = ll_reg()
+    let bad_val = ll_reg()
+    let ignored = ll_reg()
+    ll("{bad_ptr} = getelementptr inbounds i8, ptr {slot}, i64 8")
+    ll("{bad_val} = load i64, ptr {bad_ptr}")
+    ll("{ignored} = call i64 @lvv_truth(i64 {tag}, i64 {bad_val})")
+    ll_br(ok)
+    ll_label(ok)
+    let payload = ll_reg()
+    ll("{payload} = getelementptr inbounds i8, ptr {slot}, i64 8")
+    let v = ll_reg()
+    ll("{v} = load i32, ptr {payload}")
+    let flag = ll_reg()
+    ll("{flag} = icmp ne i32 {v}, 0")
+    return flag
+}
+
+# Expressions
+
+func int_literal(n) {
+    return ll_int(lit_int(n))
+}
+
+func ex_list(nodes) {
+    let res = []
+    for (let n in nodes) {
+        append(res, ex(n))
+    }
+    return res
+}
+
+# Reads a global variable. The common case, a defined variable, is a plain load and store; the
+# runtime call is only made (to report the error) when the variable is still undefined. 17 is the
+# runtime's T_UNDEF tag.
+func global_get(name) {
+    let g = ll_gname(name)
+    let t = ll_slot()
+    let tag = ll_reg()
+    ll("{tag} = load i64, ptr {g}")
+    let undefined = ll_reg()
+    ll("{undefined} = icmp eq i64 {tag}, 17")
+    let slow = ll_new_label("gundef")
+    let ok = ll_new_label("gdef")
+    ll_condbr(undefined, slow, ok)
+    ll_label(slow)
+    ll("call void @lvp_gundef(ptr {g}, ptr {ll_cstr(name)})")
+    ll_br(ok)
+    ll_label(ok)
+    ll_copy(t, g)
+    return t
+}
+
+func ex_id(n) {
+    let r = resolve(n.name)
+    if (r.kind == "local") {
+        return var_get(r.v)
+    }
+    if (r.kind == "cap") {
+        let t = ll_slot()
+        ll_copy(t, cap_cell(r.i))
+        return t
+    }
+    if (r.kind == "null") {
+        return ll_null()
+    }
+    if (r.kind == "builtin") {
+        ll_use_builtin(n.name)
+        return ll_call_lv("lv_native", "ptr @lb_{n.name}, ptr {ll_cstr(n.name)}")
+    }
+    ll_reg_global(n.name)
+    ll_mark(n.line)
+    return global_get(n.name)
+}
+
+func call_builtin(name, argv) {
+    ll_use_native(name)
+    let arr = ll_args_array(argv)
+    return ll_call_lv("lb_{name}", "ptr @nf_{name}, i32 {len(argv)}, ptr {arr}")
+}
+
+func ex_call(n) {
+    ll_mark(n.line)
+    let callee = n.callee
+    if (callee.k == "id") {
+        if (callee.name == "defer" and len(n.args) == 1 and n.args[0].k == "call") {
+            return ex_defer(n)
+        }
+        if ((callee.name == "address_of" or callee.name == "addr") and resolve(callee.name).kind != "local") {
+            return ex_address_of(n)
+        }
+        if (callee.name == "append" and len(n.args) == 2 and resolve("append").kind == "builtin") {
+            let argv = ex_list(n.args)
+            ll("call void @lvp_container_check(ptr {argv[1]})")
+            ll_mark(n.line)
+            return call_builtin("append", argv)
+        }
+        let r = resolve(callee.name)
+        if (r.kind == "builtin") {
+            let argv = ex_list(n.args)
+            ll_mark(n.line)
+            return call_builtin(callee.name, argv)
+        }
+    }
+    let f = ex(callee)
+    let argv = ex_list(n.args)
+    ll_mark(n.line)
+    let arr = ll_args_array(argv)
+    return ll_call_out("lvp_call", "ptr {f}, i32 {len(argv)}, ptr {arr}")
+}
+
+# address_of(name): a pointer to the variable's own storage.
+func ex_address_of(n) {
+    if (len(n.args) == 1 and n.args[0].k == "id") {
+        let name = n.args[0].name
+        let r = resolve(name)
+        ll_mark(n.line)
+        if (r.kind == "local") {
+            if (r.v.cell) {
+                let cell = ll_reg()
+                ll("{cell} = load ptr, ptr {r.v.c}")
+                return ll_call_lv("lv_addr", "ptr {cell}")
+            }
+            return ll_call_lv("lv_addr", "ptr {r.v.c}")
+        }
+        if (r.kind == "cap") {
+            return ll_call_lv("lv_addr", "ptr {cap_cell(r.i)}")
+        }
+        if (r.kind == "global") {
+            ll_reg_global(name)
+            return ll_call_lv("lv_addr", "ptr {ll_gname(name)}")
+        }
+    }
+    ll_mark(n.line)
+    return ll_call_lv("lv_addr_invalid", "i32 {len(n.args)}")
+}
+
+func copy_slot(src) {
+    let t = ll_slot()
+    ll_copy(t, src)
+    return t
+}
+
+# defer(f(args)): the callee and arguments are captured now and called when the scope exits.
+func ex_defer(n) {
+    if (len(n.args) != 1 or n.args[0].k != "call") {
+        die("Compile Error", n.line, "defer expects a call, like defer(close(f))")
+    }
+    let inner = n.args[0]
+    let f = copy_slot(ex(inner.callee))
+    let saved = []
+    for (let a in ex_list(inner.args)) {
+        append(saved, copy_slot(a))
+    }
+    append(ST.ctx.defers[len(ST.ctx.defers) - 1], {"kind": "call", "f": f, "args": saved})
+    return ll_null()
+}
+
+func ex_bin(n) {
+    if (n.op == "and" or n.op == "or") {
+        let a = ex(n.l)
+        ll_mark(n.line)
+        let t = copy_slot(a)
+        let rhs = ll_new_label("rhs")
+        let done = ll_new_label("done")
+        let flag = ll_truth_flag(t)
+        if (n.op == "and") {
+            ll_condbr(flag, rhs, done)
+        } else {
+            ll_condbr(flag, done, rhs)
+        }
+        ll_label(rhs)
+        let b = ex(n.r)
+        ll_copy(t, b)
+        ll_br(done)
+        ll_label(done)
+        return t
+    }
+    let a = ex(n.l)
+    let b = ex(n.r)
+    ll_mark(n.line)
+    if (n.op == "**") {
+        return call_builtin("pow", [a, b])
+    }
+    return ll_binop(n.op, a, b)
+}
+
+# x++ and x-- as a value give the old value; ++x and --x give the new one. as_statement skips
+# keeping the old value.
+func ex_incdec(n, as_statement) {
+    ll_mark(n.line)
+    let op = "+"
+    if (n.op == "--") {
+        op = "-"
+    }
+    let r = resolve(n.name)
+    if (r.kind == "local" and (r.v.ty == "int" or r.v.ty == "float")) {
+        let kind = r.v.ty
+        let raw = ty_load(r.v)
+        let stepped = tex_step(kind, op, raw)
+        ty_store(r.v, stepped)
+        if (as_statement) {
+            return ll_null()
+        }
+        if (n.prefix == true) {
+            return box_raw(kind, stepped)
+        }
+        return box_raw(kind, raw)
+    }
+    let cur = ex_id(n)
+    let old = null
+    if (n.prefix != true and not as_statement) {
+        old = copy_slot(cur)
+    }
+    let one = ll_int("1")
+    let t = ll_binop(op, cur, one)
+    store_name(n.name, t)
+    if (old != null) {
+        return old
+    }
+    return t
+}
+
+func ex_tmpl(n) {
+    let items = []
+    for (let part in n.parts) {
+        if (type(part) == "string") {
+            if (len(part) > 0) {
+                append(items, ll_kstr(part))
+            }
+        } else {
+            append(items, ex(part))
+        }
+    }
+    ll_mark(n.line)
+    let arr = ll_args_array(items)
+    return ll_call_lv("lv_interp", "i32 {len(items)}, ptr {arr}")
+}
+
+func ex(n) {
+    let k = n.k
+    if (k == "num") {
+        return int_literal(n)
+    }
+    if (k == "float") {
+        return ll_float(n.v)
+    }
+    if (k == "str") {
+        return ll_kstr(n.v)
+    }
+    if (k == "char") {
+        return ll_char(n.v)
+    }
+    if (k == "bool") {
+        return ll_bool(n.v)
+    }
+    if (k == "id") {
+        return ex_id(n)
+    }
+    if (k == "tmpl") {
+        return ex_tmpl(n)
+    }
+    if (k == "bin" or k == "not") {
+        let sk = skind(n)
+        if (sk != null) {
+            return box_raw(sk, tex(n))
+        }
+    }
+    if (k == "bin") {
+        return ex_bin(n)
+    }
+    if (k == "not") {
+        let a = ex(n.e)
+        ll_mark(n.line)
+        return ll_call_out("lvp_not", "ptr {a}")
+    }
+    if (k == "call") {
+        return ex_call(n)
+    }
+    if (k == "index") {
+        let t = ex(n.target)
+        let i = ex(n.index)
+        ll_mark(n.line)
+        return ll_call_out("lvp_index", "ptr {t}, ptr {i}")
+    }
+    if (k == "field") {
+        let t = ex(n.target)
+        ll_mark(n.line)
+        return ll_call_out("lvp_field", "ptr {t}, ptr {ll_kstr(n.field)}")
+    }
+    if (k == "list") {
+        let items = ex_list(n.items)
+        if (len(items) == 0) {
+            return ll_call_lv("lv_list_new", "i64 0")
+        }
+        for (let it in items) {
+            ll("call void @lvp_container_check(ptr {it})")
+        }
+        let arr = ll_args_array(items)
+        return ll_call_lv("lv_list_of", "i32 {len(items)}, ptr {arr}")
+    }
+    if (k == "map") {
+        let t = ll_call_lv("lv_map_new", "")
+        for (let i = 0; i < len(n.keys); i++) {
+            let v = ex(n.vals[i])
+            ll("call void @lvp_container_check(ptr {v})")
+            ll("call void @lvp_map_put(ptr {t}, ptr {ll_kstr(n.keys[i])}, ptr {v})")
+        }
+        return t
+    }
+    if (k == "func") {
+        return compile_function(n)
+    }
+    if (k == "incdec") {
+        return ex_incdec(n, false)
+    }
+    if (k == "box") {
+        let size = ex(n.size)
+        ll_mark(n.line)
+        let id = box_scope_id()
+        # A box whose size is written as a number lives in the function's own stack frame.
+        if (n.size.k == "num" and len(n.size.v) <= 4) {
+            let bytes = int(n.size.v)
+            if (bytes >= 1 and bytes <= 4096) {
+                let mem = ll_alloca("[{bytes} x i8]")
+                return ll_call_out("lvp_box_new_stack", "ptr {size}, i64 {id}, ptr {mem}")
+            }
+        }
+        return ll_call_out("lvp_box_new", "ptr {size}, i64 {id}")
+    }
+    die("Compile Error", n.line, "cannot compile expression of kind '{k}'")
+}
+
+# The id that ties a box to the scope it was created in, as an i64 operand; 0 at the top
+# level, where boxes live until freed.
+func box_scope_id() {
+    if (ST.ctx.is_main and len(ST.ctx.scopes) == 1) {
+        return "0"
+    }
+    let top = len(ST.ctx.defers) - 1
+    for (let d in ST.ctx.defers[top]) {
+        if (d.kind == "boxes") {
+            let loaded = ll_reg()
+            ll("{loaded} = load i64, ptr {d.slot}")
+            return loaded
+        }
+    }
+    let slot = ll_alloca("i64")
+    let id = ll_reg()
+    ll("{id} = call i64 @lv_scope_new()")
+    ll("store i64 {id}, ptr {slot}")
+    append(ST.ctx.defers[top], {"kind": "boxes", "slot": slot})
+    return id
+}
+
+# Functions
+
+# Puts a finished function together: signature, entry-block allocas, then the body.
+func finish_function(header, ctx) {
+    let lines = [header, "entry:"]
+    for (let a in ctx.allocas) {
+        append(lines, a)
+    }
+    for (let o in ctx.out) {
+        append(lines, o)
+    }
+    append(lines, "}")
+    append(LL_FUNCS, join(lines, "\n"))
+}
+
+func compile_function(n) {
+    let fid = uid()
+    let fname = "fn_{fid}"
+    let parent = ST.ctx
+
+    let caps = []
+    let capmap = {}
+    for (let nm in used_names(n)) {
+        let r = resolve(nm)
+        if (r.kind == "local") {
+            capmap[nm] = len(caps)
+            let cell = ll_reg()
+            ll("{cell} = load ptr, ptr {r.v.c}")
+            append(caps, cell)
+        } else if (r.kind == "cap") {
+            capmap[nm] = len(caps)
+            append(caps, cap_cell(r.i))
+        }
+    }
+
+    let child = ll_new_ctx(false)
+    let nested = {}
+    walk_nested(n.body, nested)
+    walk_nested(n.defaults, nested)
+    child.nested = nested
+    child.capmap = capmap
+    child.no_unbox = uses_address(n.body) or uses_address(n.defaults)
+    ST.ctx = child
+
+    let min_args = 0
+    for (let i = 0; i < len(n.params); i++) {
+        if (n.defaults[i] == null) {
+            min_args = i + 1
+        }
+    }
+    ll("store ptr @mod_{ST.mod.id}, ptr @lv_pos_mod")
+    ll("call void @lv_arity(ptr %self, i32 %argc, i32 {min_args}, i32 {len(n.params)})")
+    for (let i = 0; i < len(n.params); i++) {
+        let slot = ll_reg()
+        ll("{slot} = getelementptr inbounds %LV, ptr %argv, i64 {i}")
+        let pk = null
+        if (n.ptypes != null and (n.ptypes[i] == "int" or n.ptypes[i] == "float" or n.ptypes[i] == "bool")) {
+            if (not child.no_unbox and nested[n.params[i]] == null) {
+                pk = n.ptypes[i]
+            }
+        }
+        if (n.defaults[i] == null and pk != null) {
+            declare_typed(n.params[i], pk, unbox_checked(slot, pk, n.params[i]))
+        } else if (n.defaults[i] == null) {
+            declare(n.params[i], slot)
+        } else {
+            let v = declare(n.params[i], ll_null())
+            let given = ll_reg()
+            ll("{given} = icmp sgt i32 %argc, {i}")
+            let yes = ll_new_label("arg")
+            let no = ll_new_label("dflt")
+            let done = ll_new_label("argend")
+            ll_condbr(given, yes, no)
+            ll_label(yes)
+            var_set(v, slot)
+            ll_br(done)
+            ll_label(no)
+            let d = ex(n.defaults[i])
+            var_set(v, d)
+            ll_br(done)
+            ll_label(done)
+        }
+    }
+    for (let s in n.body) {
+        st(s)
+    }
+    run_defers(0)
+    ll("ret %LV zeroinitializer")
+    finish_function("define internal %LV @{fname}(ptr %self, i32 %argc, ptr %argv) \{", child)
+    ST.ctx = parent
+
+    let name = "<anonymous>"
+    if (n.name != null) {
+        name = n.name
+    }
+    if (len(caps) == 0) {
+        return ll_call_lv("lv_closure", "ptr @{fname}, ptr {ll_cstr(name)}, i32 0, ptr null")
+    }
+    let arr = ll_alloca("[{len(caps)} x ptr]")
+    for (let i = 0; i < len(caps); i++) {
+        let p = ll_reg()
+        ll("{p} = getelementptr inbounds [{len(caps)} x ptr], ptr {arr}, i64 0, i64 {i}")
+        ll("store ptr {caps[i]}, ptr {p}")
+    }
+    return ll_call_lv("lv_closure", "ptr @{fname}, ptr {ll_cstr(name)}, i32 {len(caps)}, ptr {arr}")
+}
+
+func global_in_function() {
+    if (ST.ctx.is_main) {
+        return 0
+    }
+    return 1
+}
+
+# Whether a value stored into name would leave the innermost unsafe block: the variable was
+# declared outside it.
+func outlives_unsafe(name) {
+    let marks = ST.ctx.unsafe_marks
+    if (len(marks) == 0) {
+        return false
+    }
+    let idx = find_local_index(name)
+    return idx >= 0 and idx < marks[len(marks) - 1]
+}
+
+# Only pointers and boxes need the checks in lvp_global_store_check. Null, bool, int and float
+# (tags 0 to 3) skip the call.
+func global_store_check(value, in_function) {
+    let tag = ll_reg()
+    let plain = ll_reg()
+    ll("{tag} = load i64, ptr {value}")
+    ll("{plain} = icmp ule i64 {tag}, 3")
+    let check = ll_new_label("gcheck")
+    let done = ll_new_label("gchecked")
+    ll_condbr(plain, done, check)
+    ll_label(check)
+    let check_ptr = ll_reg()
+    let check_val = ll_reg()
+    ll("{check_ptr} = getelementptr inbounds i8, ptr {value}, i64 8")
+    ll("{check_val} = load i64, ptr {check_ptr}")
+    ll("call void @lvv_global_store_check(i64 {tag}, i64 {check_val}, i64 {in_function})")
+    ll_br(done)
+    ll_label(done)
+}
+
+func store_name(name, value) {
+    let r = resolve(name)
+    if (r.kind == "local") {
+        if (outlives_unsafe(name)) {
+            ll("call void @lvp_ptr_escape_check(ptr {value})")
+        }
+        var_set(r.v, value)
+    } else if (r.kind == "cap") {
+        ll_copy(cap_cell(r.i), value)
+    } else {
+        ll_reg_global(name)
+        global_store_check(value, global_in_function())
+        ll_copy(ll_gname(name), value)
+    }
+}
+
+# Statements
+
+func st_block(stmts) {
+    push_scope()
+    for (let s in stmts) {
+        st(s)
+    }
+    pop_scope()
+}
+
+# A value read from a variable, field or element is copied when it is a box: assigning a box makes
+# a new box with the same bytes, so the two never share storage. A box passed to a function is
+# lent and not copied.
+func copy_if_box(node, v) {
+    if (node.k == "id" or node.k == "field" or node.k == "index") {
+        let t = copy_slot(v)
+        ll("call void @lvp_box_assign_copy(ptr {t}, i64 {box_scope_id()})")
+        return t
+    }
+    return v
+}
+
+# The scalar kind a variable is kept raw as, or null: the checker proved the type, nothing captures
+# the variable and the function never takes an address.
+func raw_kind(n) {
+    let t = n.sty
+    if (ST.ctx.no_unbox or (t != "int" and t != "float" and t != "bool")) {
+        return null
+    }
+    if (ST.ctx.nested[n.name] != null) {
+        return null
+    }
+    return t
+}
+
+func st_let(n) {
+    ll_mark(n.line)
+    if (not at_top() and n.init != null) {
+        let kind = raw_kind(n)
+        if (kind != null) {
+            let raw = null
+            if (skind(n.init) == kind) {
+                raw = tex(n.init)
+            } else {
+                raw = unbox_checked(ex(n.init), kind, n.name)
+            }
+            declare_typed(n.name, kind, raw)
+            return null
+        }
+    }
+    let init_ptr = ll_null()
+    if (n.init != null) {
+        init_ptr = copy_if_box(n.init, ex(n.init))
+    }
+    if (at_top()) {
+        ll_reg_global(n.name)
+        global_store_check(init_ptr, 0)
+        ll_copy(ll_gname(n.name), init_ptr)
+    } else {
+        declare(n.name, init_ptr)
+    }
+}
+
+func st_funcdef(n) {
+    ll_mark(n.line)
+    if (n.name == null) {
+        ex(n)
+        return null
+    }
+    if (at_top()) {
+        ll_reg_global(n.name)
+        let f = compile_function(n)
+        ll_copy(ll_gname(n.name), f)
+    } else {
+        let v = declare(n.name, ll_null())
+        let f = compile_function(n)
+        var_set(v, f)
+    }
+}
+
+func st_setidx(n) {
+    let t = ex(n.target)
+    let i = ex(n.index)
+    let v = ex(n.e)
+    ll_mark(n.line)
+    if (n.op != null) {
+        let cur = ll_call_out("lvp_index", "ptr {t}, ptr {i}")
+        v = ll_binop(n.op, cur, v)
+    }
+    ll("call void @lvp_index_set(ptr {t}, ptr {i}, ptr {v})")
+}
+
+# The i1 for a condition. A condition computed raw needs no LV; any other goes through the check
+# that it is a boolean.
+func cond_flag(e, line) {
+    if (skind(e) == "bool") {
+        ll_mark(line)
+        return tex(e)
+    }
+    let c = ex(e)
+    ll_mark(line)
+    return ll_truth_flag(c)
+}
+
+func st_if(n) {
+    let flag = cond_flag(n.cond, n.line)
+    let yes = ll_new_label("then")
+    let no = ll_new_label("else")
+    let done = ll_new_label("endif")
+    ll_condbr(flag, yes, no)
+    ll_label(yes)
+    st_block(n.then)
+    ll_br(done)
+    ll_label(no)
+    st_block(n.els)
+    ll_br(done)
+    ll_label(done)
+}
+
+func loop_push(kind, brk, cont) {
+    let l = {"kind": kind, "id": uid(), "brk": brk, "cont": cont, "depth": len(ST.ctx.scopes)}
+    append(ST.ctx.loops, l)
+    return l
+}
+
+func loop_pop() {
+    remove(ST.ctx.loops, len(ST.ctx.loops) - 1)
+}
+
+func st_while(n) {
+    let cond = ll_new_label("wcond")
+    let body = ll_new_label("wbody")
+    let done = ll_new_label("wend")
+    loop_push("loop", done, cond)
+    ll_br(cond)
+    ll_label(cond)
+    ll_condbr(cond_flag(n.cond, n.line), body, done)
+    ll_label(body)
+    st_block(n.body)
+    ll_br(cond)
+    ll_label(done)
+    loop_pop()
+}
+
+func st_for(n) {
+    push_scope()
+    if (n.init != null) {
+        st(n.init)
+    }
+    let cond = ll_new_label("fcond")
+    let body = ll_new_label("fbody")
+    let step = ll_new_label("fstep")
+    let done = ll_new_label("fend")
+    loop_push("for", done, step)
+    ll_br(cond)
+    ll_label(cond)
+    if (n.cond == null) {
+        ll_br(body)
+    } else {
+        ll_condbr(cond_flag(n.cond, n.line), body, done)
+    }
+    ll_label(body)
+    st_block(n.body)
+    ll_br(step)
+    ll_label(step)
+    if (n.incr != null) {
+        st(n.incr)
+    }
+    ll_br(cond)
+    ll_label(done)
+    loop_pop()
+    pop_scope()
+}
+
+func st_forin(n) {
+    push_scope()
+    let it = ex(n.iter)
+    ll_mark(n.line)
+    let prepared = ll_call_out("lvp_iter_prepare", "ptr {it}")
+    let count = ll_reg()
+    ll("{count} = call i64 @lvp_iter_len(ptr {prepared})")
+    let idx = ll_alloca("i64")
+    ll("store i64 0, ptr {idx}")
+    let cond = ll_new_label("icond")
+    let body = ll_new_label("ibody")
+    let step = ll_new_label("istep")
+    let done = ll_new_label("iend")
+    loop_push("loop", done, step)
+    ll_br(cond)
+    ll_label(cond)
+    let cur = ll_reg()
+    ll("{cur} = load i64, ptr {idx}")
+    let more = ll_reg()
+    ll("{more} = icmp slt i64 {cur}, {count}")
+    ll_condbr(more, body, done)
+    ll_label(body)
+    push_scope()
+    ll_mark(n.line)
+    let at = ll_reg()
+    ll("{at} = load i64, ptr {idx}")
+    let item = ll_call_out("lvp_iter_at", "ptr {prepared}, i64 {at}")
+    let kind = raw_kind(n)
+    if (kind != null) {
+        declare_typed(n.name, kind, unbox_checked(item, kind, n.name))
+    } else {
+        declare(n.name, item)
+    }
+    for (let s in n.body) {
+        st(s)
+    }
+    pop_scope()
+    ll_br(step)
+    ll_label(step)
+    let old = ll_reg()
+    ll("{old} = load i64, ptr {idx}")
+    let next = ll_reg()
+    ll("{next} = add i64 {old}, 1")
+    ll("store i64 {next}, ptr {idx}")
+    ll_br(cond)
+    ll_label(done)
+    loop_pop()
+    pop_scope()
+}
+
+func st_scoped(stmts) {
+    push_scope()
+    for (let s in stmts) {
+        st(s)
+    }
+    pop_scope()
+}
+
+func st_switch(n) {
+    push_scope()
+    let sv = copy_slot(ex(n.e))
+    let done = ll_new_label("swend")
+    loop_push("switch", done, null)
+    for (let c in n.cases) {
+        let cv = ex(c.value)
+        ll_mark(c.line)
+        let r = ll_reg()
+        ll("{r} = call i32 @lvp_eq_b(ptr {sv}, ptr {cv})")
+        let flag = ll_reg()
+        ll("{flag} = icmp ne i32 {r}, 0")
+        let yes = ll_new_label("case")
+        let no = ll_new_label("next")
+        ll_condbr(flag, yes, no)
+        ll_label(yes)
+        st_scoped(c.body)
+        ll_br(done)
+        ll_label(no)
+    }
+    st_scoped(n.dflt)
+    ll_br(done)
+    ll_label(done)
+    loop_pop()
+    pop_scope()
+}
+
+func st_unsafe(n) {
+    if (len(ST.ctx.unsafe_marks) > 0) {
+        die("Syntax Error", n.line, "unsafe blocks cannot be nested: the enclosing unsafe block already allows unsafe operations")
+    }
+    ll_mark(n.line)
+    ll("call void @lv_unsafe_begin()")
+    push_scope()
+    # Variables in scopes below this index were declared outside the block.
+    append(ST.ctx.unsafe_marks, len(ST.ctx.scopes) - 1)
+    append(ST.ctx.defers[len(ST.ctx.defers) - 1], {"kind": "unsafe"})
+    for (let s in n.body) {
+        st(s)
+    }
+    remove(ST.ctx.unsafe_marks, len(ST.ctx.unsafe_marks) - 1)
+    pop_scope()
+}
+
+func st_break(n) {
+    if (len(ST.ctx.loops) == 0) {
+        die("Compile Error", n.line, "break statement outside loop")
+    }
+    let lp = ST.ctx.loops[len(ST.ctx.loops) - 1]
+    run_defers(lp.depth)
+    ll_br(lp.brk)
+}
+
+func st_continue(n) {
+    let i = len(ST.ctx.loops) - 1
+    while (i >= 0 and ST.ctx.loops[i].kind == "switch") {
+        i -= 1
+    }
+    if (i < 0) {
+        die("Compile Error", n.line, "continue statement outside loop")
+    }
+    let lp = ST.ctx.loops[i]
+    run_defers(lp.depth)
+    ll_br(lp.cont)
+}
+
+func st_return(n) {
+    ll_mark(n.line)
+    let v = ll_null()
+    if (n.e != null) {
+        v = ex(n.e)
+    }
+    if (ST.ctx.is_main) {
+        run_defers(0)
+        ll("ret void")
+        ST.ctx.dead = true
+    } else {
+        v = copy_slot(v)
+        if (len(ST.ctx.unsafe_marks) > 0) {
+            ll("call void @lvp_ptr_escape_check(ptr {v})")
+        }
+        let where_text = ll_cstr("returned from a function")
+        # Only a box (tag 15) can be wrong here; the check takes the value by value.
+        let ret_tag = ll_reg()
+        let is_box = ll_reg()
+        ll("{ret_tag} = load i64, ptr {v}")
+        ll("{is_box} = icmp eq i64 {ret_tag}, 15")
+        let box_check = ll_new_label("rbox")
+        let box_done = ll_new_label("rchecked")
+        ll_condbr(is_box, box_check, box_done)
+        ll_label(box_check)
+        let ret_ptr = ll_reg()
+        let ret_val = ll_reg()
+        ll("{ret_ptr} = getelementptr inbounds i8, ptr {v}, i64 8")
+        ll("{ret_val} = load i64, ptr {ret_ptr}")
+        ll("call void @lvv_box_escape_check(i64 {ret_tag}, i64 {ret_val}, ptr {where_text})")
+        ll_br(box_done)
+        ll_label(box_done)
+        run_defers(0)
+        let r = ll_reg()
+        ll("{r} = load %LV, ptr {v}")
+        ll("ret %LV {r}")
+        ST.ctx.dead = true
+    }
+}
+
+func st(n) {
+    let k = n.k
+    if (k == "let") {
+        st_let(n)
+    } else if (k == "group") {
+        for (let s in n.items) {
+            st(s)
+        }
+    } else if (k == "func") {
+        st_funcdef(n)
+    } else if (k == "assign") {
+        ll_mark(n.line)
+        let r = resolve(n.name)
+        if (r.kind == "local" and r.v.ty != null and skind(n.e) == r.v.ty) {
+            ty_store(r.v, tex(n.e))
+        } else {
+            let v = copy_if_box(n.e, ex(n.e))
+            store_name(n.name, v)
+        }
+    } else if (k == "setidx") {
+        st_setidx(n)
+    } else if (k == "return") {
+        st_return(n)
+    } else if (k == "break") {
+        st_break(n)
+    } else if (k == "continue") {
+        st_continue(n)
+    } else if (k == "if") {
+        st_if(n)
+    } else if (k == "while") {
+        st_while(n)
+    } else if (k == "for") {
+        st_for(n)
+    } else if (k == "forin") {
+        st_forin(n)
+    } else if (k == "switch") {
+        st_switch(n)
+    } else if (k == "use") {
+        st_use(n)
+    } else if (k == "unsafe") {
+        st_unsafe(n)
+    } else if (k == "typedef") {
+        ll_mark(n.line)
+    } else if (k == "block") {
+        st_scoped(n.body)
+    } else if (k == "incdec") {
+        ex_incdec(n, true)
+    } else {
+        ll_mark(n.line)
+        ex(n)
+    }
+}
+
+# Modules
+
+func new_module(display, canon) {
+    let id = len(MOD_LIST)
+    let m = {"id": id, "path": display, "canon": canon, "prefix": "g_", "globals": {},
+             "exports": [], "state": "compiling"}
+    if (id > 0) {
+        m.prefix = "m{id}_"
+    }
+    append(MOD_LIST, m)
+    MODULES[canon] = m
+    append(LL_MODDECLS, "@mod_{id}_state = internal global i32 0")
+    return m
+}
+
+func decl_module_source(m, lines) {
+    let entries = []
+    for (let line_text in lines) {
+        append(entries, "ptr {ll_cstr(line_text)}")
+    }
+    append(entries, "ptr null")
+    let body = join(entries, ", ")
+    append(LL_MODDECLS, "@srcl_{m.id} = internal constant [{len(entries)} x ptr] [{body}]")
+    append(LL_MODDECLS, "@mod_{m.id} = internal constant %LvModule \{ ptr {ll_cstr(m.path)}, ptr @srcl_{m.id}, i32 {len(lines)} }")
+}
+
+func prescan_globals(stmts) {
+    for (let s in stmts) {
+        if (s.k == "let") {
+            ll_reg_global(s.name)
+        } else if (s.k == "func" and s.name != null) {
+            ll_reg_global(s.name)
+        } else if (s.k == "group") {
+            prescan_globals(s.items)
+        }
+    }
+}
+
+# data, template and bloc names exist before the program starts (main file only).
+func define_types(stmts) {
+    for (let s in stmts) {
+        if (s.k == "typedef") {
+            ll_reg_global(s.name)
+            let fields = "null"
+            if (len(s.fields) > 0) {
+                let names = []
+                for (let f in s.fields) {
+                    append(names, "ptr {ll_cstr(f)}")
+                }
+                fields = "@fld{uid()}"
+                let joined = join(names, ", ")
+                append(LL_MODDECLS, "{fields} = private constant [{len(names)} x ptr] [{joined}]")
+            }
+            # The declared field types as text, "null" for a field without one; null when none has a type.
+            let ftypes = "null"
+            let typed = false
+            let type_texts = []
+            for (let ft in s.ftypes) {
+                if (ft == null) {
+                    append(type_texts, "ptr null")
+                } else {
+                    typed = true
+                    # The runtime checks the container only; list<int> is judged at compile time.
+                    let lt = index_of(ft, "<")
+                    if (lt >= 0) {
+                        ft = slice(ft, 0, lt)
+                    }
+                    append(type_texts, "ptr {ll_cstr(ft)}")
+                }
+            }
+            if (typed) {
+                ftypes = "@fty{uid()}"
+                let joined_types = join(type_texts, ", ")
+                append(LL_MODDECLS, "{ftypes} = private constant [{len(type_texts)} x ptr] [{joined_types}]")
+            }
+            ll_mark(s.line)
+            let r = ll_reg()
+            if (s.is_bloc and typed) {
+                ll("{r} = call %LV @lv_define_bloc_typed(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields}, ptr {ftypes})")
+            } else if (s.is_bloc) {
+                ll("{r} = call %LV @lv_define_bloc(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields})")
+            } else {
+                let template_flag = 0
+                if (s.is_template) {
+                    template_flag = 1
+                }
+                if (typed) {
+                    ll("{r} = call %LV @lv_define_data_typed(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields}, i32 {template_flag}, ptr {ftypes})")
+                } else {
+                    ll("{r} = call %LV @lv_define_data(ptr {ll_cstr(s.name)}, i32 {len(s.fields)}, ptr {fields}, i32 {template_flag})")
+                }
+            }
+            ll("store %LV {r}, ptr {ll_gname(s.name)}")
+        }
+    }
+}
+
+# Compiles the statements of module m into a function named `fname`.
+func compile_module_body(m, stmts, fname) {
+    ST.ctx = ll_new_ctx(true)
+    ST.ctx.no_unbox = uses_address(stmts)
+    walk_nested(stmts, ST.ctx.nested)
+    prescan_globals(stmts)
+    ll("store ptr @mod_{m.id}, ptr @lv_pos_mod")
+    define_types(stmts)
+    for (let s in stmts) {
+        st(s)
+    }
+    if (m.id == 0 and has_zero_arg_main(stmts)) {
+        let sink = ll_slot()
+        let main_var = ll_gname("main")
+        ll("call void @lvp_call(ptr {sink}, ptr {main_var}, i32 0, ptr null)")
+    }
+    run_defers(0)
+    ll("ret void")
+    finish_function("define internal void @{fname}() \{", ST.ctx)
+}
+
+# Loads, parses and compiles an imported file. Returns null if it cannot be read.
+func compile_module(canon) {
+    let f = open(canon, "r")
+    if (f == null) {
+        return null
+    }
+    let text = read(f)
+    close(f)
+    let saved_mod = ST.mod
+    let saved_ctx = ST.ctx
+    let saved_file = ST.src_file
+    let saved_lines = ST.src_lines
+    let m = new_module(canon, canon)
+    ST.mod = m
+    ST.src_file = canon
+    ST.src_lines = split_lines(text)
+    decl_module_source(m, ST.src_lines)
+    let stmts = parse_program(lex(text, 1))
+    check_program(stmts)
+    collect_exports(stmts, m.exports)
+    compile_module_body(m, stmts, "mod_{m.id}_run")
+    m.state = "done"
+    ST.mod = saved_mod
+    ST.ctx = saved_ctx
+    ST.src_file = saved_file
+    ST.src_lines = saved_lines
+    return m
+}
+
+func emit_name_error(hint, fmt_text, arg_a, arg_b) {
+    let a_text = "null"
+    let b_text = "null"
+    if (arg_a != null) {
+        a_text = ll_cstr(arg_a)
+    }
+    if (arg_b != null) {
+        b_text = ll_cstr(arg_b)
+    }
+    ll("call void @lv_name_error(ptr {ll_cstr(hint)}, ptr {ll_cstr(fmt_text)}, ptr {a_text}, ptr {b_text})")
+}
+
+func st_use(n) {
+    ll_mark(n.line)
+    let canon = path_norm(path_join(path_dir(ST.mod.canon), n.path))
+    let m2 = MODULES[canon]
+    if (m2 == null) {
+        m2 = compile_module(canon)
+    }
+    if (m2 == null) {
+        let hint = "Check that the import path exists and ends with .zu"
+        emit_name_error(hint, "Could not import file '%s'", n.path, null)
+        return null
+    }
+    if (m2.state == "compiling") {
+        let hint = "Modules must not import each other in a cycle; move shared code to a third module"
+        emit_name_error(hint, "Circular import detected: '%s' is already loading", n.path, null)
+        return null
+    }
+    let id = m2.id
+    let flag = ll_reg()
+    ll("{flag} = load i32, ptr @mod_{id}_state")
+    let fresh = ll_reg()
+    ll("{fresh} = icmp eq i32 {flag}, 0")
+    let run = ll_new_label("modrun")
+    let done = ll_new_label("modend")
+    ll_condbr(fresh, run, done)
+    ll_label(run)
+    ll("store i32 1, ptr @mod_{id}_state")
+    ll("call void @mod_{id}_run()")
+    ll("store i32 2, ptr @mod_{id}_state")
+    ll_br(done)
+    ll_label(done)
+    ll("store ptr @mod_{ST.mod.id}, ptr @lv_pos_mod")
+    ST.ctx.line = -1
+    ll_mark(n.line)
+    let names = n.names
+    if (len(names) == 0) {
+        names = m2.exports
+    }
+    for (let name in names) {
+        if (find(m2.exports, name) < 0) {
+            let hint = "Export names explicitly in the module before using them"
+            emit_name_error(hint, "Module '%s' does not export '%s'", n.path, name)
+            return null
+        }
+        ll_reg_global(name)
+        ll_copy(ll_gname(name), "@{m2.prefix}{name}")
+    }
+}
+
+# Program
+
+func declarations() {
+    let d = []
+    for (let nm in split("add_fast sub_fast mul_fast div mod eq_fast ne_fast lt_fast le_fast gt_fast ge_fast band bor bxor shl shr", " ")) {
+        append(d, "declare void @lvp_{nm}(ptr, ptr, ptr)")
+    }
+    append(d, "declare double @llvm.fabs.f64(double)")
+    for (let nm in ["sadd", "ssub", "smul"]) {
+        append(d, "declare \{ i64, i1 } @llvm.{nm}.with.overflow.i64(i64, i64)")
+    }
+    for (let nm in split("add sub mul div mod lt le gt ge eq ne band bor bxor shl shr", " ")) {
+        append(d, "declare %LV @lvv_{nm}(i64, i64, i64, i64)")
+    }
+    append(d, "declare i64 @lvv_truth(i64, i64)")
+    append(d, "declare void @lvv_global_store_check(i64, i64, i64)")
+    append(d, "declare void @lvp_gundef(ptr, ptr)")
+    append(d, "declare void @lvp_not(ptr, ptr)")
+    append(d, "declare i32 @lvp_truth(ptr)")
+    append(d, "declare i32 @lvp_eq_b(ptr, ptr)")
+    append(d, "declare void @lvp_index(ptr, ptr, ptr)")
+    append(d, "declare void @lvp_index_set(ptr, ptr, ptr)")
+    append(d, "declare void @lvp_field(ptr, ptr, ptr)")
+    append(d, "declare void @lvp_map_put(ptr, ptr, ptr)")
+    append(d, "declare void @lvp_container_check(ptr)")
+    append(d, "declare void @lvp_global_store_check(ptr, i32)")
+    append(d, "declare void @lvp_box_escape_check(ptr, ptr)")
+    append(d, "declare void @lvv_box_escape_check(i64, i64, ptr)")
+    append(d, "declare void @lvp_box_new(ptr, ptr, i64)")
+    append(d, "declare void @lvp_box_new_stack(ptr, ptr, i64, ptr)")
+    append(d, "declare void @lvp_box_assign_copy(ptr, i64)")
+    append(d, "declare void @lvp_gget(ptr, ptr, ptr)")
+    append(d, "declare void @lvp_iter_prepare(ptr, ptr)")
+    append(d, "declare i64 @lvp_iter_len(ptr)")
+    append(d, "declare void @lvp_iter_at(ptr, ptr, i64)")
+    append(d, "declare void @lvp_call(ptr, ptr, i32, ptr)")
+    append(d, "declare void @lvp_print(ptr)")
+    append(d, "declare ptr @lvp_cell(ptr)")
+    append(d, "declare %LV @lv_str_n(ptr, i64)")
+    append(d, "declare %LV @lv_list_new(i64)")
+    append(d, "declare %LV @lv_list_of(i32, ptr)")
+    append(d, "declare %LV @lv_map_new()")
+    append(d, "declare %LV @lv_closure(ptr, ptr, i32, ptr)")
+    append(d, "declare %LV @lv_native(ptr, ptr)")
+    append(d, "declare %LV @lv_interp(i32, ptr)")
+    append(d, "declare %LV @lv_define_bloc(ptr, i32, ptr)")
+    append(d, "declare %LV @lv_define_data(ptr, i32, ptr, i32)")
+    append(d, "declare %LV @lv_define_bloc_typed(ptr, i32, ptr, ptr)")
+    append(d, "declare %LV @lv_define_data_typed(ptr, i32, ptr, i32, ptr)")
+    append(d, "declare i64 @lv_scope_new()")
+    append(d, "declare void @lv_box_release_scope(i64)")
+    append(d, "declare void @lv_unsafe_begin()")
+    append(d, "declare void @lv_unsafe_end()")
+    append(d, "declare void @lvp_ptr_escape_check(ptr)")
+    append(d, "declare %LV @lv_addr(ptr)")
+    append(d, "declare %LV @lv_addr_invalid(i32)")
+    append(d, "declare void @lv_arity(ptr, i32, i32, i32)")
+    append(d, "declare void @lv_name_error(ptr, ptr, ptr, ptr)")
+    append(d, "declare void @lvv_unbox_fail(ptr, i64, i64, i64)")
+    append(d, "declare i32 @lv_main(i32, ptr, ptr)")
+    for (let b in LL_BUILTINS) {
+        append(d, "declare %LV @lb_{b}(ptr, i32, ptr)")
+    }
+    return d
+}
+
+export func compile_program_ll(stmts) {
+    let m = new_module(ST.src_file, path_norm(path_join(ST.cwd, ST.src_file)))
+    ST.mod = m
+    decl_module_source(m, ST.src_lines)
+    check_program(stmts)
+    collect_exports(stmts, m.exports)
+    compile_module_body(m, stmts, "entry")
+
+    # Pieces that create more string constants come first.
+    let natives = []
+    for (let b in LL_NATIVES) {
+        append(natives, "@nf_{b} = internal global %LvFunc \{ ptr @lb_{b}, ptr {ll_cstr(b)}, i32 1, i32 0, ptr null }")
+    }
+    let init = ["define internal void @lv_init_consts() \{", "entry:"]
+    for (let i = 0; i < len(LL_KSTRS); i++) {
+        let text = LL_KSTRS[i]
+        append(init, "  %s{i} = call %LV @lv_str_n(ptr {ll_cstr(text)}, i64 {len(text)})")
+        append(init, "  store %LV %s{i}, ptr getelementptr inbounds (%LV, ptr @K, i64 {i})")
+    }
+    append(init, "  ret void")
+    append(init, "}")
+
+    let out = []
+    append(out, "; generated by zuec from {ST.src_file}")
+    append(out, "%LV = type \{ i64, i64 }")
+    append(out, "%LvFunc = type \{ ptr, ptr, i32, i32, ptr }")
+    append(out, "%LvModule = type \{ ptr, ptr, i32 }")
+    append(out, "@lv_pos_mod = external global ptr")
+    append(out, "@lv_pos_line = external global i32")
+    for (let d in declarations()) {
+        append(out, d)
+    }
+    for (let s in LL_STRS) {
+        append(out, s)
+    }
+    for (let c in LL_CONSTS) {
+        append(out, c)
+    }
+    for (let d in LL_MODDECLS) {
+        append(out, d)
+    }
+    for (let g in LL_GLOBALS) {
+        append(out, g)
+    }
+    for (let nf in natives) {
+        append(out, nf)
+    }
+    append(out, "@K = internal global [{len(LL_KSTRS) + 1} x %LV] zeroinitializer")
+    append(out, join(init, "\n"))
+    for (let f in LL_FUNCS) {
+        append(out, f)
+    }
+    append(out, "define i32 @main(i32 %argc, ptr %argv) \{")
+    append(out, "  call void @lv_init_consts()")
+    append(out, "  %r = call i32 @lv_main(i32 %argc, ptr %argv, ptr @entry)")
+    append(out, "  ret i32 %r")
+    append(out, "}")
+    return join(out, "\n") + "\n"
+}
