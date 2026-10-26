@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 6:
+  variable 'n' must be an int, got string
+
+   6 | print(g("a"))
+
+Hint: The type checker could not follow where this value came from

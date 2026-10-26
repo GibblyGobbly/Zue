@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot use '|' on float and an int constant
+
+   2 | print(f | 1)
+

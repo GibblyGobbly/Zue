@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot append string to list<int>
+
+   2 | append(xs, "four")
+

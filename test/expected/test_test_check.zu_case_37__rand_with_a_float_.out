@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  rand() argument 1 must be an int, got a float constant
+
+   1 | print(rand(5.5))
+

@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  round() cannot be called with (float, float); use (float, int) or (int, int)
+
+   4 | print(round(1.5, pass(1.0)))
+

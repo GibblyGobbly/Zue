@@ -1,0 +1,5 @@
+Type Error in test/modules_fixtures/bad_types.zu at line 4:
+  cannot assign string to 'count', which is int
+
+   4 | count = "one"
+

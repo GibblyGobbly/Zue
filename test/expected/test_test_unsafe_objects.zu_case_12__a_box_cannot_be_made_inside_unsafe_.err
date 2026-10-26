@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 2:
+  box values are not allowed inside unsafe blocks
+
+   2 |     let b = box[4]
+
+Hint: A box lives on the stack and frees itself. Make it outside the unsafe block.

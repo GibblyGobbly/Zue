@@ -1,0 +1,6 @@
+Name Error in /tmp/zue_test_case.zu at line 5:
+  Template field 'mana' does not exist
+
+   5 |     print(p.mana)
+
+Hint: Access only declared fields for this template

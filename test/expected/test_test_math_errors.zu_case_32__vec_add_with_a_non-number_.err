@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  cannot use '+' on a list: element 1 is a string, not a number
+
+   1 | print(vec_add([1, "a"], [1, 2]))
+
+Hint: Both lists must hold only numbers.

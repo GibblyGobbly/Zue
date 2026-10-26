@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  strict mode: parameter 'x' of this function needs a type, for example x: int
+
+   2 | let f = func(x) {
+

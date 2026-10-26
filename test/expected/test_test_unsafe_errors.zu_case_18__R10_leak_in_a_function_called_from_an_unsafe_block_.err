@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 3:
+  1 alloc() call(s) in this unsafe block were never freed; the first is at line 3
+
+   3 |         let inner = alloc(1)
+
+Hint: Every alloc() needs a free(ptr) or defer(ptr) before its block ends. Write defer(ptr) right after alloc().

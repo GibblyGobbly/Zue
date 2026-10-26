@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  Template 'Holder' field 'thing' must be a Missing, got int
+
+   2 | let h = Holder(1)
+
+Hint: Give the field a value of its declared type. A whole number written in the source is an int; write 2.0 for a float.

@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 1:
+  int() value "99999999999999999999" does not fit in a 64-bit int
+
+   1 | print(int("99999999999999999999"))
+
+Hint: The value must fit in a 64-bit int.

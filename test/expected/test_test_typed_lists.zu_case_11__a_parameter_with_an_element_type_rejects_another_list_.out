@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  total() argument 1 must be a list<int>, got list<string>
+
+   4 | print(total(["a"]))
+

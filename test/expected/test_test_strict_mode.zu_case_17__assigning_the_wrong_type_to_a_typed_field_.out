@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  Template 'Player' field 'hp' must be an int, got string
+
+   3 | p.hp = "dead"
+

@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 1:
+  ceil() result does not fit in a 64-bit int
+
+   1 | print(ceil(pow(10.0, 30.0)))
+
+Hint: Keep the value in the 64-bit int range, or use the float result.

@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  floor() argument 1 must be a float, got int
+
+   2 | print(floor(i))
+

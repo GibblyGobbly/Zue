@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  condition must be a boolean, got int
+
+   4 | let s = not pass(0)
+
+Hint: Write the test explicitly, for example x != 0, len(s) > 0 or v != null.

@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 6:
+  variable 'x' must be a float, got int
+
+   6 | print(g(3))
+
+Hint: The type checker could not follow where this value came from

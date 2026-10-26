@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  bloc values are immutable
+
+   3 | v.x = 5.0
+
+Hint: Build a new bloc, or use a template for data that changes

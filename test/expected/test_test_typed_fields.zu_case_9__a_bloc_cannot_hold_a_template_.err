@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  Bloc 'B' field 't' cannot hold a template or data value: a bloc may only hold a box
+
+   2 | bloc B { t: T }
+
+Hint: A bloc holds int, float, bool, char, string, another bloc or a box, in at most 64 bytes

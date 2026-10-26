@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  cannot use '+' on null and int
+
+   4 | let s = pass(null) + 1
+
+Hint: Both sides must be numbers, or both strings. Build text with "{x}" or to_string(x).

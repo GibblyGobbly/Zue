@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 5:
+  load() cannot be used on a whole object
+
+   5 |     print(load(p))
+
+Hint: Read or write a field instead, for example p.name or p.name = value

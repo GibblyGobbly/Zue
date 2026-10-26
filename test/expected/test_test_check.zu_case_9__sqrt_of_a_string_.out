@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  sqrt() argument 1 must be a float, got string
+
+   1 | print(sqrt("4"))
+

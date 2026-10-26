@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 2:
+  box index 4 is out of bounds for a box of 4 bytes
+
+   2 | t[4] = 1
+
+Hint: Use b[i] = byte with 0 <= i < b.len and 0 <= byte <= 255

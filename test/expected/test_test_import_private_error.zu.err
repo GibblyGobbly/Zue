@@ -1,0 +1,6 @@
+Name Error in test/test_import_private_error.zu at line 2:
+  Variable 'private_func' is not defined
+
+   2 | private_func()
+
+Hint: Declare variables with 'let' before using them

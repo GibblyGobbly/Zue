@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot store a string in a dense list
+
+   2 | d[0] = "s"
+
+Hint: A dense list holds only numbers.

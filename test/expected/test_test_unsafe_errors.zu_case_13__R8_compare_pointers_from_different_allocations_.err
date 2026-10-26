@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 6:
+  ordered pointer comparisons need the same base allocation
+
+   6 |     let bad = a < b
+
+Hint: Only compare pointers with <, >, <=, or >= when they come from the same allocation.

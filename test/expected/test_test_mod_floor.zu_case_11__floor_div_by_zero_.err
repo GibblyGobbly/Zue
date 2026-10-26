@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 1:
+  division by zero
+
+   1 | print(floor_div(5, 0))
+
+Hint: Check the divisor before dividing.

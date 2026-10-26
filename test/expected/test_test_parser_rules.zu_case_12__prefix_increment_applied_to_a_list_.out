@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot use '++' on xs, which is list<int>
+
+   2 | ++xs[0]
+

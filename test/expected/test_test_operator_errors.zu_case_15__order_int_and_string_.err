@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  cannot order int and string with <, <=, > or >=
+
+   4 | let s = pass(1) < "a"
+
+Hint: Ordering works on two numbers, two strings or two chars.

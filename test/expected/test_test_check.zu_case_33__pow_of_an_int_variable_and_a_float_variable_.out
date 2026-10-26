@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  pow() cannot be called with (int, float); use (int, int) or (float, float)
+
+   3 | print(pow(a, b))
+

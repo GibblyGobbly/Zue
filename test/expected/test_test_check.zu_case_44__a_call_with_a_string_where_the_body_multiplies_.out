@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot use '*' on int and string
+  in area(int, string), called at line 4
+
+   2 |     return w * h
+

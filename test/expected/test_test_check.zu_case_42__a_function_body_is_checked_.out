@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  cannot assign string to 'x', which is int
+
+   3 |     x = "a"
+

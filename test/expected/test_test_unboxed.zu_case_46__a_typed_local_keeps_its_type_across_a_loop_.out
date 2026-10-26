@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 6:
+  cannot assign a float constant to 's', which is int
+
+   6 |     s = 1.5
+

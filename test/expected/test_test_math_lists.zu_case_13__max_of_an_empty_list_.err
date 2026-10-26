@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 4:
+  max() needs a list with at least one item
+
+   4 | print(max(pass([])))
+
+Hint: Check that the list has items before calling it.

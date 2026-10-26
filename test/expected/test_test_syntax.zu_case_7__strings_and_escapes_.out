@@ -1,0 +1,8 @@
+tab	here
+quote " inside
+back\slash
+two
+lines
+
+hash # not a comment
+slash // not a comment

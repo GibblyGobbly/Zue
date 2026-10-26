@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  mat_mul() dimension mismatch (2 columns vs 1 rows)
+
+   1 | print(mat_mul([[1, 2]], [[1, 2]]))
+
+Hint: The first matrix needs as many columns as the second has rows.

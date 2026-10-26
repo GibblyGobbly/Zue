@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  rand() expects 0, 1 or 2 arguments, but got 3
+
+   1 | print(rand(1, 2, 3))
+

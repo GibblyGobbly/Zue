@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 7:
+  Bloc 'Outer' field 'i' must be an Inner, got Other
+
+   7 | let o = Outer{pass(Other{1})}
+
+Hint: Give the field a value of its declared type. A whole number written in the source is an int; write 2.0 for a float.

@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 4:
+  pow() exponent of an int must not be negative
+
+   4 | print(pass(2) ** pass(-1))
+
+Hint: Use floats for a negative power, for example pow(2.0, -1.0).

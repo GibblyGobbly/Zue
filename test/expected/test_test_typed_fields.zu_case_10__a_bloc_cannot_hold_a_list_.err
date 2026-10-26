@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  Bloc 'B' field 'items' cannot be a list, map or function: a bloc is an immutable value
+
+   1 | bloc B { items: list }
+
+Hint: A bloc holds int, float, bool, char, string, another bloc or a box, in at most 64 bytes

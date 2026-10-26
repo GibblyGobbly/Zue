@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot assign string to 'n', which is int
+
+   2 | n = "two"
+

@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 3:
+  cannot store string in list<int>
+
+   3 | grid[0][1] = "x"
+

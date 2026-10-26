@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 1:
+  trand() expects 0 arguments, but got 1
+
+   1 | print(trand(5))
+

@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 1:
+  cannot use '+' on lists of different lengths (2 and 3)
+
+   1 | print(vec_add([1, 2], [1, 2, 3]))
+
+Hint: Both lists need the same number of elements.

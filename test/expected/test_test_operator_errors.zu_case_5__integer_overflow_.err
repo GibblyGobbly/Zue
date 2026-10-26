@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 2:
+  integer overflow in '+'
+
+   2 | let s = big + 1
+
+Hint: The result does not fit in a 64-bit int. Use floats for very large numbers.

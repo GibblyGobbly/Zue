@@ -1,0 +1,6 @@
+Type Error in /tmp/zue_test_case.zu at line 5:
+  cannot use '-' on int and string
+
+   5 | let s = -t
+
+Hint: Both sides must be numbers.

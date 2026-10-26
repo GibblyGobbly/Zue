@@ -1,0 +1,6 @@
+Argument Error in /tmp/zue_test_case.zu at line 4:
+  isqrt() argument must not be negative
+
+   4 | print(isqrt(pass(-1)))
+
+Hint: Check the value before taking the square root.

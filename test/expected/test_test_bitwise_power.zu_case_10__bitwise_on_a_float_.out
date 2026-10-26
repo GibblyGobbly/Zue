@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 4:
+  cannot use '&' on float and an int constant
+
+   4 | print(pass(1.5) & 3)
+

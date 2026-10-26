@@ -1,0 +1,2 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  data fields cannot have types; use a template for typed fields

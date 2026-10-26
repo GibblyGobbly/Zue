@@ -1,0 +1,2 @@
+Syntax Error in /tmp/zue_test_case.zu at line 1:
+  Parameter 'b' needs a default value because an earlier parameter has one

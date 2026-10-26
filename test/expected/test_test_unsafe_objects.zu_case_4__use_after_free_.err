@@ -1,0 +1,6 @@
+Runtime Error in /tmp/zue_test_case.zu at line 5:
+  pointer was freed or freed twice
+
+   5 |     print(p.hp)
+
+Hint: That pointer is no longer valid. Prefer defer(ptr) so cleanup happens once at block exit.

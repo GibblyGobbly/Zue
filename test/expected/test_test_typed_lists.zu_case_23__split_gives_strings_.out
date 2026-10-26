@@ -1,0 +1,5 @@
+Type Error in /tmp/zue_test_case.zu at line 2:
+  cannot use '+' on string and an int constant
+
+   2 | print(parts[0] + 1)
+
