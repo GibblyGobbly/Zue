@@ -181,5 +181,5 @@ In a compiled program, `ZUE_RT_GC_STRESS=N` collects every N allocations and
 | `bootstrap/` | The seed IR files |
 | `test/` | Test programs, `test/expected/`, and `test/native/` (unit tests of runtime functions) |
 | `docs/` | Documentation |
-| `assets/` | The logo |
+| `assets/` | The README banner |
 | `bin/`, `C/` | Build output: the `zue` binary, and generated IR and objects (git-ignored) |
