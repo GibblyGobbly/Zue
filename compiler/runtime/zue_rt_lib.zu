@@ -8,6 +8,7 @@
 extern("getline", "i64", "ptr,ptr,ptr")
 extern("system", "i32", "ptr")
 extern("clock_gettime", "i32", "i32,ptr")
+extern("calloc", "ptr", "i64,i64")
 extern("strtoll", "i64", "ptr,ptr,i32")
 extern("strtod", "double", "ptr,ptr")
 extern("strtok_r", "ptr", "ptr,ptr,ptr")
@@ -149,9 +150,28 @@ func lb_list_append(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# The type() result for each fixed type tag, made once: strings never change, so every call can
+# share them. The table is a root range, so the collector keeps the strings alive.
+let g_type_names = 0
+
 func lb_type(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let o = stack_buf(16)
+    let t = _tag(argv_p)
+    if (t <= T_MAP or t == T_DENSE) {
+        if (g_type_names == 0) {
+            g_type_names = calloc(16, 8)
+            lv_gc_root_add(g_type_names, g_type_names + 128)
+        }
+        let cached = ld64(g_type_names + t * 8)
+        if (cached == 0) {
+            _str(o, _type_name(argv_p))
+            cached = _val(o)
+            st64(g_type_names + t * 8, cached)
+        }
+        _set(o, T_STR, cached)
+        retp(o)
+    }
     _str(o, _type_name(argv_p))
     retp(o)
 }
@@ -1173,8 +1193,45 @@ func lb_join(self_p, argc_i, argv_p) {
     let d = _text_str(self_p, argv_p + 16, 0, tmp)
     let b = stack_buf(B_SIZE)
     let o = stack_buf(16)
+    let count = ld64(l + L_COUNT)
+    # A list of strings, the usual case, is joined with one exact-size allocation and one copy.
+    let total = 0
+    let all_text = 1
+    for (let i = 0; i < count; i++) {
+        let item = ld64(l + L_ITEMS) + 16 * i
+        if (_tag(item) != T_STR) {
+            all_text = 0
+            break
+        }
+        total += ld64(_val(item))
+    }
+    if (all_text != 0) {
+        if (count > 1) {
+            total += ld64(d) * (count - 1)
+        }
+        if (ugt(total, 70368744177664)) {
+            _die_oom()
+        }
+        let st = lv_alloc_atomic(S_DATA + total + 1)
+        st64(st, total)
+        let at = st + S_DATA
+        for (let i = 0; i < count; i++) {
+            if (i != 0 and ld64(d) != 0) {
+                memcpy(at, d + S_DATA, ld64(d))
+                at += ld64(d)
+            }
+            let src = _val(ld64(l + L_ITEMS) + 16 * i)
+            if (ld64(src) != 0) {
+                memcpy(at, src + S_DATA, ld64(src))
+                at += ld64(src)
+            }
+        }
+        st8(at, 0)
+        _set(o, T_STR, st)
+        retp(o)
+    }
     _buf_init(b)
-    for (let i = 0; i < ld64(l + L_COUNT); i++) {
+    for (let i = 0; i < count; i++) {
         if (i != 0) {
             _buf_add(b, d + S_DATA, ld64(d))
         }

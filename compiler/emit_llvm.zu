@@ -13,10 +13,10 @@ use { lex } from "lexer.zu"
 use { parse_program } from "parser.zu"
 use { MODULES, MOD_LIST, uid } from "shared.zu"
 use { collect_exports, has_zero_arg_main, used_names, walk_nested } from "analysis.zu"
-use { LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_KSTRS, LL_MODDECLS } from "ll_state.zu"
+use { LL_BUILTINS, LL_CONSTS, LL_FUNCS, LL_GLOBALS, LL_ICS, LL_KSTRS, LL_MODDECLS } from "ll_state.zu"
 use { LL_NATIVES, LL_STRS, ll, ll_alloca, ll_args_array, ll_br, ll_bool, ll_call_lv } from "ll_state.zu"
 use { ll_call_out, ll_char, ll_condbr, ll_copy, ll_cstr, ll_float, ll_gname, ll_int } from "ll_state.zu"
-use { ll_kstr, ll_label, ll_mark, ll_new_ctx, ll_new_label, ll_null, ll_reg } from "ll_state.zu"
+use { ll_ic, ll_kstr, ll_label, ll_mark, ll_new_ctx, ll_new_label, ll_null, ll_reg } from "ll_state.zu"
 use { ll_reg_global, ll_slot, ll_use_builtin, ll_use_native } from "ll_state.zu"
 use { at_top, cap_cell, declare, find_local_index, pop_scope, push_scope, resolve, run_defers } from "ll_scope.zu"
 use { declare_typed, find_local, var_get, var_set } from "ll_scope.zu"
@@ -513,7 +513,7 @@ func ex(n) {
     if (k == "field") {
         let t = ex(n.target)
         ll_mark(n.line)
-        return ll_call_out("lvp_field", "ptr {t}, ptr {ll_kstr(n.field)}")
+        return ll_call_out("lvp_field_ic", "ptr {t}, ptr {ll_kstr(n.field)}, ptr {ll_ic()}")
     }
     if (k == "list") {
         let items = ex_list(n.items)
@@ -1362,7 +1362,7 @@ func declarations() {
     append(d, "declare i32 @lvp_eq_b(ptr, ptr)")
     append(d, "declare void @lvp_index(ptr, ptr, ptr)")
     append(d, "declare void @lvp_index_set(ptr, ptr, ptr)")
-    append(d, "declare void @lvp_field(ptr, ptr, ptr)")
+    append(d, "declare void @lvp_field_ic(ptr, ptr, ptr, ptr)")
     append(d, "declare void @lvp_map_put(ptr, ptr, ptr)")
     append(d, "declare void @lvp_container_check(ptr)")
     append(d, "declare void @lvp_global_store_check(ptr, i32)")
@@ -1454,6 +1454,7 @@ export func compile_program_ll(stmts) {
         append(out, nf)
     }
     append(out, "@K = internal global [{len(LL_KSTRS) + 1} x %LV] zeroinitializer")
+    append(out, "@ic = internal global [{len(LL_ICS) * 2 + 2} x i64] zeroinitializer")
     append(out, join(init, "\n"))
     for (let f in LL_FUNCS) {
         append(out, f)

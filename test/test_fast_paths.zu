@@ -1,0 +1,131 @@
+// Edge cases of the runtime fast paths: interpolation and join built in one allocation, cached
+// type() strings, per-site field caches, string equality shortcuts, and recycled memory.
+
+# CASE interpolation of strings only
+let a = "x"
+let e = ""
+print("[{a}{e}{a}]")
+print("{e}")
+print("{a}{a}{a}{a}")
+print("{e}{e}{e}")
+let long = "0123456789"
+print("{long}{long}{long}{long}{long}{long}{long}{long}")
+# CASE interpolation with other types
+let n = 42
+let f = 1.5
+let b = true
+let c = 'z'
+let l = [1, "a"]
+print("n={n} f={f} b={b} c={c} l={l} null={null}")
+print("{n}")
+func a_str() {
+    return "s"
+}
+print("{a_str()}{n}")
+# CASE join of strings
+print(join([], ","))
+print(join(["a"], ","))
+print(join(["a", "b", "c"], ","))
+print(join(["a", "", "c"], ""))
+print(join(["", ""], "-"))
+print(join(["ab", "cd"], "<>"))
+# CASE join of mixed items
+print(join([1, "a", 2.5, true], "|"))
+print(join([[1, 2], "x"], ";"))
+# CASE type strings are shared and stay correct
+let seen = []
+for (let i = 0; i < 3; i++) {
+    append(seen, type(1))
+    append(seen, type("s"))
+    append(seen, type([1]))
+    append(seen, type({"k": 1}))
+    append(seen, type(null))
+    append(seen, type(true))
+    append(seen, type(1.5))
+    append(seen, type('c'))
+}
+print(join(seen, " "))
+assert(type(1) == "int")
+assert(type(type(1)) == "string")
+assert(type(1) == type(2))
+# CASE one field read site sees different template types
+template A { x, y }
+template B { y, x, z }
+template C { z }
+func get_x(o) {
+    return o.x
+}
+let objs = [A(1, 2), B(20, 10, 0), A(3, 4), B(40, 30, 0), A(5, 6)]
+let xs = []
+for (let o in objs) {
+    append(xs, get_x(o))
+}
+print(xs)
+let m = {"x": "from a map"}
+print(get_x(m))
+print(get_x(A(7, 8)))
+# CASE a field read site with a missing field
+template P { x }
+func get_q(o) {
+    return o.q
+}
+print(get_q({"q": 1}))
+print(get_q(P(1)))
+# CASE field cache after an object is rebuilt
+template Q { a, b }
+func read_b(o) {
+    return o.b
+}
+let total = 0
+for (let i = 0; i < 1000; i++) {
+    total += read_b(Q(i, i * 2))
+}
+print(total)
+# CASE string equality shortcuts
+assert("abc" == "abc")
+assert("abc" != "abd")
+assert("abc" != "abcd")
+assert("" == "")
+assert("" != "a")
+assert("a" != "")
+assert("b" != "a")
+let s1 = "hel" + "lo"
+let s2 = "he" + "llo"
+assert(s1 == s2)
+assert(s1 != "hellp")
+assert("é" == "é")
+assert("é" != "è")
+let i1 = 5
+assert(i1 == 5)
+assert(i1 != 6)
+print("equality ok")
+# CASE recycled memory is clean
+template Cell { v, w }
+func churn(n) {
+    let keep = []
+    for (let i = 0; i < n; i++) {
+        let t = Cell(i, null)
+        if (i % 7 == 0) {
+            append(keep, t)
+        }
+        let junk = [i]
+        let text = repeat("x", 900)
+    }
+    return keep
+}
+let first = churn(20000)
+let second = churn(20000)
+let bad = 0
+for (let t in second) {
+    if (t.w != null) {
+        bad += 1
+    }
+}
+for (let i = 0; i < 200; i++) {
+    let fresh = Cell(null, null)
+    let list = []
+    if (fresh.v != null or fresh.w != null or len(list) != 0) {
+        bad += 1
+    }
+}
+print("keep {len(first)} {len(second)} bad {bad}")
