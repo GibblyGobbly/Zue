@@ -21,6 +21,7 @@ covered by tests in `test/`.
 |---|---|---|
 | Hand-written lexer with tables indexed by byte code | `compiler/lexer.zu` | No string or map work for operators |
 | Tokens as `template` objects, not maps | `compiler/lexer.zu` | About 5 times faster to make and 4 times smaller than a map |
+| Syntax tree nodes as `template` objects, one type per kind of node, built by `mk_*` functions | `compiler/ast_nodes.zu` | A node is made in one call with fixed field places: 2.5 times fewer instructions than building a map. With the faster template field read, the lexer, parser and checker run 7 to 9 percent fewer instructions, and compiling the compiler itself 4 percent fewer |
 | Recursive descent with a Pratt (precedence climbing) table for binary operators | `compiler/parser.zu` | One table row per operator; adding `**` and the bitwise operators was a one-line change each |
 | The current token and its kind kept in variables | `compiler/parser.zu` | Asking "what is the next token?" is a comparison, not a call |
 | Line breaks ignored inside brackets by lowering the bracket depth before the closing token | `compiler/parser.zu` | Multi-line calls and literals without a continuation character |

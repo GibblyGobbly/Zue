@@ -23,6 +23,7 @@
 # p[i] = v writes the 64-bit word at p + 8 * i.
 
 use { die } from "util.zu"
+use { mk_id, node_children } from "ast_nodes.zu"
 use { uid } from "shared.zu"
 use { ll, ll_alloca, ll_br, ll_condbr, ll_escape, ll_label, ll_new_ctx, ll_new_label } from "ll_state.zu"
 use { ll_reg } from "ll_state.zu"
@@ -687,7 +688,7 @@ func nx(n) {
     }
     if (k == "incdec") {
         nx_incdec(n)
-        return nx_id({"k": "id", "name": n.name, "line": n.line})
+        return nx_id(mk_id(n.line, n.name))
     }
     if (k == "index") {
         let addr = word_addr(n)
@@ -941,11 +942,11 @@ func has_retv(x) {
         }
         return false
     }
-    if (type(x) == "map") {
-        if (x["k"] == "call" and x["callee"]["k"] == "id" and (x["callee"]["name"] == "retv" or x["callee"]["name"] == "retp")) {
+    if (type(x) == "template" or type(x) == "map") {
+        if (x.k == "call" and x.callee.k == "id" and (x.callee.name == "retv" or x.callee.name == "retp")) {
             return true
         }
-        for (let v in map_values(x)) {
+        for (let v in node_children(x)) {
             if (has_retv(v)) {
                 return true
             }

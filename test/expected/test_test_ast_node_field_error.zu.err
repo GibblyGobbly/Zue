@@ -1,0 +1,6 @@
+Name Error in test/test_ast_node_field_error.zu at line 6:
+  Template field 'op' does not exist
+
+   6 | print(n.op)
+
+Hint: Access only declared fields for this template

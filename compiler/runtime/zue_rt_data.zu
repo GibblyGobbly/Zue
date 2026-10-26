@@ -803,8 +803,12 @@ func _construct(o, type, argc, argv) {
 
 func _tpl_find(tp, field) {
     let dt = ld64(tp + TP_DT)
-    for (let i = 0; i < ld32(dt + DT_NFIELDS); i++) {
-        if (strcmp(ld64(ld64(dt + DT_FIELDS) + i * 8), field) == 0) {
+    let names = ld64(dt + DT_FIELDS)
+    let n = ld32(dt + DT_NFIELDS)
+    let first = ld8(field)
+    for (let i = 0; i < n; i++) {
+        let name = ld64(names + i * 8)
+        if (ld8(name) == first and strcmp(name, field) == 0) {
             return i
         }
     }

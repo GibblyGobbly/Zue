@@ -1,0 +1,208 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# ast_nodes.zu: the syntax tree node types and the functions that build them.
+#
+# Every node is a template whose first two fields are k (the kind, a string) and line. A template
+# keeps its fields at fixed places, so a node costs less memory than a map and is built in one call.
+# A field a kind does not use is not declared; a field it may leave empty holds null. The checker
+# adds sty to let and for-in nodes. NODE_FIELDS lists the fields of each kind after k and line, in
+# the order of the template; ast_dump.zu and the tree walkers read it.
+
+export template NLit { k, line, v }
+export template NId { k, line, name }
+export template NTmpl { k, line, parts }
+export template NList { k, line, items }
+export template NMap { k, line, keys, vals }
+export template NFunc { k, line, name, params, defaults, ptypes, body, exported }
+export template NBox { k, line, size }
+export template NCall { k, line, callee, args }
+export template NIndex { k, line, target, index }
+export template NField { k, line, target, field }
+export template NIncdec { k, line, name, op, prefix }
+export template NBin { k, line, op, l, r, unary }
+export template NNot { k, line, e }
+export template NLet { k, line, name, init, exported, const_decl, type, sty }
+export template NGroup { k, line, items }
+export template NIf { k, line, cond, then, els }
+export template NForIn { k, line, name, iter, body, sty }
+export template NFor { k, line, init, cond, incr, body }
+export template NWhile { k, line, cond, body }
+export template NSwitch { k, line, e, cases, dflt }
+export template NAssign { k, line, name, e }
+export template NSetidx { k, line, target, index, e, op }
+export template NTypedef { k, line, exported, name, is_template, is_bloc, fields, ftypes }
+export template NUse { k, line, names, path }
+export template NBlock { k, line, body }
+export template NReturn { k, line, e }
+export template NJump { k, line }
+
+export let NODE_FIELDS = {
+    "num": ["v"], "float": ["v"], "str": ["v"], "char": ["v"], "bool": ["v"],
+    "id": ["name"],
+    "tmpl": ["parts"],
+    "list": ["items"],
+    "map": ["keys", "vals"],
+    "func": ["name", "params", "defaults", "ptypes", "body", "exported"],
+    "box": ["size"],
+    "call": ["callee", "args"],
+    "index": ["target", "index"],
+    "field": ["target", "field"],
+    "incdec": ["name", "op", "prefix"],
+    "bin": ["op", "l", "r", "unary"],
+    "not": ["e"],
+    "let": ["name", "init", "exported", "const_decl", "type", "sty"],
+    "group": ["items"],
+    "if": ["cond", "then", "els"],
+    "forin": ["name", "iter", "body", "sty"],
+    "for": ["init", "cond", "incr", "body"],
+    "while": ["cond", "body"],
+    "switch": ["e", "cases", "dflt"],
+    "assign": ["name", "e"],
+    "setidx": ["target", "index", "e", "op"],
+    "typedef": ["exported", "name", "is_template", "is_bloc", "fields", "ftypes"],
+    "use": ["names", "path"],
+    "block": ["body"], "unsafe": ["body"],
+    "return": ["e"],
+    "break": [], "continue": []
+}
+
+# Fields that a node may not have set at all. ast_dump.zu leaves them out when they are null.
+export let OPTIONAL_FIELDS = ["ptypes", "type", "const_decl", "unary", "sty"]
+
+export func mk_lit(k, line, v) {
+    return NLit(k, line, v)
+}
+
+export func mk_id(line, name) {
+    return NId("id", line, name)
+}
+
+export func mk_tmpl(line, parts) {
+    return NTmpl("tmpl", line, parts)
+}
+
+export func mk_list(line, items) {
+    return NList("list", line, items)
+}
+
+export func mk_map(line, keys, vals) {
+    return NMap("map", line, keys, vals)
+}
+
+export func mk_func(line, name, params, defaults, ptypes, body, exported) {
+    return NFunc("func", line, name, params, defaults, ptypes, body, exported)
+}
+
+export func mk_box(line, size) {
+    return NBox("box", line, size)
+}
+
+export func mk_call(line, callee, args) {
+    return NCall("call", line, callee, args)
+}
+
+export func mk_index(line, target, index) {
+    return NIndex("index", line, target, index)
+}
+
+export func mk_field(line, target, field) {
+    return NField("field", line, target, field)
+}
+
+export func mk_incdec(line, name, op, prefix) {
+    return NIncdec("incdec", line, name, op, prefix)
+}
+
+export func mk_bin(line, op, l, r) {
+    return NBin("bin", line, op, l, r, null)
+}
+
+export func mk_not(line, e) {
+    return NNot("not", line, e)
+}
+
+export func mk_let(line, name, init, exported, const_decl, type) {
+    return NLet("let", line, name, init, exported, const_decl, type, null)
+}
+
+export func mk_group(line, items) {
+    return NGroup("group", line, items)
+}
+
+export func mk_if(line, cond, then, els) {
+    return NIf("if", line, cond, then, els)
+}
+
+export func mk_forin(line, name, iter, body) {
+    return NForIn("forin", line, name, iter, body, null)
+}
+
+export func mk_for(line, init, cond, incr, body) {
+    return NFor("for", line, init, cond, incr, body)
+}
+
+export func mk_while(line, cond, body) {
+    return NWhile("while", line, cond, body)
+}
+
+export func mk_switch(line, e, cases, dflt) {
+    return NSwitch("switch", line, e, cases, dflt)
+}
+
+export func mk_assign(line, name, e) {
+    return NAssign("assign", line, name, e)
+}
+
+export func mk_setidx(line, target, index, e, op) {
+    return NSetidx("setidx", line, target, index, e, op)
+}
+
+export func mk_typedef(line, exported, name, is_template, is_bloc, fields, ftypes) {
+    return NTypedef("typedef", line, exported, name, is_template, is_bloc, fields, ftypes)
+}
+
+export func mk_use(line, names, path) {
+    return NUse("use", line, names, path)
+}
+
+# k is "block" for a bare { } block and "unsafe" for an unsafe block.
+export func mk_block(k, line, body) {
+    return NBlock(k, line, body)
+}
+
+export func mk_return(line, e) {
+    return NReturn("return", line, e)
+}
+
+# k is "break" or "continue".
+export func mk_jump(k, line) {
+    return NJump(k, line)
+}
+
+export func is_node(x) {
+    return type(x) == "template"
+}
+
+# The values inside x that can hold more nodes: lists, maps and nodes. x is a node, or a map such as
+# a switch case. The tree walkers use it to visit every part of a tree.
+export func node_children(x) {
+    let out = []
+    if (type(x) == "map") {
+        for (let y in map_values(x)) {
+            let t = type(y)
+            if (t == "list" or t == "map" or t == "template") {
+                append(out, y)
+            }
+        }
+        return out
+    }
+    for (let name in NODE_FIELDS[x.k]) {
+        let y = x[name]
+        let t = type(y)
+        if (t == "list" or t == "map" or t == "template") {
+            append(out, y)
+        }
+    }
+    return out
+}

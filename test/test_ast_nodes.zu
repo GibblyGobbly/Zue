@@ -1,0 +1,107 @@
+// The syntax tree is made of templates (compiler/ast_nodes.zu). This parses a program that uses
+// every kind of node, prints the tree, and checks that NODE_FIELDS describes what the parser builds.
+
+use { lex } from "../compiler/lexer.zu"
+use { parse_program } from "../compiler/parser.zu"
+use { dump_program } from "../compiler/ast_dump.zu"
+use { NODE_FIELDS, node_children, is_node } from "../compiler/ast_nodes.zu"
+
+let lines = [
+    "use \{ area } from \"shapes.zu\"",
+    "template Pt \{ x, y: int }",
+    "let a, b = 1, 2",
+    "const c: int = 3",
+    "let f = 2.5",
+    "let s = \"hi \{a}\"",
+    "let ch = 'x'",
+    "let ok = true",
+    "let xs: list<int> = [1, 2]",
+    "let m = \{\"k\": 1}",
+    "func add(p: int, q = 2) \{",
+    "    return p + q",
+    "}",
+    "let anon = func(z) \{",
+    "    return -z",
+    "}",
+    "let bx = box[8]",
+    "let r = add(1)[0].v",
+    "a++",
+    "--b",
+    "a += 1",
+    "xs[0] = 5",
+    "r.v = 6",
+    "if (not ok) \{",
+    "    a = 1",
+    "} else \{",
+    "    a = 2",
+    "}",
+    "while (a < 3) \{",
+    "    a = a + 1",
+    "    if (a == 2) \{",
+    "        continue",
+    "    }",
+    "    break",
+    "}",
+    "for (let i = 0; i < 3; i++) \{",
+    "    a = a + i",
+    "}",
+    "for (let q in xs) \{",
+    "    a = a + q",
+    "}",
+    "switch (a) \{",
+    "    case 1:",
+    "        a = 2",
+    "    default:",
+    "        a = 3",
+    "}",
+    "\{",
+    "    let inner = ~a ** 2",
+    "}",
+    "unsafe \{",
+    "    let h = 1",
+    "}"
+]
+let text = join(lines, "\n")
+let tree = parse_program(lex(text, 1))
+print(dump_program(tree))
+
+# Every node found in the tree, by kind.
+let seen = {}
+func visit(x) {
+    if (type(x) == "list") {
+        for (let y in x) {
+            visit(y)
+        }
+        return null
+    }
+    if (is_node(x)) {
+        seen[x.k] = x
+    }
+    if (type(x) == "template" or type(x) == "map") {
+        for (let y in node_children(x)) {
+            visit(y)
+        }
+    }
+    return null
+}
+visit(tree)
+
+let kinds = map_keys(NODE_FIELDS)
+sort(kinds)
+for (let kind in kinds) {
+    if (seen[kind] == null) {
+        print("the program has no {kind} node")
+    }
+    assert(seen[kind] != null)
+    for (let field in NODE_FIELDS[kind]) {
+        let node = seen[kind]
+        assert(node[field] == node[field])
+    }
+}
+for (let kind in map_keys(seen)) {
+    if (NODE_FIELDS[kind] == null) {
+        print("{kind} is missing from NODE_FIELDS")
+    }
+    assert(NODE_FIELDS[kind] != null)
+}
+print("{len(kinds)} node kinds")

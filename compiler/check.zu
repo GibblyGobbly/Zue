@@ -674,7 +674,7 @@ func ck_call(n) {
         return "any"
     }
     let name = n.callee.name
-    if (TYPEDEFS[name] != null and lookup(name) == "type" and TYPEDEFS[name].is_data != true) {
+    if (TYPEDEFS[name] != null and lookup(name) == "type") {
         if (TYPEDEFS[name].is_bloc == true or TYPEDEFS[name].is_template == true) {
             return ck_typed_construct(n, name, argtypes)
         }
@@ -885,7 +885,7 @@ func ck_expr(n) {
     }
     if (k == "tmpl") {
         for (let part in n.parts) {
-            if (type(part) == "map") {
+            if (type(part) != "string") {
                 ck_expr(part)
             }
         }
