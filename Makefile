@@ -5,7 +5,8 @@
 #
 #   make            build bin/luna from the seeds in bootstrap/ (needs clang 18)
 #   make test       compile and run every test, compare with test/expected/
-#   make verify-ir  run the tests and check every generated IR file with LLVM's verifier (opt-18)
+#   make verify-ir  run the tests and check every generated IR file with LLVM's verifier (opt)
+#   make LLVM=22    use clang-22 and opt-22 (any target)
 #   make fuzz       compare random expressions and programs with an independent model (needs python3)
 #   make round-trip parse every Luna file, print it back with luna unparse, and compare the trees
 #   make seed       refresh the seeds after changing compiler/ or compiler/runtime/
@@ -18,7 +19,18 @@ ifeq (,$(filter -j%,$(MAKEFLAGS)))
 MAKEFLAGS += -j$(shell nproc)
 endif
 
+# The LLVM toolchain: "make LLVM=22" uses clang-22 and opt-22. By default clang and opt-18.
+# Objects built by one version are not reused by another: run "make clean" when switching.
+LLVM ?=
+ifeq ($(LLVM),)
 CLANG = clang
+OPT = opt-18
+else
+CLANG = clang-$(LLVM)
+OPT = opt-$(LLVM)
+endif
+export CC := $(CLANG)
+export OPT
 BINDIR = bin
 OUT = C
 
@@ -59,7 +71,7 @@ test: $(BINDIR)/luna
 verify-ir: $(BINDIR)/luna
 	@VERIFY_IR=1 compiler/run_tests.sh
 	@for f in examples/*.lu; do \
-	    $(BINDIR)/luna emit $$f -o $(OUT)/verify.ll > /dev/null && opt-18 -passes=verify -disable-output $(OUT)/verify.ll \
+	    $(BINDIR)/luna emit $$f -o $(OUT)/verify.ll > /dev/null && $(OPT) -passes=verify -disable-output $(OUT)/verify.ll \
 	        && echo "[PASS] $$f (IR verifier)" || { echo "[FAIL] $$f (IR verifier)"; exit 1; }; \
 	done
 

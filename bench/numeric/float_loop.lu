@@ -1,0 +1,9 @@
+# Float arithmetic: a numeric integration of x * x + 0.5 over 40 million steps.
+let sum = 0.0
+let dx = 0.000001
+let x = 0.0
+for (let i = 0; i < 40000000; i++) {
+    sum += (x * x + 0.5) * dx
+    x += dx
+}
+print(sum)

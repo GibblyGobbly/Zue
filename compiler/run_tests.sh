@@ -5,7 +5,7 @@
 # must equal the recorded files in test/expected/. Files made of "# CASE <name>" sections run
 # each case on its own.
 # Usage: compiler/run_tests.sh [file.lu ...]   (default: test/*.lu)
-# VERIFY_IR=1 compiler/run_tests.sh   also runs opt-18 -passes=verify on every generated IR file.
+# VERIFY_IR=1 compiler/run_tests.sh   also runs $OPT (default opt-18) -passes=verify on every generated IR file.
 # RECORD=1 compiler/run_tests.sh   writes test/expected/ from the compiled programs. Read the
 #                                  diff (git diff test/expected) before committing it.
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -14,7 +14,7 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 [ $# -eq 0 ] && set -- test/*.lu
 RT=compiler/runtime
-EXT=ll; CC="clang"
+EXT=ll; CC=${CC:-clang}; OPT=${OPT:-opt-18}
 RTSRC=$("$ROOT/compiler/build_runtime.sh") || exit 1
 CASE_FILE="$TMP/case.lu"
 EXPECT=test/expected
@@ -39,7 +39,7 @@ check_one() {
         cp "$TMP/cerr" "$TMP/c.out"; : > "$TMP/c.err"; cc=1
     else
         # VERIFY_IR=1 also checks the generated IR with LLVM's verifier.
-        if [ -n "$VERIFY_IR" ] && ! opt-18 -passes=verify -disable-output "$TMP/$name.$EXT" 2> "$TMP/gerr"; then
+        if [ -n "$VERIFY_IR" ] && ! "$OPT" -passes=verify -disable-output "$TMP/$name.$EXT" 2> "$TMP/gerr"; then
             fail=$((fail + 1)); echo "[FAIL] $label (IR verifier)"; head -5 "$TMP/gerr"; return
         fi
         if ! $CC -O1 -w "$TMP/$name.$EXT" "$RTSRC" \

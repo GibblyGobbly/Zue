@@ -3,6 +3,13 @@
 Luna is a compiled language. The Luna compiler turns a program into LLVM IR, and `clang` turns
 the IR into a native executable.
 
+## Choosing the LLVM version
+
+`make` uses `clang` (18 here). To build and test with another installed version, pass it by number:
+`make LLVM=22` and `make test LLVM=22` use `clang-22` and `opt-22`. Objects built by one version are
+not reused by another, so run `make clean` when switching. `bench/numeric_benchmarks.sh 22 -O2`
+times the programs in `bench/numeric` with a chosen version and optimization level.
+
 ## Requirements
 
 Linux. The project is developed and tested on x86-64 with glibc.

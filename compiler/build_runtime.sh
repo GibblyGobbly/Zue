@@ -15,9 +15,12 @@ OUT="$ROOT/C"
 OBJ="$OUT/luna_rt_native.o"
 LL="$OUT/luna_rt_native.ll"
 LUNAC=${LUNAC:-$ROOT/bin/luna}
+CC=${CC:-clang}
+STAMP="$OUT/luna_rt_native.cc"
 
 mkdir -p "$OUT"
-if [ ! -f "$OBJ" ] || [ -n "$(find "$RT" "$ROOT/compiler" -maxdepth 1 -name '*.lu' -newer "$OBJ" 2>/dev/null)" ] \
+# The object is rebuilt when a different C compiler (or LLVM version) made it.
+if [ ! -f "$OBJ" ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$CC" ] || [ -n "$(find "$RT" "$ROOT/compiler" -maxdepth 1 -name '*.lu' -newer "$OBJ" 2>/dev/null)" ] \
     || [ -n "$(find "$RT" -name '*.lu' -newer "$OBJ" 2>/dev/null)" ]; then
     if [ ! -x "$LUNAC" ]; then
         echo "[ERROR] the compiler $LUNAC is not built; run make" >&2
@@ -25,6 +28,7 @@ if [ ! -f "$OBJ" ] || [ -n "$(find "$RT" "$ROOT/compiler" -maxdepth 1 -name '*.l
     fi
     rm -f "$LL"
     "$LUNAC" --native "$RT"/*.lu -o "$LL" >&2 || exit 1
-    clang -O2 -w -c "$LL" -o "$OBJ" >&2 || exit 1
+    "$CC" -O2 -w -c "$LL" -o "$OBJ" >&2 || exit 1
+    echo "$CC" > "$STAMP"
 fi
 echo "$OBJ"

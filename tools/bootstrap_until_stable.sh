@@ -17,7 +17,7 @@ OUT=C
 prev=$OUT/boot2.ll
 n=2
 while [ $n -le 8 ]; do
-    clang -O1 -w "$prev" $OUT/boot_rt.ll -lm -lpthread -ldl -o $OUT/luna_stage$n || exit 1
+    "${CC:-clang}" -O1 -w "$prev" $OUT/boot_rt.ll -lm -lpthread -ldl -o $OUT/luna_stage$n || exit 1
     next=$OUT/boot$((n + 1)).ll
     $OUT/luna_stage$n compiler/lunac.lu "$next" . || exit 1
     if cmp -s "$prev" "$next"; then
