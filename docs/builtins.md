@@ -236,8 +236,14 @@ fractional part prints with `.0` (`sqrt(16)` prints `4.0`).
 | Function | Description | Example |
 |---|---|---|
 | `abs(x)` | Absolute value, same type as `x` | `abs(-10)` is `10` |
-| `min(a, b)` | The smaller of two values | `min(10, 5)` is `5` |
-| `max(a, b)` | The larger of two values | `max(10, 5)` is `10` |
+| `min(a, b)` | The smaller of two values; both ints or both floats | `min(10, 5)` is `5` |
+| `max(a, b)` | The larger of two values; both ints or both floats | `max(10, 5)` is `10` |
+| `min(list)`, `max(list)` | The smallest or largest item of a list of numbers. The list must not be empty and its items must all be ints or all be floats | `max([3, 1, 2])` is `3` |
+| `sum(list)` | Sum of a list of numbers, same type as the items. Ints raise `integer overflow in 'sum'`; floats are added with Neumaier's compensated sum, so `sum([1.0, 1e100, 1.0, -1e100])` is `2.0` | `sum([1, 2, 3])` is `6` |
+| `mean(list)` | Average of a list of numbers, always a float | `mean([1, 2, 4])` is `2.33333` |
+| `gcd(a, b)` | Greatest common divisor of two ints, never negative; `gcd(0, 0)` is `0` | `gcd(-12, 18)` is `6` |
+| `lcm(a, b)` | Least common multiple of two ints, never negative; `0` if either is `0`; overflow is an error | `lcm(4, 6)` is `12` |
+| `isqrt(n)` | Exact integer square root, the largest `r` with `r * r <= n`; a negative `n` is an `Argument Error` | `isqrt(17)` is `4` |
 | `clamp(x, lo, hi)` | Constrains `x` to the range `[lo, hi]`; `lo` greater than `hi` is an `Argument Error` | `clamp(15, 0, 10)` is `10` |
 | `sign(x)` | `-1`, `0` or `1` | `sign(-50)` is `-1` |
 
@@ -256,7 +262,9 @@ All return a float except `pow` with two ints.
 
 ### Rounding
 
-`floor`, `ceil`, `round` and `trunc` return an int; a result outside the 64-bit int range is a
+Luna has no negative zero: `-0.0` and any result of `-0.0` is `0.0`.
+
+`floor`, `ceil`, `round` (with one argument) and `trunc` return an int; a result outside the 64-bit int range is a
 `Runtime Error` (`floor() result does not fit in a 64-bit int`). `fract` and `mod` return a float.
 
 | Function | Description | Example |
@@ -264,9 +272,12 @@ All return a float except `pow` with two ints.
 | `floor(x)` | Rounds down | `floor(5.9)` is `5` |
 | `ceil(x)` | Rounds up | `ceil(5.1)` is `6` |
 | `round(x)` | Nearest integer, halves away from zero | `round(5.5)` is `6`, `round(-5.5)` is `-6` |
+| `round(x, digits)` | A float rounded to `digits` decimal places (0 to 15), halves away from zero. The scaling is done in binary, so `1.005` (really `1.00499...`) rounds down. An int `x` is returned unchanged | `round(3.14159, 3)` is `3.142` |
 | `trunc(x)` | Removes the fractional part (toward 0) | `trunc(5.9)` is `5` |
-| `fract(x)` | The fractional part | `fract(5.9)` is `0.9` |
-| `mod(x, y)` | Floating-point remainder of `x / y` | `mod(5.5, 2)` is `1.5` |
+| `fract(x)` | The fractional part, with the sign of `x`, so `x == trunc(x) + fract(x)` | `fract(-5.9)` is `-0.9` |
+| `mod(x, y)` | Floored remainder: the result has the sign of `y`, so `mod(-7, 3)` is `2` (while `-7 % 3` is `-1`). Both arguments are ints (result int) or both floats (result float); mixing is a Type Error. A zero divisor is an error | `mod(7, 3)` is `1`, `mod(5.5, 2.0)` is `1.5`, `float(mod(7, 3))` is `1.0` |
+| `floor_div(x, y)` | Division rounding down, so `x == floor_div(x, y) * y + mod(x, y)`. Same argument rules; `INT_MIN` by `-1` is an overflow error | `floor_div(-7, 3)` is `-3` |
+| `divmod(x, y)` | `[floor_div(x, y), mod(x, y)]` | `divmod(-7, 3)` is `[-3, 2]` |
 
 ### Trigonometry
 

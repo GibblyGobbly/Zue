@@ -38,15 +38,23 @@ func ck_init_sigs() {
         sig(nm, [[["float"], "float"]])
     }
     sig("atan2", [[["float", "float"], "float"]])
-    sig("mod", [[["float", "float"], "float"]])
+    sig("mod", [[["int", "int"], "int"], [["float", "float"], "float"]])
+    sig("floor_div", [[["int", "int"], "int"], [["float", "float"], "float"]])
+    sig("divmod", [[["int", "int"], "list"], [["float", "float"], "list"]])
     sig("lerp", [[["float", "float", "float"], "float"]])
     for (let nm in split("floor ceil round trunc", " ")) {
         sig(nm, [[["float"], "int"]])
     }
+    sig("round", [[["float"], "int"], [["float", "int"], "float"], [["int", "int"], "int"]])
     sig("pow", [[["int", "int"], "int"], [["float", "float"], "float"]])
     sig("abs", [[["T"], "T"]])
-    sig("min", [[["T", "T"], "T"]])
-    sig("max", [[["T", "T"], "T"]])
+    sig("min", [[["T", "T"], "T"], [["list"], "any"]])
+    sig("max", [[["T", "T"], "T"], [["list"], "any"]])
+    sig("sum", [[["list"], "any"]])
+    sig("mean", [[["list"], "float"]])
+    sig("gcd", [[["int", "int"], "int"]])
+    sig("lcm", [[["int", "int"], "int"]])
+    sig("isqrt", [[["int"], "int"]])
     sig("clamp", [[["T", "T", "T"], "T"]])
     sig("sign", [[["int"], "int"], [["float"], "int"]])
     sig("rand", [[[], "float"], [["int"], "int"], [["int", "int"], "int"]])
@@ -251,7 +259,16 @@ func ck_bin(n) {
         }
         operand_error(op, a, b, n.line)
     }
-    # + - * / %
+    if (op == "&" or op == "|" or op == "^" or op == "<<" or op == ">>") {
+        if ((a != "any" and a != "int" and a != "int~") or (b != "any" and b != "int" and b != "int~")) {
+            operand_error(op, a, b, n.line)
+        }
+        if (a == "any" or b == "any") {
+            return "any"
+        }
+        return "int"
+    }
+    # + - * / % **
     if (a == "any" or b == "any") {
         return "any"
     }

@@ -292,6 +292,52 @@ func lvp_neg(o, a) {
     _operand_error(cstr("-"), zero, a)
 }
 
+# Bitwise operators work on ints only.
+func _bit_ints(op, a, b) {
+    if (_tag(a) != T_INT or _tag(b) != T_INT) {
+        _operand_error(op, a, b)
+    }
+}
+
+func lvp_band(o, a, b) {
+    _bit_ints(cstr("&"), a, b)
+    _int(o, band(_val(a), _val(b)))
+}
+
+func lvp_bor(o, a, b) {
+    _bit_ints(cstr("|"), a, b)
+    _int(o, bor(_val(a), _val(b)))
+}
+
+func lvp_bxor(o, a, b) {
+    _bit_ints(cstr("^"), a, b)
+    _int(o, bxor(_val(a), _val(b)))
+}
+
+func _shift_count(b) {
+    if (_val(b) < 0 or _val(b) > 63) {
+        _errf(E_ARGUMENT, cstr("A shift count must be from 0 to 63."),
+              cstr("shift count %lld is out of range"), _val(b), 0, 0)
+    }
+}
+
+# x << n must not lose bits: the result shifted back has to give x again.
+func lvp_shl(o, a, b) {
+    _bit_ints(cstr("<<"), a, b)
+    _shift_count(b)
+    let r = shl(_val(a), _val(b))
+    if (sar(r, _val(b)) != _val(a)) {
+        _overflow(cstr("<<"))
+    }
+    _int(o, r)
+}
+
+func lvp_shr(o, a, b) {
+    _bit_ints(cstr(">>"), a, b)
+    _shift_count(b)
+    _int(o, sar(_val(a), _val(b)))
+}
+
 # Comparison
 
 func _family(v) {
@@ -838,4 +884,190 @@ func lv_main(argc_i, argv_p, entry_p) {
     }
     fflush(_stdout())
     return 0
+}
+
+# By-value entry points for generated code. The operands arrive as tag and payload words and the
+# result is returned as an LV in registers, so the generated code never has to give the runtime the
+# address of a value and LLVM can keep its values in registers.
+
+func lvv_add(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_add_fast(o, a, b)
+    retp(o)
+}
+
+func lvv_sub(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_sub_fast(o, a, b)
+    retp(o)
+}
+
+func lvv_mul(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_mul_fast(o, a, b)
+    retp(o)
+}
+
+func lvv_div(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_div(o, a, b)
+    retp(o)
+}
+
+func lvv_mod(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_mod(o, a, b)
+    retp(o)
+}
+
+func lvv_lt(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_lt_fast(o, a, b)
+    retp(o)
+}
+
+func lvv_le(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_le_fast(o, a, b)
+    retp(o)
+}
+
+func lvv_gt(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_gt_fast(o, a, b)
+    retp(o)
+}
+
+func lvv_ge(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_ge_fast(o, a, b)
+    retp(o)
+}
+
+func lvv_eq(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_eq_fast(o, a, b)
+    retp(o)
+}
+
+func lvv_ne(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_ne_fast(o, a, b)
+    retp(o)
+}
+
+func lvv_band(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_band(o, a, b)
+    retp(o)
+}
+
+func lvv_bor(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_bor(o, a, b)
+    retp(o)
+}
+
+func lvv_bxor(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_bxor(o, a, b)
+    retp(o)
+}
+
+func lvv_shl(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_shl(o, a, b)
+    retp(o)
+}
+
+func lvv_shr(at, ap, bt, bp) {
+    let a = stack_buf(16)
+    let b = stack_buf(16)
+    let o = stack_buf(16)
+    _set(a, at, ap)
+    _set(b, bt, bp)
+    lvp_shr(o, a, b)
+    retp(o)
+}
+
+func lvv_truth(t, p) {
+    let a = stack_buf(16)
+    _set(a, t, p)
+    return lvp_truth(a)
+}
+
+func lvv_global_store_check(t, p, in_function_i) {
+    let a = stack_buf(16)
+    _set(a, t, p)
+    lvp_global_store_check(a, in_function_i)
+}
+
+func lvp_gundef(g, name) {
+    lv_undefined(name)
+}
+
+func lvv_box_escape_check(t, p, where_p) {
+    let a = stack_buf(16)
+    _set(a, t, p)
+    lvp_box_escape_check(a, where_p)
 }

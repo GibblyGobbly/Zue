@@ -114,8 +114,8 @@ assert(trunc(5.9) == 5)
 assert(trunc(-5.9) == -5)
 assert(fract(5.9) > 0.89)
 assert(fract(5.9) < 0.91)
-assert(mod(5.5, 2) > 1.4)
-assert(mod(5.5, 2) < 1.6)
+assert(mod(5.5, 2.0) > 1.4)
+assert(mod(5.5, 2.0) < 1.6)
 
 # Logarithms
 let e_val = exp(1)

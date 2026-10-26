@@ -1,0 +1,53 @@
+# CASE floored remainder of ints
+print(mod(7, 3))
+print(mod(-7, 3))
+print(mod(7, -3))
+print(mod(-7, -3))
+print(mod(-1, 5))
+print(mod(0, 5))
+# CASE floored remainder of floats
+print(mod(7.5, 2.0))
+print(mod(-7.5, 2.0))
+print(mod(7.5, -2.0))
+print(mod(-7.5, -2.0))
+# CASE the percent operator still truncates
+print(-7 % 3)
+print(7 % -3)
+# CASE floor_div rounds down
+print(floor_div(7, 3))
+print(floor_div(-7, 3))
+print(floor_div(7, -3))
+print(floor_div(-7, -3))
+print(floor_div(-7.5, 2.0))
+# CASE divmod gives both
+print(divmod(-7, 3))
+print(divmod(17, 5))
+print(divmod(7.5, 2.0))
+# CASE the identity holds
+let ok = true
+for (let a = -20; a <= 20; a++) {
+    for (let b = -6; b <= 6; b++) {
+        if (b != 0) {
+            if (a != floor_div(a, b) * b + mod(a, b)) {
+                ok = false
+            }
+        }
+    }
+}
+print(ok)
+# CASE a result converted on purpose
+print(float(mod(7, 3)))
+# CASE mod of int and float is an error
+print(mod(5.5, 2))
+# CASE mod by zero
+print(mod(5, 0))
+# CASE mod of floats by zero
+print(mod(5.0, 0.0))
+# CASE floor_div by zero
+print(floor_div(5, 0))
+# CASE the remainder of the smallest int by minus one is zero
+print(mod(-9223372036854775807 - 1, -1))
+# CASE the quotient of the smallest int by minus one overflows
+print(floor_div(-9223372036854775807 - 1, -1))
+# CASE divmod of the smallest int by minus one overflows
+print(divmod(-9223372036854775807 - 1, -1))

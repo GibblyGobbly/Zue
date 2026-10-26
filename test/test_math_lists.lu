@@ -1,0 +1,112 @@
+# CASE gcd and lcm
+print(gcd(12, 18))
+print(gcd(-12, 18))
+print(gcd(0, 5))
+print(gcd(0, 0))
+print(gcd(7, 13))
+print(gcd(-9223372036854775807 - 1, 6))
+print(gcd(-9223372036854775807 - 1, -1))
+print(lcm(4, 6))
+print(lcm(-4, 6))
+print(lcm(0, 3))
+# CASE gcd of INT_MIN and 0 overflows
+func pass(v) {
+    return v
+}
+print(gcd(pass(-9223372036854775807 - 1), 0))
+# CASE lcm overflow
+func pass(v) {
+    return v
+}
+print(lcm(pass(4611686018427387904), 3))
+# CASE gcd needs ints
+func pass(v) {
+    return v
+}
+print(gcd(pass(1.5), 2))
+# CASE isqrt is exact
+print(isqrt(0))
+print(isqrt(1))
+print(isqrt(15))
+print(isqrt(16))
+print(isqrt(17))
+print(isqrt(9223372036854775807))
+print(isqrt(9223372030926249001))
+print(isqrt(9223372030926249000))
+let bad = 0
+for (let r = 0; r < 3000; r++) {
+    if (isqrt(r * r) != r or isqrt(r * r + r * 2) != r or (r > 0 and isqrt(r * r - 1) != r - 1)) {
+        bad++
+    }
+}
+print(bad)
+# CASE isqrt of a negative
+func pass(v) {
+    return v
+}
+print(isqrt(pass(-1)))
+# CASE sum of a list
+print(sum([1, 2, 3]))
+print(sum([0.5, 0.25]))
+print(sum([1.0, 1e100, 1.0, -1e100]))
+print(sum(dense_list(4, 0.5)))
+# CASE sum overflow
+func pass(v) {
+    return v
+}
+print(sum(pass([9223372036854775807, 1])))
+# CASE sum of an empty list
+func pass(v) {
+    return v
+}
+print(sum(pass([])))
+# CASE sum of mixed types
+func pass(v) {
+    return v
+}
+print(sum(pass([1, 2.5])))
+# CASE mean
+print(mean([1, 2, 4]))
+print(mean([1.5, 2.5]))
+# CASE min and max of a list
+print(min([3, 1, 2]))
+print(max([3, 1, 2]))
+print(min([2.5, -1.5]))
+print(max([2.5, -1.5]))
+print(min(3, 1))
+# CASE max of an empty list
+func pass(v) {
+    return v
+}
+print(max(pass([])))
+# CASE min of strings
+func pass(v) {
+    return v
+}
+print(min(pass(["a", "b"])))
+# CASE rounding to digits
+print(round(3.14159, 3))
+print(round(-1.5, 0))
+print(round(2.5, 0))
+print(round(5, 2))
+print(round(1234.5678, 1))
+print(round(1e300, 2))
+print(round(2.5))
+# CASE round digits out of range
+func pass(v) {
+    return v
+}
+print(round(1.5, pass(16)))
+# CASE round digits must be an int
+func pass(v) {
+    return v
+}
+print(round(1.5, pass(1.0)))
+# CASE fract keeps the sign
+print(fract(5.9))
+print(fract(-5.9))
+print(fract(5.0))
+# CASE no negative zero
+print(0.0 * -1.0)
+print(-0.0)
+print(round(-0.4, 1))
