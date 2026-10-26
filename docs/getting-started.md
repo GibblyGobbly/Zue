@@ -27,6 +27,17 @@ On Ubuntu or Debian:
 sudo apt install clang make libc6-dev
 ```
 
+## Download a release
+
+Each version is published on the GitHub Releases page as `zue-<version>-linux-x86_64.tar.gz`, with a
+`.sha256` file. It holds a built `bin/zue` and the runtime, so no `make` is needed. It still needs
+`clang` on the machine.
+
+```bash
+tar xzf zue-0.0.3-linux-x86_64.tar.gz
+zue-0.0.3-linux-x86_64/bin/zue run zue-0.0.3-linux-x86_64/examples/hello.zu
+```
+
 ## Build
 
 ```bash

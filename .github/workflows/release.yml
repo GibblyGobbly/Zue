@@ -1,0 +1,46 @@
+name: Release
+
+# Runs only when a version tag is pushed (git tag v0.0.3 && git push origin v0.0.3),
+# or by hand from the Actions tab. Ordinary pushes and pull requests do not start it.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LLVM 18
+        run: sudo apt-get update && sudo apt-get install -y clang-18 llvm-18 && sudo ln -sf /usr/bin/clang-18 /usr/local/bin/clang
+      - name: Check the tag matches VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        run: test "${GITHUB_REF_NAME}" = "v$(cat VERSION)"
+      - name: Build (stage1 and stage2 IR must match)
+        run: make
+      - name: Check the seeds follow the sources
+        run: |
+          make seed
+          git diff --exit-code bootstrap/
+      - name: Test
+        run: make test
+      - name: Package
+        run: tools/package_release.sh
+      - name: Keep the archive from a manual run
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: zue-linux-x86_64
+          path: dist/*.tar.gz*
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.tar.gz.sha256 \
+            --title "Zue $GITHUB_REF_NAME" \
+            --notes "Linux x86-64 build of the Zue compiler. Unpack it and run bin/zue. It needs clang 18 or newer on the machine. See README.md."

@@ -97,6 +97,19 @@ Measured on a 188 KB file of 56,000 tokens, and by instruction count.
 
 The ten `unsafe` rules are listed in [unsafe](unsafe.md).
 
+## Releases
+
+The version is in the `VERSION` file. The workflow in `.github/workflows/release.yml` does not run on
+ordinary pushes or pull requests. It runs when a tag that starts with `v` is pushed. It builds, checks
+that the seeds follow the sources, runs `make test`, packages the build with `tools/package_release.sh`
+and publishes the archive and its checksum as a GitHub release.
+
+```bash
+echo 0.0.4 > VERSION        # change the version, commit it
+git tag v0.0.4              # the tag must match VERSION or the workflow stops
+git push origin main v0.0.4
+```
+
 ## Sources
 
 Ideas used, with the pages they came from:
