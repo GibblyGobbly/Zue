@@ -201,3 +201,27 @@ let count = func(v: list<float>) {
     return len(v)
 }
 print(xs, m, p.x, s, count(dense_list(3, 1.0)))
+# CASE a parameter of a type whose values may be empty may be given null
+func show(name: string, items: list<int>) {
+    if (name == null) {
+        return "no name"
+    }
+    return "{name}: {len(items)}"
+}
+print(show(null, [1]), show("a", [1, 2]))
+# CASE an int parameter cannot be given null
+func twice(n: int) {
+    return n * 2
+}
+print(twice(null))
+# CASE a parameter written list without an item type keeps the item type of each call
+func first_two(xs: list) {
+    let out = []
+    for (let i = 0; i < 2; i++) {
+        append(out, xs[i])
+    }
+    return out
+}
+let a = first_two([1, 2, 3])
+let b = first_two(["x", "y", "z"])
+print(a[0] + 1, b[1] + "!")

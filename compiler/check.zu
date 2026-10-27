@@ -96,6 +96,35 @@ func grow_list(a: Node, t: string, vt: string) -> bool {
 }
 
 # Prints "file:line: name: list<T>" for every list that starts empty and gets values of one known type.
+# zue check --param-types: for each untyped parameter of a named function, the types of the arguments its
+# calls give it, so that a tool can write the type: "file:line:col name" -> the types.
+export const PARAM_TYPES_ON = [false]
+let PARAM_TYPES: map<map<bool>> = {}
+
+func note_param_types(fn: Node, types: list<string>) {
+    for (let i = 0; i < len(fn.params); i++) {
+        if (fn.ptypes != null and fn.ptypes[i] != "") {
+            continue
+        }
+        let at = param_span(fn, i)
+        if (at == null) {
+            continue
+        }
+        let key = "{ST.src_file}:{at.line}:{at.col} {fn.params[i]}"
+        if (not map_has(PARAM_TYPES, key)) {
+            PARAM_TYPES[key] = {}
+        }
+        PARAM_TYPES[key][settle(types[i])] = true
+    }
+}
+
+func print_param_types() {
+    for (let key in sort(map_keys(PARAM_TYPES))) {
+        let sep = "|"
+        print("{key} {join(sort(map_keys(PARAM_TYPES[key])), sep)}")
+    }
+}
+
 func print_list_types() {
     for (let key in sort(map_keys(LIST_TYPES))) {
         let ts = map_keys(LIST_TYPES[key].types)
@@ -2061,8 +2090,9 @@ func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call
                     strict_known(at, argnodes[i], "argument {i + 1} of {name}()")
                     at = adapt_expr(argnodes[i], at, want)
                 }
-                # a parameter of a template type may be given an empty value, as a field of that type may
-                if (not fits_slot(at, want) and not (at == "null" and template_or_null([want]) != null)) {
+                # a parameter of a type whose values may be empty (string, list, map, function, template) may
+                # be given null, as a field or a typed let of that type may
+                if (not fits_slot(at, want) and not (at == "null" and may_be_empty(want))) {
                     let d = fail_node(argnodes[i], "{name}() argument {i + 1} must be {article(want)} {want}, got {describe(at)}")
                     diag_text(d, "expected {want}, found {describe(at)}")
                     if (home == null) {
@@ -2076,7 +2106,11 @@ func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call
                         diag_hint(d, "{ch}{name} is defined in {home.canon} at line {fn.line}, with '{fn.params[i]}' a {want}")
                     }
                 }
-                at = want
+                # a parameter written list or map, without an item type, takes the list or map type of
+                # the argument, so one function serves lists of every item type
+                if (not ((want == "list" or want == "map") and kind_of(at) == want)) {
+                    at = want
+                }
             }
             append(types, settle(at))
         } else if (want != null) {
@@ -2329,6 +2363,11 @@ func spec_site(call: Node, fn: Node, idx: int, types: list<string>, result: stri
     }
 }
 
+# Whether values of type t may be empty (null): all but int, float, bool and char.
+func may_be_empty(t: string) -> bool {
+    return not is_scalar(t) and t != "char"
+}
+
 func is_scalar(t: string) -> bool {
     return t == "int" or t == "float" or t == "bool"
 }
@@ -2346,6 +2385,9 @@ func check_body(name: string, fn: Node, idx: int, types: list<string>, line: int
     push_scope()
     for (let i = 0; i < len(fn.params); i++) {
         declare(fn.params[i], types[i], param_span(fn, i))
+    }
+    if (PARAM_TYPES_ON[0] and QUIET == 0) {
+        note_param_types(fn, types)
     }
     let body = "{ST.src_file}:{fn.line}:{fn.col}:{name}"
     let key = join(types, ",")
@@ -2495,7 +2537,7 @@ func ck_default(fn: Node, i: int, dt: string, want: string) {
     let dn = fn.defaults[i]
     strict_known(dt, dn, "the default value of '{fn.params[i]}'")
     let at = adapt_expr(dn, dt, want)
-    if (not fits_slot(at, want) and not (at == "null" and template_or_null([want]) != null)) {
+    if (not fits_slot(at, want) and not (at == "null" and may_be_empty(want))) {
         let d = fail_node(dn, "the default value of parameter '{fn.params[i]}' must be {article(want)} {want}, got {describe(at)}")
         diag_text(d, "expected {want}, found {describe(at)}")
         diag_label(d, ptype_span(fn, i), "parameter '{fn.params[i]}' is {want}")
@@ -3517,6 +3559,10 @@ export func check_program(stmts: list<Node>, canon: string) {
         # the main program is checked first, and its check covers the files it imports
         print_list_types()
         LIST_TYPES_ON[0] = false
+    }
+    if (PARAM_TYPES_ON[0]) {
+        print_param_types()
+        PARAM_TYPES_ON[0] = false
     }
     report_undefined()
     diag_exit_if_errors()

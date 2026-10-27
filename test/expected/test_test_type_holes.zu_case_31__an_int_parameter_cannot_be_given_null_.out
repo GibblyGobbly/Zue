@@ -1,0 +1,9 @@
+Type Error [E0202] in /tmp/zue_test_case.zu at line 4:
+  twice() argument 1 must be an int, got null
+
+   1 | func twice(n: int) {
+     |               --- parameter 'n' is int
+...
+   4 | print(twice(null))
+     |             ^^^^ expected int, found null
+
