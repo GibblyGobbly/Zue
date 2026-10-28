@@ -17,7 +17,7 @@
 use { Diag, Span, diag_new, diag_text, diag_hint, diag_label, diag_on_line, diag_exit_if_errors, diag_count, span_at, span_line } from "diag.zu"
 use { StrPart, Token, lex } from "lexer.zu"
 use { KEYWORDS } from "token.zu"
-use { Node, node_span, mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_slice, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_case, mk_typedef, mk_use, mk_block, mk_return, mk_jump, mk_neg } from "ast_nodes.zu"
+use { Node, node_span, mk_lit, mk_id, mk_tmpl, mk_list, mk_map, mk_func, mk_box, mk_call, mk_index, mk_slice, mk_field, mk_incdec, mk_bin, mk_not, mk_let, mk_group, mk_if, mk_forin, mk_for, mk_while, mk_switch, mk_assign, mk_setidx, mk_case, mk_typedef, mk_use, mk_block, mk_return, mk_jump, mk_neg, span_token } from "ast_nodes.zu"
 use { cut } from "ranges.zu"
 
 let P_toks: list<Token> = []
@@ -1088,7 +1088,7 @@ func p_if(st: Token) -> Node {
         let e = p_expr()
         p_close(")", "Expected ')' after condition")
         p_check_can_fail(e, "'if (let ...)'")
-        cond = mk_let(lt, P_prev, nt.v, e, false, false, "", nt, null)
+        cond = mk_let(lt, P_prev, nt.v, e, false, false, "", span_at(nt.line, nt.col, nt.eline, nt.ecol), null)
         p_scope_push()
         p_declare(nt.v, nt)
         bound = true
@@ -1153,7 +1153,7 @@ func p_for_header(st: Token) -> Node {
         if (p_eat("=")) {
             first = p_expr()
         }
-        let init = mk_let(lt, P_prev, name, first, false, null, ty, nt, tsp)
+        let init = mk_let(lt, P_prev, name, first, false, false, ty, span_at(nt.line, nt.col, nt.eline, nt.ecol), tsp)
         return p_for_rest(st, init)
     }
     if ((P_kind == ";")) {
@@ -1287,7 +1287,7 @@ func p_simple(st: Token) -> Node {
 func make_setidx(st: Token, e: Node, v: Node, op: string) -> Node {
     let index = e.index
     if (e.k == "field") {
-        index = mk_lit("str", e.fspan, e.fspan, e.field)
+        index = mk_lit("str", span_token(e.fspan), span_token(e.fspan), e.field)
     }
     if (e.k == "index" or e.k == "field") {
         let n = mk_setidx(st, P_prev, e.target, index, v, null)

@@ -7,11 +7,11 @@ use { die_line } from "diag.zu"
 use { cut } from "ranges.zu"
 
 # Reports one error that has only a line and ends the run.
-export func die(kind, line, msg) {
+export func die(kind: string, line: int, msg: string) {
     die_line(kind, line, msg)
 }
 
-export func path_dir(p) {
+export func path_dir(p: string) {
     if (not contains(p, "/")) {
         return ""
     }
@@ -22,7 +22,7 @@ export func path_dir(p) {
     return cut(p, 0, i)
 }
 
-export func path_join(dir, rel) {
+export func path_join(dir: string, rel: string) {
     if (starts_with(rel, "/") or dir == "") {
         return rel
     }
@@ -33,7 +33,7 @@ export func path_join(dir, rel) {
 }
 
 # Resolves "." and ".." segments, like realpath does for files without symlinks.
-export func path_norm(p) {
+export func path_norm(p: string) {
     let absolute = starts_with(p, "/")
     let out: list<string> = []
     for (let seg in split(p, "/")) {
@@ -55,7 +55,7 @@ export func path_norm(p) {
     return joined
 }
 
-export func read_file(path) {
+export func read_file(path: string) {
     let f = open(path, "r")
     if (f == null) {
         print("[ERROR] cannot open {path}")
@@ -67,7 +67,7 @@ export func read_file(path) {
 }
 
 # split() drops empty lines, which would shift every later line number.
-export func split_lines(text) {
+export func split_lines(text: string) {
     let lines = []
     let start = 0
     let n = len(text)

@@ -8,7 +8,7 @@
 # still run in the order they are written. A parameter left out that has a default gets an "absent" node,
 # which the called function reads as not given.
 
-use { NODE_FIELDS, Node, child_list, child_node, mk_jump, node_span, nodes_under } from "ast_nodes.zu"
+use { NODE_FIELDS, Node, child_list, child_node, mk_jump, node_span, node_token, nodes_under } from "ast_nodes.zu"
 use { Span, diag_new, diag_text, diag_label, diag_hint, diag_exit_if_errors, diag_count, suggest } from "diag.zu"
 use { parse_source } from "parser.zu"
 use { BUILTINS } from "shared.zu"
@@ -373,7 +373,7 @@ func place(c: Node, name: string, params: list<string>, defaults: list<Node>) {
             }
         } else if (defaults[p] != null) {
             if (p < last) {
-                append(args, mk_jump("absent", c, c))
+                append(args, mk_jump("absent", node_token(c), node_token(c)))
             }
         } else {
             let d = diag_new("Argument Error", c.aspan, "{name}() needs a value for '{params[p]}'")

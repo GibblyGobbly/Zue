@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 #
-# ranges.zu: cut(x, a, b) takes the part of a string or list from offset a up to, not including,
-# offset b, counting from 0. A negative offset counts from the end, an offset past either end is
+# ranges.zu: cut(s, a, b) and cut_list(x, a, b) take the part of a string or a list from offset a up
+# to, not including, offset b, counting from 0. A negative offset counts from the end, an offset past either end is
 # clamped, and a range that is empty gives "" or []. The compiler uses it because the builtin slice
 # counts from 0 and includes both ends, and never gives an empty result.
 
-export func cut(x, a, b) {
-    let n = len(x)
+export func cut(s: string, a: int, b: int) -> string {
+    let n = len(s)
     if (a < 0) {
         a += n
     }
@@ -20,11 +20,26 @@ export func cut(x, a, b) {
     if (b > n) {
         b = n
     }
-    if (type(x) == "string") {
-        if (a >= b) {
-            return ""
-        }
-        return substring(x, a, b - a)
+    if (a >= b) {
+        return ""
+    }
+    return substring(s, a, b - a)
+}
+
+# A list parameter without an item type takes the list type of each call, so the part has the items' type.
+export func cut_list(x: list, a: int, b: int) {
+    let n = len(x)
+    if (a < 0) {
+        a += n
+    }
+    if (b < 0) {
+        b += n
+    }
+    if (a < 0) {
+        a = 0
+    }
+    if (b > n) {
+        b = n
     }
     let out = []
     while (a < b) {

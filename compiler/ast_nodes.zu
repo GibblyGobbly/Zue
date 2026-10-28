@@ -20,6 +20,7 @@
 # NODE_FIELDS lists the fields each kind uses besides k, line and the places; ast_dump.zu and the tree
 # walkers read it. A possible later form, smaller in memory, is in docs/plan.md (phase 4).
 
+use { Token } from "lexer.zu"
 use { Span, span_at, span_line } from "diag.zu"
 
 export template Node {
@@ -35,7 +36,7 @@ export template Node {
 }
 
 # A node of kind k from token (or node) st to en, every other field empty.
-func node(k, st, en) {
+func node(k: string, st: Token, en: Token) {
     return Node(k, st.line, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
         null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
@@ -43,12 +44,29 @@ func node(k, st, en) {
         null, null, null, null)
 }
 
-# The place of a token, a Span or a node as a Span, or null.
-func sp(x) {
+# The place of a token as a Span, or null.
+func sp(x: Token) -> Span {
     if (x == null) {
         return null
     }
     return span_at(x.line, x.col, x.eline, x.ecol)
+}
+
+# The place of a node as a Span (its line and columns as the parser saw them), or null.
+func nsp(x: Node) -> Span {
+    if (x == null) {
+        return null
+    }
+    return span_at(x.line, x.col, x.eline, x.ecol)
+}
+
+# A token standing for a place, so a node can be made from a span or another node.
+export func span_token(s: Span) -> Token {
+    return Token("", "", [], s.line, s.col, s.eline, s.ecol)
+}
+
+export func node_token(n: Node) -> Token {
+    return Token("", "", [], n.line, n.col, n.eline, n.ecol)
 }
 
 export const NODE_FIELDS: map<list<string>> = {
@@ -92,39 +110,39 @@ export const OPTIONAL_FIELDS: list<string> = ["rtype", "ptypes", "type", "const_
 # its line is the line of st. An argument that ends in span is a token or a Span, or null.
 # Evaluate the children before reading the parser's last token for en: arguments are read in order.
 
-export func mk_lit(k, st, en, v) {
+export func mk_lit(k: string, st: Token, en: Token, v: string) {
     let n = node(k, st, en)
     n.v = v
     return n
 }
 
-export func mk_id(st, en, name) {
+export func mk_id(st: Token, en: Token, name: string) {
     let n = node("id", st, en)
     n.name = name
     return n
 }
 
 # An id node for a name made by the compiler, with no place in the source but its line.
-export func mk_id_line(line, name) {
+export func mk_id_line(line: int, name: string) {
     let at = span_at(line, 0, line, 0)
-    let n = node("id", at, at)
+    let n = node("id", span_token(at), span_token(at))
     n.name = name
     return n
 }
 
-export func mk_tmpl(st, en, parts) {
+export func mk_tmpl(st: Token, en: Token, parts: list<Node>) {
     let n = node("tmpl", st, en)
     n.parts = parts
     return n
 }
 
-export func mk_list(st, en, items) {
+export func mk_list(st: Token, en: Token, items: list<Node>) {
     let n = node("list", st, en)
     n.items = items
     return n
 }
 
-export func mk_map(st, en, keys, vals) {
+export func mk_map(st: Token, en: Token, keys: list<string>, vals: list<Node>) {
     let n = node("map", st, en)
     n.keys = keys
     n.vals = vals
@@ -132,7 +150,7 @@ export func mk_map(st, en, keys, vals) {
 }
 
 # nspan is the name of a named function; pspans the parameter names, tspans their type annotations.
-export func mk_func(st, en, name, params, defaults, ptypes, body, exported, nspan, pspans, tspans, rtype = null, rspan = null) {
+export func mk_func(st: Token, en: Token, name: string, params: list<string>, defaults: list<Node>, ptypes: list<string>, body: list<Node>, exported: bool, nspan: Token, pspans: list<Span>, tspans: list<Span>, rtype: string = null, rspan: Span = null) {
     let n = node("func", st, en)
     n.name = name
     n.params = params
@@ -144,26 +162,26 @@ export func mk_func(st, en, name, params, defaults, ptypes, body, exported, nspa
     n.pspans = pspans
     n.tspans = tspans
     n.rtype = rtype
-    n.rspan = sp(rspan)
+    n.rspan = rspan
     return n
 }
 
-export func mk_box(st, en, size) {
+export func mk_box(st: Token, en: Token, size: Node) {
     let n = node("box", st, en)
     n.size = size
     return n
 }
 
 # aspan is the argument list with its brackets.
-export func mk_call(st, en, callee, args, aspan) {
+export func mk_call(st: Token, en: Token, callee: Node, args: list<Node>, aspan: Span) {
     let n = node("call", st, en)
     n.callee = callee
     n.args = args
-    n.aspan = sp(aspan)
+    n.aspan = aspan
     return n
 }
 
-export func mk_index(st, en, target, index) {
+export func mk_index(st: Token, en: Token, target: Node, index: Node) {
     let n = node("index", st, en)
     n.target = target
     n.index = index
@@ -171,7 +189,7 @@ export func mk_index(st, en, target, index) {
 }
 
 # target[lo:hi]: positions from lo to hi, counting from 0, both included. lo or hi is null when left out.
-export func mk_slice(st, en, target, lo, hi) {
+export func mk_slice(st: Token, en: Token, target: Node, lo: Node, hi: Node) {
     let n = node("slice", st, en)
     n.target = target
     n.lo = lo
@@ -179,7 +197,7 @@ export func mk_slice(st, en, target, lo, hi) {
     return n
 }
 
-export func mk_field(st, en, target, field, fspan) {
+export func mk_field(st: Token, en: Token, target: Node, field: string, fspan: Token) {
     let n = node("field", st, en)
     n.target = target
     n.field = field
@@ -187,7 +205,7 @@ export func mk_field(st, en, target, field, fspan) {
     return n
 }
 
-export func mk_incdec(st, en, name, op, prefix, nspan) {
+export func mk_incdec(st: Token, en: Token, name: string, op: string, prefix: bool, nspan: Token) {
     let n = node("incdec", st, en)
     n.name = name
     n.op = op
@@ -197,7 +215,7 @@ export func mk_incdec(st, en, name, op, prefix, nspan) {
 }
 
 # ospan is the operator.
-export func mk_bin(st, en, op, l, r, ospan) {
+export func mk_bin(st: Token, en: Token, op: string, l: Node, r: Node, ospan: Token) {
     let n = node("bin", st, en)
     n.op = op
     n.l = l
@@ -207,7 +225,7 @@ export func mk_bin(st, en, op, l, r, ospan) {
 }
 
 # Unary minus is stored as 0 - r, with unary set.
-export func mk_neg(st, en, zero, r, ospan) {
+export func mk_neg(st: Token, en: Token, zero: Node, r: Node, ospan: Token) {
     let n = node("bin", st, en)
     n.op = "-"
     n.l = zero
@@ -217,13 +235,13 @@ export func mk_neg(st, en, zero, r, ospan) {
     return n
 }
 
-export func mk_not(st, en, e) {
+export func mk_not(st: Token, en: Token, e: Node) {
     let n = node("not", st, en)
     n.e = e
     return n
 }
 
-export func mk_let(st, en, name, init, exported, const_decl, type, nspan, tspan) {
+export func mk_let(st: Token, en: Token, name: string, init: Node, exported: bool, const_decl: bool, type: string, nspan: Span, tspan: Span) {
     let n = node("let", st, en)
     n.name = name
     n.init = init
@@ -232,18 +250,18 @@ export func mk_let(st, en, name, init, exported, const_decl, type, nspan, tspan)
     if (type != "") {
         n.type = type
     }
-    n.nspan = sp(nspan)
-    n.tspan = sp(tspan)
+    n.nspan = nspan
+    n.tspan = tspan
     return n
 }
 
-export func mk_group(st, en, items) {
+export func mk_group(st: Token, en: Token, items: list<Node>) {
     let n = node("group", st, en)
     n.items = items
     return n
 }
 
-export func mk_if(st, en, cond, then, els) {
+export func mk_if(st: Token, en: Token, cond: Node, then: list<Node>, els: list<Node>) {
     let n = node("if", st, en)
     n.cond = cond
     n.then = then
@@ -251,7 +269,7 @@ export func mk_if(st, en, cond, then, els) {
     return n
 }
 
-export func mk_forin(st, en, name, iter, body, nspan) {
+export func mk_forin(st: Token, en: Token, name: string, iter: Node, body: list<Node>, nspan: Token) {
     let n = node("forin", st, en)
     n.name = name
     n.iter = iter
@@ -260,7 +278,7 @@ export func mk_forin(st, en, name, iter, body, nspan) {
     return n
 }
 
-export func mk_for(st, en, init, cond, incr, body) {
+export func mk_for(st: Token, en: Token, init: Node, cond: Node, incr: Node, body: list<Node>) {
     let n = node("for", st, en)
     n.init = init
     n.cond = cond
@@ -269,14 +287,14 @@ export func mk_for(st, en, init, cond, incr, body) {
     return n
 }
 
-export func mk_while(st, en, cond, body) {
+export func mk_while(st: Token, en: Token, cond: Node, body: list<Node>) {
     let n = node("while", st, en)
     n.cond = cond
     n.body = body
     return n
 }
 
-export func mk_switch(st, en, e, cases, dflt) {
+export func mk_switch(st: Token, en: Token, e: Node, cases: list<Node>, dflt: list<Node>) {
     let n = node("switch", st, en)
     n.e = e
     n.cases = cases
@@ -285,22 +303,22 @@ export func mk_switch(st, en, e, cases, dflt) {
 }
 
 # A case of a switch: its value and its statements.
-export func mk_case(st, e, body) {
+export func mk_case(st: Token, e: Node, body: list<Node>) {
     let n = node("case", st, st)
     n.e = e
     n.body = body
     return n
 }
 
-export func mk_assign(st, en, name, e, nspan) {
+export func mk_assign(st: Token, en: Token, name: string, e: Node, nspan: Node) {
     let n = node("assign", st, en)
     n.name = name
     n.e = e
-    n.nspan = sp(nspan)
+    n.nspan = nsp(nspan)
     return n
 }
 
-export func mk_setidx(st, en, target, index, e, op) {
+export func mk_setidx(st: Token, en: Token, target: Node, index: Node, e: Node, op: string) {
     let n = node("setidx", st, en)
     n.target = target
     n.index = index
@@ -310,7 +328,7 @@ export func mk_setidx(st, en, target, index, e, op) {
 }
 
 # nspan is the name; fspans the field names.
-export func mk_typedef(st, en, exported, name, is_template, is_bloc, fields, ftypes, nspan, fspans) {
+export func mk_typedef(st: Token, en: Token, exported: bool, name: string, is_template: bool, is_bloc: bool, fields: list<string>, ftypes: list<string>, nspan: Token, fspans: list<Span>) {
     let n = node("typedef", st, en)
     n.exported = exported
     n.name = name
@@ -324,7 +342,7 @@ export func mk_typedef(st, en, exported, name, is_template, is_bloc, fields, fty
 }
 
 # pspan is the path string; nspans the imported names.
-export func mk_use(st, en, names, path, pspan, nspans) {
+export func mk_use(st: Token, en: Token, names: list<string>, path: string, pspan: Token, nspans: list<Span>) {
     let n = node("use", st, en)
     n.names = names
     n.path = path
@@ -334,20 +352,20 @@ export func mk_use(st, en, names, path, pspan, nspans) {
 }
 
 # k is "block" for a bare { } block and "unsafe" for an unsafe block.
-export func mk_block(k, st, en, body) {
+export func mk_block(k: string, st: Token, en: Token, body: list<Node>) {
     let n = node(k, st, en)
     n.body = body
     return n
 }
 
-export func mk_return(st, en, e) {
+export func mk_return(st: Token, en: Token, e: Node) {
     let n = node("return", st, en)
     n.e = e
     return n
 }
 
 # k is "break" or "continue".
-export func mk_jump(k, st, en) {
+export func mk_jump(k: string, st: Token, en: Token) {
     let n = node(k, st, en)
     return n
 }
@@ -358,10 +376,6 @@ export func node_span(n: Node) -> Span {
         return span_line(n.line)
     }
     return span_at(n.line, n.col, n.eline, n.ecol)
-}
-
-export func is_node(x) {
-    return type(x) == "template"
 }
 
 # The kind of a syntax tree node.

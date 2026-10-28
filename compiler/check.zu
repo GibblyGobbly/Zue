@@ -15,8 +15,8 @@
 use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
 use { Diag, Span, diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, suggest } from "diag.zu"
-use { cut } from "ranges.zu"
-use { Node, mk_call, node_span, nodes_under } from "ast_nodes.zu"
+use { cut, cut_list } from "ranges.zu"
+use { Node, mk_call, node_span, node_token, nodes_under } from "ast_nodes.zu"
 use { parse_source } from "parser.zu"
 use { resolve_named_args } from "named_args.zu"
 use { path_dir, path_join, path_norm, split_lines } from "util.zu"
@@ -960,7 +960,7 @@ func check_name(n: Node, what: string) -> bool {
     if (map_has(BUILTIN_NAMES, name) or name == "null") {
         return false
     }
-    append(PENDING, Pending(node_span(n), name, what, cut(SCOPES, 0, len(SCOPES))))
+    append(PENDING, Pending(node_span(n), name, what, cut_list(SCOPES, 0, len(SCOPES))))
     # a name declared nowhere is reported at the end; strict mode does not also report its unknown type
     append(ERROR_SPANS, ErrorAt(ST.src_file, node_span(n)))
     return true
@@ -1781,7 +1781,7 @@ func ck_fn_value_call(n: Node, name: string, argtypes: list<string>) {
     for (let t in types) {
         append(nodes, a)
     }
-    ck_user_call(a.name, fn, fidx, types, mk_call(a, a, a, nodes, a), home, true)
+    ck_user_call(a.name, fn, fidx, types, mk_call(node_token(a), node_token(a), a, nodes, node_span(a)), home, true)
 }
 
 func ck_call(n: Node) -> string {
@@ -2378,7 +2378,7 @@ func check_body(name: string, fn: Node, idx: int, types: list<string>, line: int
     let saved = SCOPES
     let saved_ctx: FileState = null
     if (home == null) {
-        SCOPES = cut(saved, 0, idx + 1)
+        SCOPES = cut_list(saved, 0, idx + 1)
     } else {
         saved_ctx = enter_file(home)
     }
@@ -2755,7 +2755,7 @@ func ck_expr(n: Node) -> string {
     if (k == "incdec") {
         let t = lookup(n.name)
         if (t == null and not map_has(BUILTIN_NAMES, n.name)) {
-            append(PENDING, Pending(span_or(n.nspan, n), n.name, "Variable", cut(SCOPES, 0, len(SCOPES))))
+            append(PENDING, Pending(span_or(n.nspan, n), n.name, "Variable", cut_list(SCOPES, 0, len(SCOPES))))
             return "any"
         }
         if (t != null and t != "any" and t != "unset" and t != "int" and t != "float") {
@@ -2812,7 +2812,7 @@ func ck_assign(n: Node) {
     let s = scope_of(n.name)
     if (s == null) {
         if (not map_has(BUILTIN_NAMES, n.name)) {
-            append(PENDING, Pending(span_or(n.nspan, n), n.name, "Variable", cut(SCOPES, 0, len(SCOPES))))
+            append(PENDING, Pending(span_or(n.nspan, n), n.name, "Variable", cut_list(SCOPES, 0, len(SCOPES))))
         }
         return null
     }
@@ -3413,7 +3413,7 @@ func restore_file_state(st: FileState) {
 # body reads that nothing declares were reported when the file itself was checked.
 func enter_file(cf: CkFile) -> FileState {
     let saved = save_file_state()
-    SCOPES = cut(cf.scopes, 0, len(cf.scopes))
+    SCOPES = cut_list(cf.scopes, 0, len(cf.scopes))
     TYPEDEFS = cf.typedefs
     ASSIGNED = cf.assigned
     HOISTED = cf.hoisted

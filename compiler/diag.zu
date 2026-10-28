@@ -11,7 +11,7 @@
 
 use { ST } from "state.zu"
 use { code_for } from "error_codes.zu"
-use { cut } from "ranges.zu"
+use { cut, cut_list } from "ranges.zu"
 
 export template Span { line: int, col: int, eline: int, ecol: int }
 template Label { span: Span, text: string }
@@ -182,8 +182,8 @@ func sort_marks(marks: list<Mark>) -> list<Mark> {
         while (i > 0 and out[i - 1].at > m.at) {
             i -= 1
         }
-        let rest = cut(out, i, len(out))
-        let head = cut(out, 0, i)
+        let rest = cut_list(out, i, len(out))
+        let head = cut_list(out, 0, i)
         out = head
         append(out, m)
         for (let r in rest) {
@@ -247,7 +247,7 @@ func mark_rows(marks: list<Mark>) -> list<string> {
         append(rows, bars_row(pending))
         let k = len(pending) - 1
         while (k >= 0) {
-            let row = bars_row(cut(pending, 0, k))
+            let row = bars_row(cut_list(pending, 0, k))
             let at = pending[k].at
             row = row + repeat(" ", at - len(row)) + pending[k].text
             append(rows, row)
@@ -364,8 +364,8 @@ func merge_sorted(xs: list<Diag>) -> list<Diag> {
         return xs
     }
     let mid = n / 2
-    let a = merge_sorted(cut(xs, 0, mid))
-    let b = merge_sorted(cut(xs, mid, n))
+    let a = merge_sorted(cut_list(xs, 0, mid))
+    let b = merge_sorted(cut_list(xs, mid, n))
     let out: list<Diag> = []
     let i = 0
     let j = 0
@@ -431,7 +431,7 @@ export func diag_shown() {
     if (FORMAT.mode == "json" or len(all) <= MAX_PRINTED) {
         return all
     }
-    return cut(all, 0, MAX_PRINTED)
+    return cut_list(all, 0, MAX_PRINTED)
 }
 
 # Prints every recorded error, in the order of the source, and forgets them.

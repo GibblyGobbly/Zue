@@ -31,10 +31,10 @@ use { SPEC_ON } from "ll_spec.zu"
 use { LIST_TYPES_ON, NO_STRICT, PARAM_TYPES_ON } from "check.zu"
 use { diag_set_format } from "diag.zu"
 use { ERROR_CODES } from "error_codes.zu"
-use { cut } from "ranges.zu"
+use { cut, cut_list } from "ranges.zu"
 
 # Name of a file without its directory and extension: "dir/prog.zu" is "prog".
-func base_name(path) {
+func base_name(path: string) {
     let name = path
     if (contains(path, "/")) {
         name = cut(path, last_index_of(path, "/") + 1, len(path))
@@ -49,7 +49,7 @@ func base_name(path) {
 let RELEASE = [false]
 
 # A shell word for one argument, in single quotes.
-func shell_quote(text) {
+func shell_quote(text: string) {
     let q = "'"
     # Each ' becomes '\'' : close the quote, a quoted quote, reopen.
     return q + replace(text, q, "'\\''") + q
@@ -58,7 +58,7 @@ func shell_quote(text) {
 # The shell command that turns generated IR into a binary with LLVM's tools (compiler/llvm_build.sh).
 # The compiler's own files are found through ZUE_HOME, or else from the place of the running zue
 # binary (bin/zue is one level below the tree).
-func build_command(code_path, out_path) {
+func build_command(code_path: string, out_path: string) {
     let home = "$\{ZUE_HOME:-$(dirname \"$(dirname \"$(readlink -f /proc/$PPID/exe)\")\")}"
     let setup = "H=\"{home}\"; RT=\"$(\"$H/compiler/build_runtime.sh\")\" || exit 1; "
     if (RELEASE[0]) {
@@ -97,14 +97,14 @@ func usage() {
 }
 
 # Parses and compiles one program; returns the LLVM IR text.
-func compile_file(path) {
+func compile_file(path: string) {
     ST.src_file = path
     let text = read_file(path)
     ST.src_lines = split_lines(text)
     return compile_program_ll(parse_source(text))
 }
 
-func write_text(path, text) {
+func write_text(path: string, text: string) {
     let f = open(path, "w")
     if (f == null) {
         print("[ERROR] cannot write {path}")
@@ -115,7 +115,7 @@ func write_text(path, text) {
 }
 
 # Compiles path to C/<name>.ll and, unless stop is set, builds out_path from it.
-func build_program(path, out_path, stop) {
+func build_program(path: string, out_path: string, stop: bool) {
     let name = base_name(path)
     let code = compile_file(path)
     system("mkdir -p C")
@@ -137,7 +137,7 @@ func build_program(path, out_path, stop) {
 }
 
 # zue build prog.zu -o program [-S]
-func build_main(a) {
+func build_main(a: list<string>) {
     let out_path = ""
     let stop = false
     let i = 1
@@ -162,7 +162,7 @@ func build_main(a) {
 }
 
 # zue run prog.zu [args...]: the program's exit status is this command's.
-func run_main(a) {
+func run_main(a: list<string>) {
     let name = base_name(a[0])
     system("mkdir -p C/run")
     let out_path = "C/run/{name}"
@@ -184,7 +184,7 @@ func run_main(a) {
 }
 
 # zue emit prog.zu [-o out.ll]
-func emit_main(a) {
+func emit_main(a: list<string>) {
     let out_path = "C/{base_name(a[0])}.ll"
     let i = 1
     while (i < len(a)) {
@@ -205,7 +205,7 @@ func emit_main(a) {
 }
 
 # zue explain [E0201]: what an error code means, with an example and the fix. No code lists them all.
-func explain_main(a) {
+func explain_main(a: list<string>) {
     if (len(a) == 0 or a[0] == "list") {
         print("Error codes (zue explain CODE for details):")
         print("")
@@ -243,7 +243,7 @@ func explain_main(a) {
 }
 
 # zue ast [--spans] prog.zu: the syntax tree as text (see ast_dump.zu).
-func ast_main(a) {
+func ast_main(a: list<string>) {
     let spans = false
     let path = a[0]
     if (len(a) == 2 and a[0] == "--spans") {
@@ -258,12 +258,12 @@ func ast_main(a) {
 
 # zue check prog.zu: finds the lexical, syntax, type and import errors of a program without building it. Every
 # error is printed together; the status is 1 if there was any.
-func check_main(a) {
+func check_main(a: list<string>) {
     compile_file(a[0])
 }
 
 # zue unparse prog.zu: the program written back as source (see ast_unparse.zu).
-func unparse_main(a) {
+func unparse_main(a: list<string>) {
     ST.src_file = a[0]
     let text = read_file(a[0])
     ST.src_lines = split_lines(text)
@@ -271,7 +271,7 @@ func unparse_main(a) {
 }
 
 # zue --native a.zu b.zu ... -o out.ll: compiles runtime files (emit_native.zu).
-func native_main(a) {
+func native_main(a: list<string>) {
     let files: list<NativeFile> = []
     let out_path = ""
     let i = 1
@@ -295,7 +295,7 @@ func native_main(a) {
 
 # zuec input.zu output.ll [cwd]: the form the test runner and the bootstrap use. The cwd
 # is the directory that relative paths in the program resolve against.
-func positional_main(a) {
+func positional_main(a: list<string>) {
     ST.src_file = a[0]
     let text = read_file(a[0])
     ST.src_lines = split_lines(text)
@@ -315,41 +315,41 @@ func main() {
     if (len(a) >= 1 and a[0] == "--no-strict") {
         # for the test suite: see NO_STRICT in check.zu
         NO_STRICT[0] = true
-        a = cut(a, 1, len(a))
+        a = cut_list(a, 1, len(a))
     }
     if (len(a) < 1) {
         usage()
     }
     let cmd = a[0]
-    let rest = cut(a, 1, len(a))
+    let rest = cut_list(a, 1, len(a))
     if (len(rest) >= 2 and rest[0] == "--error-format=json") {
         diag_set_format("json")
-        rest = cut(rest, 1, len(rest))
+        rest = cut_list(rest, 1, len(rest))
     }
     let more = true
     while (more and len(rest) >= 2) {
         if (rest[0] == "-g" and (cmd == "run" or cmd == "build" or cmd == "emit")) {
             dbg_enable()
-            rest = cut(rest, 1, len(rest))
+            rest = cut_list(rest, 1, len(rest))
         } else if (rest[0] == "--release" and (cmd == "run" or cmd == "build")) {
             RELEASE[0] = true
-            rest = cut(rest, 1, len(rest))
+            rest = cut_list(rest, 1, len(rest))
         } else if (starts_with(rest[0], "--gc=") and (cmd == "run" or cmd == "build" or cmd == "emit")) {
             if (cut(rest[0], 5, len(rest[0])) != "lowmem") {
                 print("unknown collector setting '{cut(rest[0], 5, len(rest[0]))}': the only value is --gc=lowmem (without the flag the collector favors speed)")
                 exit(1)
             }
             GC_LOWMEM[0] = true
-            rest = cut(rest, 1, len(rest))
+            rest = cut_list(rest, 1, len(rest))
         } else if (rest[0] == "--list-types" and cmd == "check") {
             LIST_TYPES_ON[0] = true
-            rest = cut(rest, 1, len(rest))
+            rest = cut_list(rest, 1, len(rest))
         } else if (rest[0] == "--param-types" and cmd == "check") {
             PARAM_TYPES_ON[0] = true
-            rest = cut(rest, 1, len(rest))
+            rest = cut_list(rest, 1, len(rest))
         } else if (rest[0] == "--no-spec" and (cmd == "run" or cmd == "build" or cmd == "emit")) {
             SPEC_ON[0] = false
-            rest = cut(rest, 1, len(rest))
+            rest = cut_list(rest, 1, len(rest))
         } else {
             more = false
         }
