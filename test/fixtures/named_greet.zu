@@ -3,6 +3,6 @@
 #
 # A module for test_named_args_import.zu: an exported function with defaults.
 
-export func greet(name, greeting = "Hello", mark = "!") {
+export func greet(name: string, greeting: string = "Hello", mark: string = "!") {
     return "{greeting}, {name}{mark}"
 }

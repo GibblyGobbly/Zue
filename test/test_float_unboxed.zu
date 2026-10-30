@@ -25,7 +25,7 @@ func main() {
 }
 main()
 # CASE float of an int variable that a function shadows
-func float(x) { return x }
+func float(x: int) { return x }
 func main() {
     let i = 3
     print(float(i))

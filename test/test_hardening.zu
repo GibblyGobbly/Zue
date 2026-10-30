@@ -57,7 +57,7 @@ print(len(repeat("ab", 4611686018427387904)))
 print(-9223372036854775808)
 print(9223372036854775807)
 # CASE deep recursion is an error, not a crash
-func f(n) {
+func f(n: int) {
     if (n == 0) {
         return 0
     }

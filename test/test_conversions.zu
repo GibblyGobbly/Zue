@@ -23,12 +23,12 @@ print(-2 as float)
 print(not "1" as int == 2)
 
 # CASE a float with a fraction has no int
-func pass(v) { return [v, null][0] }
+func pass(v: float) { return [v, null][0] }
 print(int(pass(2.5)))
 # test: no-strict
 
 # CASE a float with a fraction has no int, written with as
-func pass(v) { return [v, null][0] }
+func pass(v: float) { return [v, null][0] }
 print(pass(-0.5) as int)
 # test: no-strict
 
@@ -42,12 +42,12 @@ print(trunc(-2.5))
 print(int('A'))
 
 # CASE a char is not a number, found while the program runs
-func pass(v) { return [v, null][0] }
+func pass(v: char) { return [v, null][0] }
 print(int(pass('A')))
 # test: no-strict
 
 # CASE a bool is not a number
-func pass(v) { return [v, null][0] }
+func pass(v: bool) { return [v, null][0] }
 print(float(pass(true)))
 # test: no-strict
 
@@ -55,13 +55,13 @@ print(float(pass(true)))
 print("4x" as int)
 
 # CASE an int above 2^53 that has no exact float
-func pass(v) { return [v, null][0] }
+func pass(v: int) { return [v, null][0] }
 print(float(pass(9007199254740992)))
 print(float(pass(9007199254740993)))
 # test: no-strict
 
 # CASE an int kept raw that has no exact float
-func f(n) {
+func f(n: int) {
     let m = n + 1
     return float(m)
 }
@@ -81,7 +81,7 @@ print(char(256))
 print(to_int("12"))
 
 # CASE else runs when the conversion fails
-func number(s) {
+func number(s: string) {
     let n = s as int else {
         print("'{s}' is not a whole number")
         return 0

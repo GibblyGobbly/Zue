@@ -9,7 +9,7 @@ returns the value.
 ```javascript
 # math_mod.zu
 export const BASE = 10
-export func scale(x) {
+export func scale(x: int) {
     return x * BASE
 }
 ```

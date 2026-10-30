@@ -326,7 +326,7 @@ def block_source(stmts, depth):
 def program_source(funcs, main):
     text = ""
     for name, params, body, ret in funcs:
-        text += "func %s(%s) {\n%s    return %s\n}\n" % (name, ", ".join(params), block_source(body, 1), render(ret))
+        text += "func %s(%s) {\n%s    return %s\n}\n" % (name, ", ".join(p + ": int" for p in params), block_source(body, 1), render(ret))
     return text + block_source(main, 0)
 
 

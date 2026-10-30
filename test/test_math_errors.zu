@@ -24,19 +24,19 @@ print(int(""))
 print(int("  -42  "))
 print(int("+7"))
 # CASE rand with a string
-func pass(v) {
+func pass(v: string) {
     return [v, null][0]
 }
 print(rand(pass("a")))
 # test: no-strict
 # CASE rand with a float
-func pass(v) {
+func pass(v: float) {
     return [v, null][0]
 }
 print(rand(pass(5.9)))
 # test: no-strict
 # CASE srand with a string
-func pass(v) {
+func pass(v: string) {
     return [v, null][0]
 }
 srand(pass("x"))
@@ -95,14 +95,14 @@ print(dense_list(-1, 0.0))
 let d = dense_list(2, 0.0)
 d[0] = "s"
 # CASE storing a string in a dense list at run time
-func pass(v) {
+func pass(v: string) {
     return [v, null][0]
 }
 let d = dense_list(2, 0.0)
 d[0] = pass("s")
 # test: no-strict
 # CASE storing an int in a dense list
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 let d = dense_list(2, 0.0)
@@ -132,13 +132,13 @@ let r = [3.0, 99.0]
 remove(r, 1)
 print(mat_mul([[1.0, 2.0], r], [[1.0], [1.0]]))
 # CASE mat_mul with a row that is not a list
-func pass(v) {
+func pass(v: list) {
     return [v, null][0]
 }
 print(mat_mul(pass([[1.0], 5]), [[1.0]]))
 # test: no-strict
 # CASE mat_mul with a second row that is not a list
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 print(mat_mul([[1.0, 2.0]], [[1.0], pass(7)]))

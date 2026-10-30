@@ -121,7 +121,7 @@ reclaimed: its stack, about 6.5 KB, stays for as long as the program runs, like 
 channels that will get no more values, so that receivers wake up.
 
 ```
-func worker(id, results) {
+func worker(id: int, results: channel) {
     send(results, id * id)
 }
 let results = channel(4)
@@ -242,7 +242,7 @@ two two two
 ### Example: username validator
 
 ```javascript
-func validate_username(username) {
+func validate_username(username: string) {
     let clean = trim(username)
     if (is_empty(clean)) {
         print("Error: username cannot be empty")
@@ -273,7 +273,7 @@ validate_username("9gamer")
 ### Example: text formatter
 
 ```javascript
-func format_title(text) {
+func format_title(text: string) {
     let upper = to_upper(text)
     let border = repeat("=", len(upper) + 4)
     print(border)
@@ -281,7 +281,7 @@ func format_title(text) {
     print(border)
 }
 
-func censor_text(text, bad_word) {
+func censor_text(text: string, bad_word: string) {
     return replace(text, bad_word, repeat("*", len(bad_word)))
 }
 
@@ -438,7 +438,7 @@ print(distance(0, 0, 3, 4))   # 5
 ### Example: dice statistics
 
 ```javascript
-func roll_dice(num_rolls) {
+func roll_dice(num_rolls: int) {
     srand(42)
     let total = 0
     let lowest = 6

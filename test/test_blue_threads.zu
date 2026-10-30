@@ -2,7 +2,7 @@
 # ZUE_RT_GC_STRESS=1 ZUE_RT_GC_VERIFY=1 to check that the collector sees the stacks of threads that are away.
 
 # CASE results and order
-func add(a, b) {
+func add(a: int, b: int) {
     return a + b
 }
 let t1 = spawn(add, 2, 3)
@@ -11,7 +11,7 @@ print(wait(t2), wait(t1))
 print(type(t1), type(channel()))
 
 # CASE threads run only when the running thread waits
-func say(name) {
+func say(name: string) {
     print("in {name}")
     return name
 }
@@ -20,7 +20,7 @@ print("before wait")
 print(wait(t))
 
 # CASE yield alternates between threads
-func count(name, n) {
+func count(name: string, n: int) {
     for (let i = 0; i < n; i++) {
         print("{name} {i}")
         yield()
@@ -34,7 +34,7 @@ let rb: int = wait(b)
 print(ra + rb)
 
 # CASE unbuffered channel hands values over in order
-func producer(ch, n) {
+func producer(ch: channel, n: int) {
     for (let i = 0; i < n; i++) {
         send(ch, i * i)
     }
@@ -49,7 +49,7 @@ wait(p)
 print(out)
 
 # CASE buffered channel fills and the sender waits for room
-func fill(ch) {
+func fill(ch: channel) {
     for (let i = 0; i < 6; i++) {
         send(ch, i)
         print("sent {i}")
@@ -68,13 +68,13 @@ wait(f)
 print(sum)
 
 # CASE a pipeline of three threads
-func gen(out, n) {
+func gen(out: channel, n: int) {
     for (let i = 1; i <= n; i++) {
         send(out, i)
     }
     channel_close(out)
 }
-func square(inp, out, n) {
+func square(inp: channel, out: channel, n: int) {
     for (let i = 0; i < n; i++) {
         let v: int = recv(inp)
         send(out, v * recv_one_more())
@@ -112,7 +112,7 @@ let ch = channel()
 recv(ch)
 
 # CASE a thread waiting for itself
-func me(cell) {
+func me(cell: list) {
     let t: thread = cell[0]
     return wait(t)
 }
@@ -131,7 +131,7 @@ spawn(5)
 channel(0 - 1)
 
 # CASE a thread keeps its own call depth
-func deep(n) {
+func deep(n: int) {
     if (n == 0) {
         yield()
         return 0
@@ -149,7 +149,7 @@ func forever(n: int) -> int {
 wait(spawn(forever, 0))
 
 # CASE many threads
-func square_of(n) {
+func square_of(n: int) {
     return n * n
 }
 let ts = []
@@ -164,7 +164,7 @@ for (let i = 0; i < 2000; i++) {
 print(total)
 
 # CASE objects held only by a thread that is away survive collections
-func holder_thread(ch, id) {
+func holder_thread(ch: channel, id: int) {
     let mine = []
     for (let i = 0; i < 200; i++) {
         append(mine, [id, i, "s{id}-{i}"])
@@ -206,7 +206,7 @@ print(total)
 
 # CASE a thread that runs before the collector reached its stack hands on what only it held
 let shelf = []
-func deep(id, n) {
+func deep(id: int, n: int) {
     if (n == 0) {
         let mine = [id, "only{id}"]
         yield()
@@ -222,7 +222,7 @@ func deep(id, n) {
     let pad = n * 2
     return deep(id, n - 1) + pad - pad
 }
-func start(id) {
+func start(id: int) {
     return deep(id, 150)
 }
 let ds = []

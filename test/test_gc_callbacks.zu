@@ -31,7 +31,7 @@ let kept = filter(src, func(x: int) {
 assert(len(kept) == 1000)
 assert(kept[999] == 1998)
 
-func join_digits(acc, x) {
+func join_digits(acc: string, x: int) {
     churn(x)
     if (x < 50) { return acc + to_string(x % 10) }
     return acc

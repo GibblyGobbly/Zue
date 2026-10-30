@@ -146,14 +146,14 @@ print(k)
 Parameters can have default values. A function is a value and can be passed around.
 
 ```javascript
-func greet(name, greeting = "Hello") {
+func greet(name: string, greeting: string = "Hello") {
     return "{greeting}, {name}!"
 }
 
 print(greet("Astra"))
 print(greet("Astra", "Hi"))
 
-func twice(f, x) {
+func twice(f: function, x: int) {
     return f(f(x))
 }
 print(twice(func(n: int) { return n * 3 }, 2))   # 18
@@ -212,7 +212,7 @@ Split a program over files and share names with `export`:
 
 ```javascript
 # utils.zu
-export func shout(text) {
+export func shout(text: string) {
     return to_upper(text) + "!"
 }
 ```
@@ -271,7 +271,7 @@ The [examples](examples) folder has these ready to run with `zue run examples/<n
 ### Quicksort
 
 ```javascript
-func quicksort(items) {
+func quicksort(items: list) {
     if (len(items) <= 1) {
         return items
     }

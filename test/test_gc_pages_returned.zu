@@ -1,7 +1,7 @@
 # Empty pages go back to the OS: after a large structure is dropped and the collector has run, the
 # resident memory of the process falls well below its peak. Reads VmRSS and VmHWM from /proc.
 
-func status_kib(name) {
+func status_kib(name: string) {
     let f = open("/proc/self/status", "r")
     let text = read(f)
     close(f)

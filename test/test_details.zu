@@ -10,13 +10,13 @@ print(pad_left("7", 3, "0"), pad_right("Ok", 5, "."), pad_left("x", 3, "é"))
 # CASE pad with more than one character
 print(pad_left("7", 3, "ab"))
 # CASE pad names the pad argument
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 print(pad_left("7", 3, pass(5)))
 # test: no-strict
 # CASE join names the separator argument
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 print(join(["a"], pass(5)))
@@ -24,7 +24,7 @@ print(join(["a"], pass(5)))
 # CASE repeat too large
 print(repeat("ab", 40000000000000))
 # CASE str_len and concat take strings
-func pass(v) {
+func pass(v: list<int>) {
     return [v, null][0]
 }
 print(str_len("abc"))

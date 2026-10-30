@@ -5,7 +5,7 @@
 # large string ended where its mapping ended it crashed. These cases join strings at the sizes where
 # an object ends: the small-object limit, a whole 64 KB span, and sizes in between.
 # CASE joins at the edges of the size classes
-func make(n, c) {
+func make(n: int, c: string) {
     let s = ""
     let piece = repeat(c, 1000)
     let left = n

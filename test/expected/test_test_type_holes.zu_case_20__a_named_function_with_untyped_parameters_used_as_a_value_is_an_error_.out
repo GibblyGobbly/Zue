@@ -1,3 +1,19 @@
+Type Error [E0208] in /tmp/zue_test_case.zu at line 1:
+  strict mode: parameter 'a' of add() needs a type, for example a: int
+
+   1 | func add(a, b) {
+     |          ^ needs a type
+
+Hint: Every parameter has a type; a variable takes the type of its first value
+
+Type Error [E0208] in /tmp/zue_test_case.zu at line 1:
+  strict mode: parameter 'b' of add() needs a type, for example b: int
+
+   1 | func add(a, b) {
+     |             ^ needs a type
+
+Hint: Every parameter has a type; a variable takes the type of its first value
+
 Type Error [E0208] in /tmp/zue_test_case.zu at line 4:
   strict mode: 'add' is used as a value, so its parameter 'a' needs a type, for example a: int
 
@@ -5,3 +21,4 @@ Type Error [E0208] in /tmp/zue_test_case.zu at line 4:
      |         ^^^ used as a value
 
 Hint: A function called by its name is checked for the types of each call; one passed around as a value is not
+3 errors found.

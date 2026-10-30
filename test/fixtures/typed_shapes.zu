@@ -12,12 +12,8 @@ export func area(w: float, h: float) {
     return w * h
 }
 
-export func twice(x) {
+export func twice(x: int) {
     return x + x
-}
-
-export func label(s) {
-    return s + 1
 }
 
 # A file that imports only corner_of still knows the fields of the Corner it returns.

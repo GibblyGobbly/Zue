@@ -1,7 +1,7 @@
 # Objects on both sides of every size-class boundary and of the large-object limit keep their
 # contents while others are freed and their memory is reused.
 
-func check_string(size, ch) {
+func check_string(size: int, ch: string) {
     let s = pad_left("", size, ch)
     if (len(s) != size or char_at(s, 0) != ch or char_at(s, size - 1) != ch) {
         print("bad string of {size}")
@@ -10,7 +10,7 @@ func check_string(size, ch) {
     return s
 }
 
-func check_list(size) {
+func check_list(size: int) {
     let l = []
     for (let i = 0; i < size; i++) {
         append(l, i)

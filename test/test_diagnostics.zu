@@ -77,11 +77,11 @@ show()
 let user = "ann"
 print("hello {usr}")
 # CASE an error in a function body is reported once however many calls reach it
-func g(v) {
+func g(v: int) {
     return v * "a"
 }
 print(g(1))
-print(g(2.5))
+print(g(2))
 # CASE an unterminated string
 let s = "abc
 print(s)

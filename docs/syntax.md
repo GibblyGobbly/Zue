@@ -298,7 +298,7 @@ third iteration sees `2` even after the loop has finished. A variable declared b
 ## Functions
 
 ```javascript
-func greet(name, greeting = "Hello") {    # default parameter
+func greet(name: string, greeting: string = "Hello") {    # default parameter
     return "{greeting}, {name}"
 }
 
@@ -328,7 +328,7 @@ A call can name its arguments. This helps when a function has defaults and you w
 of them. Here `food` must be given, and `drink` and `size` have defaults:
 
 ```javascript
-func order(food, drink = "water", size = "medium") {
+func order(food: string, drink: string = "water", size: string = "medium") {
     print("{food}, {drink}, {size}")
 }
 
@@ -392,7 +392,7 @@ Recursion is limited to 100000 nested calls; beyond that the program stops with
 `defer(call(...))` runs the call when the current scope exits, in LIFO order:
 
 ```javascript
-func save(path, text) {
+func save(path: string, text: string) {
     let f = open(path, "w")
     if (f == null) {
         print("cannot write {path}")
@@ -495,8 +495,6 @@ a `Type Error` with the line, and the program is not built.
   form). A whole number adapts to a float only when the float is exact: `floor(9007199254740993)` is an
   error, since the nearest float is 9007199254740992. A variable never converts: with `let n = 16`,
   `sqrt(n)` and `n + 1.5` are errors. Write `sqrt(float(n))` or `sqrt(n as float)` to convert on purpose.
-- In a function checked with several argument types, a number adapts per call: with
-  `func f(v) { let x = v; x = 1; return x }`, `f(1.5)` gives `1.0` and `f(2)` gives `1`.
 - A variable declared `int`, `float` or `bool` cannot start as `null` (`let x: int = null` is an error).
 - Operators need operands of the same type. `"a" + 1`, `"a" * 2`, `-"a"`, `1 == "a"` and
   `3 == 3.0` for a variable are errors, and so is dividing by a zero written in the source.
@@ -506,10 +504,8 @@ a `Type Error` with the line, and the program is not built.
   `pow(int, int)` or `pow(float, float)`, `len(5)`, `append(5, 1)` and `trim()` are errors. Text builtins
   that take a string also take a char where the runtime does (`split(s, ',')`, `to_upper('a')`).
   `print`, `spawn` and the builtins of `unsafe` code are checked in their own way.
-- A function you write is checked at each call, with its parameters bound to the argument types:
-  `area(2, "a")` is an error at the call when the body does `w * h`, and the message names the
-  call (`in area(int, string), called at line 3`). A call with a number written in the source gives
-  that parameter the plain type (`16` is an int, `16.0` a float). The type of a call is the type
+- Every parameter of a function has a type (see Strict mode below), and each call is checked against
+  them: `area(2, "a")` with `func area(w: int, h: int)` is an error at the call. The type of a call is the type
   its `return` statements give, with `null` added when the body can end without a return; a recursive
   call needs a base case that returns first. A name that is assigned anywhere (`g = h`) or hidden by a
   parameter or local of the same name is not checked against the function's body.
@@ -529,12 +525,13 @@ a `Type Error` with the line, and the program is not built.
 - A function declared inside another is checked for each call of its parent, with the types it takes
   from that call.
 - A named function given to `map`, `filter`, `reduce` or `spawn` is checked for the types it will be
-  called with: `map(["a"], dbl)` with `func dbl(x) { return x * 2 }` is an error. Used as a value anywhere
+  called with: `map(["a"], dbl)` with `func dbl(x: int) { return x * 2 }` is an error. Used as a value anywhere
   else (`let h = add`, `apply(add, 1)`, `g = h`), its parameters need types, as a `func` value's do.
 - A list that starts empty takes the type of the first value appended to it: after `let xs = []` and
   `append(xs, 1)`, `xs` is a `list<int>`. A value of another type appended or stored later makes it a list
   of mixed items. Write the type (`let xs: list<int> = []`) to have such a value rejected instead.
-- A test of `type(x)` against a name, when the type of `x` is known, leaves out the branch that cannot run:
+- A test of `type(x)` against a name, when the type of `x` is known, leaves out the branch that cannot run
+  (an untyped parameter, with `zue --no-strict`):
   a function with `if (type(x) == "string") { return "text" }` called with a list does not count that
   return. When the branch that runs always returns, the rest of the block is left out too:
 
@@ -662,57 +659,58 @@ stored in a variable or reassigned) are checked the same way when it is called. 
 checker proves is never checked again. A value of unknown type returned from a function with a result
 type needs `as`, as an assignment does.
 
-A parameter of a named function may stay untyped: the body is checked for the argument types of each
-call, and strict mode reports what is unknown in those checks. The parameters of a function value
-(`let f = func(x) { ... }`) need types, because the checker does not follow calls made through a variable:
+Every parameter has a type, in a named function and in a function value alike. A parameter without one
+is an error:
 
 ```javascript
-func twice(x) {
+func twice(x) {        # error: parameter 'x' of twice() needs a type, for example x: int
     return x + x
 }
-print(twice(4))        # checked with x an int
-print(twice("ab"))     # checked with x a string
-let f = func(x) {      # error: parameter 'x' of this function value needs a type
-    return x
-}
 ```
 
-The same function can be used with ints and with floats, and each call is checked with its own types:
+A call with a wrong type stops the build, and the error shows the parameter and the argument:
 
 ```javascript
-func area(w, h) {
+func area(w: int, h: int) {
     return w * h
 }
-
-print(area(3, 4))
-print(area(2.5, 2.0))
-```
-
-Output:
-
-```
-12
-5.0
-```
-
-A call with a wrong type stops the build, and the error says which call caused it:
-
-```javascript
 print(area("big", 2))
 ```
 
 Output:
 
 ```
-Type Error [E0201] in area.zu at line 3:
-  cannot use '*' on string and int
-  in area(string, int), called at line 8
+Type Error [E0202] in area.zu at line 4:
+  area() argument 1 must be an int, got string
 
-   3 |     return w * h
-     |            - ^ - int
-     |            |
-     |            string
+   1 | func area(w: int, h: int) {
+     |              --- parameter 'w' is int
+...
+   4 | print(area("big", 2))
+     |            ^^^^^ expected int, found string
 ```
+
+A parameter of an open type takes the full type of each call's argument, so one function serves several
+types. The open types are `list` and `map` written without an item type, and a template or bloc that has a
+field without a type:
+
+```javascript
+func first(xs: list) {
+    return xs[0]
+}
+print(first([1, 2]) + 1)
+print(first(["a", "b"]) + "c")
+```
+
+Output:
+
+```
+2
+ac
+```
+
+With `zue --no-strict` a parameter of a named function may stay untyped; its body is then checked for the
+argument types of each call (`in twice(string), called at line 5`).
 
 ### Raw values
 

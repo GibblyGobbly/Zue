@@ -1,0 +1,16 @@
+Type Error [E0208] in /tmp/zue_test_case.zu at line 1:
+  strict mode: parameter 'w' of area() needs a type, for example w: int
+
+   1 | func area(w, h) {
+     |           ^ needs a type
+
+Hint: Every parameter has a type; a variable takes the type of its first value
+
+Type Error [E0208] in /tmp/zue_test_case.zu at line 1:
+  strict mode: parameter 'h' of area() needs a type, for example h: int
+
+   1 | func area(w, h) {
+     |              ^ needs a type
+
+Hint: Every parameter has a type; a variable takes the type of its first value
+2 errors found.

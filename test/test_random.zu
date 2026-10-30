@@ -1,7 +1,7 @@
 // rand and srand (xoroshiro128++), trand and tshuffle (OS entropy), shuffle. Both ends of a range are included.
 
 # CASE srand repeats a sequence
-func same(x, y) {
+func same(x: list<int>, y: list<int>) {
     if (len(x) != len(y)) {
         return false
     }
@@ -81,7 +81,7 @@ let x = trand()
 srand(5)
 print(x != trand())
 # CASE shuffle repeats after srand and keeps every item
-func same(x, y) {
+func same(x: list<int>, y: list<int>) {
     if (len(x) != len(y)) {
         return false
     }
@@ -152,7 +152,7 @@ for (let k in map_keys(counts)) {
 }
 print(even)
 # CASE tshuffle keeps every item of a long list
-func same(x, y) {
+func same(x: list<int>, y: list<int>) {
     if (len(x) != len(y)) {
         return false
     }
@@ -172,49 +172,49 @@ print(same(l, range(0, 1000)))
 sort(l)
 print(same(l, range(0, 1000)))
 # CASE rand with a string
-func pass(v) {
+func pass(v: string) {
     return [v, null][0]
 }
 print(rand(pass("a")))
 # test: no-strict
 # CASE rand with a float bound
-func pass(v) {
+func pass(v: float) {
     return [v, null][0]
 }
 print(rand(1, pass(2.5)))
 # test: no-strict
 # CASE trand with a string
-func pass(v) {
+func pass(v: string) {
     return [v, null][0]
 }
 print(trand(pass("a")))
 # test: no-strict
 # CASE trand with a float bound
-func pass(v) {
+func pass(v: float) {
     return [v, null][0]
 }
 print(trand(pass(2.5), 9))
 # test: no-strict
 # CASE srand with a float
-func pass(v) {
+func pass(v: float) {
     return [v, null][0]
 }
 srand(pass(1.5))
 # test: no-strict
 # CASE shuffle of a number
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 shuffle(pass(5))
 # test: no-strict
 # CASE tshuffle of a string
-func pass(v) {
+func pass(v: string) {
     return [v, null][0]
 }
 tshuffle(pass("abc"))
 # test: no-strict
 # CASE shuffle with two arguments
-func pass(v) {
+func pass(v: list<int>) {
     return [v, null][0]
 }
 shuffle(pass([1]), [2])

@@ -105,7 +105,7 @@ Validating user names and passwords with the character classes.
 ```javascript
 # Checking text: trim, len, is_* classes, starts_with, contains
 
-func check_password(pw) {
+func check_password(pw: string) {
     if (len(pw) < 8) {
         return "too short"
     }
@@ -136,7 +136,7 @@ func check_password(pw) {
     return "ok"
 }
 
-func check_username(raw) {
+func check_username(raw: string) {
     let name = trim(raw)
     if (is_empty(name)) {
         return "empty"
@@ -298,7 +298,7 @@ Reversing, a palindrome test, and a Caesar cipher.
 
 let ALPHABET = "abcdefghijklmnopqrstuvwxyz"
 
-func is_palindrome(text) {
+func is_palindrome(text: string) {
     let letters = ""
     for (let i = 0; i < len(text); i++) {
         let c = to_lower(char_at(text, i))
@@ -309,14 +309,14 @@ func is_palindrome(text) {
     return letters == reverse(letters)
 }
 
-func shift_letter(c, k) {
+func shift_letter(c: string, k: int) {
     if (not contains(ALPHABET, c)) {
         return c
     }
     return char_at(ALPHABET, mod(index_of(ALPHABET, c) + k, 26))
 }
 
-func caesar(text, k) {
+func caesar(text: string, k: int) {
     let out = ""
     for (let i = 0; i < len(text); i++) {
         out = out + shift_letter(char_at(text, i), k)
@@ -359,7 +359,7 @@ A tokenizer, a key=value reader, and slices.
 ```javascript
 # Taking text apart: a tokenizer with skip_chars and index_of_any, and slices
 
-func tokens(src) {
+func tokens(src: string) {
     let out = []
     let i = 0
     while (i < len(src)) {

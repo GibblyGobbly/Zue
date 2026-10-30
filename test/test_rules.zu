@@ -1,6 +1,6 @@
 print("=== Running Data and Memory Rule Tests ===")
 
-func say(t) {
+func say(t: string) {
     print(t)
 }
 

@@ -2,17 +2,17 @@
 # Copyright (c) 2026 GibblyGobbly
 # What unsafe blocks allow: calls to your own functions (even ones with their own unsafe block), and freeing under any condition.
 
-func square(x) {
+func square(x: int) {
     return x * x
 }
 
-func fill(buf, n) {
+func fill(buf: pointer, n: int) {
     for (let i = 0; i < n; i++) {
         store(ptr_offset(buf, i), square(i))
     }
 }
 
-func sum(buf, n) {
+func sum(buf: pointer, n: int) {
     let total = 0
     for (let i = 0; i < n; i++) {
         let got_total: int = load(ptr_offset(buf, i))
@@ -31,7 +31,7 @@ unsafe {
 
 # A function with its own unsafe block can be called from inside another one: a safe wrapper.
 # Each block frees its own memory when it ends, and only a plain value comes back out.
-func read_twice(value) {
+func read_twice(value: int) {
     unsafe {
         let inner = alloc(1)
         defer(inner)
@@ -62,7 +62,7 @@ unsafe {
 }
 
 # A pointer made by a function called inside the block stays inside the block.
-func make(n) {
+func make(n: int) {
     let p = alloc(n)
     store(p, 7)
     return p

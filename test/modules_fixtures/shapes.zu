@@ -1,10 +1,10 @@
 // Fixture for test_use_file.zu: two exports and one private helper.
 export const UNIT = "cm"
 
-export func area(w, h) {
+export func area(w: int, h: int) {
     return scale(w * h)
 }
 
-func scale(x) {
+func scale(x: int) {
     return x
 }

@@ -5,7 +5,7 @@
 # parameters. A parameter with a default can be left out before a named one.
 
 # CASE named arguments after positional ones
-func greet(name, greeting = "Hello", mark = "!") {
+func greet(name: string, greeting: string = "Hello", mark: string = "!") {
     return "{greeting}, {name}{mark}"
 }
 print(greet("Ann"))
@@ -15,15 +15,15 @@ print(greet(name: "Bo", greeting: "Hey", mark: "."))
 print(greet("Cy", "Yo", mark: "..."))
 
 # CASE a parameter left out in the middle keeps its default
-func volume(w, h = 2, depth = 1) {
+func volume(w: int, h: int = 2, depth: int = 1) {
     return w * h * depth
 }
 print(volume(2, depth: 5))
 print(volume(3, h: 1))
 
 # CASE a nested function
-func area(w, h) {
-    func half(v, by = 2.0) {
+func area(w: float, h: float) {
+    func half(v: float, by: float = 2.0) {
         return v / by
     }
     return half(w * h, by: 1.0)
@@ -122,7 +122,8 @@ h = other
 print(h(1, b: 3))
 
 # CASE an absent value is never seen by the program
-func show(a = 1, b = 2) {
+# test: no-strict
+func show(a = 1, b: int = 2) {
     return [a, b]
 }
 print(show(b: 5))

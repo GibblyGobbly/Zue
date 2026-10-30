@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# A module for test_import_types_body.zu: a function whose body has a type error.
+
+export func label(s: string) {
+    return s + 1
+}

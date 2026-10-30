@@ -47,7 +47,7 @@ assert(branch == 42)
 
 assert(l[-1] == 99)
 
-func greet(name, greeting = "Hello") {
+func greet(name: string, greeting: string = "Hello") {
     return greeting + ", " + name
 }
 assert(greet("Zue") == "Hello, Zue")
@@ -134,7 +134,7 @@ assert(c1 == 1)
 assert(c2 == 2)
 assert(c3 == 3)
 
-func apply_twice(fn, value) {
+func apply_twice(fn: function, value: int) {
     return fn(fn(value))
 }
 

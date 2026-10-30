@@ -11,7 +11,7 @@ assert(f != null)
 write(f, "Hello Zue\nSecond Line\n")
 close(f)
 
-func write_with_defer(path, text) {
+func write_with_defer(path: string, text: string) {
     let handle = open(path, "w")
     assert(handle != null)
     defer(close(handle))

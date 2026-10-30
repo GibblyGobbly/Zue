@@ -4,11 +4,11 @@
 
 template Holder { item }
 
-func make_obj(i) {
+func make_obj(i: int) {
     return [i, i * 2, "n{i}", [i, i + 1]]
 }
 
-func check_obj(o, i) {
+func check_obj(o: list, i: int) {
     if (len(o) != 4) {
         print("object {i} was damaged")
         exit(1)
@@ -56,7 +56,7 @@ func case_map_set() {
     }
 }
 
-func make_cell(i) {
+func make_cell(i: int) {
     let v = make_obj(i)
     return [func() { return v }, func(x: list) { v = x }]
 }

@@ -15,7 +15,7 @@ assert("int main(void) \{ return {n}; \}" == "int main(void) " + "\{" + " return
 assert(len("\{\}") == 2)
 
 // deep recursion (the parser and code generator recurse)
-func depth(k) {
+func depth(k: int) {
     if (k == 0) { return 0 }
     return 1 + depth(k - 1)
 }

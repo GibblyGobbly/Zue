@@ -18,7 +18,7 @@ print("not reached")
 let f = open("test/util.zu", "r")
 write(f, "x")
 # CASE write needs a string
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 let f = open("/dev/null", "w")

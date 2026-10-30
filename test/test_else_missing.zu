@@ -16,7 +16,7 @@ if (let v = m["b"]) {
 } else {
     print("no b")
 }
-func get(k) {
+func get(k: string) {
     let v = m[k] else {
         return -1
     }
@@ -43,13 +43,13 @@ if (let c = "hi"[0]) { print(c) }
 if (let c = ""[0]) { print(c) } else { print("empty string") }
 
 # CASE a wrong kind of index is still an error
-func pass(v) { return [v, null][0] }
+func pass(v: string) { return [v, null][0] }
 let xs = [1]
 if (let x = xs[pass("0")]) { print(x) } else { print("missing") }
 # test: no-strict
 
 # CASE a map key that is not a string is still an error
-func pass(v) { return [v, null][0] }
+func pass(v: int) { return [v, null][0] }
 let m = {"a": 1}
 if (let x = m[pass(0)]) { print(x) } else { print("missing") }
 # test: no-strict
@@ -58,7 +58,7 @@ if (let x = m[pass(0)]) { print(x) } else { print("missing") }
 template Node { value: int, left: Node }
 let leaf = Node(1, null)
 let root = Node(2, leaf)
-func walk(n) {
+func walk(n: Node) {
     print(n.value)
     if (let l = n.left) {
         walk(l)
@@ -88,7 +88,7 @@ let j = last_index_of("banana", "x") else {
 print(j)
 
 # CASE a search with a wrong argument is still an error
-func pass(v) { return [v, null][0] }
+func pass(v: string) { return [v, null][0] }
 if (let i = find(pass("abc"), "b")) { print(i) } else { print("missing") }
 # test: no-strict
 
@@ -111,7 +111,7 @@ for (let name in ["ann", "cy", "bo"]) {
 print(total)
 
 # CASE a function of the program's own named like a search counts null as missing
-func find(xs, v) {
+func find(xs: list<int>, v: int) {
     return null
 }
 if (let i = find([1], 1)) { print(i) } else { print("own find gave null") }

@@ -6,7 +6,7 @@ for (let i = 0; i < 3; i++) {
     b[3] = 7
 }
 # CASE every call has its own box
-func fill(n) {
+func fill(n: int) {
     let b = box[8]
     b[0] = n
     if (n > 0) {

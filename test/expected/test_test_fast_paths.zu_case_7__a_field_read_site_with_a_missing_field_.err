@@ -1,9 +1,9 @@
-Name Error [E0402] in /tmp/zue_test_case.zu at line 3:
+Name Error [E0402] in /tmp/zue_test_case.zu at line 4:
   Template field 'q' does not exist
 
-   3 |     return o.q
+   4 |     return o.q
      |            ^^^
 
 Hint: Access only declared fields for this template
 Call stack, innermost call first:
-  in get_q(), called at line 6: print(get_q(P(1)))
+  in get_q(), called at line 7: print(get_q(P(1)))

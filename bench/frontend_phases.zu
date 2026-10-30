@@ -10,7 +10,7 @@ use { parse_program } from "../compiler/parser.zu"
 use { read_file } from "../compiler/util.zu"
 use { check_program } from "../compiler/check.zu"
 
-func measure(path) {
+func measure(path: string) {
     let text = read_file(path)
     let t0 = clock()
     let toks = lex(text, 1)

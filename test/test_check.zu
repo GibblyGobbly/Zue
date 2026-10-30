@@ -125,55 +125,54 @@ let f = func() {
 }
 f()
 # CASE a call with a string where the body multiplies
-func area(w, h) {
+func area(w: int, h: string) {
     return w * h
 }
 print(area(2, "a"))
 # CASE a call with int and float arguments
-func area(w, h) {
+func area(w: int, h: float) {
     return w * h
 }
 print(area(2, 3.5))
-# CASE the same function with ints and with floats
+# CASE a parameter without a type is an error
 func area(w, h) {
     return w * h
 }
 print(area(2, 3))
-print(area(2.5, 3.0))
 # CASE too few arguments for a user function
-func area(w, h) {
+func area(w: int, h: int) {
     return w * h
 }
 print(area(2))
 # CASE a default parameter
-func area(w, h = 2) {
+func area(w: int, h: int = 2) {
     return w * h
 }
 print(area(4))
 # CASE the result type of a call is known
-func add(a, b) {
+func add(a: int, b: int) {
     return a + b
 }
 let r = add(1, 2)
 r = "x"
 # CASE a string result is a string
-func add(a, b) {
+func add(a: string, b: string) {
     return a + b
 }
 let s = add("a", "b")
 s = 5
 # CASE a call passes its argument type into a math builtin
-func root(x) {
+func root(x: int) {
     return sqrt(x)
 }
 print(root(16))
 # CASE a call with a float reaches a math builtin
-func root(x) {
+func root(x: float) {
     return sqrt(x)
 }
 print(root(16.0))
 # CASE recursion with a base case
-func fact(n) {
+func fact(n: int) {
     if (n <= 1) {
         return 1
     }
@@ -181,25 +180,25 @@ func fact(n) {
 }
 print(fact(5))
 # CASE a function passed as an argument
-func twice(f, x) {
+func twice(f: function, x: int) {
     return f(f(x))
 }
 print(twice(func(n: int) { return n * 3 }, 2))
 # CASE an error inside a nested call names the chain
-func inner(a) {
+func inner(a: string) {
     return a + 1
 }
-func outer(b) {
+func outer(b: string) {
     return inner(b)
 }
 print(outer("s"))
 # CASE dividing two ints is integer division
-func div(a, b) {
+func div(a: int, b: int) {
     return a / b
 }
 print(div(7, 2))
 # CASE dividing two converted ints gives a float
-func div(a, b) {
+func div(a: int, b: int) {
     return float(a) / float(b)
 }
 print(div(7, 2))

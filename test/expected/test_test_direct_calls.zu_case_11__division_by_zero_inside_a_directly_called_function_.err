@@ -1,8 +1,8 @@
 Runtime Error [E0207] in /tmp/zue_test_case.zu at line 1:
   division by zero
 
-   1 | func d(a, b) { return a / b }
-     |                       - ^ -
+   1 | func d(a: int, b: int) { return a / b }
+     |                                 - ^ -
 
 Hint: Check the divisor before dividing.
 Call stack, innermost call first:

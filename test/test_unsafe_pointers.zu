@@ -6,7 +6,7 @@
 // variable or block it points into.
 
 # CASE a pointer into new memory at an old address is valid
-func step(i) {
+func step(i: int) {
     unsafe {
         let a = alloc(4 + (i * 7919) % 500)
         let b = alloc(4 + (i * 104729) % 700)
@@ -126,7 +126,7 @@ unsafe {
     print(load(q))
 }
 # CASE pointers passed through functions
-func id(p) {
+func id(p: pointer) {
     return p
 }
 let g = 5
@@ -155,7 +155,7 @@ func grab() {
     let f = make()
     return f()
 }
-func churn(n) {
+func churn(n: int) {
     let junk = []
     for (let i = 0; i < n; i++) {
         junk = [i, "x{i}", [i, i]]
@@ -186,7 +186,7 @@ unsafe {
     set(b)
 }
 # CASE a pointer given to spawn
-func worker(p) {
+func worker(p: pointer) {
     return p
 }
 unsafe {

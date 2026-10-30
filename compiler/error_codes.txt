@@ -455,7 +455,7 @@ title: The program ran out of stack or memory
 match: stack overflow | out of memory | too many boxes | too many to hold in memory | too large to hold in memory
 text: A recursion that never stops uses up the stack. Very large data can use up memory.
 example:
-    func f(n) { return f(n + 1) }
+    func f(n: int) -> int { return f(n + 1) }
     f(0)
 fix: Give the recursion a base case, or work on smaller data.
 

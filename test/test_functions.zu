@@ -4,7 +4,7 @@ print("=== Running Function Tests ===")
 print("\n[1] Testing Basic Functions...")
 
 # Simple function with parameters and return
-func add(a, b) {
+func add(a: int, b: int) {
     return a + b
 }
 
@@ -12,7 +12,7 @@ let result = add(10, 20)
 assert(result == 30)
 
 # Function with no return (implicit null)
-func greet(name) {
+func greet(name: string) {
     let message = "Hello " + name
 }
 
@@ -21,7 +21,7 @@ print("  ✓ Basic Functions passed")
 # SECTION 2: Functions with Logic
 print("\n[2] Testing Functions with Logic...")
 
-func get_max(x, y) {
+func get_max(x: int, y: int) {
     if (x > y) {
         return x
     } else {
@@ -38,7 +38,7 @@ print("  ✓ Functions with Logic passed")
 print("\n[3] Testing Recursion...")
 
 # Factorial
-func factorial(n) {
+func factorial(n: int) {
     if (n <= 1) {
         return 1
     }
@@ -50,7 +50,7 @@ assert(factorial(0) == 1)
 assert(factorial(1) == 1)
 
 # Fibonacci
-func fib(n) {
+func fib(n: int) {
     if (n <= 1) {
         return n
     }
@@ -68,7 +68,7 @@ print("\n[4] Testing Nested Functions...")
 
 func outer() {
     # Inner function (local scope)
-    func inner(val) {
+    func inner(val: int) {
         return val * 2
     }
     
@@ -95,7 +95,7 @@ print("  ✓ Nested Functions passed")
 # SECTION 5: Functions with Arrays
 print("\n[5] Testing Functions with Arrays...")
 
-func sum_array(arr) {
+func sum_array(arr: list<int>) {
     let total = 0
     for (let i = 0; i < len(arr); i++) {
         total = total + arr[i]
@@ -106,7 +106,7 @@ func sum_array(arr) {
 let numbers = [1, 2, 3, 4, 5]
 assert(sum_array(numbers) == 15)
 
-func reverse_array(arr) {
+func reverse_array(arr: list<int>) {
     let reversed = []
     let i = len(arr) - 1
     while (i >= 0) {

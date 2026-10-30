@@ -1,4 +1,4 @@
 # int of a float outside the int range is an error with a code.
-func pass(v) { return [v, null][0] }
+func pass(v: float) { return [v, null][0] }
 print("{}", int(pass(1e30)))
 # test: no-strict

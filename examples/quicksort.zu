@@ -2,7 +2,7 @@
 # Copyright (c) 2026 GibblyGobbly
 # Quicksort on a list of numbers: pick the first item as the pivot, split the rest into
 # smaller and larger items, sort both halves, and put the pieces back together.
-func quicksort(items) {
+func quicksort(items: list) {
     if (len(items) <= 1) {
         return items
     }

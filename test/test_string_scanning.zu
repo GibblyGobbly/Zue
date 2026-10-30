@@ -36,13 +36,13 @@ print(index_of("abc", "a", 4))
 # CASE negative start
 print(index_of_any("abc", "a", -1))
 # CASE start must be an int
-func pass(v) {
+func pass(v: string) {
     return [v, null][0]
 }
 print(skip_chars("abc", "a", pass("1")))
 # test: no-strict
 # CASE set must be a string
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 print(skip_chars("abc", pass(5)))

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 # CASE lists compare their contents
-func pass(v) {
+func pass(v: list) {
     return [v, null][0]
 }
 print([1, 2] == [1, 2], [1, 2] == [2, 1], [1, 2] == [1, 2, 3], [1, 2] != [1, 2])
@@ -18,7 +18,7 @@ print(contains([[1], [2]], [2]), find([[1], [2]], [2]), contains([{"k": 1}], {"k
 # CASE dense lists compare with lists of floats
 print(dense_list(2, 0.5) == [0.5, 0.5], dense_list(2, 0.5) == [0.5], dense_list(2, 0.5) == dense_list(2, 0.5))
 # CASE lists that contain themselves and very deep lists compare
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 let x = []

@@ -1,6 +1,6 @@
 print("=== Running GC Safety Tests ===")
 
-func make_keeper(base) {
+func make_keeper(base: string) {
     let items = []
     let meta = {"tag": base, "items": items}
     for (let i = 0; i < 32; i++) {
@@ -15,7 +15,7 @@ func make_keeper(base) {
 }
 
 # The text a keeper gives for idx (a function value's result has no known type, so it is written here).
-func text_of(keeper, idx) {
+func text_of(keeper: function, idx: int) {
     let s: string = keeper(idx)
     return s
 }

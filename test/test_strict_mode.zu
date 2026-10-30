@@ -17,9 +17,9 @@ for (let x in xs) {
     total += x
 }
 print(total)
-# CASE an untyped parameter takes the type of each call
+# CASE an argument of unknown type for a typed parameter
 # strict
-func add(a, b: int) {
+func add(a: int, b: int) {
     return a + b
 }
 print(add(1, 2))
@@ -74,7 +74,7 @@ if (m["a"] != null) {
     print("set")
 }
 # CASE the comment must come before the code
-func add(a, b) {
+func add(a: int, b: int) {
     return a
 }
 # strict
@@ -84,7 +84,7 @@ let xs = [1, "two"]
 let y = xs[0]
 print(y)
 # CASE an untyped parameter is fine outside strict mode
-func add(a, b) {
+func add(a: int, b: int) {
     return a + b
 }
 print(add(1, 2))
@@ -118,11 +118,11 @@ let p = Player("Ana", 10)
 let z: int = p.mana
 # CASE a function first checked inside another body is still checked for its calls
 # strict
-func inner(a) {
+func inner(a: int) {
     let ys = [1, "two"]
     return ys[0] + a
 }
-func outer(x) {
+func outer(x: int) {
     return inner(1)
 }
 print(inner(1))

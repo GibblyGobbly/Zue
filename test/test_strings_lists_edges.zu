@@ -72,7 +72,7 @@ for (let z in zs) {
     remove(zs, 0)
 }
 # CASE int of a float too large names int
-func pass(v) {
+func pass(v: float) {
     return [v, null][0]
 }
 print(int(pass(1e19)))

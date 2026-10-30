@@ -31,7 +31,7 @@ loop_your_balls (balls j = 0; j < 5; j++) {
 assert(count == 5)
 
 # 5. Functions (grab_balls -> func)
-grab_balls double_it(val) {
+grab_balls double_it(val: int) {
     return val * 2
 }
 assert(double_it(10) == 20)

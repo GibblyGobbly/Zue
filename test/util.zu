@@ -5,6 +5,6 @@ export func util_ping() {
     return "util-ok"
 }
 
-export func util_greet(name) {
+export func util_greet(name: string) {
     return "Hello {name} from util"
 }

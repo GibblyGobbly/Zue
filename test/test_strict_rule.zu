@@ -6,7 +6,7 @@ print(person[0] as string + "!")
 let person = ["Ann", 30]
 print(person[1] + 1)
 # CASE a value from a channel or a thread is given its type where it is taken
-func square(n) {
+func square(n: int) {
     return n * n
 }
 let t = spawn(square, 7)
@@ -54,14 +54,14 @@ let b = box[8]
 b[0] = 7
 print(b.len + b[0])
 # CASE a function that ends with exit, or returns inside an unsafe block, has its type
-func number(text) {
+func number(text: string) {
     if (text == "one") {
         return 1
     }
     print("not a number")
     exit(1)
 }
-func doubled_in_block(v) {
+func doubled_in_block(v: int) {
     unsafe {
         let m = alloc(1)
         defer(m)
@@ -71,7 +71,7 @@ func doubled_in_block(v) {
 }
 print(number("one") + doubled_in_block(4))
 # CASE a recursive function is checked with the type of its result
-func fib(n) {
+func fib(n: int) {
     if (n < 2) {
         return n
     }

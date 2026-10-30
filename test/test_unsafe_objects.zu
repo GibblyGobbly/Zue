@@ -57,7 +57,7 @@ unsafe {
 }
 # CASE your own functions can work on the object
 template Player { name: string, hp: int }
-func heal(p, amount) {
+func heal(p: Player, amount: int) {
     p.hp = p.hp + amount
 }
 unsafe {

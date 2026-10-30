@@ -3,6 +3,7 @@
 #
 # Holes in the type checker found when phases 1 to 4 were checked again (F1 to F11).
 # CASE a nested function is checked for the captured types of each call of its parent
+# test: no-strict
 func outer(a) {
     func inner() {
         return a
@@ -13,8 +14,9 @@ let r = outer(2)
 let q = outer(2.5)
 print(r + 1, q + 1.5)
 # CASE a nested function given a wrong captured type is an error
+# test: no-strict
 func outer(a) {
-    func inner(b) {
+    func inner(b: int) {
         return a + b
     }
     return inner(1)
@@ -66,6 +68,7 @@ let m: map<float> = {"a": 1.5, "b": 2}
 let zz: list<list<int>> = [[1], [2, 3]]
 print(ys, m, zz)
 # CASE a whole-number literal next to a float in ** is a float
+# test: no-strict
 let f = 1.5
 print(f ** 2, 2 ** f, 2 ** 3)
 func p(x) {
@@ -81,7 +84,7 @@ func g(n: int) -> int {
             return 2
     }
 }
-func h(n) {
+func h(n: int) {
     switch (n) {
         case 1:
             return 10
@@ -129,7 +132,7 @@ func add(a, b) {
 }
 let h = add
 # CASE a named function given to map is checked for the items of the list
-func dbl(x) {
+func dbl(x: string) {
     return x * 2
 }
 print(map(["a"], dbl))
@@ -139,16 +142,16 @@ func work(a: int) {
 }
 let t = spawn(work, "s")
 # CASE named functions given to map, filter, reduce and spawn
-func dbl(x) {
+func dbl(x: int) {
     return x * 2
 }
-func even(x) {
+func even(x: int) {
     return x % 2 == 0
 }
-func plus(acc, x) {
+func plus(acc: int, x: int) {
     return acc + x
 }
-func work(a) {
+func work(a: int) {
     return a + 1
 }
 let xs = [1, 2, 3]

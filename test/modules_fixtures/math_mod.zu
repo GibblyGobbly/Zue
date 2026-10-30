@@ -5,7 +5,7 @@ export const BASE = 10
 
 let calls = 0
 
-export func scale(x) {
+export func scale(x: int) {
     return x * BASE
 }
 

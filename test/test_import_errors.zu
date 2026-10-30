@@ -14,7 +14,7 @@ export let counter = 1
 print(counter)
 # CASE export of a const and a function is fine
 export const LIMIT = 10
-export func double(x) { return x * 2 }
+export func double(x: int) { return x * 2 }
 print(LIMIT, double(4))
 # CASE export of something else
 export print(1)

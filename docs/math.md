@@ -131,7 +131,7 @@ Prime numbers, simplifying a fraction, and the difference between `%` and `mod`.
 ```javascript
 # Number theory: gcd, lcm, isqrt, mod, divmod
 
-func is_prime(n) {
+func is_prime(n: int) {
     if (n < 2) {
         return false
     }
@@ -144,7 +144,7 @@ func is_prime(n) {
     return true
 }
 
-func simplify(num, den) {
+func simplify(num: int, den: int) {
     let g = gcd(num, den)
     return "{num / g}/{den / g}"
 }
@@ -191,7 +191,7 @@ The count, sum, mean, extremes, median and spread of a list of floats.
 ```javascript
 # Statistics of a list of numbers
 
-func median(sorted_values) {
+func median(sorted_values: list<float>) {
     let n = len(sorted_values)
     let mid = floor_div(n, 2)
     if (n % 2 == 1) {
@@ -200,7 +200,7 @@ func median(sorted_values) {
     return (sorted_values[mid - 1] + sorted_values[mid]) / 2.0
 }
 
-func variance(values) {
+func variance(values: list<float>) {
     let m = mean(values)
     let total = 0.0
     for (let v in values) {
@@ -251,7 +251,7 @@ Distances, angles, interpolation, a circle, and a rotation by a matrix product.
 ```javascript
 # Points, angles and vectors
 
-func distance(ax, ay, bx, by) {
+func distance(ax: float, ay: float, bx: float, by: float) {
     let dx = bx - ax
     let dy = by - ay
     return sqrt(dx * dx + dy * dy)
@@ -310,7 +310,7 @@ Prices and cents, the four ways to drop a fraction, and converting seconds into 
 ```javascript
 # Rounding: money, and clock arithmetic with floor_div and mod
 
-func cents(price) {
+func cents(price: float) {
     return round(price * 100.0)
 }
 
@@ -366,7 +366,7 @@ A repeatable dice game, a true random roll, and two kinds of shuffle.
 ```javascript
 # Random numbers: a reproducible game, a true random roll, and shuffles
 
-func roll_many(count) {
+func roll_many(count: int) {
     let faces = [0, 0, 0, 0, 0, 0, 0]
     for (let i = 0; i < count; i++) {
         faces[rand(1, 6)] += 1

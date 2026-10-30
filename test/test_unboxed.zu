@@ -206,7 +206,7 @@ func f() {
 }
 print(f())
 # CASE index call
-func sq(v) {
+func sq(v: int) {
     return v * v
 }
 func f() {
@@ -339,6 +339,7 @@ func f() {
 }
 print(f())
 # CASE param default
+# test: no-strict
 func f(a, b = 2) {
     let c = a * b
     return c + 1
@@ -347,7 +348,7 @@ print(f(3))
 print(f(3, 4))
 print(f(1.5, 2.0))
 # CASE recursion
-func fact(n) {
+func fact(n: int) {
     if (n <= 1) {
         return 1
     }

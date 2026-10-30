@@ -14,7 +14,7 @@ print(len(all))
 print(total)
 print(all[9999].bytes[0])
 # CASE many boxes made and released one after another
-func fill(n) {
+func fill(n: int) {
     let total = 0
     for (let i = 0; i < n; i++) {
         let b = box[8]
@@ -49,14 +49,14 @@ b = a
 a[1] = 8
 print(b[1])
 # CASE passing a box to a function lends it
-func set_first(buf, value) {
+func set_first(buf: box, value: int) {
     buf[0] = value
 }
 let a = box[4]
 set_first(a, 9)
 print(a[0])
 # CASE a freed box lent to a function is still freed
-func touch(buf) {
+func touch(buf: box) {
     buf[0] = 1
 }
 let a = box[2]

@@ -17,11 +17,11 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
-func make_string(n) {
+func make_string(n: int) {
     let s = "x"
     while (len(s) < n) {
         s = s + s
@@ -32,7 +32,7 @@ let ring = []
 for (let i = 0; i < 400; i++) {
     append(ring, "")
 }
-func churn_strings(rounds) {
+func churn_strings(rounds: int) {
     for (let r = 0; r < rounds; r++) {
         for (let i = 0; i < 400; i++) {
             ring[i] = make_string(1 + (r * 31 + i * 17) % 3000)
@@ -57,11 +57,11 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
-func churn_maps(rounds) {
+func churn_maps(rounds: int) {
     for (let r = 0; r < rounds; r++) {
         let m = {}
         for (let i = 0; i < 4000; i++) {
@@ -90,7 +90,7 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
@@ -98,7 +98,7 @@ let big = []
 for (let i = 0; i < 8; i++) {
     append(big, [0])
 }
-func churn_large(rounds) {
+func churn_large(rounds: int) {
     for (let r = 0; r < rounds; r++) {
         let l = []
         let size = 60000 + (r * 7919) % 200000
@@ -126,16 +126,16 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
-func use_box(i) {
+func use_box(i: int) {
     let b = box[64]
     b[0] = i % 200
     return b[0]
 }
-func churn_boxes(n) {
+func churn_boxes(n: int) {
     let sum = 0
     for (let i = 0; i < n; i++) {
         sum += use_box(i)
@@ -160,11 +160,11 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
-func churn_unsafe(n) {
+func churn_unsafe(n: int) {
     for (let i = 0; i < n; i++) {
         unsafe {
             let p = alloc(64)
@@ -191,14 +191,14 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
-func work(n) {
+func work(n: int) {
     return n + 1
 }
-func churn_threads(n) {
+func churn_threads(n: int) {
     let total = 0
     for (let i = 0; i < n; i++) {
         let got_total: int = wait(spawn(work, i))
@@ -224,11 +224,11 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
-func churn_channels(n) {
+func churn_channels(n: int) {
     let total = 0
     for (let i = 0; i < n; i++) {
         let ch = channel(2)
@@ -257,18 +257,18 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
-func make_counter(start) {
+func make_counter(start: int) {
     let n = start
     return func() {
         n += 1
         return n
     }
 }
-func churn_closures(count) {
+func churn_closures(count: int) {
     let sum = 0
     for (let i = 0; i < count; i++) {
         let c = make_counter(i)
@@ -296,11 +296,11 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
-func churn_dense(rounds) {
+func churn_dense(rounds: int) {
     let sum = 0.0
     for (let r = 0; r < rounds; r++) {
         let d = dense_list(50000, 1.5)
@@ -326,7 +326,7 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
@@ -337,7 +337,7 @@ let holders = []
 for (let i = 0; i < 64; i++) {
     append(holders, null)
 }
-func churn_holders(n) {
+func churn_holders(n: int) {
     for (let i = 0; i < n; i++) {
         holders[i % 64] = Holder("h", box[65536])
     }
@@ -360,12 +360,12 @@ func peak_kib() {
 }
 
 # The peak may grow by a third and 16 MiB between the early and the late measurement.
-func grew(early, late) {
+func grew(early: int, late: int) {
     return late > early * 4 / 3 + 16384
 }
 
 # Sizes vary so that malloc hands out addresses again in a different order; ptr_add makes interior pointers.
-func churn_sizes(n) {
+func churn_sizes(n: int) {
     unsafe {
         for (let i = 0; i < n; i++) {
             let a = alloc(4 + (i * 7919) % 500)

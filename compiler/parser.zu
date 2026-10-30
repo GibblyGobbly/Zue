@@ -393,6 +393,11 @@ func p_map_literal(st: Token) -> Node {
 # A type annotation after ':' on a variable, a parameter or a field: a type name, and for list and
 # map an element type in angle brackets, as in list<int> or map<list<float>>. Returned as text.
 func p_type(what: string, after: string = ":") -> string {
+    # box is a keyword (box[16] makes one) and also the name of its type
+    if (P_kind == "box") {
+        p_next()
+        return "box"
+    }
     if (not (P_kind == "id")) {
         p_fail("Expected a type after '{after}' in {what}")
         return "any"

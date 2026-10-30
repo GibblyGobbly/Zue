@@ -139,7 +139,7 @@ let b = box[16777217]
 # CASE box size negative
 let b = box[-1]
 # CASE box access after free through a function parameter
-func poke(b) {
+func poke(b: box) {
     b[0] = 1
 }
 let a = box[4]

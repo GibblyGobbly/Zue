@@ -4,21 +4,21 @@ print("Testing GC in recursion-only code...")
 
 template Node { left: Node, right: Node, value: int }
 
-func build(depth) {
+func build(depth: int) {
     if (depth == 0) {
         return null
     }
     return Node(build(depth - 1), build(depth - 1), depth)
 }
 
-func check(n) {
+func check(n: Node) {
     if (n == null) {
         return 0
     }
     return n.value + check(n.left) + check(n.right)
 }
 
-func run(i, total) {
+func run(i: int, total: int) {
     if (i == 0) {
         return total
     }

@@ -1,5 +1,5 @@
 # Recursion and integer compare: fib(36).
-func fib(n) {
+func fib(n: int) {
     if (n < 2) {
         return n
     }

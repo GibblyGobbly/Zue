@@ -4,7 +4,7 @@ use { lex } from "../compiler/lexer.zu"
 use { parse_program } from "../compiler/parser.zu"
 use { dump_program } from "../compiler/ast_dump.zu"
 
-func show_tokens(title, src) {
+func show_tokens(title: string, src: string) {
     print("--- {title}")
     for (let t in lex(src, 1)) {
         let v = t.v
@@ -15,7 +15,7 @@ func show_tokens(title, src) {
     }
 }
 
-func show_tree(title, src) {
+func show_tree(title: string, src: string) {
     print("--- {title}")
     for (let line in split(dump_program(parse_program(lex(src, 1)), true), "\n")) {
         print(line)

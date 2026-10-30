@@ -16,7 +16,7 @@ use { ST } from "state.zu"
 use { BUILTINS } from "shared.zu"
 use { Diag, Span, diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, suggest } from "diag.zu"
 use { cut, cut_list } from "ranges.zu"
-use { Node, mk_call, node_span, node_token, nodes_under } from "ast_nodes.zu"
+use { Node, mk_call, node_span, node_token, nodes_under, span_token } from "ast_nodes.zu"
 use { parse_source } from "parser.zu"
 use { resolve_named_args } from "named_args.zu"
 use { path_dir, path_join, path_norm, split_lines } from "util.zu"
@@ -797,7 +797,7 @@ func annot_in(text: string, span: Span, strict: bool, ds: map<Node>) -> string {
     if (text == "list" or text == "map" or text == "function") {
         return text
     }
-    if (text == "pointer" or text == "channel" or text == "thread" or text == "file") {
+    if (text == "pointer" or text == "channel" or text == "thread" or text == "file" or text == "box") {
         return text
     }
     let td = map_get(ds, text, null)
@@ -810,7 +810,7 @@ func annot_in(text: string, span: Span, strict: bool, ds: map<Node>) -> string {
     if (strict and lookup(text) == null) {
         let d = fail_at(span, "unknown type '{text}'")
         diag_text(d, "not a type")
-        diag_hint(d, "The types are int, float, bool, char, string, list, map, function, pointer, channel, thread, file, and the names of your own bloc and template types")
+        diag_hint(d, "The types are int, float, bool, char, string, list, map, function, pointer, channel, thread, file, box, and the names of your own bloc and template types")
     }
     return "any"
 }
@@ -1043,6 +1043,10 @@ func fail_at(span: Span, msg: string, kind: string = "Type Error") -> Diag {
     let i = len(CALLS) - 1
     while (i >= 0) {
         let c = CALLS[i]
+        if (c.line == 0) {
+            i -= 1
+            continue
+        }
         let sep = ", "
         let at = "line {c.line}"
         if (c.file != ST.src_file) {
@@ -2106,9 +2110,9 @@ func ck_user_call(name: string, fn: Node, idx: int, argtypes: list<string>, call
                         diag_hint(d, "{ch}{name} is defined in {home.canon} at line {fn.line}, with '{fn.params[i]}' a {want}")
                     }
                 }
-                # a parameter written list or map, without an item type, takes the list or map type of
-                # the argument, so one function serves lists of every item type
-                if (not ((want == "list" or want == "map") and kind_of(at) == want)) {
+                # a parameter of an open type (list or map without an item type, a template with untyped
+                # fields) takes the full type of the argument, so one function serves every item type
+                if (not (open_type(want) and kind_of(at) == want)) {
                     at = want
                 }
             }
@@ -2363,6 +2367,28 @@ func spec_site(call: Node, fn: Node, idx: int, types: list<string>, result: stri
     }
 }
 
+# Whether type t leaves the types inside it open: list or map without an item type, or a template or bloc
+# with a field that has no type (its fields take the types of each value). A parameter of an open type
+# takes the full type of each call's argument.
+func open_type(t: string) -> bool {
+    if (t == "list" or t == "map") {
+        return true
+    }
+    if (contains(t, "<")) {
+        return false
+    }
+    let od = object_def(t)
+    if (od == null or od.fields == null) {
+        return false
+    }
+    for (let i = 0; i < len(od.fields); i++) {
+        if (od.ftypes == null or od.ftypes[i] == "") {
+            return true
+        }
+    }
+    return false
+}
+
 # Whether values of type t may be empty (null): all but int, float, bool and char.
 func may_be_empty(t: string) -> bool {
     return not is_scalar(t) and t != "char"
@@ -2554,16 +2580,27 @@ func ck_func(n: Node) {
     }
     let untyped = false
     for (let i = 0; i < len(n.params); i++) {
+        # a parameter of an open type is checked per call, like one without a type
+        if (n.ptypes != null and n.ptypes[i] != "" and open_type(annot(n.ptypes[i], span_or(ptype_span(n, i), n), false))) {
+            untyped = true
+        }
         if (n.ptypes == null or n.ptypes[i] == "") {
             untyped = true
-            if (strict_on() and n.name == null) {
-                let d = fail_at(span_or(param_span(n, i), n), "strict mode: parameter '{n.params[i]}' of this function value needs a type, for example {n.params[i]}: int")
+            if (strict_on()) {
+                let who = "this function value"
+                if (n.name != null) {
+                    who = "{n.name}()"
+                }
+                let d = fail_at(span_or(param_span(n, i), n), "strict mode: parameter '{n.params[i]}' of {who} needs a type, for example {n.params[i]}: int")
                 diag_text(d, "needs a type")
-                diag_hint(d, "A function declared with a name is checked for the types of each call; a function value is not")
+                diag_hint(d, "Every parameter has a type; a variable takes the type of its first value")
             }
         }
     }
-    if (untyped and n.name != null) {
+    # A typed function that calls itself, with no result type written, is checked through a call with its
+    # own parameter types below, which settles the type of the calls to itself first; this pass is silent.
+    let selfcheck = not untyped and n.name != null and n.rtype == null and calls_itself(n, n.name)
+    if ((untyped and n.name != null) or selfcheck) {
         GENERIC += 1
     }
     push_result_type(n)
@@ -2590,8 +2627,19 @@ func ck_func(n: Node) {
     remove(RETS, len(RETS) - 1)
     remove(RESULT_TYPES, len(RESULT_TYPES) - 1)
     check_result_paths(n)
-    if (untyped and n.name != null) {
+    if ((untyped and n.name != null) or selfcheck) {
         GENERIC -= 1
+    }
+    if (selfcheck and fn_index(n.name) >= 0) {
+        let types: list<string> = []
+        let nodes: list<Node> = []
+        for (let i = 0; i < len(n.params); i++) {
+            append(types, annot(n.ptypes[i], span_or(ptype_span(n, i), n), false))
+            append(nodes, n)
+        }
+        # line 0: the check is made where the function is declared, not by a call, so no trace line names it
+        let at = span_token(span_at(0, 0, 0, 0))
+        ck_user_call(n.name, n, fn_index(n.name), types, mk_call(at, at, n, nodes, span_at(0, 0, 0, 0)), null, true)
     }
 }
 

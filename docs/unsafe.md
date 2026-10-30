@@ -104,7 +104,7 @@ Deferred calls are available in normal Zue code and are separate from pointer
 cleanup in `unsafe`.
 
 ```javascript
-func write_log(path, text) {
+func write_log(path: string, text: string) {
     let file = open(path, "w")
     defer(close(file))
     write(file, text)

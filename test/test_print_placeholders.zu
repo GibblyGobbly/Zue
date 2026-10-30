@@ -23,7 +23,7 @@ print("two {} and {}", 1)
 # CASE too many values
 print("one {}", 1, 2)
 # CASE the count is checked at run time when the text comes from a variable
-func pass(v) { return [v, null][0] }
+func pass(v: string) { return [v, null][0] }
 let text = pass("a {} b {}")
 print(text, 1)
 # test: no-strict

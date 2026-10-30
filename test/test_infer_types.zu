@@ -19,7 +19,7 @@ xs[0] = true
 print(xs)
 
 # CASE a branch on type(x) that cannot run is not counted
-func size(x) {
+func size(x: list<int>) {
     if (type(x) == "string") {
         return "text"
     }
@@ -31,7 +31,7 @@ let t: string = size([1])
 
 # CASE a recursive function that returns a template or null has the template type
 template Tree { v: int, l: Tree }
-func build(n) {
+func build(n: int) {
     if (n == 0) {
         return null
     }
@@ -48,6 +48,7 @@ print(map_get(m, "x") + 1)
 print(len(map_values(m)))
 let wrong: int = a
 # CASE after if (type(x) == "list") { return ... } the rest of the function is not for a list
+# test: no-strict
 func first(x) {
     if (type(x) == "list") {
         return len(x)
@@ -97,7 +98,7 @@ print(f == null)
 # CASE a parameter given null: the code after if (x == null) { return ... } is not checked for it
 # strict
 template Pt { x: int, y: int }
-func sum_of(p) {
+func sum_of(p: Pt) {
     if (p == null) {
         return 0
     }

@@ -30,13 +30,13 @@ func pass(v) {
 print(pass(1) < pass(2.0))
 # test: no-strict
 # CASE sqrt of a hidden int
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 print(sqrt(pass(4)))
 # test: no-strict
 # CASE floor of a hidden int
-func pass(v) {
+func pass(v: int) {
     return [v, null][0]
 }
 print(floor(pass(4)))
@@ -54,7 +54,7 @@ func pass(v) {
 print(clamp(pass(5), pass(1.0), pass(10)))
 # test: no-strict
 # CASE clamp with floats
-func pass(v) {
+func pass(v: float) {
     return [v, null][0]
 }
 print(clamp(pass(5.0), pass(1.0), pass(2.5)))
@@ -85,7 +85,7 @@ print(deg_to_rad(1.7e308))
 print(mat_mul([[1, 2], [3, 4]], [[5, 6], [7, 8]]))
 print(mat_mul([[9223372036854775807]], [[2]]))
 # CASE mat_mul of ints with floats
-func pass(v) {
+func pass(v: list) {
     return [v, null][0]
 }
 print(mat_mul(pass([[1, 2]]), pass([[1.0], [2.0]])))

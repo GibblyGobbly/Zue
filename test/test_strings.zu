@@ -61,7 +61,7 @@ print("Testing interpolation...")
 let pilot = "Zue"
 let hp = 42
 let items = [7, 11]
-func plus(a, b) {
+func plus(a: int, b: int) {
     return a + b
 }
 assert("Hello {pilot}" == "Hello Zue")

@@ -1,7 +1,7 @@
 Type Error [E0203] in /tmp/zue_test_case.zu at line 4:
   area() expects 2 arguments, but got 1
 
-   1 | func area(w, h) {
+   1 | func area(w: int, h: int) {
      |      ---- area is defined here with 2 parameters
 ...
    4 | print(area(2))

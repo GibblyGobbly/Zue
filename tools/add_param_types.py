@@ -23,6 +23,10 @@ def written(t):
 def choose(types):
     # any comes from a caller whose own parameters were not known yet
     ts = [t for t in types if t not in ("null", "unset", "any")]
+    # lists (or maps) of several item types: a plain list (or map) parameter takes each call's type
+    for kind in ("list", "map"):
+        if len(ts) > 1 and all(t == kind or t.startswith(kind + "<") for t in ts):
+            return kind
     if len(ts) != 1:
         return None
     t = ts[0]
@@ -31,13 +35,36 @@ def choose(types):
     return written(t)
 
 
-def report(prog):
-    r = subprocess.run([ZUE, "check", "--param-types", prog], capture_output=True, text=True)
+def run_check(prog, no_strict):
+    cmd = [ZUE] + (["--no-strict"] if no_strict else []) + ["check", "--param-types", prog]
+    r = subprocess.run(cmd, capture_output=True, text=True)
     out = []
     for line in r.stdout.splitlines():
         m = re.match(r"^(.*):(\d+):(\d+) (\w+) (.+)$", line)
         if m:
             out.append((m.group(1), int(m.group(2)), int(m.group(3)), m.group(4), m.group(5).split("|")))
+    return out
+
+
+def report(prog):
+    text = open(prog).read()
+    no_strict = re.search(r"^# test: no-strict$", text, re.M) is not None
+    lines = text.split("\n")
+    starts = [i for i, l in enumerate(lines) if l.startswith("# CASE ")]
+    if not starts:
+        return run_check(prog, no_strict)
+    # a file of "# CASE" sections: each case is its own program, checked from a file next to it
+    out = []
+    tmp = os.path.join(os.path.dirname(os.path.abspath(prog)), ".param_types_case.zu")
+    for k, st in enumerate(starts):
+        end = starts[k + 1] if k + 1 < len(starts) else len(lines)
+        open(tmp, "w").write("\n".join(lines[st + 1:end]) + "\n")
+        try:
+            for path, line, col, name, types in run_check(tmp, no_strict):
+                if os.path.abspath(path) == tmp:
+                    out.append((prog, line + st + 1, col, name, types))
+        finally:
+            os.remove(tmp)
     return out
 
 

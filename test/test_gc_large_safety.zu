@@ -1,6 +1,6 @@
 print("=== Running GC Large Object Safety Tests ===")
 
-func make_big_keeper(tag, slots) {
+func make_big_keeper(tag: string, slots: int) {
     let payload = []
     for (let i = 0; i < slots; i++) {
         append(payload, repeat(tag + "-", 2048) + to_string(i))
@@ -15,7 +15,7 @@ func make_big_keeper(tag, slots) {
 }
 
 # The text a keeper gives for idx (a function value's result has no known type, so it is written here).
-func text_of(keeper, idx) {
+func text_of(keeper: function, idx: int) {
     let s: string = keeper(idx)
     return s
 }

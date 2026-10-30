@@ -49,6 +49,7 @@ assert(type(1) == "int")
 assert(type(type(1)) == "string")
 assert(type(1) == type(2))
 # CASE one field read site sees different template types
+# test: no-strict
 template A { x, y }
 template B { y, x, z }
 template C { z }
@@ -61,6 +62,7 @@ let m = {"x": "from a map"}
 print(get_x(m))
 print(get_x(A(7, 8)))
 # CASE a field read site with a missing field
+# test: no-strict
 template P { x }
 func get_q(o) {
     return o.q
@@ -69,7 +71,7 @@ print(get_q({"q": 1}))
 print(get_q(P(1)))
 # CASE field cache after an object is rebuilt
 template Q { a, b }
-func read_b(o) {
+func read_b(o: Q) {
     return o.b
 }
 let total = 0
@@ -97,7 +99,7 @@ assert(i1 != 6)
 print("equality ok")
 # CASE recycled memory is clean
 template Cell { v, w }
-func churn(n) {
+func churn(n: int) {
     let keep = []
     for (let i = 0; i < n; i++) {
         let t = Cell(i, null)

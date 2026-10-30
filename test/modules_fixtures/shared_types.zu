@@ -4,10 +4,10 @@ export data Rec { a }
 
 template Hidden { v }
 
-export func make_hidden(n) {
+export func make_hidden(n: int) {
     return Hidden(n)
 }
 
-export func total(p) {
+export func total(p: Pair) {
     return p.left + p.right
 }

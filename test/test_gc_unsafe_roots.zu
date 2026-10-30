@@ -105,13 +105,13 @@ unsafe {
 }
 print("bad {bad}")
 # CASE a buffer freed while its scan is partway, after a value was taken out of it
-func put(buf, at, j) {
+func put(buf: pointer, at: int, j: int) {
     unsafe {
         store(ptr_offset(buf, at), ["last", j, "v{j}"])
     }
     return 0
 }
-func take(buf, at) {
+func take(buf: pointer, at: int) {
     unsafe {
         return load(ptr_offset(buf, at))
     }
