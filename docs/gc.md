@@ -46,7 +46,8 @@ compiler: it treats every aligned word it scans as a possible pointer.
   object when a start bit is found at or before it in the same block, and the first end bit after that
   start is at or after it. Interior pointers keep an object alive.
 - **Large objects** are mapped with `mmap`, which the kernel zeroes, and touched only when used. A dead one
-  leaves the page table and is unmapped by the GC thread.
+  leaves the page table and is unmapped by the GC thread, 2 MB at a time: one `munmap` of a 64 MB object held
+  the kernel's lock on the address space for 5.4 ms, and the program thread waited for it in its own `mmap`.
 
 ## Collection
 
@@ -87,7 +88,7 @@ percentages.
 | Estimate | `a`, the bytes the program will allocate during the next cycle: rate times the cycle time for the live size |
 | Goal | Four times `a`, but at least 32 MiB, at most twice the live size (an eighth of it with `--gc=lowmem`), and at most what the free memory of the machine (85 percent of it, `sysconf`) and `ulimit -v` (70 percent) allow |
 | Start | The next cycle starts when the goal minus `a` has been allocated, at least 16 MiB |
-| Hold back | While a cycle runs, the program is slowed down in 100 microsecond steps only once the bytes allocated since the last cycle end pass the goal |
+| Hold back | While a cycle runs, the program is slowed down in 100 microsecond steps once the bytes allocated since the last cycle end pass a bound. In the default mode the bound is the memory the machine has left (the 85 percent and `ulimit -v` limits above): a cycle that takes longer than expected lets the heap grow past the goal, which gives memory for speed. With `--gc=lowmem` the bound is the goal |
 | Keep | Free blocks up to the start threshold stay ready; the GC thread gives the memory of the rest back to the system |
 
 ## How a cycle runs
@@ -148,7 +149,7 @@ Read once at program start, by the compiled program itself:
 | Variable | Effect |
 |---|---|
 | `ZUE_RT_GC_STRESS=N` | Collect on every Nth allocation. `1` collects on every allocation. Used to find missing roots |
-| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<n> chunks,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max cycle end ns,<ns> max cycle start ns,<n> mark stack grows,<bytes> large object bytes,<ns> longest cycle ns` to standard error. A pause is one stop of the program thread in a collector step. `mark ns` is the time of all marking threads added up, `sweep ns` the GC thread's. Live bytes count whole lines. A second line, `ZUE_RT_GC_THROTTLE`, gives how many steps were held back, the total and longest hold, and how much of the longest pause was that hold. A third line, `ZUE_RT_GC_CHUNKS`, gives how many 2 MB chunks the helper thread had ready and how many the program thread had to make itself. A fourth line, `ZUE_RT_GC_LOCK`, gives the program thread's longest wait for the collector's mutex, its longest hold of it, and the longest hold by a collector thread, each with the function that took it. `ZUE_RT_GC_STATS=2` also prints a `ZUE_RT_GC_CYCLE` line per cycle (wall time, GC thread time, bytes allocated during and before the cycle). `ZUE_RT_GC_STATS=3` instead prints a `ZUE_RT_GC_CENSUS` line after each sweep: chunks, blocks in use (full and with room), the share of their lines that is live, free blocks, blocks whose memory was given back, and large objects. The collector's pause counter does not see time the program waits inside the write barrier; `bench/gc/stalls.zu` times every loop iteration and shows what the program itself sees, and `bench/gc/mutator_utilization.zu` records every stop over 10 microseconds and prints the minimum mutator utilization (MMU, the smallest share of any 0.1 ms to 1 s window in which the program ran) and the metered latency (how far requests arriving at an even rate fall behind) |
+| `ZUE_RT_GC_STATS=1` | At exit, print `ZUE_RT_GC_STATS,<n> collections,<bytes> live bytes,<n> chunks,<ns> total pause ns,<ns> max pause ns,<ns> mark ns,<ns> sweep ns,<ns> max cycle end ns,<ns> max cycle start ns,<n> mark stack grows,<bytes> large object bytes,<ns> longest cycle ns` to standard error. A pause is one stop of the program thread in a collector step. `mark ns` is the time of all marking threads added up, `sweep ns` the GC thread's. Live bytes count whole lines. A second line, `ZUE_RT_GC_THROTTLE`, gives how many steps were held back, the total and longest hold, and how much of the longest pause was that hold. A third line, `ZUE_RT_GC_CHUNKS`, gives how many 2 MB chunks the helper thread had ready and how many the program thread had to make itself; `ZUE_RT_GC_OWN_CHUNK` gives the longest of those, and how much of it was the mapping and the descriptor. A fourth line, `ZUE_RT_GC_LOCK`, gives the program thread's longest wait for the collector's mutex, its longest hold of it, and the longest hold by a collector thread, each with the function that took it. `ZUE_RT_GC_STATS=2` also prints a `ZUE_RT_GC_CYCLE` line per cycle (wall time, GC thread time, bytes allocated during and before the cycle). `ZUE_RT_GC_STATS=3` instead prints a `ZUE_RT_GC_CENSUS` line after each sweep: chunks, blocks in use (full and with room), the share of their lines that is live, free blocks, blocks whose memory was given back, and large objects. The collector's pause counter does not see time the program waits inside the write barrier; `bench/gc/stalls.zu` times every loop iteration and shows what the program itself sees, and `bench/gc/mutator_utilization.zu` records every stop over 10 microseconds and prints the minimum mutator utilization (MMU, the smallest share of any 0.1 ms to 1 s window in which the program ran) and the metered latency (how far requests arriving at an even rate fall behind) |
 | `ZUE_RT_GC_MARKERS=N` | The number of marking threads, from 1 up. The default is 2 on a machine with 4 or more CPUs, else 1. Any other value is an error (`Runtime Error: ZUE_RT_GC_MARKERS must be a whole number from 1 up`) |
 | `ZUE_RT_GC_SLOW=N` | Each marking thread sleeps N microseconds after each piece of marking. For tests: it widens the time the program and the GC thread overlap |
 | `ZUE_RT_GC_VERIFY=1` | At the end of each marking walk the heap again and stop with an error if a reachable object is neither marked nor new in the cycle. A free line that still holds a start or end bit is an error too. Dead objects and free lines are filled with `0xDD` so a use after free shows. A stale word on the stack that points at an unmarked object is skipped, because the program cannot reach the object through it. After each sweep the block lists are checked |
@@ -167,6 +168,12 @@ created the program stops with `Runtime Error: cannot start the garbage collecto
 way to collect. A helper thread makes 2 MB chunks and their descriptors ahead of time, so that the program
 pays neither the first touch of a huge page nor a `calloc` (which took up to 8 ms with the mutex held while
 other threads allocated).
+
+| What the helper keeps | Why |
+|---|---|
+| An arena: address space for 64 chunks and their descriptors, mapped in one piece, its first page touched | A chunk cut from it needs no call into the kernel. When the program finds no chunk ready it takes the next one of the arena itself and does not wait for the kernel's lock on the address space |
+| A reserve of ready chunks: one for every 8 chunks of heap, at most 16 (two with `--gc=lowmem`, more after the program ran dry) | The first touch of a huge page sometimes takes 5 to 10 ms (the kernel compacts memory). The program lives on the reserve meanwhile |
+| The huge page hint | Switched off only after the program had to make three chunks itself. A slow huge page alone no longer switches it off: without huge pages the program is about 15 percent slower at 4 GiB |
 
 The program thread takes the collector's mutex by spinning, never by sleeping, and every thread wakes another
 only after letting the mutex go: a woken thread often runs at once on the waker's core, and a thread that
@@ -201,9 +208,9 @@ collector: the compiler compiles itself twice, and the two outputs must be ident
 
 ## Known limits
 
-- A program that allocates faster than the markers mark is still held back by the throttle; with two
-  markers that is rare (see [plan](plan.md)). Four or more markers gave occasional stops of 1 to 2 ms on an
-  8-core machine, which is not understood yet.
+- With `--gc=lowmem` a program that allocates fast is held back for more than half of its run (a spin, see
+  [plan](plan.md)); the default mode lets the heap grow instead. Four or more markers gave occasional stops
+  of 1 to 2 ms on an 8-core machine before the fixes of 2026-11-11 and have not been measured for stops since.
 - A block whose largest gap is smaller than a line is used only when its gap fits the request at the top of
   its list; its small gaps may wait for the next cycle.
 - No compaction. A block with a few live objects stays in use; the gaps between them are reused.

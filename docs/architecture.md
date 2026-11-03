@@ -1,7 +1,9 @@
 # Architecture
 
 This page describes how a program becomes a binary. The only external pieces are LLVM 22 (`opt`,
-`llc`, `ld.lld`, `llvm-link`), libc and libm. `compiler/llvm_build.sh` runs the LLVM tools.
+`llc`, `ld.lld`, `llvm-link`), libc and libm. `compiler/llvm_build.sh` runs the LLVM tools. It names the target
+(`x86_64-pc-linux-gnu`) for `opt` and `llc`: the IR does not, and without a target LLVM takes the C library to
+be missing and turns every `memcpy` and `memset` into a loop over single bytes.
 
 ```
 prog.zu
@@ -191,7 +193,9 @@ func lb_len(self_p, argc_i, argv_p) {    // _p is a pointer parameter, _i a C in
 - Generated code never passes an `LV` by value to the runtime: it passes pointers (`lvp_*`).
 - Globals are `internal global %LV`. The GC scans the data segment and stack conservatively, so
   globals and allocas are roots.
-- Variables captured by closures live in heap cells.
+- Variables captured by closures live in heap cells. A function captures only its free names: a name it
+  declares itself (a parameter, a `let`, a loop variable) is its own, so an outer variable of the same
+  spelling stays a plain variable (`analysis.zu`).
 
 ## Make targets
 

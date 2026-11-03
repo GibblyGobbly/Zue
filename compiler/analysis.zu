@@ -4,26 +4,110 @@
 # analysis.zu: which names a function uses and which are captured by nested functions.
 
 # Used by the LLVM backend.
-use { Node, node_children, nodes_under } from "ast_nodes.zu"
+use { Node, NODE_FIELDS, child_list, child_node, node_children } from "ast_nodes.zu"
 
-# Every name read or written anywhere inside x (in order of first use).
-func walk_names(x: Node, seen: map<bool>, order: list<string>) {
-    for (let y in nodes_under([x])) {
-        let k = y.k
-        if ((k == "id" or k == "assign" or k == "incdec") and not map_has(seen, y.name)) {
-            seen[y.name] = true
-            append(order, y.name)
-        }
+# The names a function uses that it does not declare itself: its free names, in order of first use. The
+# variables of the enclosing function they refer to are the ones the function captures. A name is taken as
+# declared by the function where the code generator would find a local of the function itself:
+#   a parameter, in the defaults and the body;
+#   let name, in the statements after it in the same list;
+#   for (let name = ...; cond; step), in cond, step and the body;
+#   for (let name in ...), in the body.
+# Any other use counts as free. Before this, a local of a function made every outer variable of the same
+# spelling a captured cell: a top-level loop over i allocated a cell per iteration because some function in
+# the file had its own i.
+template Free { bound: map<int>, seen: map<bool>, order: list<string> }
+
+func fr_bind(f: Free, name: string) {
+    f.bound[name] = map_get(f.bound, name, 0) + 1
+}
+
+func fr_unbind(f: Free, name: string) {
+    f.bound[name] = map_get(f.bound, name, 0) - 1
+}
+
+func fr_use(f: Free, name: string) {
+    if (map_get(f.bound, name, 0) == 0 and not map_has(f.seen, name)) {
+        f.seen[name] = true
+        append(f.order, name)
     }
 }
 
-export func used_names(fn_node: Node) -> list<string> {
-    let order: list<string> = []
-    walk_names(fn_node, {}, order)
-    return order
+# A list of statements (or of expressions): a let binds its name for the statements after it.
+func fr_list(f: Free, xs: list<Node>) {
+    if (xs == null) {
+        return null
+    }
+    let added: list<string> = []
+    for (let x in xs) {
+        if (x == null) {
+            continue
+        }
+        fr_node(f, x)
+        if (x.k == "let" and x.name != null) {
+            fr_bind(f, x.name)
+            append(added, x.name)
+        }
+    }
+    for (let nm in added) {
+        fr_unbind(f, nm)
+    }
 }
 
-# Names used inside any function literal nested within xs.
+# The fields of x, each list as a list of statements of its own.
+func fr_children(f: Free, x: Node) {
+    for (let name in NODE_FIELDS[x.k]) {
+        let y = child_node(x, name)
+        if (y != null) {
+            fr_node(f, y)
+        }
+        fr_list(f, child_list(x, name))
+    }
+}
+
+func fr_node(f: Free, x: Node) {
+    let k = x.k
+    if (k == "id" or k == "assign" or k == "incdec") {
+        fr_use(f, x.name)
+        fr_children(f, x)
+    } else if (k == "func") {
+        for (let p in x.params) {
+            fr_bind(f, p)
+        }
+        fr_list(f, x.defaults)
+        fr_list(f, x.body)
+        for (let p in x.params) {
+            fr_unbind(f, p)
+        }
+    } else if (k == "for" and x.init != null and x.init.k == "let" and x.init.name != null) {
+        fr_node(f, x.init)
+        fr_bind(f, x.init.name)
+        if (x.cond != null) {
+            fr_node(f, x.cond)
+        }
+        if (x.incr != null) {
+            fr_node(f, x.incr)
+        }
+        fr_list(f, x.body)
+        fr_unbind(f, x.init.name)
+    } else if (k == "forin") {
+        fr_node(f, x.iter)
+        fr_bind(f, x.name)
+        fr_list(f, x.body)
+        fr_unbind(f, x.name)
+    } else {
+        fr_children(f, x)
+    }
+}
+
+# The free names of function fn_node (see above).
+export func used_names(fn_node: Node) -> list<string> {
+    let f = Free({}, {}, [])
+    fr_node(f, fn_node)
+    return f.order
+}
+
+# The free names of every function literal nested within xs: the variables that must live in cells.
 export func walk_nested(xs: list<Node>, out: map<bool>) {
     if (xs == null) {
         return null
@@ -33,15 +117,7 @@ export func walk_nested(xs: list<Node>, out: map<bool>) {
             continue
         }
         if (x.k == "func") {
-            # A parameter of the nested function hides any outer name of the same spelling in its whole
-            # body, so it is not a use of an outer variable (it made that variable a captured cell for nothing).
-            let seen: map<bool> = {}
-            for (let p in x.params) {
-                seen[p] = true
-            }
-            let order: list<string> = []
-            walk_names(x, seen, order)
-            for (let nm in order) {
+            for (let nm in used_names(x)) {
                 out[nm] = true
             }
         } else {

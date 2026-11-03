@@ -1,0 +1,132 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Which variables a nested function captures: only the names it does not declare itself.
+
+# CASE a local of an inner function leaves the outer variable of the same name alone
+func outer() -> int {
+    let i = 10
+    func inner() -> int {
+        let i = 1
+        i += 1
+        return i
+    }
+    i += inner()
+    return i
+}
+print(outer())
+
+# CASE a use before the inner let reads the outer variable
+func outer() -> int {
+    let n = 5
+    func inner() -> int {
+        let first = n
+        let n = 100
+        return first + n
+    }
+    return inner() + n
+}
+print(outer())
+
+# CASE a let inside a block ends with the block, and the use after it is the outer variable
+func outer() -> int {
+    let v = 7
+    func inner(c: bool) -> int {
+        if (c) {
+            let v = 1
+            return v
+        }
+        v += 1
+        return v
+    }
+    let a = inner(true)
+    let b = inner(false)
+    return a * 100 + b * 10 + v
+}
+print(outer())
+
+# CASE a loop variable of an inner function, then the outer variable after the loop
+func outer() -> int {
+    let i = 3
+    func inner() -> int {
+        let sum = 0
+        for (let i = 0; i < 4; i++) {
+            sum += i
+        }
+        for (let i in [10, 20]) {
+            sum += i
+        }
+        return sum + i
+    }
+    i = 4
+    return inner()
+}
+print(outer())
+
+# CASE the first value of an inner let may read the outer variable of the same name
+func outer() -> int {
+    let k = 2
+    func inner() -> int {
+        let k = k + 40
+        return k
+    }
+    return inner() + k
+}
+print(outer())
+
+# CASE a function inside the inner function captures the inner local, not the outer one
+func outer() -> int {
+    let x = 1
+    func inner() -> int {
+        let x = 20
+        let add = func(d: int) -> int {
+            x += d
+            return x
+        }
+        add(1)
+        let r: int = add(1)
+        return r
+    }
+    return inner() * 10 + x
+}
+print(outer())
+
+# CASE closures made in a loop still keep the value of their own iteration
+func outer() -> list<int> {
+    let fs: list<function> = []
+    for (let i = 0; i < 3; i++) {
+        append(fs, func() -> int { return i * 10 })
+    }
+    let out: list<int> = []
+    for (let f in fs) {
+        let r: int = f()
+        append(out, r)
+    }
+    return out
+}
+print(outer())
+
+# CASE a top-level loop variable is not disturbed by a function with a local of the same name
+func total(xs: list<int>) -> int {
+    let sum = 0
+    for (let i = 0; i < len(xs); i++) {
+        sum += xs[i]
+    }
+    return sum
+}
+let seen: list<int> = []
+for (let i = 0; i < 3; i++) {
+    append(seen, i + total([i, i]))
+}
+print(seen)
+
+# CASE a parameter with a default that reads an outer variable
+func outer() -> int {
+    let base = 5
+    func inner(a: int = base, base2: int = 1) -> int {
+        return a + base2
+    }
+    base = 6
+    return inner()
+}
+print(outer())

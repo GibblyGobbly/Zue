@@ -1056,6 +1056,50 @@ are not built: with two markers the spin is 1 percent of the run or less.
 | c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
 | d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |
 
+### Throughput and stops after the program got faster (measured 2026-11-11, 16 threads, 23 GB)
+
+`bench/gc/mutator_utilization.zu <live MiB> 30000000`, normal build, one run each (three at 4 GiB).
+
+| Live asked | Before: iterations/s | Longest stop | After: iterations/s | Longest stop | MMU 1 ms | MMU 10 ms | Peak before | Peak after |
+|---|---|---|---|---|---|---|---|---|
+| 1 MiB | 7.20 M | 0.79 ms | 13.63 M | 0.22 ms | 75.5% | 96.2% | not kept | 47 MB |
+| 256 MiB | 5.37 M | 1.44 ms | 11.88 M | 0.22 ms | 77.8% | 95.6% | 0.97 GB | 1.06 GB |
+| 1 GiB | 5.64 M | 0.47 ms | 13.08 M | 0.24 ms | 75.4% | 97.0% | 3.74 GB | 3.75 GB |
+| 4 GiB | 5.90 M | 0.19 ms | 12.75 to 12.91 M | 0.22 to 0.31 ms | 61.6 to 76.8% | 94.5 to 96.1% | 11.25 GB | 8.97 to 9.05 GB |
+
+10 GiB was not run: it does not fit this machine. The throttle did not run in any of the runs after.
+
+What was wrong, each found by measuring, in the order found:
+
+| Cause | Evidence | Fix |
+|---|---|---|
+| The IR names no target, so LLVM took the C library to be missing and made every `memcpy` and `memset` of the runtime a loop over single bytes | `lv_list_of` took 345 instructions for a list of four items, 320 of them the byte loop; the binary had no `memcpy` symbol | `llvm_build.sh` gives `opt` and `llc` the target. List literal loop 47.1 to 19.6 ns, string loop 26.1 to 21.0 ns |
+| A local of a function made every outer variable of the same spelling a captured cell | The benchmark's top-level `i` was a heap cell, made new at every iteration, because `mmu()` has its own `i`: twice the calls of `_gc_alloc` against the same loop in a file without such functions | `analysis.zu` gives a function its free names only. 256 MiB: 6.50 M to 11.92 M iterations/s |
+| One `munmap` of a dead 64 MB large object held the kernel's lock on the address space for 5.4 ms | `strace -T`: the GC thread's `munmap` and the program thread's `mmap`, waiting, ended in the same microsecond | Large objects are unmapped 2 MB at a time. 4 GiB longest stop 9.5 to 13.8 ms, then 1.1 ms |
+| A chunk the program thread made itself waited in the kernel while the helper's huge page took 5 to 8 ms | `ZUE_RT_GC_OWN_CHUNK`: 5.1 ms, all of it the mapping; then, with the mapping gone, 1.47 ms in `calloc` of the descriptor | A reserve of ready chunks that grows with the heap, and an arena of address space and descriptors from which a chunk is cut without a call into the kernel. Longest stop 0.30 to 0.51 ms at every size |
+| Three slow huge pages switched the hint off for the rest of the run | Runs with "chunks made when the hint went off" were 15 to 25 percent slower (4 GiB: 7.1 to 7.5 M) | The hint goes off only after three chunks the program made itself. 4 GiB: 9.6 to 10.0 M |
+| The program was held back at the pacer's goal although memory was free | 4 GiB: 2,900 to 4,400 holds of 100 microseconds in the loop, the same with 3, 4 and 6 markers | Default mode holds back only at the machine's memory limit; `--gc=lowmem` at the goal. 4 GiB: 12.75 to 12.91 M, peak 9.0 GB |
+
+One guess was wrong and was taken back before the cause was measured: that the 5 ms stop was the huge page
+hint on the program thread's own chunk (switching it off there changed nothing, tried twice).
+
+`--gc=lowmem`, same benchmark, one run each:
+
+| Live asked | Iterations/s | Peak | Peak in default mode | Held back | Longest stop |
+|---|---|---|---|---|---|
+| 256 MiB | 3.71 M | 0.38 GB | 1.06 GB | 60.9% of the run | 1.12 ms |
+| 1 GiB | 3.90 M | 1.55 GB | 3.75 GB | 54.9% | 1.03 ms |
+| 4 GiB | 3.62 M | 6.16 GB | 9.0 GB | 61.2% | 1.23 ms |
+
+Open in lowmem: more than half of the run is the hold-back spin, and each run had one stop just over a
+millisecond that the collector's own counters do not show (longest pause 0.14 to 0.36 ms, longest wait for the
+mutex 0.08 ms). Assists (the program marks while it is held back) are the next step there.
+
+Checked: `make test` (1174), the suite under `ZUE_RT_GC_VERIFY=1`, the GC and blue thread tests under
+`ZUE_RT_GC_STRESS=7 ZUE_RT_GC_SLOW=50 ZUE_RT_GC_VERIFY=1`, `tools/gc_race_check.sh`, round-trip, verify-ir, fuzz,
+codes-check. The capture change was not mutation-tested; `test_capture_scopes.zu` (9 cases) gives the same
+output with the compiler before the change.
+
 ## Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 to 4 done 2026-11-06)
 
 The language changes after the collector work. The aim: every type known when the program is built, values

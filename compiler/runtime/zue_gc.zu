@@ -84,6 +84,7 @@ const CD_LINES = 49216         # byte per line: the epoch of the cycle that last
 const CD_NEW = 65600           # bit per granule, at an object's start: allocated while the cycle marks (program thread only)
 const CD_BLK = 81984           # BlockInfo[64]
 const CD_SIZE = 83008
+const DESC_STEP = 86016         # CD_SIZE in whole 4 KB pages: the distance between two descriptors of an arena
 const MAP_BYTES = 16384        # bytes of one granule bitmap of a chunk
 # struct BlockInfo (16 bytes)
 const BI_KIND = 0              # u8: 0 free, 1 normal objects, 2 atomic objects
@@ -122,7 +123,7 @@ const H_HEAP_LO = 16
 const H_HEAP_HI = 24
 const H_BYTES_SINCE_GC = 32
 const H_THRESHOLD = 40
-const H_EXTRA = 48             # the pacer's heap goal: bytes the program may allocate between two cycle ends before it is slowed down
+const H_EXTRA = 48             # bytes the program may allocate between two cycle ends before it is slowed down (see _after_sweep)
 const H_LIMIT = 56             # bytes allocated since the last collection that make _gc_alloc look at the collector
 const H_LIVE_BYTES = 64
 const H_GC_READY = 72
@@ -236,9 +237,17 @@ const PRE_MADE = 264
 const PRE_SPIKES = 272
 const PRE_OFF_AT = 280
 const PRE_MAXNS = 288
-const PRE_SIZE = 296
+const PRE_OWN_NS = 296         # the longest chunk the program thread made itself: all of it, the mapping, the descriptor
+const PRE_OWN_MAP = 304
+const PRE_OWN_DESC = 312
+const PRE_ARENA = 320          # the next chunk of the arena and the arena's end (PRE_MUTEX)
+const PRE_ARENA_END = 328
+const PRE_DESCS = 336          # the descriptor of the next chunk of the arena (PRE_MUTEX)
+const PRE_SIZE = 344
 const SPIKE_NS = 1000000       # a chunk that takes longer than this to make is a spike (the pause goal is below a millisecond)
-const HINT_SPIKES = 3          # this many spikes switch the huge page hint off for the chunks made after them
+const ARENA_CHUNKS = 64         # chunks of address space the helper maps at a time
+const RESERVE_PART = 8          # the helper keeps one chunk ready for every this many chunks of heap (at most PRE_SLOTS)
+const HINT_MISSES = 3          # this many chunks the program had to make itself switch the huge page hint off
 space("_heap0", HEAP_SIZE)
 space("lv_stack_low", 8)    # a copy of H_STACK_LOW for generated code, which does the stack test of a direct call itself
 space("_hibit", 256)        # the highest set bit of a byte
@@ -486,7 +495,7 @@ func _list(i) {
 # Maps a 2 MB chunk aligned to 2 MB, asks for huge pages and touches it, so that the kernel has zeroed
 # and attached the memory when this returns. Returns 0 when the system has no memory left. The first
 # touch of a huge page can take milliseconds, which is why the helper thread does it ahead of time. hint is
-# 0 once the helper has seen the hint cost spikes (see _pre_judge).
+# 0 once the helper has failed to keep up with huge pages (see _chunk_new).
 func _chunk_make(hint) {
     let raw = mmap(0, CHUNK_SIZE * 2, 3, 34, -1, 0)    # read and write, private and anonymous
     if (raw == -1 or raw == 0) {
@@ -500,17 +509,78 @@ func _chunk_make(hint) {
     if (tail > 0) {
         munmap(base + CHUNK_SIZE, tail)
     }
+    _chunk_touch(base, hint)
+    return base
+}
+
+# Asks for a huge page for the chunk at base (or for small pages) and touches it.
+func _chunk_touch(base, hint) {
     if (hint != 0) {
         madvise(base, CHUNK_SIZE, 14)    # MADV_HUGEPAGE: a hint, ignored where unsupported
     } else {
         madvise(base, CHUNK_SIZE, 15)    # MADV_NOHUGEPAGE
     }
     st8(base, 0)
+}
+
+# The arena: address space for ARENA_CHUNKS chunks, mapped by the helper in one piece and handed out a chunk at
+# a time. A chunk cut from it needs no call into the kernel, so a program thread that finds no chunk ready
+# does not wait for the kernel's lock on the address space (held for milliseconds by another thread's munmap
+# or first touch of a huge page: 5 ms measured). The first page is touched at once: a mapping that has been
+# touched takes its later page faults without that lock.
+
+# The next chunk of the arena, or 0 when it is used up. PRE_MUTEX held.
+func _arena_slice(pre) {
+    let base = ld64(pre + PRE_ARENA)
+    if (base == ld64(pre + PRE_ARENA_END)) {
+        return 0
+    }
+    st64(pre + PRE_ARENA, base + CHUNK_SIZE)
     return base
 }
 
-# The hint costs speed when the kernel has to compact memory to find a huge page, and the cost shows as a
-# chunk that takes long to make. After HINT_SPIKES such chunks, new chunks stop asking for huge pages.
+# The descriptor that goes with the chunk _arena_slice just returned. PRE_MUTEX held.
+func _arena_desc(pre) {
+    let cd = ld64(pre + PRE_DESCS)
+    st64(pre + PRE_DESCS, cd + DESC_STEP)
+    return cd
+}
+
+# Maps a new arena. Helper thread, PRE_MUTEX not held. Returns 0 when the system has no address space left.
+func _arena_grow(pre) {
+    let size = ARENA_CHUNKS * CHUNK_SIZE
+    let raw = mmap(0, size + CHUNK_SIZE, 3, 34, -1, 0)    # read and write, private and anonymous
+    if (raw == -1 or raw == 0) {
+        return 0
+    }
+    let base = band(raw + CHUNK_SIZE - 1, bnot(CHUNK_SIZE - 1))
+    if (base > raw) {
+        munmap(raw, base - raw)
+    }
+    let tail = raw + size + CHUNK_SIZE - (base + size)
+    if (tail > 0) {
+        munmap(base + size, tail)
+    }
+    st8(base, 0)
+    # The descriptors of its chunks, mapped with it: calloc on the program thread took 1.5 ms once (it may
+    # call into the kernel, or wait for another thread's calloc).
+    let descs = mmap(0, ARENA_CHUNKS * DESC_STEP, 3, 34, -1, 0)
+    if (descs == -1 or descs == 0) {
+        munmap(base, size)
+        return 0
+    }
+    st8(descs, 0)
+    pthread_mutex_lock(pre + PRE_MUTEX)
+    st64(pre + PRE_DESCS, descs)
+    st64(pre + PRE_ARENA, base)
+    st64(pre + PRE_ARENA_END, base + size)
+    pthread_mutex_unlock(pre + PRE_MUTEX)
+    return 1
+}
+
+# Counts a chunk the helper made and how long it took (ZUE_RT_GC_STATS). A chunk that takes long is the
+# kernel compacting memory to find a huge page; the hint goes off only when that starves the program (see
+# _chunk_new).
 func _pre_judge(pre, dt) {
     st64(pre + PRE_MADE, ld64(pre + PRE_MADE) + 1)
     if (dt > ld64(pre + PRE_MAXNS)) {
@@ -518,10 +588,6 @@ func _pre_judge(pre, dt) {
     }
     if (dt > SPIKE_NS) {
         st64(pre + PRE_SPIKES, ld64(pre + PRE_SPIKES) + 1)
-    }
-    if (ld64a(pre + PRE_HINT) != 0 and ld64(pre + PRE_SPIKES) >= HINT_SPIKES) {
-        st64(pre + PRE_OFF_AT, ld64(pre + PRE_MADE))
-        st64a(pre + PRE_HINT, 0)
     }
 }
 
@@ -532,20 +598,25 @@ func _pre_main(pre) {
     while (1 == 1) {
         let tail = ld64a(pre + PRE_TAIL)
         if (tail - ld64a(pre + PRE_HEAD) < ld64a(pre + PRE_WANT)) {
-            pthread_mutex_unlock(pre + PRE_MUTEX)
-            let t0 = _now_ns()
-            let base = _chunk_make(ld64a(pre + PRE_HINT))
-            if (base == 0) {
-                return 0    # out of memory: the program thread meets it on its own path
+            let base = _arena_slice(pre)
+            let cd = 0
+            if (base != 0) {
+                cd = _arena_desc(pre)
             }
+            pthread_mutex_unlock(pre + PRE_MUTEX)
+            if (base == 0) {
+                if (_arena_grow(pre) == 0) {
+                    return 0    # out of memory: the program thread meets it on its own path
+                }
+                pthread_mutex_lock(pre + PRE_MUTEX)
+                continue
+            }
+            let t0 = _now_ns()
+            _chunk_touch(base, ld64a(pre + PRE_HINT))
             # Only the chunk's own time judges the hint: a slow calloc of the descriptor (up to 12 ms seen) is not
             # the hint's cost, and counting it switched huge pages off and cost 15 percent of throughput at 4 GiB.
             _pre_judge(pre, _now_ns() - t0)
-            let cd = _desc_make(base)
-            if (cd == 0) {
-                munmap(base, CHUNK_SIZE)
-                return 0
-            }
+            _desc_init(cd, base)
             st64(pre + PRE_RING + (tail % PRE_SLOTS) * 8, cd)
             st64a(pre + PRE_TAIL, tail + 1)
             pthread_mutex_lock(pre + PRE_MUTEX)
@@ -567,6 +638,12 @@ func _desc_make(base) {
     if (cd == 0) {
         return 0
     }
+    _desc_init(cd, base)
+    return cd
+}
+
+# Fills in the zeroed descriptor cd for the chunk at base and touches its pages.
+func _desc_init(cd, base) {
     for (let off = 0; off < CD_SIZE; off += 4096) {
         st8(cd + off, 0)
     }
@@ -590,6 +667,13 @@ func _chunk_new() {
             st64(pre + PRE_HITS, ld64(pre + PRE_HITS) + 1)
         } else if (ld64a(pre + PRE_WANT) != 0) {
             st64(pre + PRE_MISSES, ld64(pre + PRE_MISSES) + 1)
+            # The helper did not keep up HINT_MISSES times: from now on it makes chunks of small pages, which
+            # come at once. A slow huge page alone does not switch the hint off: the reserve covers it, and
+            # without huge pages the program is slower (15 percent at 4 GiB).
+            if (ld64a(pre + PRE_HINT) != 0 and ld64(pre + PRE_MISSES) >= HINT_MISSES) {
+                st64(pre + PRE_OFF_AT, ld64a(pre + PRE_MADE))
+                st64a(pre + PRE_HINT, 0)
+            }
             if (ld64a(pre + PRE_WANT) < PRE_SLOTS) {
                 st64a(pre + PRE_WANT, ld64a(pre + PRE_WANT) * 2)    # the program outruns the helper: keep more ready
             }
@@ -598,25 +682,66 @@ func _chunk_new() {
         }
         st64(h + H_PRE_POKE, 1)    # woken by _refill after the mutex is let go (see _wake)
     }
+    let t0 = 0
+    let t1 = 0
+    let t2 = 0
     if (cd == 0) {
         let hint = 1
         if (pre != 0) {
             hint = ld64a(pre + PRE_HINT)
         }
-        let made = _chunk_make(hint)
-        if (made == 0) {
-            _die_oom()
+        t0 = _now_ns()
+        let made = 0
+        if (pre != 0) {
+            # a chunk of the helper's arena and its descriptor, without a call into the kernel; the pages
+            # of the chunk come as they are used
+            pthread_mutex_lock(pre + PRE_MUTEX)
+            made = _arena_slice(pre)
+            if (made != 0) {
+                cd = _arena_desc(pre)
+            }
+            pthread_mutex_unlock(pre + PRE_MUTEX)
         }
-        cd = _desc_make(made)
-        if (cd == 0) {
-            _die_oom()
+        t1 = _now_ns()
+        if (made != 0) {
+            _desc_init(cd, made)
+        } else {
+            made = _chunk_make(hint)
+            if (made == 0) {
+                _die_oom()
+            }
+            t1 = _now_ns()
+            cd = _desc_make(made)
+            if (cd == 0) {
+                _die_oom()
+            }
         }
+        t2 = _now_ns()
     }
     let base = ld64(cd + CD_BASE)
     _arr_push(h + H_CHUNKS, cd)
+    # The reserve of ready chunks grows with the heap: one for every RESERVE_PART chunks in use, as many as the
+    # ring holds. While the helper is held up in the kernel (a huge page that took 5 to 8 ms to come), the
+    # program lives on the reserve; a chunk it has to make itself waits for the same lock in the kernel
+    # (5 ms measured, mutex held). --gc=lowmem keeps the small reserve.
+    if (pre != 0 and ld64(h + H_LOWMEM) == 0 and ld64a(pre + PRE_WANT) != 0) {
+        let want = ld64(h + H_CHUNKS + 8) / RESERVE_PART
+        if (want > PRE_SLOTS) {
+            want = PRE_SLOTS
+        }
+        if (want > ld64a(pre + PRE_WANT)) {
+            st64a(pre + PRE_WANT, want)
+        }
+    }
     _note_heap(base, CHUNK_SIZE)
     for (let off = 0; off < CHUNK_SIZE; off += PAGE_SIZE) {
         _table_insert(shr(base + off, PAGE_SHIFT), cd)
+    }
+    # The longest chunk the program thread made itself, by its parts (ZUE_RT_GC_STATS).
+    if (t0 != 0 and pre != 0 and _now_ns() - t0 > ld64(pre + PRE_OWN_NS)) {
+        st64(pre + PRE_OWN_NS, _now_ns() - t0)
+        st64(pre + PRE_OWN_MAP, t1 - t0)
+        st64(pre + PRE_OWN_DESC, t2 - t1)
     }
     return cd
 }
@@ -1697,6 +1822,21 @@ func _fits(b, n) {
 
 # Sweeps the large objects that existed when the sweep began: a dead one leaves the page table and its span is
 # given back after the mutex is let go. Mutex held at the start and at the end.
+# Unmaps the span of a dead large object, a chunk's size at a time. One munmap of the whole span keeps the
+# kernel's lock on the address space for as long as it takes to free every page (5.4 ms for 64 MB, measured),
+# and a program thread that needs a new chunk or a large object at that moment waits for it.
+func _unmap_span(base, span) {
+    let off = 0
+    while (off < span) {
+        let n = span - off
+        if (n > CHUNK_SIZE) {
+            n = CHUNK_SIZE
+        }
+        munmap(base + off, n)
+        off += n
+    }
+}
+
 func _sweep_large() {
     let h = _heap()
     let n = ld64(h + H_SW_LARGE)
@@ -1729,7 +1869,7 @@ func _sweep_large() {
     _unlock()
     for (let i = 0; i < ngone; i++) {
         let d = ld64(gone + i * 8)
-        munmap(ld64(d + LD_BASE), ld64(d + LD_SPAN))
+        _unmap_span(ld64(d + LD_BASE), ld64(d + LD_SPAN))
         free(d)
     }
     free(gone)
@@ -1931,7 +2071,14 @@ func _after_sweep() {
     if (goal < 2 * MIN_THRESHOLD) {
         goal = 2 * MIN_THRESHOLD
     }
-    st64(h + H_EXTRA, goal)
+    # When the program is held back. The default mode gives memory for speed: a cycle that takes longer than
+    # the pacer expected lets the heap grow past the goal, and the program is held back only where the
+    # machine's memory ends (room). --gc=lowmem holds the program to the goal.
+    let hold = goal
+    if (ld64(h + H_LOWMEM) == 0 and room > hold) {
+        hold = room
+    }
+    st64(h + H_EXTRA, hold)
     let next = goal - a
     if (next < MIN_THRESHOLD) {
         next = MIN_THRESHOLD
@@ -2310,6 +2457,10 @@ func _gc_report() {
     }
     let n3 = snprintf(buf3, 256, cstr("ZUE_RT_GC_CHUNKS,%llu taken ready,%llu made by the program thread,%llu made by the helper,%llu of them over a millisecond,%llu longest make ns,%llu chunks made when the hint went off (0: still on)\n"), hits, misses, made, spikes, maxns, off)
     write(2, buf3, n3)
+    if (pre != 0) {
+        let n4 = snprintf(buf3, 256, cstr("ZUE_RT_GC_OWN_CHUNK,%llu ns longest chunk made by the program thread,%llu ns of it the mapping,%llu ns the descriptor\n"), ld64(pre + PRE_OWN_NS), ld64(pre + PRE_OWN_MAP), ld64(pre + PRE_OWN_DESC))
+        write(2, buf3, n4)
+    }
 }
 
 # Called first thing in main of a program built with --gc=lowmem.

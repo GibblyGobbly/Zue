@@ -32,6 +32,7 @@ OPT=${OPT:-$(pick opt)}
 LLC=${LLC:-$(pick llc)}
 LLD=${LLD:-$(pick ld.lld)}
 LLVM_LINK=${LLVM_LINK:-$(pick llvm-link)}
+TRIPLE=x86_64-pc-linux-gnu
 
 if [ "$1" = "--which" ]; then
     case "$2" in
@@ -73,9 +74,11 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 # Compiles one .ll file to the object file $2.
+# The IR names no target, and without one LLVM takes the C library to be missing: every memcpy and memset
+# then becomes a loop over single bytes (a list literal of four items took 47 ns, with the target 20 ns).
 compile() {
-    "$OPT" "$level" "$1" -o "$TMP/opt.bc" || exit 1
-    "$LLC" "$level" -filetype=obj -relocation-model=pic "$TMP/opt.bc" -o "$2" || exit 1
+    "$OPT" -mtriple="$TRIPLE" "$level" "$1" -o "$TMP/opt.bc" || exit 1
+    "$LLC" -mtriple="$TRIPLE" "$level" -filetype=obj -relocation-model=pic "$TMP/opt.bc" -o "$2" || exit 1
 }
 
 if [ "$one_module" = 1 ]; then
