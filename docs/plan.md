@@ -1093,7 +1093,15 @@ hint on the program thread's own chunk (switching it off there changed nothing, 
 
 Open in lowmem: more than half of the run is the hold-back spin, and each run had one stop just over a
 millisecond that the collector's own counters do not show (longest pause 0.14 to 0.36 ms, longest wait for the
-mutex 0.08 ms). Assists (the program marks while it is held back) are the next step there.
+mutex 0.08 ms).
+
+Assists were tried and taken out (2026-11-11): the program thread marked from the pool for the 100 microseconds
+of each hold. Holds and throughput did not change (256 MiB 3.60 M, 1 GiB 3.51 M, 4 GiB 3.33 M). The reason,
+measured at 1 GiB in lowmem with 1, 2, 4 and 8 markers: 3.35, 3.57, 3.35 and 2.84 M iterations/s, while the
+markers' CPU time went from 11.2 to 15.7, 20.3 and 25.8 s. More marking threads do not shorten a cycle on this
+heap, so one more (the program) does not either. Not yet measured: why. The likely cause is the heap's shape,
+one list of 5 million rows: its items are one mark item that stays on one marker's stack, and a marker gives
+away half of its items, not half of a large one. With 8 markers there were stops of 2 to 3 ms.
 
 Checked: `make test` (1174), the suite under `ZUE_RT_GC_VERIFY=1`, the GC and blue thread tests under
 `ZUE_RT_GC_STRESS=7 ZUE_RT_GC_SLOW=50 ZUE_RT_GC_VERIFY=1`, `tools/gc_race_check.sh`, round-trip, verify-ir, fuzz,
