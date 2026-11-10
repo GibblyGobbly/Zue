@@ -221,6 +221,12 @@ const MK_TOP = 8
 const MK_CAP = 16
 const MK_SLOT = 24
 const MK_GROW = 48             # times the mark stack grew
+const MK_WORDS = 56            # words scanned
+const MK_NS = 64               # time spent marking
+const MK_GIVEN = 72            # times it gave work to the pool
+const MK_GIVEN_N = 80          # items given
+const MK_TAKES = 88            # times it took work from the pool
+const MK_WAITS = 96            # times it went to sleep during marking
 const MK_SIZE = 128
 # The block of the helper thread, which makes chunks ahead of time.
 const PRE_SLOTS = 16
@@ -1450,15 +1456,38 @@ func _pool_take(mk) {
     return 0
 }
 
-# A marker that has work while another waits and the pool is empty gives the top half of its stack away.
+# A marker that has work while another waits and the pool is empty gives the bottom half of its stack away: the
+# oldest items, which are the nearest to the roots and have the most behind them. A large item among them is
+# cut in two and one half kept, so the scan of one huge list is shared too (measured before: the rest of a list
+# of 5 million rows stayed at the bottom of one stack, the other markers were given about 115 rows at a time,
+# and with four markers fewer than two were busy). With one item on the stack, a large one, half of it is given.
 func _donate(mk) {
     let h = _heap()
-    _lock(5)
+    let k = ld64(mk + MK_TOP) / 2
+    if (k == 0) {
+        k = 1
+    }
+    for (let i = 0; i < k; i++) {
+        let item = ld64(mk + MK_STACK) + i * 16
+        let n = ld64(item + 8)
+        if (n > 2 * CHUNK_BYTES) {
+            let half = band(n / 2, -16)
+            st64(item + 8, half)
+            _push(mk, ld64(item) + half, n - half)
+        }
+    }
+    let stack = ld64(mk + MK_STACK)
     let top = ld64(mk + MK_TOP)
-    let k = top / 2
-    let w = _pool_add(ld64(mk + MK_STACK) + (top - k) * 16, k)
-    st64(mk + MK_TOP, top - k)
+    if (top < 2) {
+        return 0
+    }
+    _lock(5)
+    let w = _pool_add(stack, k)
     _unlock()
+    memmove(stack, stack + k * 16, (top - k) * 16)
+    st64(mk + MK_TOP, top - k)
+    st64(mk + MK_GIVEN, ld64(mk + MK_GIVEN) + 1)
+    st64(mk + MK_GIVEN_N, ld64(mk + MK_GIVEN_N) + k)
     _wake(w)
 }
 
@@ -1522,16 +1551,20 @@ func _drain() {
     }
 }
 
-# Marks about GCT_BATCH words from the stack of marker mk, giving half of it away when another marker waits.
+# Marks about GCT_BATCH words from the stack of marker mk, giving half of it away when another marker waits
+# and the pool is empty.
 func _mark_batch(mk) {
     let h = _heap()
     let work = 0
     while (ld64(mk + MK_TOP) != 0 and work < GCT_BATCH) {
         work += _scan_top(mk)
-        if (ld64(mk + MK_TOP) > 1 and ld64a(h + H_IDLE) != 0 and ld64a(h + H_SHARED_N) == 0) {
-            _donate(mk)
+        if (ld64a(h + H_IDLE) != 0 and ld64a(h + H_SHARED_N) == 0 and ld64(mk + MK_TOP) != 0) {
+            if (ld64(mk + MK_TOP) > 1 or ld64(ld64(mk + MK_STACK) + 8) > 2 * CHUNK_BYTES) {
+                _donate(mk)
+            }
         }
     }
+    st64(mk + MK_WORDS, ld64(mk + MK_WORDS) + work)
 }
 
 # Roots
@@ -2148,6 +2181,7 @@ func _marker_main(mk) {
         let w = 0
         if (st == 1 and ld64(mk + MK_TOP) == 0 and ld64(h + H_SHARED_N) != 0) {
             w = _pool_take(mk)
+            st64(mk + MK_TAKES, ld64(mk + MK_TAKES) + 1)
         }
         if (st == 1 and ld64(mk + MK_TOP) != 0) {
             _unlock()
@@ -2160,9 +2194,13 @@ func _marker_main(mk) {
             }
             _lock(10)
             st64(h + H_GCT_NS, ld64(h + H_GCT_NS) + dt)
+            st64(mk + MK_NS, ld64(mk + MK_NS) + dt)
             continue
         }
         st64a(h + H_IDLE, ld64(h + H_IDLE) + 1)
+        if (st == 1) {
+            st64(mk + MK_WAITS, ld64(mk + MK_WAITS) + 1)
+        }
         if (st == 1 and ld64(h + H_IDLE) == ld64(h + H_NMARK) and ld64(h + H_SHARED_N) == 0) {
             st64a(h + H_GCT_STATE, 2)
             pthread_cond_broadcast(h + H_COND_DONE)
@@ -2460,6 +2498,11 @@ func _gc_report() {
     if (pre != 0) {
         let n4 = snprintf(buf3, 256, cstr("ZUE_RT_GC_OWN_CHUNK,%llu ns longest chunk made by the program thread,%llu ns of it the mapping,%llu ns the descriptor\n"), ld64(pre + PRE_OWN_NS), ld64(pre + PRE_OWN_MAP), ld64(pre + PRE_OWN_DESC))
         write(2, buf3, n4)
+    }
+    for (let i = 0; i < ld64(h + H_NMARK); i++) {
+        let mk = _marker(i)
+        let n5 = snprintf(buf3, 256, cstr("ZUE_RT_GC_MARKER,%llu,%llu words scanned,%llu ns marking,%llu times gave work away,%llu items given,%llu times took work,%llu times waited for work\n"), i, ld64(mk + MK_WORDS), ld64(mk + MK_NS), ld64(mk + MK_GIVEN), ld64(mk + MK_GIVEN_N), ld64(mk + MK_TAKES), ld64(mk + MK_WAITS))
+        write(2, buf3, n5)
     }
 }
 

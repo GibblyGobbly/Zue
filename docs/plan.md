@@ -1103,6 +1103,33 @@ heap, so one more (the program) does not either. Not yet measured: why. The like
 one list of 5 million rows: its items are one mark item that stays on one marker's stack, and a marker gives
 away half of its items, not half of a large one. With 8 markers there were stops of 2 to 3 ms.
 
+The cause, measured the same day with a new line per marker (`ZUE_RT_GC_MARKER`): the words scanned were spread
+evenly, but the markers were mostly asleep. A cycle took 655, 485, 603 and 826 ms of wall time with 1, 2, 4 and
+8 markers for 648, 760, 1004 and 1367 ms of marker CPU, so with four markers fewer than two were busy. Each
+marker gave away about 115 items a time, took work from the pool over 2 million times in a run and went to
+sleep about 400,000 times. The rest of the big list stayed at the bottom of one stack; the top half that was
+given held only rows, done in microseconds.
+
+Fixed: a marker gives the bottom half of its stack, and an item over 8 KB among them is cut in two with one
+half kept. After it a marker waits about 300 times in a run instead of 400,000. Throughput at 1 GiB in
+lowmem, old and new back to back, two runs each. Another program (a game, about 5 cores) was running on the
+machine during these, so the numbers compare old with new and are not the collector's speed on a quiet
+machine; the stops of these runs (4 to 5 ms, the same with one marker) are the scheduler's.
+
+| Markers | Before | After |
+|---|---|---|
+| 2 | 2.55, 2.52 M iterations/s | 3.17, 3.13 M |
+| 4 | 2.18, 2.21 M | 4.31, 3.86 M |
+
+Still open: the time per word scanned rises with the markers (6.1, 6.6, 7.7 and 9.0 ns with 1, 2, 4 and 8, on
+the busy machine), so eight markers gave no more than four. Not measured: whether that is memory, the shared
+mark bytes or the other program. To do on a quiet machine: the table again, and the default number of markers.
+
+Checked: `make test` (1175), the suite under `ZUE_RT_GC_VERIFY=1` with 4 markers, the GC and blue thread tests
+under `ZUE_RT_GC_STRESS=7 ZUE_RT_GC_SLOW=50 ZUE_RT_GC_VERIFY=1` with 2, 4 and 8 markers, `tools/gc_race_check.sh`
+with the new test. `test_gc_marker_sharing.zu` was mutation-tested: with the kept half of a cut item dropped
+it crashes in three runs of three and the verifier names the unmarked object.
+
 Checked: `make test` (1174), the suite under `ZUE_RT_GC_VERIFY=1`, the GC and blue thread tests under
 `ZUE_RT_GC_STRESS=7 ZUE_RT_GC_SLOW=50 ZUE_RT_GC_VERIFY=1`, `tools/gc_race_check.sh`, round-trip, verify-ir, fuzz,
 codes-check. The capture change was not mutation-tested; `test_capture_scopes.zu` (9 cases) gives the same

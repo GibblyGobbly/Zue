@@ -1,0 +1,12 @@
+=== Running GC Marker Sharing Tests ===
+rows
+120000
+bad
+0
+flat
+400000
+sum
+39999900000.0
+junk
+3600000
+=== GC Marker Sharing Tests Complete ===

@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# One huge list is the whole live heap: the marking threads share its scan by cutting the list in two when
+# one of them runs out of work. Every row must survive many cycles, whichever marker scanned its part.
+print("=== Running GC Marker Sharing Tests ===")
+
+let rows = []
+for (let i = 0; i < 120000; i++) {
+    append(rows, [i, i * 2, "r{i}"])
+}
+
+# A list of floats holds no pointer: a marker that has only this one item gives half of it away.
+let flat = []
+for (let i = 0; i < 400000; i++) {
+    append(flat, float(i) / 2.0)
+}
+
+func row_ok(row: list, i: int) -> bool {
+    let a: int = row[0]
+    let b: int = row[1]
+    let s: string = row[2]
+    return a == i and b == i * 2 and s == "r{i}"
+}
+
+let n = len(rows)
+let junk = 0
+for (let round = 0; round < 60; round++) {
+    for (let k = 0; k < 20000; k++) {
+        let tmp = [round, k, "t{k}"]
+        junk += len(tmp)
+    }
+    # A row is replaced while a cycle may be marking: the old one goes through the write barrier.
+    let at = (round * 7919) % n
+    rows[at] = [at, at * 2, "r{at}"]
+}
+
+let bad = 0
+for (let i = 0; i < n; i++) {
+    if (not row_ok(rows[i], i)) {
+        bad += 1
+    }
+}
+let total = 0.0
+for (let v in flat) {
+    total += v
+}
+print("rows", n, "bad", bad)
+print("flat", len(flat), "sum", total)
+print("junk", junk)
+print("=== GC Marker Sharing Tests Complete ===")
