@@ -4,6 +4,8 @@
 # gc_race_pairs.py: reads ThreadSanitizer reports on standard input and sorts the data races into the one
 # kind the concurrent collector has by design, and everything else. Exits 1 when anything else appears.
 #   expected: a marking thread scanning an object (_mark_range, called from _scan_top) while the program writes it.
+#   expected: generated code reading its stack limit (lv_stack_low, a plain load) while the ticker, the worker
+#   that drives the collector or a program that is ending raises it to ask the thread to come to a safe point.
 #   The object bitmaps, line epochs and block kinds the GC thread reads while the program allocates are read and
 #   written with atomic loads and stores, so they make no report.
 import re
@@ -21,8 +23,11 @@ for block in text.split("WARNING: ThreadSanitizer: data race")[1:]:
         continue
     scan = [a for a in acc if a[1] == "_mark_range" and a[2] == "_scan_top" and a[0] == "read"]
     other = [a for a in acc if a not in scan]
+    asked = [a for a in acc if a[0] == "write" and a[1] in ("_blue_ticker", "_stw_begin", "lv_gc_dying")]
     if scan and len(other) == 1 and other[0][0] == "write":
         seen["object contents"] = seen.get("object contents", 0) + 1
+    elif len(asked) == 1 and [a for a in acc if a not in asked and a[0] == "read"]:
+        seen["stack limit raised"] = seen.get("stack limit raised", 0) + 1
     else:
         bad[tuple(acc)] = bad.get(tuple(acc), 0) + 1
 for k, v in sorted(seen.items()):

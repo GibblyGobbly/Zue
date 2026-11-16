@@ -1,0 +1,7 @@
+Type Error [E0213] in /tmp/zue_test_case.zu at line 2:
+  spawn() needs the name of a top-level function
+
+   2 | wait(spawn(f, 1))
+     |            ^ this is not one
+
+Hint: Blue threads share nothing. A function value, or a function declared inside another, carries variables of this thread; declare the function at the top level and pass what it needs as arguments

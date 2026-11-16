@@ -1,0 +1,7 @@
+Runtime Error [E0453] in /tmp/zue_test_case.zu at line 7:
+  cannot give a function to another blue thread
+
+   7 | print(wait(spawn(call, one)))
+     |            ^^^^^^^^^^^^^^^^
+
+Hint: Blue threads share nothing. Lists, maps, templates and blocs are copied for the other thread; a function, a file, a box or a pointer stays in its own thread.

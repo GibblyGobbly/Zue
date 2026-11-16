@@ -349,6 +349,12 @@ func lv_code_for(msg) {
     if (strstr(msg, cstr("must return")) != 0) {
         return cstr("E0212")
     }
+    if (strstr(msg, cstr("blue threads share nothing")) != 0) {
+        return cstr("E0213")
+    }
+    if (strstr(msg, cstr("spawn() needs the name")) != 0) {
+        return cstr("E0213")
+    }
     if (strstr(msg, cstr("is not defined")) != 0) {
         return cstr("E0301")
     }
@@ -510,6 +516,12 @@ func lv_code_for(msg) {
     }
     if (strstr(msg, cstr("from a closed channel")) != 0) {
         return cstr("E0452")
+    }
+    if (strstr(msg, cstr("to another blue thread")) != 0) {
+        return cstr("E0453")
+    }
+    if (strstr(msg, cstr("was already taken")) != 0) {
+        return cstr("E0453")
     }
     if (strstr(msg, cstr("unsafe")) != 0) {
         return cstr("E0460")

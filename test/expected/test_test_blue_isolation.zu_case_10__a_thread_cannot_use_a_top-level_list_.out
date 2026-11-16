@@ -1,0 +1,8 @@
+Type Error [E0213] in /tmp/zue_test_case.zu at line 3:
+  blue threads share nothing: 'count' runs in its own thread, and 'items' belongs to the thread that declared it
+  spawn(count, ...) at line 5
+
+   3 |     return len(items)
+     |                ^^^^^ a top-level variable (list<int>)
+
+Hint: Pass the value to spawn() as an argument or send it through a channel; the thread gets its own copy

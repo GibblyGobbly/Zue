@@ -16,7 +16,7 @@ use { Node, NODE_FIELDS, child_list, child_node, node_children } from "ast_nodes
 # Any other use counts as free. Before this, a local of a function made every outer variable of the same
 # spelling a captured cell: a top-level loop over i allocated a cell per iteration because some function in
 # the file had its own i.
-template Free { bound: map<int>, seen: map<bool>, order: list<string> }
+template Free { bound: map<int>, seen: map<bool>, order: list<string>, nodes: list<Node> }
 
 func fr_bind(f: Free, name: string) {
     f.bound[name] = map_get(f.bound, name, 0) + 1
@@ -26,10 +26,12 @@ func fr_unbind(f: Free, name: string) {
     f.bound[name] = map_get(f.bound, name, 0) - 1
 }
 
-func fr_use(f: Free, name: string) {
+func fr_use(f: Free, x: Node) {
+    let name = x.name
     if (map_get(f.bound, name, 0) == 0 and not map_has(f.seen, name)) {
         f.seen[name] = true
         append(f.order, name)
+        append(f.nodes, x)
     }
 }
 
@@ -68,7 +70,7 @@ func fr_children(f: Free, x: Node) {
 func fr_node(f: Free, x: Node) {
     let k = x.k
     if (k == "id" or k == "assign" or k == "incdec") {
-        fr_use(f, x.name)
+        fr_use(f, x)
         fr_children(f, x)
     } else if (k == "func") {
         for (let p in x.params) {
@@ -102,9 +104,16 @@ func fr_node(f: Free, x: Node) {
 
 # The free names of function fn_node (see above).
 export func used_names(fn_node: Node) -> list<string> {
-    let f = Free({}, {}, [])
+    let f = Free({}, {}, [], [])
     fr_node(f, fn_node)
     return f.order
+}
+
+# The node of the first use of each free name of fn_node, in the same order (to point an error at it).
+export func used_name_nodes(fn_node: Node) -> list<Node> {
+    let f = Free({}, {}, [], [])
+    fr_node(f, fn_node)
+    return f.nodes
 }
 
 # The free names of every function literal nested within xs: the variables that must live in cells.

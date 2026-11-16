@@ -350,6 +350,22 @@ example:
     }
 fix: Return a value of the written type, convert the value, or change the result type.
 
+== E0213
+title: A blue thread uses something of another thread
+match: blue threads share nothing | spawn() needs the name
+text: Blue threads share nothing that can change, so two of them can run at the same moment without a
+    data race. spawn takes the name of a top-level function. That function, and every function it
+    calls, may use other functions, types, and top-level variables that never change and hold a number,
+    a bool, a char or a string. Any other top-level variable belongs to the thread that declared it.
+example:
+    let total = 0
+    func add(n: int) {
+        total += n
+    }
+    wait(spawn(add, 1))
+fix: Pass the value to spawn as an argument, send it through a channel, or return the result and read
+    it with wait.
+
 == E0301
 title: A name is not defined
 match: is not defined
@@ -488,6 +504,21 @@ example:
     send(ch, 1)
 fix: Send before closing, close a channel only when no more values come, and make sure some thread
     sends what another receives.
+
+== E0453
+title: A value cannot be given to another blue thread
+match: to another blue thread | was already taken
+text: A value given to spawn or send is copied for the thread that gets it. A function, a file, a box
+    and a pointer cannot be copied and stay in their thread. wait hands the result of a thread over
+    once, without copying it; a second wait for the same thread finds nothing.
+example:
+    func twice(n: int) -> int {
+        return n * 2
+    }
+    let t = spawn(twice, 2)
+    print(wait(t))
+    print(wait(t))
+fix: Keep the result of wait in a variable, and send data, not functions or files.
 
 == E0460
 title: An unsafe rule was broken

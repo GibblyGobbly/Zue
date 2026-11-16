@@ -12,7 +12,7 @@ Call stack, innermost call first:
   in f(), called at line 3: return 1 + f(n + 1)
   in f(), called at line 3: return 1 + f(n + 1)
   in f(), called at line 3: return 1 + f(n + 1)
-  ... 8141 more calls ...
+  ... 8142 more calls ...
   in f(), called at line 3: return 1 + f(n + 1)
   in f(), called at line 5: func work() { return f(1) }
   in work(), called at line 6: let t = spawn(work)

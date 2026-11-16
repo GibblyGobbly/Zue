@@ -1,5 +1,8 @@
 # Blue threads: spawn, wait, yield and channels. Each CASE runs on its own. Run with
 # ZUE_RT_GC_STRESS=1 ZUE_RT_GC_VERIFY=1 to check that the collector sees the stacks of threads that are away.
+# The cases here record the order in which threads run, so they run without time slices (a thread is
+# switched out only where it waits); test_blue_preemption.zu covers the slices.
+# test: no-preempt
 
 # CASE results and order
 func add(a: int, b: int) {
@@ -112,13 +115,13 @@ let ch = channel()
 recv(ch)
 
 # CASE a thread waiting for itself
-func me(cell: list) {
-    let t: thread = cell[0]
+func me(ch: channel) {
+    let t: thread = recv(ch)
     return wait(t)
 }
-let holder = [null]
-holder[0] = spawn(me, holder)
-let first: thread = holder[0]
+let ch = channel(1)
+let first = spawn(me, ch)
+send(ch, first)
 wait(first)
 
 # CASE wait needs a thread
@@ -204,13 +207,12 @@ for (let id = 0; id < 20; id++) {
 }
 print(total)
 
-# CASE a thread that runs before the collector reached its stack hands on what only it held
-let shelf = []
-func deep(id: int, n: int) {
+# CASE a thread that runs before the collector reached its stack sends what only it held
+func deep(shelf: channel, id: int, n: int) {
     if (n == 0) {
         let mine = [id, "only{id}"]
         yield()
-        append(shelf, mine)
+        send(shelf, mine)
         mine = [0, "gone"]
         let junk = []
         for (let i = 0; i < 20; i++) {
@@ -220,14 +222,15 @@ func deep(id: int, n: int) {
         return id
     }
     let pad = n * 2
-    return deep(id, n - 1) + pad - pad
+    return deep(shelf, id, n - 1) + pad - pad
 }
-func start(id: int) {
-    return deep(id, 150)
+func start(shelf: channel, id: int) {
+    return deep(shelf, id, 150)
 }
 let ds = []
+let shelf_ch = channel(400)
 for (let id = 0; id < 400; id++) {
-    append(ds, spawn(start, id))
+    append(ds, spawn(start, shelf_ch, id))
 }
 let waste = []
 for (let i = 0; i < 30000; i++) {
@@ -245,8 +248,10 @@ for (let id = 0; id < 400; id++) {
     sum += got_sum
 }
 let ok = 0
-for (let i = 0; i < len(shelf); i++) {
-    let row: list = shelf[i]
+let shelf = []
+for (let i = 0; i < 400; i++) {
+    let row: list = recv(shelf_ch)
+    append(shelf, row)
     if (row[1] as string == "only{row[0]}") {
         ok += 1
     }

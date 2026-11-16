@@ -1402,6 +1402,23 @@ func loop_pop() {
     remove(ST.ctx.loops, len(ST.ctx.loops) - 1)
 }
 
+# At the head of every loop: lets another blue thread run when the scheduler has asked for it. The request
+# is the stack limit raised to the highest address (see lvp_stack_slow in the runtime). The load is volatile
+# because another thread writes the limit; without it LLVM reads the limit once, before the loop.
+func ll_preempt_check() {
+    let low = ll_reg()
+    ll("{low} = load volatile i64, ptr @lv_stack_low")
+    let asked = ll_reg()
+    ll("{asked} = icmp eq i64 {low}, -1")
+    let l_yes = ll_new_label("pyes")
+    let l_go = ll_new_label("pgo")
+    ll_condbr(asked, l_yes, l_go)
+    ll_label(l_yes)
+    ll("call void @lvp_stack_slow()")
+    ll_br(l_go)
+    ll_label(l_go)
+}
+
 func st_while(n: Node) {
     let cond = ll_new_label("wcond")
     let body = ll_new_label("wbody")
@@ -1409,6 +1426,7 @@ func st_while(n: Node) {
     loop_push("loop", done, cond)
     ll_br(cond)
     ll_label(cond)
+    ll_preempt_check()
     ll_condbr(cond_flag(n.cond), body, done)
     ll_label(body)
     st_block(n.body)
@@ -1429,6 +1447,7 @@ func st_for(n: Node) {
     loop_push("for", done, step)
     ll_br(cond)
     ll_label(cond)
+    ll_preempt_check()
     if (n.cond == null) {
         ll_br(body)
     } else {
@@ -1480,6 +1499,7 @@ func st_forin(n: Node) {
     loop_push("loop", done, step)
     ll_br(cond)
     ll_label(cond)
+    ll_preempt_check()
     let cur = ll_reg()
     ll("{cur} = load i64, ptr {idx}")
     let more = ll_reg()
@@ -1964,7 +1984,7 @@ func declarations() -> list<string> {
     append(d, "declare double @pow(double, double)")
     append(d, "declare void @lvp_enter(ptr)")
     append(d, "declare void @lvp_leave()")
-    append(d, "declare void @lvp_out_of_stack()")
+    append(d, "declare void @lvp_stack_slow()")
     append(d, "declare void @lvp_print(ptr)")
     append(d, "declare ptr @lvp_cell(ptr)")
     append(d, "declare void @lv_wb_cell(ptr)")
@@ -2033,11 +2053,13 @@ export func compile_program_ll(stmts: list<Node>) -> string {
     append(out, "%LV = type \{ i64, i64 }")
     append(out, "%LvFunc = type \{ ptr, ptr, i32, i32, ptr }")
     append(out, "%LvModule = type \{ ptr, ptr, i32 }")
-    append(out, "@lv_pos_mod = external global ptr")
-    append(out, "@lv_pos = external global i64")
-    append(out, "@lv_depth = external global i32")
-    append(out, "@lv_frames = external global i8")
-    append(out, "@lv_stack_low = external global i64")
+    # What the running code is doing belongs to the operating system thread that runs it: every such thread
+    # has its own copy of these (tspace in the runtime).
+    append(out, "@lv_pos_mod = external thread_local(localexec) global ptr")
+    append(out, "@lv_pos = external thread_local(localexec) global i64")
+    append(out, "@lv_depth = external thread_local(localexec) global i32")
+    append(out, "@lv_frames_p = external thread_local(localexec) global ptr")
+    append(out, "@lv_stack_low = external thread_local(localexec) global i64")
     for (let d in declarations()) {
         append(out, d)
     }

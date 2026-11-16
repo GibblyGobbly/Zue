@@ -642,9 +642,13 @@ const RL_COMPACT_MIN = 1024
 const RL_FIRST_CAP = 64    # entries in the table when it is first made
 
 # address_of() of the same variable twice in one block gives the same pointer: slot address -> number.
-space("rl_addr_map", 32)
+# The table of an unsafe block and all that goes with it is one per operating system thread: no blue thread
+# is switched inside an unsafe block, and several workers can each be inside one.
+tspace("rl_addr_map", 32)
 # number -> index + 1, for the entries that survived a compaction
-space("rl_num_map", 32)
+tspace("rl_num_map", 32)
+per_thread("rl_entries", "rl_entry_n", "rl_entry_cap", "rl_freed", "rl_next", "rl_first", "rl_tail_idx", "rl_tail_num",
+           "rl_defers", "rl_defer_n", "rl_defer_cap", "rl_inside", "rl_marks", "rl_mark_cap")
 let rl_entries = 0
 let rl_entry_n = 0
 let rl_entry_cap = 0

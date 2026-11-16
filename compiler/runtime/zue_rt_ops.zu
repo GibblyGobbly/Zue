@@ -1121,18 +1121,23 @@ func lvp_field(o, t, key) {
 # index of the field in it. The same site nearly always sees the same type, so a read is a compare
 # and a copy. The cache words sit in the data segment, which the collector scans, so a cached type
 # is never freed and its address never reused.
+# Several workers can run the same site, so the type and the index are one object, { type, index }, that
+# never changes; the site holds its address in one word, which is read and written in one step.
 func lvp_field_ic(o, t, key, ic) {
     if (_tag(t) == T_TEMPLATE) {
         let tp = _val(t)
         let dt = ld64(tp + TP_DT)
-        if (dt == ld64(ic)) {
-            _cp(o, tp + TP_FIELDS + 16 * ld64(ic + 8))
+        let hit = ld64a(ic)
+        if (hit != 0 and ld64(hit) == dt) {
+            _cp(o, tp + TP_FIELDS + 16 * ld64(hit + 8))
             return 0
         }
         let i = _tpl_find(tp, _val(key) + S_DATA)
         if (i >= 0) {
-            st64(ic, dt)
-            st64(ic + 8, i)
+            let pair = lv_alloc(16)
+            st64(pair, dt)
+            st64(pair + 8, i)
+            st64a(ic, pair)
             _cp(o, tp + TP_FIELDS + 16 * i)
             return 0
         }
@@ -1252,18 +1257,29 @@ func _call_frame(depth, pos, mod, name_p) {
         lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
                  cstr("Zue allows 100000 nested calls. Check for a recursion that never stops."))
     }
-    let fr = addr_of("lv_frames") + depth * FRAME_SIZE
+    let fr = _frames() + depth * FRAME_SIZE
     st64(fr, pos)
     st64(fr + 8, mod)
     st64(fr + 16, name_p)
-    let stack_low = ld64(addr_of("_heap0") + H_STACK_LOW)
+    let stack_low = ld64a(addr_of("lv_stack_low"))
     if (stack_low != 0 and ult(stack_ptr(), stack_low)) {
-        lvp_out_of_stack()
+        lvp_stack_slow()
     }
 }
 
-# The error of a call that finds the stack of the running thread used up. Generated code makes this call
-# itself for a direct call, after its own test of the stack.
+# A call, or the head of a loop, found the stack pointer below lv_stack_low. Either the stack of the running
+# thread is used up, or the scheduler raised lv_stack_low to the highest address to ask the thread to let
+# another one run, or the collector raised it to stop this worker. The true limit stays in the worker's
+# WK_STACK_LOW. Generated code calls this itself after its own test and goes on when it returns.
+func lvp_stack_slow() {
+    let low = ld64(_wk() + WK_STACK_LOW)
+    if (low != 0 and ult(stack_ptr(), low)) {
+        lvp_out_of_stack()
+    }
+    _blue_preempt()
+}
+
+# The error of a call that finds the stack of the running thread used up.
 func lvp_out_of_stack() {
     lv_error(E_RUNTIME, cstr("stack overflow: recursion is too deep"),
              cstr("The program ran out of stack. Check for a recursion that never stops."))
@@ -1279,7 +1295,7 @@ func lvp_enter(name_p) {
 
 func lvp_leave() {
     let depth = ld32(addr_of("lv_depth"))
-    let fr = addr_of("lv_frames") + depth * FRAME_SIZE
+    let fr = _frames() + depth * FRAME_SIZE
     st32(addr_of("lv_depth"), depth - 1)
     st64(addr_of("lv_pos_mod"), ld64(fr + 8))
     st64(addr_of("lv_pos"), ld64(fr))
@@ -1349,6 +1365,19 @@ func _crash_name(sig) {
 }
 
 func _crash_handler(sig) {
+    if (lv_gc_dying() == 0) {
+        _gc_park()
+    }
+    # A signal sent to the process can arrive on a thread that runs no Zue code (the first thread, a
+    # marking thread). The place reported is then that of the thread of the program.
+    let h = addr_of("_heap0")
+    if (_frames() == 0 and ld64a(h + H_NWORKERS) != 0) {
+        let w = ld64(ld64(h + H_WORKERS))
+        st64(addr_of("lv_frames_p"), ld64(w + WK_FRAMES))
+        st64(addr_of("lv_pos"), ld64(ld64(w + WK_POS_P)))
+        st64(addr_of("lv_pos_mod"), ld64(ld64(w + WK_MOD_P)))
+        st32(addr_of("lv_depth"), ld32(ld64(w + WK_DEPTH_P)))
+    }
     fflush(_stdout())
     let m = ld64(addr_of("lv_pos_mod"))
     let pos = ld64(addr_of("lv_pos"))
@@ -1382,17 +1411,24 @@ func _crash_setup() {
     sigaction(8, act, 0)
 }
 
-func _thread_main(start) {
+# What every thread that runs Zue code does first.
+func _thread_setup() {
     _crash_setup()
-    lv_gc_start()
+    _frames_init()
+    _srand_default()
+}
+
+func _thread_main(start) {
+    _thread_setup()
+    lv_data_init()
+    lv_gc_start(frame_addr() + 64)
     call_ptr(ld64(start))
+    lv_gc_dying()    # the program is over: the other workers stop where they are
     fflush(_stdout())
     return 0
 }
 
 func lv_main(argc_i, argv_p, entry_p) {
-    lv_data_init()
-    _srand_default()
     st64(addr_of("_argc"), argc_i)
     st64(addr_of("_argv"), argv_p)
     # Deep recursion needs a large stack; run the program on its own thread.
@@ -1413,9 +1449,7 @@ func lv_main(argc_i, argv_p, entry_p) {
         }
     }
     if (rc != 0) {
-        _crash_setup()
-        lv_gc_start()
-        call_ptr(entry_p)
+        _thread_main(start)
     } else {
         pthread_join(ld64(th), 0)
     }

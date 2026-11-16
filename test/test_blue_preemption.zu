@@ -1,0 +1,66 @@
+# Blue threads are switched out when they have run for a time slice while another thread was ready: at a
+# call, and at the head of a loop. Each CASE runs on its own.
+
+# CASE a loop that never waits does not starve the others
+func forever() {
+    let i = 0
+    while (true) {
+        i = (i + 1) % 7
+    }
+}
+func quick(n: int) -> int {
+    return n + 1
+}
+let hog = spawn(forever)
+let q = spawn(quick, 41)
+print(wait(q))
+
+# CASE a thread that only calls functions is switched out too
+func fibr(n: int) -> int {
+    if (n < 2) {
+        return n
+    }
+    return fibr(n - 1) + fibr(n - 2)
+}
+func slow(order: channel) {
+    let r = fibr(32)
+    send(order, "slow {r}")
+}
+func fast(order: channel) {
+    send(order, "fast")
+}
+let order = channel(2)
+spawn(slow, order)
+spawn(fast, order)
+print(recv(order), recv(order))
+
+# CASE a thread inside an unsafe block is not switched out
+func other() -> int {
+    let n = 0
+    unsafe {
+        let q = alloc(1)
+        defer(q)
+        store(q, 7)
+        let w = 0
+        for (let i = 0; i < 30000000; i++) {
+            w = (w + i) % 1000
+        }
+        n = load(q) as int + w
+    }
+    return n
+}
+let t = spawn(other)
+let s = 0
+unsafe {
+    let p = alloc(1)
+    defer(p)
+    store(p, 5)
+    # shorter than the loop of the other thread: were this thread switched out here, the other would start
+    # its block inside this one and this block would end first, with the other's deferred free
+    for (let i = 0; i < 10000000; i++) {
+        s = (s + i) % 1000
+    }
+    s += load(p) as int
+}
+let got: int = wait(t)
+print(s, got)

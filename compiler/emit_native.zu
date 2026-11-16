@@ -14,12 +14,15 @@
 #   let counter = 0                  a module-level word variable
 #   extern("snprintf", "i32", "ptr,i64,ptr,...")    declares a C function
 #   space("lv_depth", 4)             a zeroed global of that many bytes
+#   tspace("lv_depth", 4)            the same, one for each operating system thread
+#   per_thread("counter", "other")   the module-level variables named (declared after this line) are
+#                                    one for each operating system thread
 #   table("sizes", "i32", 16, 32)    a constant array
 #
 # Intrinsics: ld8 ld16 ld32 ld64 lds8 lds16 lds32 st8 st16 st32 st64, band bor bxor
 # shl shr sar bnot, ult ule ugt uge udiv urem, addof subof mulof (overflow flags),
 # fadd fsub fmul fdiv fneg flt fle fgt fge feq fne i2f f2i dbl, cstr addr_of fn_addr
-# ld8a ld64a (acquire loads) st8a st64a (release stores) cas8 fence (for data shared between threads),
+# ld8a ld64a (acquire loads) st8a st64a (release stores) cas8 cas64 xadd64 fence (for data shared between threads),
 # stack_buf frame_addr stack_ptr spill_regs call_ptr callv retv retp trap. p[i] reads and
 # p[i] = v writes the 64-bit word at p + 8 * i.
 
@@ -39,9 +42,9 @@ template NExtern { ret: string, params: list<string>, variadic: bool, sig: strin
 template NState {
     funcs: map<NFunc>, order: list<Node>, externs: map<NExtern>, consts: map<int>, gvars: map<bool>,
     datas: map<int>, decls: list<string>, decl_ids: map<bool>, strs: list<string>, str_ids: map<string>,
-    defs: list<string>, syms: map<bool>
+    defs: list<string>, syms: map<bool>, tls: map<bool>
 }
-let NS = NState({}, [], {}, {}, {}, {}, [], {}, [], {}, [], {})
+let NS = NState({}, [], {}, {}, {}, {}, [], {}, [], {}, [], {}, {})
 
 # One native source file and its statements.
 export template NativeFile { path: string, stmts: list<Node> }
@@ -77,7 +80,7 @@ let ARITY: map<int> = {
     "fadd": 2, "fsub": 2, "fmul": 2, "fdiv": 2, "fneg": 1, "flt": 2, "fle": 2, "fgt": 2,
     "fge": 2, "feq": 2, "fne": 2, "i2f": 1, "f2i": 1,
     "ld8": 1, "ld16": 1, "ld32": 1, "ld64": 1, "lds8": 1, "lds16": 1, "lds32": 1,
-    "ld8a": 1, "ld64a": 1, "st8a": 2, "st64a": 2, "cas8": 3, "fence": 0,
+    "ld8a": 1, "ld64a": 1, "st8a": 2, "st64a": 2, "cas8": 3, "cas64": 3, "xadd64": 2, "fence": 0,
     "st8": 2, "st16": 2, "st32": 2, "st64": 2, "frame_addr": 0, "stack_ptr": 0, "spill_regs": 0,
     "trap": 0, "retv": 2, "retp": 1
 }
@@ -458,6 +461,22 @@ func nx_intrinsic(n: Node, name: string, a: list<string>) -> string {
         ll("{r} = zext i1 {f} to i64")
         return r
     }
+    if (name == "cas64") {
+        # cas64(p, expected, new): sets the word to new if it was expected; 1 when it did
+        let p = ptr_of(a[0])
+        let pair = ll_reg()
+        ll("{pair} = cmpxchg ptr {p}, i64 {a[1]}, i64 {a[2]} seq_cst seq_cst")
+        let f = ll_reg()
+        ll("{f} = extractvalue \{ i64, i1 } {pair}, 1")
+        ll("{r} = zext i1 {f} to i64")
+        return r
+    }
+    if (name == "xadd64") {
+        # xadd64(p, v): adds v to the word in one step and returns what it held before
+        let p = ptr_of(a[0])
+        ll("{r} = atomicrmw add ptr {p}, i64 {a[1]} seq_cst")
+        return r
+    }
     if (name == "fence") {
         ll("fence seq_cst")
         return "0"
@@ -549,6 +568,12 @@ func nx_special(n: Node, name: string) {
             nfail(n, "{name} takes one string literal")
         }
         let sym = args[0].v
+        if (map_has(NS.tls, sym)) {
+            # The address of a thread's own copy is not a constant: it is taken where it is used.
+            let r = ll_reg()
+            ll("{r} = ptrtoint ptr @{sym} to i64")
+            return r
+        }
         if (not map_has(NS.datas, sym) and not map_has(NS.funcs, sym) and not map_has(NS.syms, sym)) {
             NS.syms[sym] = true
             declare_once("sym_{sym}", "@{sym} = external global i8")
@@ -1088,7 +1113,7 @@ func register_extern(n: Node) {
     declare_once("ext_{a[0].v}", "declare {rty} @{a[0].v}({commas(ptys)})")
 }
 
-func register_data(n: Node) {
+func register_data(n: Node, per_thread: bool) {
     let a = n.args
     if (len(a) != 2 or a[0].k != "str") {
         nfail(n, "space takes a name and a byte size")
@@ -1101,6 +1126,10 @@ func register_data(n: Node) {
     let linkage = ""
     if (starts_with(a[0].v, "_")) {
         linkage = "internal "
+    }
+    if (per_thread) {
+        NS.tls[a[0].v] = true
+        linkage = linkage + "thread_local(localexec) "
     }
     append(NS.defs, "@{a[0].v} = {linkage}global [{size.v} x i8] zeroinitializer, align 16")
 }
@@ -1155,16 +1184,29 @@ func scan_file(stmts: list<Node>) {
                 if (c != null) {
                     first = c.v
                 }
-                append(NS.defs, "@{s.name} = internal global i64 {first}")
+                if (map_has(NS.tls, s.name)) {
+                    append(NS.defs, "@{s.name} = internal thread_local(localexec) global i64 {first}")
+                } else {
+                    append(NS.defs, "@{s.name} = internal global i64 {first}")
+                }
             }
         } else if (s.k == "call" and s.callee.k == "id" and s.callee.name == "extern") {
             register_extern(s)
         } else if (s.k == "call" and s.callee.k == "id" and s.callee.name == "space") {
-            register_data(s)
+            register_data(s, false)
+        } else if (s.k == "call" and s.callee.k == "id" and s.callee.name == "tspace") {
+            register_data(s, true)
+        } else if (s.k == "call" and s.callee.k == "id" and s.callee.name == "per_thread") {
+            for (let a in s.args) {
+                if (a.k != "str") {
+                    nfail(s, "per_thread takes the names of module-level variables as strings")
+                }
+                NS.tls[a.v] = true
+            }
         } else if (s.k == "call" and s.callee.k == "id" and s.callee.name == "table") {
             register_table(s)
         } else {
-            nfail(s, "Only func, const, let, extern and space are allowed at the top of a native file")
+            nfail(s, "Only func, const, let, extern, space, tspace, per_thread and table are allowed at the top of a native file")
         }
     }
 }

@@ -1,11 +1,32 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 #
-# Unit tests for the atomic intrinsics of the native dialect (ld8a ld64a st8a st64a cas8 fence),
+# Unit tests for the atomic intrinsics of the native dialect (ld8a ld64a st8a st64a cas8 cas64 xadd64 fence)
+# and for variables that every operating system thread has its own copy of (tspace, per_thread),
 # compiled by test/native/run.sh. It checks the values; run.sh also checks that the generated IR
 # contains atomic instructions with the intended ordering.
 
 extern("printf", "i32", "ptr,...")
+extern("pthread_create", "i32", "ptr,ptr,ptr,ptr")
+extern("pthread_join", "i32", "i64,ptr")
+
+per_thread("mine")
+let mine = 5
+tspace("own_bytes", 16)
+space("shared_word", 8)
+
+# Runs on a second thread: its copies start fresh, and what it writes stays its own.
+func other_thread(arg) {
+    st64(arg, mine)
+    st64(arg + 8, ld64(addr_of("own_bytes")))
+    st64(arg + 16, addr_of("own_bytes"))
+    mine = 77
+    st64(addr_of("own_bytes"), 88)
+    for (let i = 0; i < 100000; i++) {
+        xadd64(addr_of("shared_word"), 1)
+    }
+    return 0
+}
 
 let failures = 0
 let checks = 0
@@ -37,6 +58,32 @@ func main() {
     expect("cas8 swaps from 1 to 5", cas8(buf + 16, 1, 5), 1)
     expect("neighbour byte untouched", ld8(buf + 17), 0)
     fence()
+    st64(buf + 24, 10)
+    expect("cas64 swaps when equal", cas64(buf + 24, 10, 1099511627776), 1)
+    expect("cas64 stored the new value", ld64(buf + 24), 1099511627776)
+    expect("cas64 fails when different", cas64(buf + 24, 10, 3), 0)
+    expect("cas64 left the word alone", ld64(buf + 24), 1099511627776)
+    expect("xadd64 returns the old value", xadd64(buf + 24, 5), 1099511627776)
+    expect("xadd64 added", ld64(buf + 24), 1099511627781)
+    mine = 6
+    st64(addr_of("own_bytes"), 9)
+    let seen = stack_buf(24)
+    let th = stack_buf(8)
+    pthread_create(th, 0, fn_addr("other_thread"), seen)
+    for (let i = 0; i < 100000; i++) {
+        xadd64(addr_of("shared_word"), 1)
+    }
+    pthread_join(ld64(th), 0)
+    expect("a per_thread variable starts at its first value on a new thread", ld64(seen), 5)
+    expect("a tspace starts zeroed on a new thread", ld64(seen + 8), 0)
+    expect("this thread keeps its per_thread variable", mine, 6)
+    expect("this thread keeps its tspace", ld64(addr_of("own_bytes")), 9)
+    let differ = 0
+    if (ld64(seen + 16) != addr_of("own_bytes")) {
+        differ = 1
+    }
+    expect("each thread has its own address for a tspace", differ, 1)
+    expect("xadd64 from two threads loses nothing", ld64(addr_of("shared_word")), 200000)
     if (failures != 0) {
         printf(cstr("[ERROR] %ld of %ld checks failed\n"), failures, checks)
         return 1

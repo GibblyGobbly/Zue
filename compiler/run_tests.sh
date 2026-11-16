@@ -49,7 +49,11 @@ check_one() {
         if ! "$BUILD" -O1 -o "$TMP/$name" "$TMP/$name.$EXT" "$RTSRC" 2> "$TMP/gerr"; then
             fail=$((fail + 1)); echo "[FAIL] $label (llvm)"; head -5 "$TMP/gerr"; return
         fi
-        timeout 60 "$TMP/$name" > "$TMP/c.out" 2> "$TMP/c.err" < /dev/null; cc=$?
+        if [ -n "$slice" ]; then
+            ZUE_RT_BLUE_SLICE_US=$slice ZUE_RT_BLUE_WORKERS=1 timeout 60 "$TMP/$name" > "$TMP/c.out" 2> "$TMP/c.err" < /dev/null; cc=$?
+        else
+            timeout 60 "$TMP/$name" > "$TMP/c.out" 2> "$TMP/c.err" < /dev/null; cc=$?
+        fi
     fi
     # Error messages name the source file; the recorded outputs use this fixed name.
     sed -i "s|$CASE_FILE|/tmp/zue_test_case.zu|g" "$TMP/c.out" "$TMP/c.err"
@@ -92,6 +96,10 @@ check_golden() {
 }
 
 for f in "$@"; do
+    # A file with the line "# test: no-preempt" records the order in which blue threads run: its programs get
+    # a time slice of an hour, so a thread is switched out only where it waits.
+    slice=""
+    grep -q '^# test: no-preempt$' "$f" && slice=3600000000
     if [ -f "${f%.zu}.golden" ]; then
         check_golden "$f"
     elif grep -q '^# CASE ' "$f"; then

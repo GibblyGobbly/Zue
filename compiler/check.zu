@@ -17,6 +17,7 @@ use { BUILTINS } from "shared.zu"
 use { Diag, Span, diag_new, diag_text, diag_hint, diag_label, diag_trace, diag_exit_if_errors, diag_shown, span_at, span_line, suggest } from "diag.zu"
 use { cut, cut_list } from "ranges.zu"
 use { Node, mk_call, node_span, node_token, nodes_under, span_token } from "ast_nodes.zu"
+use { used_name_nodes } from "analysis.zu"
 use { parse_source } from "parser.zu"
 use { resolve_named_args } from "named_args.zu"
 use { path_dir, path_join, path_norm, split_lines } from "util.zu"
@@ -1832,6 +1833,9 @@ func ck_call(n: Node) -> string {
         }
     }
     if (known == null and map_has(BUILTIN_NAMES, name)) {
+        if (name == "spawn" and len(n.args) > 0) {
+            note_spawn(n, argtypes[0])
+        }
         ck_fn_value_call(n, name, argtypes)
         return ck_builtin(n, name, argtypes)
     }
@@ -3421,7 +3425,7 @@ func report_undefined() {
 # error inside the other file names that file.
 template CkFile {
     canon: string, lines: list<string>, scopes: list<Scope>, typedefs: map<Node>, assigned: map<bool>,
-    hoisted: map<bool>, exports: map<bool>, done: bool
+    hoisted: map<bool>, exports: map<bool>, done: bool, consts: map<bool>
 }
 
 # Canonical path -> CkFile, or an empty item for a file that cannot be read.
@@ -3512,9 +3516,10 @@ func check_file(canon: string) -> CkFile {
     ST.src_lines = lines
     let stmts = parse_source(text)
     resolve_named_args(stmts, canon)
-    let cf = CkFile(canon, lines, [], {}, {}, {}, {}, false)
+    let cf = CkFile(canon, lines, [], {}, {}, {}, {}, false, {})
     FILES[canon] = cf
     collect_file_exports(stmts, cf.exports)
+    collect_consts(stmts, cf.consts)
     SCOPES = []
     TYPEDEFS = {}
     ASSIGNED = {}
@@ -3578,11 +3583,137 @@ func bind_use(n: Node) {
     }
 }
 
+# Blue threads share nothing. spawn(f, ...) takes the name of a top-level function, and that function,
+# with every function it reaches by name, may not use a top-level variable: two threads can run at the same
+# moment, and a variable both could change would be a data race. Allowed are functions, types, and a
+# variable that never changes and holds a number, a bool, a char or a string (a const, or a let that
+# nothing assigns). The spawns are noted while the files are checked and judged at the end, when every
+# top-level name of every file is known.
+template SpawnRoot { fn: Node, cf: CkFile, name: string, span: Span, file: string }
+let SPAWN_ROOTS: list<SpawnRoot> = []
+
+# The top-level names of a file that are declared with const, also inside groups.
+func collect_consts(stmts: list<Node>, out: map<bool>) {
+    for (let s in stmts) {
+        if (s.k == "let" and s.name != null and s.const_decl == true) {
+            out[s.name] = true
+        } else if (s.k == "group") {
+            collect_consts(s.items, out)
+        }
+    }
+}
+
+# The file being checked, as a CkFile whose scopes are the live ones.
+func current_file() -> CkFile {
+    if (map_has(FILES, CUR_CANON) and FILES[CUR_CANON] != null) {
+        return FILES[CUR_CANON]
+    }
+    let cf = CkFile(CUR_CANON, ST.src_lines, [], {}, {}, {}, {}, false, {})
+    FILES[CUR_CANON] = cf
+    return cf
+}
+
+# At spawn(f, ...): f must be the name of a function declared at the top level of a file.
+func note_spawn(n: Node, first: string) {
+    let a = n.args[0]
+    let fn: Node = null
+    if (a.k == "id") {
+        fn = named_fn(a.name)
+    }
+    if (fn == null or fn_index(a.name) != 0) {
+        if (first != "function" and first != "any") {
+            return null    # not a function at all: the argument check reports it
+        }
+        let d = fail_node(a, "spawn() needs the name of a top-level function")
+        diag_text(d, "this is not one")
+        diag_hint(d, "Blue threads share nothing. A function value, or a function declared inside another, carries variables of this thread; declare the function at the top level and pass what it needs as arguments")
+        return null
+    }
+    let cf = current_file()
+    if (home_index(a.name) == 0) {
+        cf = SCOPES[0].homes[a.name]
+    }
+    append(SPAWN_ROOTS, SpawnRoot(fn, cf, a.name, node_span(a), ST.src_file))
+}
+
+func thread_safe_type(t: string) -> bool {
+    return t == "int" or t == "float" or t == "bool" or t == "char" or t == "string" or t == "int~" or t == "float~"
+}
+
+# Walks fn (declared in file cf) and the functions it reaches. path is how fn was reached from the root.
+func iso_walk(root: SpawnRoot, fn: Node, cf: CkFile, path: list<string>, seen: map<bool>) {
+    let key = "{cf.canon}:{fn.line}:{fn.col}"
+    if (map_has(seen, key) or len(cf.scopes) == 0) {
+        return null
+    }
+    seen[key] = true
+    let top = cf.scopes[0]
+    for (let x in used_name_nodes(fn)) {
+        let name = x.name
+        if (not map_has(top.types, name)) {
+            continue
+        }
+        let t = top.types[name]
+        let fixed = map_has(cf.consts, name) or not map_has(cf.assigned, name)
+        if (t == "type") {
+            continue
+        }
+        if (t == "function" and map_has(top.fns, name) and not map_has(cf.assigned, name)) {
+            let home = cf
+            if (map_has(top.homes, name)) {
+                home = top.homes[name]
+            }
+            let longer = cut_list(path, 0, len(path))
+            append(longer, name)
+            iso_walk(root, top.fns[name], home, longer, seen)
+            continue
+        }
+        if (fixed and thread_safe_type(t)) {
+            continue
+        }
+        let file = ST.src_file
+        let lines = ST.src_lines
+        ST.src_file = cf.canon
+        ST.src_lines = cf.lines
+        let d = fail_at(node_span(x), "blue threads share nothing: '{root.name}' runs in its own thread, and '{name}' belongs to the thread that declared it")
+        if (d != null) {
+            if (t == "function") {
+                diag_text(d, "a top-level variable that holds a function")
+            } else if (thread_safe_type(t)) {
+                diag_text(d, "a top-level variable that is assigned somewhere, so it can change while the thread runs")
+            } else {
+                diag_text(d, "a top-level variable ({t})")
+            }
+            let sep = " calls "
+            let at = "line {root.span.line}"
+            if (root.file != cf.canon) {
+                at = "{root.file} line {root.span.line}"
+            }
+            if (len(path) > 1) {
+                diag_trace(d, "  {join(path, sep)}")
+            }
+            diag_trace(d, "  spawn({root.name}, ...) at {at}")
+            diag_hint(d, "Pass the value to spawn() as an argument or send it through a channel; the thread gets its own copy")
+        }
+        ST.src_file = file
+        ST.src_lines = lines
+    }
+}
+
+func check_spawn_roots() {
+    for (let r in SPAWN_ROOTS) {
+        if (r.cf != null) {
+            iso_walk(r, r.fn, r.cf, [r.name], {})
+        }
+    }
+    SPAWN_ROOTS = []
+}
+
 # Reports every Type Error it can prove, in source order, and ends the run if there is one.
 export func check_program(stmts: list<Node>, canon: string) {
     CUR_CANON = canon
     if (canon != "" and not map_has(FILES, canon)) {
-        FILES[canon] = CkFile(canon, ST.src_lines, [], {}, {}, {}, {}, false)
+        FILES[canon] = CkFile(canon, ST.src_lines, [], {}, {}, {}, {}, false, {})
     }
     SCOPES = []
     TYPEDEFS = {}
@@ -3599,9 +3730,18 @@ export func check_program(stmts: list<Node>, canon: string) {
     LITERALS = []
     BODY_SIGS = {}
     ASSIGNED = {}
+    SPAWN_ROOTS = []
     collect_assigned(stmts)
     push_scope()
     ck_block(stmts)
+    let main_cf = current_file()
+    if (not main_cf.done) {
+        # a copy: pop_scope below empties SCOPES itself
+        main_cf.scopes = cut_list(SCOPES, 0, len(SCOPES))
+        main_cf.assigned = ASSIGNED
+        collect_consts(stmts, main_cf.consts)
+    }
+    check_spawn_roots()
     pop_scope()
     if (LIST_TYPES_ON[0]) {
         # the main program is checked first, and its check covers the files it imports

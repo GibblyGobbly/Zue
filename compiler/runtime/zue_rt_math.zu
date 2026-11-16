@@ -591,6 +591,7 @@ func _same_number_type(self_p, argv_p) {
 
 # Floored division of ints: the quotient rounds toward negative infinity and the remainder takes the
 # sign of the divisor. The results are left in g_math_q and g_math_r.
+per_thread("g_math_q", "g_math_r", "g_math_ovf")
 let g_math_q = 0
 let g_math_r = 0
 let g_math_ovf = 0
@@ -1209,8 +1210,30 @@ func lb_mat_mul(self_p, argc_i, argv_p) {
 
 # Random numbers
 
-# xoroshiro128++, seeded and scrambled exactly as in src/math_lib.c.
-space("_rng", 16)
+# xoroshiro128++, seeded and scrambled exactly as in src/math_lib.c. The state belongs to the blue thread
+# that runs: a switch keeps it in the thread that goes away and takes the one of the thread that comes
+# (_rng_save, _rng_load). A new thread gets a state made from the next number of the thread that spawns it, so
+# a program that seeds its generator gets the same numbers in every thread on every run, whichever worker
+# runs them.
+tspace("_rng", 16)
+
+func _rng_save(p) {
+    let s = addr_of("_rng")
+    st64(p, s[0])
+    st64(p + 8, s[1])
+}
+
+func _rng_load(p) {
+    let s = addr_of("_rng")
+    s[0] = ld64(p)
+    s[1] = ld64(p + 8)
+}
+
+func _rng_child(p) {
+    let a = _splitmix(_rng_next())
+    st64(p, a)
+    st64(p + 8, _splitmix(a))
+}
 
 func _rotl(x, k) {
     return bor(shl(x, k), shr(x, 64 - k))

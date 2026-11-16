@@ -272,6 +272,7 @@ func lb_list_append(self_p, argc_i, argv_p) {
 
 # The type() result for each fixed type tag, made once: strings never change, so every call can
 # share them. The table is a root range, so the collector keeps the strings alive.
+per_thread("g_type_names")
 let g_type_names = 0
 
 func lb_type(self_p, argc_i, argv_p) {
@@ -733,7 +734,7 @@ func lb_input(self_p, argc_i, argv_p) {
     let cell = stack_buf(16)
     st64(cell, 0)
     st64(cell + 8, 0)
-    let n = getline(cell, cell + 8, _stdin())
+    let n = _waiting_getline(cell, _stdin())
     let line = ld64(cell)
     if (n < 0) {
         free(line)
@@ -831,12 +832,31 @@ func lb_exit(self_p, argc_i, argv_p) {
     retp(o)
 }
 
+# Calls that can wait for as long as someone else likes: a line of input, a command. The worker counts as
+# stopped for the collector meanwhile (_safe_enter), so the other workers' cycles go on without it. The
+# registers are spilled into this frame, which stays for the whole call.
+func _waiting_getline(cell, fp) {
+    spill_regs()
+    _safe_enter(stack_ptr())
+    let n = getline(cell, cell + 8, fp)
+    _safe_leave()
+    return n
+}
+
+func _waiting_system(cmd) {
+    spill_regs()
+    _safe_enter(stack_ptr())
+    let rc = system(cmd)
+    _safe_leave()
+    return rc
+}
+
 func lb_system(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let cmd = _arg_path(self_p, argv_p, 0)
     let o = stack_buf(16)
     fflush(_stdout())
-    let rc = system(cmd + S_DATA)
+    let rc = _waiting_system(cmd + S_DATA)
     if (rc == -1) {
         let e = ld32(__errno_location())
         _errf(E_RUNTIME, cstr("The system could not start a shell for the command."),
@@ -1349,6 +1369,7 @@ func lb_index_of(self_p, argc_i, argv_p) {
 # Tables of recently used set strings for index_of_any and skip_chars: 8 entries chosen by the
 # string's address, each the address (kept alive by the root range, so it cannot be reused) and a
 # 256-byte table with 1 at every byte of the set. The lexer asks for the same few sets over and over.
+per_thread("g_set_cache")
 let g_set_cache = 0
 
 func _fill_table(tbl, set) {

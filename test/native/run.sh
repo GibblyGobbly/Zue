@@ -16,7 +16,8 @@ BUILD="$ROOT/compiler/llvm_build.sh"
 # The atomic intrinsics: the values, and that the IR really has atomic instructions with the intended ordering.
 "$ZUEC" --native "$ROOT/test/native/atomics_unit.zu" -o "$TMP/atomics_unit.ll" || exit 1
 for want in "load atomic i64, ptr %.* acquire" "load atomic i8, ptr %.* acquire" "store atomic i64 .* release" \
-            "store atomic i8 .* release" "cmpxchg ptr .* seq_cst seq_cst" "fence seq_cst"; do
+            "store atomic i8 .* release" "cmpxchg ptr .*, i8 .* seq_cst seq_cst" "cmpxchg ptr .*, i64 .* seq_cst seq_cst" \
+            "atomicrmw add ptr .* seq_cst" "thread_local(localexec) global i64 5" "thread_local(localexec) global \[16 x i8\]" "fence seq_cst"; do
     grep -q "$want" "$TMP/atomics_unit.ll" || { echo "[FAIL] atomics_unit.ll has no '$want'"; exit 1; }
 done
 "$BUILD" -O1 -o "$TMP/atomics_unit" "$TMP/atomics_unit.ll" || exit 1

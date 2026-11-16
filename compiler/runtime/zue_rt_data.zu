@@ -85,6 +85,13 @@ const BOX_CHUNK = 4096
 const BOX_CHUNKS_MAX = 4096
 
 space("_box_chunks", 32768)
+# The table of boxes is one for all threads. box_lock guards its free list, its growth and the list of
+# owners; a slot is read without the lock (its chunk never moves). The scratch results below and the state
+# of unsafe blocks are one per operating system thread.
+space("box_lock", 8)
+space("box_scope", 8)    # the last scope number given (atomic)
+per_thread("g_fk_extra", "g_fk_extras", "g_box_stack", "g_box_stack_n", "g_box_stack_cap", "g_block_depth",
+           "g_box_index", "g_keep", "g_keep_n", "g_keep_cap", "g_type_bad")
 let g_bloc_registry = 0
 let g_fk_extra = 0
 let g_fk_extras = 0
@@ -94,7 +101,6 @@ let g_box_free = 0
 let g_box_stack = 0
 let g_box_stack_n = 0
 let g_box_stack_cap = 0
-let g_scope_counter = 0
 let g_owners = 0
 let g_owner_count = 0
 let g_owner_cap = 0
@@ -857,7 +863,16 @@ func _box_state_code(handle) {
 }
 
 func _box_free_slot(s) {
-    if (s == 0 or ld32(s + BS_IN_USE) == 0) {
+    if (s == 0) {
+        return 0
+    }
+    _spin_lock(addr_of("box_lock"))
+    _box_free_locked(s)
+    _spin_unlock(addr_of("box_lock"))
+}
+
+func _box_free_locked(s) {
+    if (ld32(s + BS_IN_USE) == 0) {
         return 0
     }
     if (ld32(s + BS_STACK) == 0) {
@@ -876,18 +891,22 @@ func _box_free_slot(s) {
 
 # A slot that is not in use: a freed one, or the first of a new chunk.
 func _box_alloc_slot() {
+    _spin_lock(addr_of("box_lock"))
     if (g_box_free != 0) {
         let s = _box_slot_at(g_box_free - 1)
         g_box_free = ld32(s + BS_NEXT)
+        _spin_unlock(addr_of("box_lock"))
         return s
     }
     if (g_box_count % BOX_CHUNK == 0) {
         let chunk = g_box_count / BOX_CHUNK
         if (chunk >= BOX_CHUNKS_MAX) {
+            _spin_unlock(addr_of("box_lock"))
             lv_error(E_RUNTIME, cstr("too many boxes are live at once"), cstr("Free boxes you no longer need."))
         }
         let mem = calloc(BOX_CHUNK, BS_SIZE)
         if (mem == 0) {
+            _spin_unlock(addr_of("box_lock"))
             lv_error(E_RUNTIME, cstr("out of memory"), cstr("The system could not give the program more memory. Free values you no longer need, or work on smaller data."))
         }
         st64(addr_of("_box_chunks") + chunk * 8, mem)
@@ -895,11 +914,36 @@ func _box_alloc_slot() {
     let s = _box_slot_at(g_box_count)
     st32(s + BS_INDEX, g_box_count)
     g_box_count += 1
+    _spin_unlock(addr_of("box_lock"))
     return s
 }
 
 # Boxes made in a scope are freed when it ends. They are remembered in creation order with the
 # generation of their slot, so ending a scope only looks at the newest ones.
+# The stack of boxes that end with their scope belongs to the running blue thread: a switch keeps it in
+# the thread that goes away (three words at p) and takes the one of the thread that comes.
+func _box_stack_save(p) {
+    st64(p, g_box_stack)
+    st64(p + 8, g_box_stack_n)
+    st64(p + 16, g_box_stack_cap)
+}
+
+func _box_stack_load(p) {
+    g_box_stack = ld64(p)
+    g_box_stack_n = ld64(p + 8)
+    g_box_stack_cap = ld64(p + 16)
+}
+
+# The running thread is over: its stack of boxes is not needed again.
+func _box_stack_drop() {
+    if (g_box_stack != 0) {
+        free(g_box_stack)
+    }
+    g_box_stack = 0
+    g_box_stack_n = 0
+    g_box_stack_cap = 0
+}
+
 func _box_stack_push(index, gen) {
     if (g_box_stack_n == g_box_stack_cap) {
         let cap = 64
@@ -918,8 +962,7 @@ func _box_stack_push(index, gen) {
 }
 
 func lv_scope_new() {
-    g_scope_counter += 1
-    return g_scope_counter
+    return xadd64(addr_of("box_scope"), 1) + 1
 }
 
 # Makes a box of the given size. mem is where its bytes live: 0 for a new heap buffer, or the
@@ -1048,6 +1091,7 @@ func _box_promote_owned(bx, owner) {
                  cstr("Make a new box for the second template, or copy the bytes into one."))
     }
     _box_promote(bx)
+    _spin_lock(addr_of("box_lock"))
     if (g_owner_count == g_owner_cap) {
         if (g_owner_cap != 0) {
             g_owner_cap = g_owner_cap * 2
@@ -1056,18 +1100,20 @@ func _box_promote_owned(bx, owner) {
         }
         g_owners = realloc(g_owners, 16 * g_owner_cap)
         if (g_owners == 0) {
+            _spin_unlock(addr_of("box_lock"))
             lv_error(E_RUNTIME, cstr("out of memory"), cstr("The system could not give the program more memory. Free values you no longer need, or work on smaller data."))
         }
     }
     st64(g_owners + g_owner_count * 16, owner)
     st64(g_owners + g_owner_count * 16 + 8, _val(bx))
     g_owner_count += 1
+    _spin_unlock(addr_of("box_lock"))
     if (s != 0) {
         lv_gc_note_external(ld64(s + BS_LEN))
     }
 }
 
-# Runs after marking: boxes whose template is unreachable are freed.
+# Runs after marking, with every other worker stopped: boxes whose template is unreachable are freed.
 func lv_data_gc_hook() {
     let keep = 0
     for (let i = 0; i < g_owner_count; i++) {
@@ -1513,7 +1559,7 @@ func _alloc_line() {
 func _slow_compact_pointers() {
     spill_regs()
     let w = band(stack_ptr(), -8)
-    let hi = ld64(addr_of("_heap0") + H_STACK_BASE)
+    let hi = ld64(_wk() + WK_STACK_BASE)
     while (ult(w, hi)) {
         zue_mem_note_ref(ld64(w))
         w += 8

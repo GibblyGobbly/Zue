@@ -1,0 +1,152 @@
+# Blue threads share nothing: spawn and send copy what they are given, wait hands a result over once, and a
+# spawned function cannot use the top-level variables of the program. Each CASE runs on its own.
+
+# CASE spawn copies lists, maps and templates
+template P { x: int, tags: list<string> }
+func change(xs: list<int>, m: map<int>, p: P) -> list<int> {
+    append(xs, 99)
+    m["k"] = 7
+    p.x = 5
+    append(p.tags, "t")
+    return xs
+}
+let xs = [1, 2]
+let m = {"a": 1}
+let p = P(1, ["a"])
+let r: list<int> = wait(spawn(change, xs, m, p))
+print(xs, m, p.x, p.tags, r)
+
+# CASE two references to one list stay one list in the copy
+func grow(both: list<list<int>>) -> bool {
+    append(both[0], 1)
+    return len(both[1]) == 2 and both[0] == both[1]
+}
+let shared = [0]
+print(wait(spawn(grow, [shared, shared])), shared)
+
+# CASE a list that holds itself is copied once
+func size(v: list) -> int {
+    let inner: list = v[0]
+    return len(v) + len(inner)
+}
+let loop: list = [null, 1]
+loop[0] = loop
+print(wait(spawn(size, loop)))
+
+# CASE a list nested 300000 deep is copied without recursion
+func depth(v: list) -> int {
+    let d = 0
+    let cur: list = v
+    while (len(cur) > 0) {
+        let next: list = cur[0]
+        cur = next
+        d += 1
+    }
+    return d
+}
+let deep: list = []
+for (let i = 0; i < 300000; i++) {
+    deep = [deep]
+}
+print(wait(spawn(depth, deep)))
+
+# CASE dense lists, blocs and strings
+bloc V { x: float, y: float }
+func norm(v: V, d: list<float>, s: string) -> string {
+    d[0] = 9.0
+    return "{s} {v.x + v.y} {d}"
+}
+let d = [1.5, 2.5, 3.5]
+print(wait(spawn(norm, V(1.0, 2.0), d, "sum")), d)
+
+# CASE send copies the value
+func recv_change(inp: channel, done: channel) {
+    let got: list<int> = recv(inp)
+    append(got, 5)
+    send(done, got)
+}
+let inp = channel(1)
+let done = channel(1)
+let w = spawn(recv_change, inp, done)
+let orig = [1]
+send(inp, orig)
+append(orig, 2)
+let back: list<int> = recv(done)
+wait(w)
+print(orig, back)
+
+# CASE the result of a thread is handed over once
+func make() -> list<int> {
+    return [1, 2, 3]
+}
+let t = spawn(make)
+let got: list<int> = wait(t)
+print(got)
+wait(t)
+
+# CASE constants and variables that never change can be read in a thread
+const LIMIT = 10
+let label = "n"
+template Pair { a: int, b: int }
+func double(n: int) -> int {
+    return n * 2
+}
+func work(n: int) -> string {
+    let pr = Pair(n, double(n))
+    return "{label} {pr.a + pr.b + LIMIT}"
+}
+print(wait(spawn(work, 4)))
+
+# CASE a thread cannot use a top-level variable that changes
+let total = 0
+func add(n: int) {
+    total += n
+}
+wait(spawn(add, 1))
+
+# CASE a thread cannot use a top-level list
+let items = [1, 2]
+func count() -> int {
+    return len(items)
+}
+print(wait(spawn(count)))
+
+# CASE the rule follows the functions a thread calls
+let seen = {"a": 1}
+func look(k: string) -> bool {
+    return map_has(seen, k)
+}
+func middle(k: string) -> bool {
+    return look(k)
+}
+func top(k: string) -> bool {
+    return middle(k)
+}
+print(wait(spawn(top, "a")))
+
+# CASE spawn needs a named top-level function
+let f = func(n: int) -> int { return n }
+wait(spawn(f, 1))
+
+# CASE a function declared inside another cannot be spawned
+func outer() -> thread {
+    func inner(n: int) -> int {
+        return n
+    }
+    return spawn(inner, 1)
+}
+wait(outer())
+
+# CASE a function cannot be given to another thread
+func call(g: function) -> int {
+    return 1
+}
+func one(n: int) -> int {
+    return n
+}
+print(wait(spawn(call, one)))
+
+# CASE a file cannot be sent
+let out = channel(1)
+let fh = open("/dev/null", "r")
+send(out, [1, fh])

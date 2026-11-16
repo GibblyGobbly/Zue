@@ -137,6 +137,7 @@ example to be sure it causes the error it claims to.
 | `E0210` | A typed field is given the wrong type |
 | `E0211` | A call or value cannot be used this way |
 | `E0212` | A function does not return its written result type |
+| `E0213` | A blue thread uses something of another thread |
 | `E0301` | A name is not defined |
 | `E0302` | An import cannot be resolved |
 | `E0401` | An index or slice is outside its list or string |
@@ -152,6 +153,7 @@ example to be sure it causes the error it claims to.
 | `E0450` | A file operation failed |
 | `E0451` | The operating system could not give random bytes |
 | `E0452` | A thread or a channel cannot go on |
+| `E0453` | A value cannot be given to another blue thread |
 | `E0460` | An unsafe rule was broken |
 | `E0470` | A bloc or template rule was broken |
 | `E0480` | An assertion failed |

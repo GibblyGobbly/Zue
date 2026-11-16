@@ -1,0 +1,7 @@
+Runtime Error [E0453] in /tmp/zue_test_case.zu at line 7:
+  the result of this blue thread was already taken
+
+   7 | wait(t)
+     | ^^^^^^^
+
+Hint: wait() hands the result over once, without copying it. Keep it in a variable.

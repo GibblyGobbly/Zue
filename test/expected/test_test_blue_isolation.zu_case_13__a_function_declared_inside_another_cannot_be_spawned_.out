@@ -1,0 +1,8 @@
+Type Error [E0213] in /tmp/zue_test_case.zu at line 5:
+  spawn() needs the name of a top-level function
+  in outer(), called at line 7
+
+   5 |     return spawn(inner, 1)
+     |                  ^^^^^ this is not one
+
+Hint: Blue threads share nothing. A function value, or a function declared inside another, carries variables of this thread; declare the function at the top level and pass what it needs as arguments

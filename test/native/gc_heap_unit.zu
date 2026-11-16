@@ -8,7 +8,6 @@
 
 extern("printf", "i32", "ptr,...")
 
-space("lv_frames", 2400072)    # the collector skips this area when it scans the data segment
 space("_slot", 16)
 
 let failures = 0
@@ -60,7 +59,7 @@ func size_of(w) {
 }
 
 func main() {
-    lv_gc_start()
+    lv_gc_start(frame_addr() + 64)
     expect("0 bytes take one granule", size_of(lv_alloc(0)), 16)
     expect("15 bytes take one granule", size_of(lv_alloc(15)), 16)
     expect("16 bytes take two (the byte past the end)", size_of(lv_alloc(16)), 32)

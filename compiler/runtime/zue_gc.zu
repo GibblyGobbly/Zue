@@ -5,6 +5,11 @@
 # with a write barrier. A GC thread marks while the program runs and then sweeps. Compiled with
 # `zue --native`.
 #
+# Several operating system threads can run Zue code (the workers of the blue threads, zue_rt_blue.zu). Each
+# has its own allocators and its own batch of marked objects (struct Worker, one per thread). One worker at a
+# time drives the collector (H_GC_BUSY). A cycle begins and its marks become final with every other worker
+# stopped at a safe point (_stw_begin): a call, the head of a loop, an allocation, or a call that may wait.
+#
 # Objects are bump allocated into 32 KB blocks of 128-byte lines; a block is cut from a 2 MB chunk. A
 # collection marks everything reachable from the stack, the registers, the program's static data and any
 # registered root ranges, treating every aligned word as a possible pointer (interior pointers count). The
@@ -48,6 +53,8 @@ extern("pthread_cond_wait", "i32", "ptr,ptr")
 extern("pthread_cond_signal", "i32", "ptr")
 extern("pthread_cond_broadcast", "i32", "ptr")
 extern("usleep", "i32", "i32")
+extern("sched_yield", "i32", "")
+extern("pause", "i32", "")
 extern("sysconf", "i64", "i32")
 extern("getrlimit", "i32", "i32,ptr")
 
@@ -115,23 +122,56 @@ const AL_G0 = 32               # the block's first granule, counted from the chu
 const AL_SIZE = 40
 # Four allocators: [atomic][overflow]. The overflow allocator takes medium objects that do not fit the gap.
 
+# struct Worker: what a thread that runs Zue code keeps for itself (the tspace "_wk0": one for each operating
+# system thread). The collector reaches the workers through H_WORKERS. The fields from WK_CUR on belong to the
+# blue threads (zue_rt_blue.zu). The driver scans WK_CUR to WK_ZOMBIE and WK_PREV as roots.
+const WK_STATE = 0             # 0: runs Zue code. 1: stopped at a safe point, or in a call that may wait (atomic)
+const WK_SP = 8                # its stack pointer when it stopped: the stack from here up does not change while WK_STATE is 1
+const WK_STACK_BASE = 16       # end of the stack of the blue thread it runs
+const WK_STACK_LOW = 24        # lowest usable address of that stack; 0 when unknown
+const WK_BYTES = 32            # bytes it allocated that H_BYTES_SINCE_GC does not hold yet
+const WK_LIMIT = 40            # WK_BYTES above this makes _gc_alloc look at the collector
+const WK_SLOT = 48             # { first granule, size, bytes marked in this cycle } of the object _find found
+const WK_LOCAL_N = 72          # items waiting in WK_LOCAL_BUF
+const WK_ALLOC = 80            # Allocator[4]
+const WK_LOW_P = 240           # the address of its lv_stack_low, for the threads that ask it to stop
+const WK_ID = 248              # its index in H_WORKERS
+const WK_DRIVER = 256          # 1 while it drives the collector
+const WK_CUR = 264             # the blue thread it runs
+const WK_RUNH = 272            # its run queue: the threads that are ready and bound to it
+const WK_RUNT = 280
+const WK_ZOMBIE = 288          # finished threads whose stack it still has to unmap
+const WK_SWITCHES = 296        # switches so far, for the ticker (atomic)
+const WK_PARK = 304            # 0: has work or looks for it. 1: looks for work without sleeping. 2: sleeps (atomic)
+const WK_PREV = 312            # the thread it switched away from, until the switch is complete
+const WK_WAKE = 320            # Worker*[]: workers to wake once the scheduler lock is let go
+const WK_WAKE_N = 328
+const WK_FRAMES = 336          # its table of call frames (lv_frames_p), for a crash report from another thread
+const WK_POS_P = 344           # the addresses of its lv_pos, lv_pos_mod and lv_depth, for the same
+const WK_MOD_P = 352
+const WK_DEPTH_P = 360
+const WK_ASKED = 368           # 1 when the ticker asked the running thread to let another run (atomic)
+const WK_STARTS = 376          # workers to start once the scheduler lock is let go
+const WK_LOCAL_BUF = 512       # MarkItem[LOCAL_CAP]: objects its barrier marked, for the marking threads to scan
+const WK_SIZE = 4608
+const WK_MAX = 1024            # workers the table holds (ZUE_RT_BLUE_WORKERS is at most this)
+
 # State of the collector: one block of 64-bit fields that the functions reach through _heap(). A field's
 # offset is its constant H_NAME. The fields named in zue_rt_blue.zu and zue_rt_ops.zu keep their names.
 const H_SETUP_DONE = 0
 const H_TABLE = 8              # top level of the page table: 65536 pointers to second-level tables
 const H_HEAP_LO = 16
 const H_HEAP_HI = 24
-const H_BYTES_SINCE_GC = 32
+const H_BYTES_SINCE_GC = 32    # bytes allocated since the last cycle ended, without what the workers have not added yet (atomic adds)
 const H_THRESHOLD = 40
 const H_EXTRA = 48             # bytes the program may allocate between two cycle ends before it is slowed down (see _after_sweep)
-const H_LIMIT = 56             # bytes allocated since the last collection that make _gc_alloc look at the collector
 const H_LIVE_BYTES = 64
 const H_GC_READY = 72
-const H_GC_BUSY = 80
+const H_GC_BUSY = 80           # 1 while a worker drives the collector (taken with a compare-and-swap)
 const H_STRESS_EVERY = 88
 const H_ALLOC_COUNT = 96
 const H_COLLECTIONS = 104
-const H_STACK_BASE = 112
+const H_WORKERS = 112          # Worker*[WK_MAX]: every thread that runs Zue code, in the order they began
 const H_MARKERS = 120          # Marker[H_NMARK + 1]: one per marking thread, the last for the program thread
 const H_NMARK = 128            # marking threads (ZUE_RT_GC_MARKERS); the first also sweeps
 const H_IDLE = 136             # marking threads waiting for work
@@ -140,7 +180,7 @@ const H_ROOT_COUNT = 152
 const H_ROOT_CAP = 160
 const H_PAUSE_TOTAL = 168      # nanoseconds the program thread spent in collector steps
 const H_PAUSE_MAX = 176
-const H_STACK_LOW = 184        # lowest usable address of the program thread stack; 0 when unknown
+const H_NWORKERS = 184         # entries of H_WORKERS in use (atomic; written with the mutex held)
 const H_MARKING = 192          # 1 from the start of a cycle until its marks are final
 const H_VERIFY = 200
 const H_VMODE = 208            # 1 while the verifier walks the heap
@@ -170,7 +210,7 @@ const H_GCT_STATE = 464        # 0: idle, 1: marking, 2: marking and every marke
 const H_SHARED_N = 488         # items in the pool: handed over by the program thread or given away by a marker, not taken yet
 const H_SHARED_CAP = 496
 const H_SHARED_BUF = 504
-const H_LOCAL_N = 512          # items waiting in H_LOCAL_BUF
+const H_STW = 512              # 1 while the driver asks every other worker to stop at its next safe point (atomic)
 const H_CYCLE_BYTES = 520      # H_BYTES_SINCE_GC when the cycle began
 const H_SLOW_US = 528          # ZUE_RT_GC_SLOW: microseconds the GC thread sleeps after each piece of marking
 const H_GCT_NS = 536           # nanoseconds the marking threads spent marking, added up
@@ -178,7 +218,6 @@ const H_SWEEP_NS = 544         # nanoseconds the GC thread spent sweeping
 const H_MUTEX = 552            # pthread_mutex_t, 40 bytes, valid when zero filled
 const H_COND_GC = 592          # pthread_cond_t, 48 bytes: wakes the marking threads (the first also sweeps)
 const H_COND_DONE = 640        # pthread_cond_t: the GC thread has run out of work
-const H_LOCAL_BUF = 688        # MarkItem[LOCAL_CAP]
 const H_CYCLE_T0 = 4784        # when the running cycle began
 const H_CYCLE_MAX = 4792       # the longest cycle from its start to final marks
 const H_CYCLE_GCT0 = 4800      # H_GCT_NS when the running cycle began
@@ -199,11 +238,11 @@ const H_BS_CUR = 4912
 const H_LOWMEM = 4920          # 1 for a program built with --gc=lowmem
 const H_BEGIN_MAX = 4928       # the longest start of a cycle
 const H_FINISH_MAX = 4936      # the longest end of the marking (verify, hook, sweep start)
-const H_ALLOC = 4944           # Allocator[4]
 const H_LARGE_BYTES = 5104     # bytes mapped for large objects
 const H_COLD_KEEP = 5112       # free blocks the trim leaves hot
 const H_PRE_POKE = 5120        # 1 when the helper is to be woken once the program thread lets the mutex go
-const H_SLOT = 5144            # { first granule, size, bytes marked in this cycle } of the object _find found, for the program thread
+const H_DYING = 5144           # 1 once the program ends or reports an error: the other workers stop for good (atomic)
+const H_ROOT_LOCK = 5152       # spin lock of the root ranges (H_ROOTS, H_RS_*)
 const H_LISTS2 = 5168          # BlockList[2]: the lists L_TIGHT
 # Mutex timing for ZUE_RT_GC_STATS (written only with the mutex held, or by the program thread for its wait).
 const H_LK_SITE = 5216         # where the holder took the mutex (a site number, + 256 for the program thread)
@@ -255,12 +294,35 @@ const ARENA_CHUNKS = 64         # chunks of address space the helper maps at a t
 const RESERVE_PART = 8          # the helper keeps one chunk ready for every this many chunks of heap (at most PRE_SLOTS)
 const HINT_MISSES = 3          # this many chunks the program had to make itself switch the huge page hint off
 space("_heap0", HEAP_SIZE)
-space("lv_stack_low", 8)    # a copy of H_STACK_LOW for generated code, which does the stack test of a direct call itself
+tspace("_wk0", WK_SIZE)
+tspace("lv_stack_low", 8)   # a copy of WK_STACK_LOW for generated code, which does the stack test of a direct call itself
 space("_hibit", 256)        # the highest set bit of a byte
 space("_lobit", 256)        # the lowest set bit of a byte
 
 func _heap() {
     return addr_of("_heap0")
+}
+
+# The calling thread's Worker.
+func _wk() {
+    return addr_of("_wk0")
+}
+
+# A lock held for a few instructions: the word at p is 1 while it is held. A thread that waits for it spins,
+# and lets another thread have the core when that takes long (the holder may have lost its core).
+func _spin_lock(p) {
+    let spins = 0
+    while (cas64(p, 0, 1) == 0) {
+        spins += 1
+        if (spins > 1000) {
+            sched_yield()
+            spins = 0
+        }
+    }
+}
+
+func _spin_unlock(p) {
+    st64a(p, 0)
 }
 
 func _now_ns() {
@@ -395,7 +457,6 @@ func _gc_setup() {
     st64(h + H_HEAP_LO, -1)
     st64(h + H_THRESHOLD, MIN_THRESHOLD)
     st64(h + H_EXTRA, 4 * MIN_THRESHOLD)
-    st64(h + H_LIMIT, 4611686018427387904)
     st64(h + H_EPOCH, 1)
     st64(h + H_SW_EPOCH, 1)
     st64(h + H_COLD_KEEP, MIN_THRESHOLD / BLOCK)
@@ -686,7 +747,7 @@ func _chunk_new() {
         } else {
             st64a(pre + PRE_WANT, 2)    # the second chunk has been asked for: from now on keep some ready
         }
-        st64(h + H_PRE_POKE, 1)    # woken by _refill after the mutex is let go (see _wake)
+        st64a(h + H_PRE_POKE, 1)    # woken by _refill after the mutex is let go (see _wake)
     }
     let t0 = 0
     let t1 = 0
@@ -897,35 +958,197 @@ func _is_live(cd, s) {
 
 # Allocation
 
-# Sets H_LIMIT: the threshold while collecting is allowed, -1 when every allocation is to be counted
-# (stress mode), and out of reach while the collector runs or has not started.
+# Adds what the calling worker allocated to the total and gives it a new budget (WK_LIMIT): the bytes it may
+# allocate before it looks at the collector again. Between two cycles that is its share of what is left up to
+# the threshold; while a cycle runs, STEP_BYTES; -1 when every allocation is to be counted (stress mode); out
+# of reach while this worker drives the collector or the collector has not started.
 func _set_limit() {
     let h = _heap()
-    st64(h + H_LIMIT, 4611686018427387904)
-    if (ld64(h + H_GC_READY) != 0 and ld64(h + H_GC_BUSY) == 0) {
-        st64(h + H_LIMIT, ld64(h + H_THRESHOLD))
-        if (ld64(h + H_MARKING) != 0 or ld64(h + H_SWEEPING) != 0) {
-            st64(h + H_LIMIT, ld64(h + H_BYTES_SINCE_GC) + STEP_BYTES)
+    let wk = _wk()
+    let mine = ld64(wk + WK_BYTES)
+    if (mine != 0) {
+        xadd64(h + H_BYTES_SINCE_GC, mine)
+        st64(wk + WK_BYTES, 0)
+    }
+    st64(wk + WK_LIMIT, 4611686018427387904)
+    if (ld64(h + H_GC_READY) != 0 and ld64(wk + WK_DRIVER) == 0) {
+        let budget = STEP_BYTES
+        if (ld64(h + H_MARKING) == 0 and ld64a(h + H_SWEEPING) == 0) {
+            let workers = ld64a(h + H_NWORKERS)
+            if (workers == 0) {
+                workers = 1
+            }
+            let left = (ld64a(h + H_THRESHOLD) - ld64a(h + H_BYTES_SINCE_GC)) / workers
+            if (left > budget) {
+                budget = left
+            }
         }
         if (ld64(h + H_STRESS_EVERY) != 0) {
-            st64(h + H_LIMIT, -1)
+            budget = -1
         }
+        st64(wk + WK_LIMIT, budget)
     }
 }
 
-# The slow part of an allocation: whether it is time to collect.
+# The slow part of an allocation: whether it is time to collect. One worker at a time drives the collector;
+# another one that comes here meanwhile stops if the driver asks for it, and is held back like the driver when
+# the program allocates faster than the collector marks.
 func _gc_check() {
     let h = _heap()
-    st64(h + H_ALLOC_COUNT, ld64(h + H_ALLOC_COUNT) + 1)
-    if (ld64(h + H_GC_READY) != 0 and ld64(h + H_GC_BUSY) == 0) {
-        if (ld64(h + H_MARKING) != 0 or ld64(h + H_SWEEPING) != 0) {
-            _gc_work()
-        } else if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_THRESHOLD) or (ld64(h + H_STRESS_EVERY) != 0 and ld64(h + H_ALLOC_COUNT) % ld64(h + H_STRESS_EVERY) == 0)) {
-            _gc_work()
+    let wk = _wk()
+    let count = xadd64(h + H_ALLOC_COUNT, 1) + 1
+    let mine = ld64(wk + WK_BYTES)
+    if (mine != 0) {
+        xadd64(h + H_BYTES_SINCE_GC, mine)
+        st64(wk + WK_BYTES, 0)
+    }
+    if (ld64(h + H_GC_READY) != 0 and ld64(wk + WK_DRIVER) == 0) {
+        if (cas64(h + H_GC_BUSY, 0, 1) != 0) {
+            st64(wk + WK_DRIVER, 1)
+            if (ld64(h + H_MARKING) != 0 or ld64a(h + H_SWEEPING) != 0) {
+                _gc_work()
+            } else if (ld64a(h + H_BYTES_SINCE_GC) > ld64a(h + H_THRESHOLD) or (ld64(h + H_STRESS_EVERY) != 0 and count % ld64(h + H_STRESS_EVERY) == 0)) {
+                _gc_work()
+            }
+            st64(wk + WK_DRIVER, 0)
+            st64a(h + H_GC_BUSY, 0)
         } else {
-            _set_limit()
+            _gc_poll()
+            if (ld64(h + H_MARKING) != 0) {
+                _throttle(0)
+            }
         }
     }
+    _set_limit()
+}
+
+# Safe points
+
+# A safe point: the calling worker stops here while the driver asks for it, and for good once the program is
+# ending. Reached from a call or the head of a loop whose stack test failed (lvp_stack_slow) and from the slow
+# part of an allocation.
+func _gc_poll() {
+    let h = _heap()
+    if (ld64a(h + H_STW) != 0 or ld64a(h + H_DYING) != 0) {
+        if (ld64(_wk() + WK_DRIVER) == 0) {
+            _gc_park()
+        }
+    }
+    return 0
+}
+
+# Kept out of line, with every callee-saved register spilled into its frame, so that the driver, which scans
+# this worker's stack from WK_SP up, finds the values held only in registers.
+func _gc_park() {
+    spill_regs()
+    let wk = _wk()
+    st64(wk + WK_SP, stack_ptr())
+    _wk_wait(wk)
+    return 0
+}
+
+# The calling worker is stopped (WK_SP is set) until no stop is asked for. A program that is ending never
+# lets it go on.
+func _wk_wait(wk) {
+    let h = _heap()
+    while (1 == 1) {
+        st64a(wk + WK_STATE, 1)
+        let spins = 0
+        while (ld64a(h + H_STW) != 0 or ld64a(h + H_DYING) != 0) {
+            if (ld64a(h + H_DYING) != 0) {
+                pause()
+            }
+            spins += 1
+            if (spins > 2000) {
+                sched_yield()
+            }
+        }
+        st64a(wk + WK_STATE, 0)
+        fence()
+        if (ld64a(h + H_STW) == 0 and ld64a(h + H_DYING) == 0) {
+            return 0
+        }
+    }
+    return 0
+}
+
+# Around a call that may wait for long (input, a command, sleeping until there is work): the worker counts as
+# stopped, so that a cycle can begin and end without it. The caller has spilled its registers (spill_regs) and
+# passes its stack pointer; between the two calls it does not touch the heap or a Zue value.
+func _safe_enter(sp) {
+    let wk = _wk()
+    st64(wk + WK_SP, sp)
+    st64a(wk + WK_STATE, 1)
+    return 0
+}
+
+func _safe_leave() {
+    let h = _heap()
+    let wk = _wk()
+    st64a(wk + WK_STATE, 0)
+    fence()
+    if (ld64a(h + H_STW) != 0 or ld64a(h + H_DYING) != 0) {
+        _wk_wait(wk)
+    }
+    return 0
+}
+
+# The driver stops every other worker: it asks, raises their stack limits so that their next call or loop head
+# comes to lvp_stack_slow, and waits until each is at a safe point. A worker restores its limit before it
+# looks at H_STW, and H_STW is set before the limits are raised, so no request is lost. The driver holds no
+# lock while it waits: a worker may need one to reach its safe point.
+func _stw_begin() {
+    let h = _heap()
+    let me = _wk()
+    st64a(h + H_STW, 1)
+    fence()
+    let n = ld64a(h + H_NWORKERS)
+    let tab = ld64(h + H_WORKERS)
+    for (let i = 0; i < n; i++) {
+        let w = ld64(tab + i * 8)
+        if (w != me) {
+            st64a(ld64(w + WK_LOW_P), -1)
+        }
+    }
+    for (let i = 0; i < n; i++) {
+        let w = ld64(tab + i * 8)
+        if (w != me) {
+            let spins = 0
+            while (ld64a(w + WK_STATE) == 0) {
+                spins += 1
+                if (spins > 2000) {
+                    sched_yield()
+                }
+            }
+        }
+    }
+    return n
+}
+
+func _stw_end() {
+    st64a(_heap() + H_STW, 0)
+    return 0
+}
+
+# The program ends, or reports an error and ends: the other workers stop at their next safe point and stay
+# there, so that they print nothing more. Returns 0 when another worker got here first: that one ends the
+# program, and the caller waits for it.
+func lv_gc_dying() {
+    let h = _heap()
+    if (cas64(h + H_DYING, 0, 1) == 0) {
+        return 0
+    }
+    let me = _wk()
+    st64(me + WK_DRIVER, 1)    # it stops at no safe point and drives no cycle from here on
+    let n = ld64a(h + H_NWORKERS)
+    let tab = ld64(h + H_WORKERS)
+    for (let i = 0; i < n; i++) {
+        let w = ld64(tab + i * 8)
+        if (w != me) {
+            st64a(ld64(w + WK_LOW_P), -1)
+        }
+    }
+    return 1
 }
 
 # The allocation that almost every call is: an object that fits the gap of its allocator, and no collector
@@ -934,8 +1157,9 @@ func _gc_check() {
 func _gc_alloc(size, atomic) {
     let h = _heap()
     let n = band(size + GRAN, -GRAN)    # one byte more than asked (a pointer just past the end stays inside), whole granules
-    if (ule(size, MAX_MEDIUM - GRAN) and ld64(h + H_BYTES_SINCE_GC) <= ld64(h + H_LIMIT)) {
-        let a = h + H_ALLOC + atomic * (2 * AL_SIZE)
+    let wk = _wk()
+    if (ule(size, MAX_MEDIUM - GRAN) and ld64(wk + WK_BYTES) <= ld64(wk + WK_LIMIT)) {
+        let a = wk + WK_ALLOC + atomic * (2 * AL_SIZE)
         let left = ld64(a + AL_LEFT)
         if (ule(n, left)) {
             let off = ld64(a + AL_OFF)
@@ -948,7 +1172,7 @@ func _gc_alloc(size, atomic) {
             if (ld64(h + H_MARKING) != 0) {
                 _born_marked(cd, g, n)
             }
-            st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
+            st64(wk + WK_BYTES, ld64(wk + WK_BYTES) + n)
             return shl(ld64(a + AL_BLOCK), BLOCK_SHIFT) + off
         }
     }
@@ -1094,8 +1318,8 @@ func _refill(a, k, n, free_only) {
         _lock_prog(2)
         let b = _take_block(k, free_only, n)
         _unlock()
-        if (ld64(h + H_PRE_POKE) != 0) {
-            st64(h + H_PRE_POKE, 0)
+        if (ld64a(h + H_PRE_POKE) != 0) {
+            st64a(h + H_PRE_POKE, 0)
             let pre = ld64(h + H_PRE)
             pthread_mutex_lock(pre + PRE_MUTEX)
             pthread_cond_signal(pre + PRE_COND)
@@ -1123,13 +1347,14 @@ func _slow_gc_alloc(size, atomic) {
         _die_oom()    # more than 64 TiB: no request like that can be met, and size + 16 would wrap
     }
     let n = band(size + GRAN, -GRAN)
-    if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_LIMIT)) {
+    let wk = _wk()
+    if (ld64(wk + WK_BYTES) > ld64(wk + WK_LIMIT)) {
         _gc_check()
     }
     if (n > MAX_MEDIUM) {
         return _alloc_large(size + 1, atomic)
     }
-    let a = h + H_ALLOC + atomic * (2 * AL_SIZE)
+    let a = wk + WK_ALLOC + atomic * (2 * AL_SIZE)
     if (ugt(n, ld64(a + AL_LEFT))) {
         if (n > LINE) {
             # A medium object that does not fit the gap: the overflow allocator takes it, so the gaps of
@@ -1152,7 +1377,7 @@ func _slow_gc_alloc(size, atomic) {
     if (ld64(h + H_MARKING) != 0) {
         _born_marked(cd, g, n)
     }
-    st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
+    st64(wk + WK_BYTES, ld64(wk + WK_BYTES) + n)
     return shl(ld64(a + AL_BLOCK), BLOCK_SHIFT) + off
 }
 
@@ -1188,7 +1413,8 @@ func _alloc_large(n, atomic) {
     _arr_push(h + H_LARGE, d)
     st64(h + H_LARGE_BYTES, ld64(h + H_LARGE_BYTES) + span)
     _unlock()
-    st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
+    let wk = _wk()
+    st64(wk + WK_BYTES, ld64(wk + WK_BYTES) + n)
     return mem
 }
 
@@ -1208,8 +1434,9 @@ func lv_gc_note_external(n) {
     if (ld64(h + H_SETUP_DONE) == 0) {
         return 0
     }
-    st64(h + H_BYTES_SINCE_GC, ld64(h + H_BYTES_SINCE_GC) + n)
-    if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_LIMIT)) {
+    let wk = _wk()
+    st64(wk + WK_BYTES, ld64(wk + WK_BYTES) + n)
+    if (ld64(wk + WK_BYTES) > ld64(wk + WK_LIMIT)) {
         _gc_check()
     }
 }
@@ -1218,12 +1445,12 @@ func lv_realloc(p, n) {
     if (p == 0) {
         return _gc_alloc(n, 0)
     }
-    let h = _heap()
-    let d = _find(p, h + H_SLOT)
+    let slot = _wk() + WK_SLOT
+    let d = _find(p, slot)
     if (d == 0) {
         _die_oom()
     }
-    let old = ld64(h + H_SLOT + 8)
+    let old = ld64(slot + 8)
     let atomic = 0
     if (ld8(d) == 2) {
         atomic = ld8(d + LD_ATOMIC)
@@ -1351,13 +1578,13 @@ func _scan_range(lo, hi) {
     _mark_range(_prog_marker(), lo, hi)
 }
 
-# Marking by the program thread while the GC thread runs: the barrier. The object is marked here, so that it
+# Marking by a worker while the marking threads run: the barrier. The object is marked here, so that it
 # is queued once, and handed over in batches.
 func _shade_word(w) {
-    let h = _heap()
-    let p = _mark_find(w, h + H_SLOT)
+    let slot = _wk() + WK_SLOT
+    let p = _mark_find(w, slot)
     if (p != 0) {
-        _local_add(p, ld64(h + H_SLOT + 8))
+        _local_add(p, ld64(slot + 8))
     }
     return 0
 }
@@ -1376,16 +1603,16 @@ func _shade_range(lo, hi) {
     }
 }
 
-# The program thread's batch of marked objects the GC thread has to scan.
+# The calling worker's batch of marked objects the marking threads have to scan.
 func _local_add(p, n) {
-    let h = _heap()
-    let i = ld64(h + H_LOCAL_N)
-    st64(h + H_LOCAL_BUF + i * 16, p)
-    st64(h + H_LOCAL_BUF + i * 16 + 8, n)
-    st64(h + H_LOCAL_N, i + 1)
+    let wk = _wk()
+    let i = ld64(wk + WK_LOCAL_N)
+    st64(wk + WK_LOCAL_BUF + i * 16, p)
+    st64(wk + WK_LOCAL_BUF + i * 16 + 8, n)
+    st64(wk + WK_LOCAL_N, i + 1)
     if (i + 1 == LOCAL_CAP) {
         _lock_prog(4)
-        let w = _hand_over()
+        let w = _hand_over(wk)
         _unlock()
         _wake(w)
     }
@@ -1432,11 +1659,24 @@ func _wake(w) {
     }
 }
 
-# Moves the program thread's batch to the pool. Mutex held. Returns what _pool_add returns.
-func _hand_over() {
+# Moves the batch of worker wk to the pool. Mutex held; wk is the caller's, or a stopped worker's. Returns what
+# _pool_add returns.
+func _hand_over(wk) {
+    let w = _pool_add(wk + WK_LOCAL_BUF, ld64(wk + WK_LOCAL_N))
+    st64(wk + WK_LOCAL_N, 0)
+    return w
+}
+
+# The batches of every worker go to the pool. Mutex held, the other workers stopped.
+func _hand_over_all() {
     let h = _heap()
-    let w = _pool_add(h + H_LOCAL_BUF, ld64(h + H_LOCAL_N))
-    st64(h + H_LOCAL_N, 0)
+    let n = ld64a(h + H_NWORKERS)
+    let w = 0
+    for (let i = 0; i < n; i++) {
+        if (_hand_over(ld64(ld64(h + H_WORKERS) + i * 8)) != 0) {
+            w = 1
+        }
+    }
     return w
 }
 
@@ -1591,16 +1831,21 @@ func _root_register(lo, hi) {
 # there, so it is shaded now, unless the stepwise scan of the roots is still to reach it.
 func lv_gc_root_add(lo, hi) {
     let h = _heap()
+    _spin_lock(h + H_ROOT_LOCK)
     _root_register(lo, hi)
     if (ld64(h + H_MARKING) != 0 and ld64(h + H_RS_ON) == 0) {
         _shade_range(lo, hi)
     }
+    _spin_unlock(h + H_ROOT_LOCK)
 }
 
 # Adds a range that is zero filled, so that there is nothing to shade: an unsafe buffer from alloc(n).
 # A store into it shades the value it overwrites (the write barrier in _cp), like a store into any object.
 func lv_gc_root_add_fresh(lo, hi) {
+    let h = _heap()
+    _spin_lock(h + H_ROOT_LOCK)
     _root_register(lo, hi)
+    _spin_unlock(h + H_ROOT_LOCK)
 }
 
 # The rest of range j, which the stepwise scan has not reached yet, is shaded now (the range is about to
@@ -1618,7 +1863,16 @@ func _root_finish(j) {
     _shade_range(pos, ld64(e + 8))
 }
 
+# The lock is held until the range is out of the table: the driver scans the ranges with the lock held
+# (_root_step), so the caller can give the memory back once this returns.
 func lv_gc_root_remove(lo) {
+    let h = _heap()
+    _spin_lock(h + H_ROOT_LOCK)
+    _root_remove(lo)
+    _spin_unlock(h + H_ROOT_LOCK)
+}
+
+func _root_remove(lo) {
     let h = _heap()
     for (let i = 0; i < ld64(h + H_ROOT_COUNT); i++) {
         if (ld64(ld64(h + H_ROOTS) + i * 16) == lo) {
@@ -1641,15 +1895,15 @@ func lv_gc_root_remove(lo) {
 # Whether the object at p survived the marking that just ended (an object allocated during it is marked). A value
 # that is not a heap object counts as marked. Program thread, after the marks are final.
 func lv_gc_is_marked(p) {
-    let h = _heap()
-    let d = _find(p, h + H_SLOT)
+    let slot = _wk() + WK_SLOT
+    let d = _find(p, slot)
     if (d == 0) {
         return 1
     }
     if (ld8(d) == 2) {
         return ld8(d + LD_MARK)
     }
-    let s = ld64(h + H_SLOT)
+    let s = ld64(slot)
     if (_is_live(d, s) != 0) {
         return 1
     }
@@ -1659,11 +1913,27 @@ func lv_gc_is_marked(p) {
 # Kept out of line, with every callee-saved register spilled into its frame, so that values held only in
 # registers are found by the stack scan. Marks what the stack and the registers point to, without following it.
 func _scan_stack_cur() {
-    let h = _heap()
+    let wk = _wk()
     spill_regs()
     let sp = stack_ptr()
-    if (ult(sp, ld64(h + H_STACK_BASE))) {
-        _scan_range(sp, ld64(h + H_STACK_BASE))
+    if (ult(sp, ld64(wk + WK_STACK_BASE))) {
+        _scan_range(sp, ld64(wk + WK_STACK_BASE))
+    }
+}
+
+# The other workers are stopped: marks what the stack each of them runs on points to, from where it stopped,
+# and what its Worker holds (the blue thread it runs, its queue, the finished threads it still has to clean up).
+func _scan_workers() {
+    let h = _heap()
+    let me = _wk()
+    let n = ld64a(h + H_NWORKERS)
+    for (let i = 0; i < n; i++) {
+        let w = ld64(ld64(h + H_WORKERS) + i * 8)
+        if (w != me and ult(ld64(w + WK_SP), ld64(w + WK_STACK_BASE))) {
+            _scan_range(ld64(w + WK_SP), ld64(w + WK_STACK_BASE))
+        }
+        _scan_range(w + WK_CUR, w + WK_ZOMBIE + 8)
+        _scan_range(w + WK_PREV, w + WK_PREV + 8)
     }
 }
 
@@ -1671,15 +1941,16 @@ func _scan_stack_cur() {
 # (_blue_scan_step).
 func _scan_stack() {
     _scan_stack_cur()
+    _scan_workers()
     _blue_scan_parked()
 }
 
-# Marks what the data segment points to, without following it.
+# Marks what the data segment points to, without following it. The collector's own state is left out: it
+# holds no address of a heap object, and the workers and the marking threads write it at any time.
 func _scan_static() {
-    # lv_frames (2.4 MB of call positions and static names) never holds a heap pointer
-    let frames = addr_of("lv_frames")
-    _scan_range(addr_of("__data_start"), frames)
-    _scan_range(frames + 2400072, addr_of("_end"))
+    let h = _heap()
+    _scan_range(addr_of("__data_start"), h)
+    _scan_range(h + HEAP_SIZE, addr_of("_end"))
 }
 
 # Everything at once, for the verifier. A cycle scans the root ranges in steps instead (_root_step).
@@ -1700,6 +1971,13 @@ func _root_step() {
     if (ld64(h + H_RS_ON) == 0) {
         return 0
     }
+    _spin_lock(h + H_ROOT_LOCK)
+    _root_scan_some()
+    _spin_unlock(h + H_ROOT_LOCK)
+}
+
+func _root_scan_some() {
+    let h = _heap()
     let budget = ROOT_STEP_WORDS
     while (ld64(h + H_RS_I) < ld64(h + H_ROOT_COUNT) and budget > 0) {
         let e = ld64(h + H_ROOTS) + ld64(h + H_RS_I) * 16
@@ -1973,15 +2251,22 @@ func _gct_sweep() {
     st64a(h + H_SW_DONE, 1)
 }
 
+# The allocators of worker wk let go of their blocks.
+func _allocators_drop(wk) {
+    for (let i = 0; i < 4; i++) {
+        let a = wk + WK_ALLOC + i * AL_SIZE
+        st64(a + AL_BLOCK, 0)
+        st64(a + AL_LEFT, 0)
+        st64(a + AL_OFF, 0)
+    }
+}
+
 # The marks are final: the sweep begins. The allocators let go of their blocks (the sweep has to see them), the
 # recyclable lists are emptied (their blocks are swept again), and the GC thread is woken to sweep. Mutex held.
 func _sweep_start() {
     let h = _heap()
-    for (let i = 0; i < 4; i++) {
-        let a = h + H_ALLOC + i * AL_SIZE
-        st64(a + AL_BLOCK, 0)
-        st64(a + AL_LEFT, 0)
-        st64(a + AL_OFF, 0)
+    for (let w = 0; w < ld64a(h + H_NWORKERS); w++) {
+        _allocators_drop(ld64(ld64(h + H_WORKERS) + w * 8))
     }
     st64(_list(L_RECYC) + 8, 0)
     st64(_list(L_RECYC + 1) + 8, 0)
@@ -1993,7 +2278,7 @@ func _sweep_start() {
     st64(h + H_SW_BLOCK, 0)
     st64(h + H_SW_LARGE, ld64(h + H_LARGE_COUNT))
     st64a(h + H_SW_DONE, 0)
-    st64(h + H_SWEEPING, 1)
+    st64a(h + H_SWEEPING, 1)
     st64a(h + H_GCT_STATE, 3)
 }
 
@@ -2049,7 +2334,7 @@ func _after_sweep() {
     # The bytes of the objects the cycle marked: what the program held at its start. What was allocated during
     # the cycle survives it but is not counted, so the goal is a multiple of what the program really holds.
     let live = ld64(h + H_LIVE_BYTES)
-    let since = ld64(h + H_BYTES_SINCE_GC)
+    let since = ld64a(h + H_BYTES_SINCE_GC)
     let elapsed = now - ld64(h + H_LAST_END)
     if (ld64(h + H_LAST_END) != 0 and elapsed > 0) {
         let rate = since * 1000000 / elapsed
@@ -2111,14 +2396,14 @@ func _after_sweep() {
     if (ld64(h + H_LOWMEM) == 0 and room > hold) {
         hold = room
     }
-    st64(h + H_EXTRA, hold)
+    st64a(h + H_EXTRA, hold)
     let next = goal - a
     if (next < MIN_THRESHOLD) {
         next = MIN_THRESHOLD
     }
-    st64(h + H_THRESHOLD, next)
+    st64a(h + H_THRESHOLD, next)
     st64(h + H_COLD_KEEP, next / BLOCK)
-    st64(h + H_BYTES_SINCE_GC, 0)
+    st64a(h + H_BYTES_SINCE_GC, 0)
 }
 
 func _count_pause(dt) {
@@ -2130,17 +2415,29 @@ func _count_pause(dt) {
     }
 }
 
-# A cycle begins by marking the roots (the stack, the registers, the data segment), which is the snapshot; the
-# root ranges and the stacks of the blue threads that are away follow in steps. From here every new object is
-# born marked (_born_marked).
+# A cycle begins by marking the roots (the stacks and registers of the workers, the data segment), which is the
+# snapshot; the root ranges and the stacks of the blue threads that are away follow in steps. Every other
+# worker is stopped meanwhile, so that all of them see the cycle begin at the same moment: from here every
+# new object is born marked (_born_marked) and every store shades what it overwrites.
 func _gc_begin() {
     let h = _heap()
+    _stw_begin()
     st64(h + H_COLLECTIONS, ld64(h + H_COLLECTIONS) + 1)
     st64(h + H_EPOCH, ld64(h + H_EPOCH) % 255 + 1)
     for (let i = 0; i <= ld64(h + H_NMARK); i++) {
         st64(_marker(i) + MK_SLOT + 16, 0)
     }
-    st64(h + H_SLOT + 16, 0)
+    let me = _wk()
+    for (let i = 0; i < ld64a(h + H_NWORKERS); i++) {
+        let w = ld64(ld64(h + H_WORKERS) + i * 8)
+        st64(w + WK_SLOT + 16, 0)
+        if (w != me) {
+            # what it allocated so far is counted, and its next allocation looks at the collector
+            xadd64(h + H_BYTES_SINCE_GC, ld64(w + WK_BYTES))
+            st64(w + WK_BYTES, 0)
+            st64(w + WK_LIMIT, -1)
+        }
+    }
     st64(h + H_MARKING, 1)
     _scan_static()
     if (ld64(h + H_ROOT_COUNT) != 0) {
@@ -2149,9 +2446,10 @@ func _gc_begin() {
         st64(h + H_RS_ON, 1)
     }
     _scan_stack_cur()
+    _scan_workers()
     _blue_begin_scan()
     # The roots are the snapshot. What they point to goes to the pool, for the marking threads.
-    st64(h + H_CYCLE_BYTES, ld64(h + H_BYTES_SINCE_GC))
+    st64(h + H_CYCLE_BYTES, ld64a(h + H_BYTES_SINCE_GC))
     st64(h + H_CYCLE_T0, _now_ns())
     st64(h + H_CYCLE_GCT0, ld64(h + H_GCT_NS))
     let pm = _prog_marker()
@@ -2160,6 +2458,7 @@ func _gc_begin() {
     _pool_add(ld64(pm + MK_STACK), ld64(pm + MK_TOP))
     st64(pm + MK_TOP, 0)
     _unlock()
+    _stw_end()
     pthread_cond_broadcast(h + H_COND_GC)
 }
 
@@ -2217,45 +2516,64 @@ func _marker_main(mk) {
 func _trace_cycle(wall) {
     let h = _heap()
     let buf = stack_buf(160)
-    let n = snprintf(buf, 160, cstr("ZUE_RT_GC_CYCLE,%llu wall ns,%llu gc thread ns,%zu bytes allocated during the cycle,%zu bytes allocated before it\n"), wall, ld64(h + H_GCT_NS) - ld64(h + H_CYCLE_GCT0), ld64(h + H_BYTES_SINCE_GC) - ld64(h + H_CYCLE_BYTES), ld64(h + H_CYCLE_BYTES))
+    let n = snprintf(buf, 160, cstr("ZUE_RT_GC_CYCLE,%llu wall ns,%llu gc thread ns,%zu bytes allocated during the cycle,%zu bytes allocated before it\n"), wall, ld64(h + H_GCT_NS) - ld64(h + H_CYCLE_GCT0), ld64a(h + H_BYTES_SINCE_GC) - ld64(h + H_CYCLE_BYTES), ld64(h + H_CYCLE_BYTES))
     write(2, buf, n)
 }
 
-# While the markers mark, asks whether they are done: returns 1 when the marks are final, with the mutex held.
-# The mutex is taken only when every marker is out of work, so the program thread does not wait for it behind
-# the markers. It then hands over its batch first, so a marked object it still holds is never left behind. A
-# program that allocates far more than the collector can keep up with is slowed down here, a little at a time,
-# so that no single step is long.
+# While the markers mark, asks whether they are done: returns 1 when the marks are final, with the mutex held
+# and every other worker stopped. The workers are stopped only when every marker is out of work and the roots
+# have all been scanned; then the batch of every worker is handed over, so a marked object one of them still
+# holds is never left behind. If that gave the markers work, the workers go on and the cycle does too.
 func _cycle_poll() {
     let h = _heap()
     if (ld64a(h + H_GCT_STATE) == 2) {
-        _lock_prog(11)
-        let w = _hand_over()
-        if (ld64(h + H_GCT_STATE) == 2 and ld64(h + H_SHARED_N) == 0 and ld64(h + H_RS_ON) == 0 and ld64(h + H_BS_ON) == 0) {
-            st64a(h + H_GCT_STATE, 0)    # the markers sleep again, so the marks are the program thread's to use
-            if (ld64(h + H_VERIFY) != 0) {
-                _check_marking_done()
+        if (ld64(h + H_RS_ON) == 0 and ld64(h + H_BS_ON) == 0) {
+            _stw_begin()
+            _lock_prog(11)
+            let w = _hand_over_all()
+            if (ld64(h + H_GCT_STATE) == 2 and ld64(h + H_SHARED_N) == 0) {
+                st64a(h + H_GCT_STATE, 0)    # the markers sleep again, so the marks are the driver's to use
+                if (ld64(h + H_VERIFY) != 0) {
+                    _check_marking_done()
+                }
+                return 1
             }
-            return 1
+            _unlock()
+            _wake(w)
+            _stw_end()
+        } else {
+            _lock_prog(11)
+            let w = _hand_over(_wk())
+            _unlock()
+            _wake(w)
         }
-        _unlock()
-        _wake(w)
     }
-    let slow = 0
-    if (ld64(h + H_BYTES_SINCE_GC) > ld64(h + H_EXTRA)) {
-        slow = 1
+    _throttle(1)
+    return 0
+}
+
+# A program that allocates far more than the collector can keep up with is slowed down here, a little at a
+# time, so that no single step is long. Every worker that comes to the collector during a cycle is held back;
+# one that does not drive the collector stops when the driver asks for it.
+func _throttle(driver) {
+    let h = _heap()
+    if (ld64a(h + H_BYTES_SINCE_GC) <= ld64a(h + H_EXTRA)) {
+        return 0
     }
-    if (slow != 0) {
-        # Spin instead of usleep: a sleep can overshoot by milliseconds, a spin takes what it is told.
-        let t0 = _now_ns()
-        let spins = 0
-        while (_now_ns() - t0 < THROTTLE_NS_STEP) {
-            spins += 1    # no sched_yield: giving up the core can hand it to the GC thread for a whole time slice
+    # Spin instead of usleep: a sleep can overshoot by milliseconds, a spin takes what it is told.
+    let t0 = _now_ns()
+    let spins = 0
+    while (_now_ns() - t0 < THROTTLE_NS_STEP) {
+        spins += 1    # no sched_yield: giving up the core can hand it to the GC thread for a whole time slice
+        if (driver == 0) {
+            _gc_poll()
         }
-        let dt = _now_ns() - t0
+    }
+    let dt = _now_ns() - t0
+    xadd64(h + H_THROTTLE_NS, dt)
+    xadd64(h + H_THROTTLE_N, 1)
+    if (driver != 0) {
         st64(h + H_THROTTLE_CALL, ld64(h + H_THROTTLE_CALL) + dt)
-        st64(h + H_THROTTLE_NS, ld64(h + H_THROTTLE_NS) + dt)
-        st64(h + H_THROTTLE_N, ld64(h + H_THROTTLE_N) + 1)
         if (dt > ld64(h + H_THROTTLE_MAX)) {
             st64(h + H_THROTTLE_MAX, dt)
         }
@@ -2263,16 +2581,20 @@ func _cycle_poll() {
     return 0
 }
 
-# The marks are final (mutex held): check them if asked, free the boxes of dead templates, and start the sweep.
+# The marks are final (mutex held, the other workers stopped): check them if asked, free the boxes of dead
+# templates, start the sweep, and let the workers go on.
 func _gc_finish() {
     let h = _heap()
     if (ld64(h + H_VERIFY) != 0) {
         _verify_marks()
     }
     st64(h + H_MARKING, 0)
-    let live = ld64(h + H_SLOT + 16)
+    let live = 0
     for (let i = 0; i <= ld64(h + H_NMARK); i++) {
         live += ld64(_marker(i) + MK_SLOT + 16)
+    }
+    for (let i = 0; i < ld64a(h + H_NWORKERS); i++) {
+        live += ld64(ld64(ld64(h + H_WORKERS) + i * 8) + WK_SLOT + 16)
     }
     st64(h + H_LIVE_BYTES, live)
     _unlock()
@@ -2280,22 +2602,22 @@ func _gc_finish() {
     _lock_prog(12)
     _sweep_start()
     _unlock()
+    _stw_end()
     pthread_cond_broadcast(h + H_COND_GC)    # every marker waits on it; only the first sweeps
 }
 
-# One stop of the incremental collector. While the GC thread sweeps, it only looks whether the sweep is done,
-# and then runs the pacer. Otherwise it begins a cycle if none is running, scans one step of the roots, and ends
-# the marking when nothing is left to scan.
+# One stop of the incremental collector, by the worker that drives it. While the GC thread sweeps, it only
+# looks whether the sweep is done, and then runs the pacer. Otherwise it begins a cycle if none is running,
+# scans one step of the roots, and ends the marking when nothing is left to scan.
 func _gc_work() {
     let h = _heap()
     let t0 = _now_ns()
     st64(h + H_THROTTLE_CALL, 0)
-    st64(h + H_GC_BUSY, 1)
     if (ld64(h + H_SWEEPING) != 0) {
         if (ld64a(h + H_SW_DONE) != 0) {
             _lock_prog(13)
             if (ld64(h + H_GCT_STATE) == 0) {
-                st64(h + H_SWEEPING, 0)
+                st64a(h + H_SWEEPING, 0)
                 if (ld64(h + H_STATS) == 3) {
                     _census()
                 }
@@ -2331,8 +2653,6 @@ func _gc_work() {
             }
         }
     }
-    st64(h + H_GC_BUSY, 0)
-    _set_limit()
     _count_pause(_now_ns() - t0)
 }
 
@@ -2351,8 +2671,10 @@ func _check_marking_done() {
     if (ld64(h + H_SHARED_N) != 0) {
         _invariant_fail(cstr("a cycle ended with objects still in the shared batch"))
     }
-    if (ld64(h + H_LOCAL_N) != 0) {
-        _invariant_fail(cstr("a cycle ended with objects still in the program thread's batch"))
+    for (let i = 0; i < ld64a(h + H_NWORKERS); i++) {
+        if (ld64(ld64(ld64(h + H_WORKERS) + i * 8) + WK_LOCAL_N) != 0) {
+            _invariant_fail(cstr("a cycle ended with objects still in a worker's batch"))
+        }
     }
 }
 
@@ -2511,23 +2833,51 @@ func lv_gc_set_lowmem() {
     st64(_heap() + H_LOWMEM, 1)
 }
 
+# Makes the calling thread a worker: a thread that runs Zue code. Its stack limits come from the thread
+# itself. It is in the table before it runs any Zue code, and counts as stopped until then.
+# base is where the scan of its stack ends: an address in the frame of the function the thread began in.
+# Above it are the thread's own variables (the operating system keeps them at the top of the stack), which
+# hold no Zue value and which the thread writes while its stack is scanned.
+func lv_gc_worker_start(base) {
+    let h = _heap()
+    let wk = _wk()
+    let attr = stack_buf(128)
+    let out = stack_buf(16)
+    st64(wk + WK_STACK_BASE, base)
+    if (pthread_getattr_np(pthread_self(), attr) == 0) {
+        pthread_attr_getstack(attr, out, out + 8)
+        pthread_attr_destroy(attr)
+        st64(wk + WK_STACK_LOW, ld64(out) + 262144)    # keep 256 KiB for the runtime itself
+        st64(addr_of("lv_stack_low"), ld64(out) + 262144)
+    }
+    st64(wk + WK_LOW_P, addr_of("lv_stack_low"))
+    st64(wk + WK_SP, base)    # nothing on its stack yet for the collector to scan
+    st64a(wk + WK_STATE, 1)
+    pthread_mutex_lock(h + H_MUTEX)
+    let id = ld64(h + H_NWORKERS)
+    if (id == WK_MAX) {
+        write(2, cstr("Runtime Error: too many worker threads\n"), 39)
+        exit(1)
+    }
+    st64(ld64(h + H_WORKERS) + id * 8, wk)
+    st64(wk + WK_ID, id)
+    st64a(h + H_NWORKERS, id + 1)
+    pthread_mutex_unlock(h + H_MUTEX)
+    _safe_leave()
+    return id
+}
+
 # Called once from the thread that runs the program.
-func lv_gc_start() {
+func lv_gc_start(base) {
     let h = _heap()
     if (ld64(h + H_SETUP_DONE) == 0) {
         _gc_setup()
     }
-    let attr = stack_buf(128)
-    let out = stack_buf(16)
-    if (pthread_getattr_np(pthread_self(), attr) == 0) {
-        pthread_attr_getstack(attr, out, out + 8)
-        pthread_attr_destroy(attr)
-        st64(h + H_STACK_BASE, ld64(out) + ld64(out + 8))
-        st64(h + H_STACK_LOW, ld64(out) + 262144)    # keep 256 KiB for the runtime itself
-        st64(addr_of("lv_stack_low"), ld64(out) + 262144)
-    } else {
-        st64(h + H_STACK_BASE, frame_addr() + 4096)
+    st64(h + H_WORKERS, calloc(WK_MAX, 8))
+    if (ld64(h + H_WORKERS) == 0) {
+        _die_oom()
     }
+    lv_gc_worker_start(base)
     let s = getenv(cstr("ZUE_RT_GC_STRESS"))
     if (s != 0 and ld8(s) != 0) {
         st64(h + H_STRESS_EVERY, strtoull(s, 0, 10))
@@ -2550,11 +2900,15 @@ func lv_gc_start() {
     if (slow != 0 and ld8(slow) != 0) {
         st64(h + H_SLOW_US, strtoull(slow, 0, 10))
     }
-    # Two marking threads where the machine has the cores for them: measured on 8 cores, two keep up with the
-    # program at 256 MiB to 4 GiB live, and four or more gave stops of 1 to 2 ms (see docs/plan.md).
-    let nm = 1
-    if (sysconf(84) >= 4) {    # _SC_NPROCESSORS_ONLN
-        nm = 2
+    # Marking threads for a quarter of the processors, four at most: measured on 16 processors at 256 MiB to
+    # 4 GiB live, four were faster than two in both modes (in --gc=lowmem by 25 to 40 percent), and eight were
+    # no faster than four for 60 percent more processor time (see docs/plan.md).
+    let nm = sysconf(84) / 4    # _SC_NPROCESSORS_ONLN
+    if (nm < 1) {
+        nm = 1
+    }
+    if (nm > 4) {
+        nm = 4
     }
     let ms = getenv(cstr("ZUE_RT_GC_MARKERS"))
     if (ms != 0) {

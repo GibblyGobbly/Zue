@@ -1,0 +1,9 @@
+Type Error [E0213] in /tmp/zue_test_case.zu at line 3:
+  blue threads share nothing: 'top' runs in its own thread, and 'seen' belongs to the thread that declared it
+  top calls middle calls look
+  spawn(top, ...) at line 11
+
+   3 |     return map_has(seen, k)
+     |                    ^^^^ a top-level variable (map<int>)
+
+Hint: Pass the value to spawn() as an argument or send it through a channel; the thread gets its own copy

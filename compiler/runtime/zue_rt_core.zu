@@ -11,6 +11,8 @@
 # Operators, calls and the program entry are in zue_rt_ops.zu, the builtins in
 # zue_rt_lib.zu and zue_rt_math.zu, and data, box and unsafe in zue_rt_data.zu.
 
+extern("flockfile", "void", "ptr")
+extern("funlockfile", "void", "ptr")
 extern("memcpy", "ptr", "ptr,ptr,i64")
 extern("memmove", "ptr", "ptr,ptr,i64")
 extern("memset", "ptr", "ptr,i32,i64")
@@ -106,31 +108,55 @@ const B_LEN = 8
 const B_CAP = 16
 const B_SIZE = 24
 
-space("lv_pos_mod", 8)
-space("lv_depth", 4)
+# What the running code is doing belongs to the operating system thread that runs it, so these are tspace:
+# one copy for each such thread. Generated code declares them thread_local too (emit_llvm.zu).
+tspace("lv_pos_mod", 8)
+tspace("lv_depth", 4)
 
 # Where the operation that is running is, as set by the generated code before an operation that can
 # fail (ll_pos in ll_state.zu): bits 0-21 the line, 22-33 the column, 34-45 the length on that line,
 # 46-57 the offset of the operator from the column (0 when there is none), 58-59 the operator
 # length minus 1. A column of 0 means that only the line is known.
-space("lv_pos", 8)
+tspace("lv_pos", 8)
 
 # Text for the marks of the next error, set by the code that raises it: beside the carets, and under
 # the left and the right operand of an operator. 0 when there is none.
-space("lv_lab_main", 8)
-space("lv_lab_l", 8)
-space("lv_lab_r", 8)
+tspace("lv_lab_main", 8)
+tspace("lv_lab_l", 8)
+tspace("lv_lab_r", 8)
 
 # The argument of a call that the next error is about, counting from 1, or 0. The carets then go
 # under that argument.
-space("lv_err_arg", 8)
+tspace("lv_err_arg", 8)
 
 # The calls that are running, innermost last, indexed by depth: for each, the place of the call, the
 # module it was made in and the name of the function (a static string, or 0).
+# lv_frames_p points to the thread's table: address space for MAX_DEPTH calls, mapped when the thread starts
+# to run Zue code (_frames_init); memory is used only as deep as the calls go.
 const FRAME_SIZE = 24
-space("lv_frames", 2400072)
+const FRAMES_BYTES = 2400072
+tspace("lv_frames_p", 8)
+
+func _frames_init() {
+    let m = mmap(0, FRAMES_BYTES, 3, 16418, -1, 0)    # read and write; private, anonymous, no reserve
+    if (m == -1 or m == 0) {
+        _die_oom()
+    }
+    st64(addr_of("lv_frames_p"), m)
+    # where another thread finds this one's place in the program (_crash_handler)
+    let wk = _wk()
+    st64(wk + WK_FRAMES, m)
+    st64(wk + WK_POS_P, addr_of("lv_pos"))
+    st64(wk + WK_MOD_P, addr_of("lv_pos_mod"))
+    st64(wk + WK_DEPTH_P, addr_of("lv_depth"))
+}
+
+func _frames() {
+    return ld64(addr_of("lv_frames_p"))
+}
 space("_argc", 8)
 space("_argv", 8)
+per_thread("g_found")
 let g_found = 0
 
 func _stdout() {
@@ -448,7 +474,7 @@ func _error_source(pos) {
 
 # One line of the call stack: the function, where it was called from and that source line.
 func _put_frame(i, cur_mod) {
-    let fr = addr_of("lv_frames") + i * FRAME_SIZE
+    let fr = _frames() + i * FRAME_SIZE
     let pos = ld64(fr)
     let m = ld64(fr + 8)
     let name = ld64(fr + 16)
@@ -572,7 +598,7 @@ func _error_json(kind_i, msg_p, hint_p) {
     let depth = ld32(addr_of("lv_depth"))
     let i = depth
     while (i >= 1) {
-        let fr = addr_of("lv_frames") + i * FRAME_SIZE
+        let fr = _frames() + i * FRAME_SIZE
         let name = ld64(fr + 16)
         let fm = ld64(fr + 8)
         if (i != depth) {
@@ -597,6 +623,11 @@ func _error_json(kind_i, msg_p, hint_p) {
 }
 
 func lv_error(kind_i, msg_p, hint_p) {
+    # One error ends the program. The other workers stop where they are; a second thread that fails at the
+    # same moment waits here for the first to end the program.
+    if (lv_gc_dying() == 0) {
+        _gc_park()
+    }
     fflush(_stdout())
     if (_json_wanted()) {
         _error_json(kind_i, msg_p, hint_p)
@@ -995,6 +1026,7 @@ const SI_TOTALRAM = 32      # struct sysinfo on x86-64 Linux
 const SI_TOTALSWAP = 64
 const SI_MEM_UNIT = 104
 const SI_SIZE = 112
+per_thread("g_machine_bytes")
 let g_machine_bytes = 0
 
 func _machine_bytes() {
@@ -1342,8 +1374,11 @@ func lv_interp(n_i, parts) {
 
 func lvp_print(v) {
     if (_tag(v) == T_STR) {
+        # the text and its line end go out together, also when several workers print
+        flockfile(_stdout())
         fwrite(_val(v) + S_DATA, 1, ld64(_val(v)), _stdout())
         fputc(10, _stdout())
+        funlockfile(_stdout())
         return 0
     }
     let b = stack_buf(B_SIZE)

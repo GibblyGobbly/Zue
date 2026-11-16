@@ -1,0 +1,124 @@
+# Blue threads on several workers (operating system threads): the results do not depend on which worker
+# runs which thread. The programs print only from the main thread, so the output is the same on any number
+# of workers.
+# CASE threads that spawn threads, results through wait, a ring of channels
+func leaf(id: int) -> list<int> {
+    let out: list<int> = []
+    for (let i = 0; i < 50; i++) {
+        append(out, id + i)
+        if (i % 10 == 0) {
+            yield()
+        }
+    }
+    return out
+}
+func branch(id: int, width: int) -> int {
+    let ts: list<thread> = []
+    for (let i = 0; i < width; i++) {
+        append(ts, spawn(leaf, id * 1000 + i))
+    }
+    let sum = 0
+    for (let t in ts) {
+        let r: list<int> = wait(t)
+        for (let v in r) {
+            sum += v
+        }
+    }
+    return sum
+}
+func ring(n: int, inp: channel, out: channel) -> int {
+    for (let i = 0; i < n; i++) {
+        let v: int = recv(inp)
+        send(out, v + 1)
+    }
+    return n
+}
+let rounds = 2
+let total = 0
+for (let r = 0; r < rounds; r++) {
+    let ts: list<thread> = []
+    for (let b = 0; b < 20; b++) {
+        append(ts, spawn(branch, b, 20))
+    }
+    for (let t in ts) {
+        let s: int = wait(t)
+        total += s
+    }
+}
+let chans: list<channel> = []
+for (let i = 0; i <= 30; i++) {
+    append(chans, channel())
+}
+let rs: list<thread> = []
+for (let i = 0; i < 30; i++) {
+    append(rs, spawn(ring, 200, chans[i], chans[i + 1]))
+}
+let last = 0
+for (let i = 0; i < 200; i++) {
+    send(chans[0], i)
+    let v: int = recv(chans[30])
+    last += v
+}
+for (let t in rs) {
+    wait(t)
+}
+print("total {total} ring {last}")
+# CASE producers and consumers on one channel
+func produce(id: int, n: int, out: channel) -> int {
+    let made = 0
+    for (let i = 0; i < n; i++) {
+        let row = [id, i, i * 2, "s{i}"]
+        send(out, row)
+        made += 1
+    }
+    return made
+}
+func consume(inp: channel, done: channel) -> int {
+    let sum = 0
+    let keep: list<list<int>> = []
+    while (true) {
+        let row: list = recv(inp)
+        let a: int = row[0]
+        if (a < 0) {
+            break
+        }
+        let b: int = row[1]
+        sum += b
+        append(keep, [a, b, sum])
+        if (len(keep) > 1000) {
+            keep = []
+        }
+    }
+    send(done, sum)
+    return sum
+}
+let np = 4
+let nc = 3
+let n = 3000
+let ch = channel(16)
+let done = channel(nc)
+let ps: list<thread> = []
+let cs: list<thread> = []
+for (let i = 0; i < nc; i++) {
+    append(cs, spawn(consume, ch, done))
+}
+for (let i = 0; i < np; i++) {
+    append(ps, spawn(produce, i, n, ch))
+}
+let made = 0
+for (let t in ps) {
+    let m: int = wait(t)
+    made += m
+}
+for (let i = 0; i < nc; i++) {
+    send(ch, [-1, 0, 0, ""])
+}
+let total = 0
+for (let i = 0; i < nc; i++) {
+    let s: int = recv(done)
+    total += s
+}
+for (let t in cs) {
+    wait(t)
+}
+print("made {made} total {total}")

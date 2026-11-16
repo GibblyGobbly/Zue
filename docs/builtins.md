@@ -86,10 +86,35 @@ A `for-in` loop does not iterate a map directly: loop over `map_keys(m)`.
 
 ## Blue threads
 
-Blue threads are light threads that share the program's memory and run one at a time on the program's own
-thread. A blue thread runs until it waits; it waits only in `wait`, `yield`, `send` and `recv`, so two threads
-never change a value at the same moment and no lock is needed. A new thread first runs when the running
-thread waits. When the program's own thread ends, the program ends, even if other threads have not finished.
+Blue threads are light threads. Each has its own stack, and they take turns on the program's own thread.
+A thread runs until it waits (`wait`, `yield`, `send`, `recv`), or until it has run for a time slice of a
+millisecond while another thread was ready; it is then switched out at its next call or loop head. A loop
+that never waits does not stop the other threads. When the program's own thread ends, the program ends, even
+if other threads have not finished.
+
+**Blue threads share nothing that can change.** That is what lets two of them run at any moment without a
+data race and without locks:
+
+| Rule | Detail |
+|---|---|
+| `spawn` takes the name of a top-level function | Not a function value and not a function declared inside another: those carry variables of the thread that made them (`Type Error`, E0213) |
+| A spawned function cannot use top-level variables | Neither can any function it calls. Allowed: other functions, types, and a top-level variable that never changes and holds a number, a bool, a char or a string (a `const`, or a `let` nothing assigns). Checked when the program is built (E0213) |
+| Arguments of `spawn` and values given to `send` are copied | Lists, dense lists, maps, templates and blocs are copied with everything in them. Two references to one list stay one list in the copy; a list that holds itself is copied once. Numbers, bools, chars, strings, types, thread handles and channels are passed as they are |
+| A function, a file, a box and a pointer stay in their thread | Giving one to `spawn` or `send` is a `Runtime Error` (E0453) |
+| `wait` hands the result over once | The thread is over, so its result is not copied. A second `wait` for the same thread is a `Runtime Error` (E0453) |
+
+Blue threads run on several processors at once. The program's own thread is the first worker; another
+worker (an operating system thread) is started when a thread is spawned and no worker is free, up to the
+number of processors. A worker with nothing to run sleeps. A thread stays on the worker that first runs it.
+
+| Setting | Effect |
+|---|---|
+| `ZUE_RT_BLUE_WORKERS=N` | At most N workers (1 to 1024; default: the number of processors). With 1, threads run one at a time in a fixed order |
+| `ZUE_RT_BLUE_SLICE_US=N` | The time slice in microseconds (default 1000) |
+
+Lines printed by different threads can come in any order when there is more than one worker. Random numbers
+belong to the thread: a new thread's generator is made from the next number of the thread that spawns it,
+so a seeded program gives the same numbers in every thread on every run.
 
 | Function | Effect |
 |---|---|
@@ -110,6 +135,7 @@ Every failure is an error, as everywhere in Zue:
 | Every thread waits and none can wake another | `Runtime Error`: deadlock |
 | `wait`, `yield`, `send` or `recv` inside an `unsafe` block that would make the thread give up the processor (a `send` to a full channel, a `recv` from an empty one, a `wait` for a thread that has not finished, any `yield`) | `Runtime Error`; a call that finishes at once is allowed. A pointer may not be sent in any case |
 | An error inside a thread | The program stops, as an error in the main thread does |
+| A thread inside an `unsafe` block has used up its time slice | No error: it is switched out when the block ends |
 | Recursion too deep in a thread | `Runtime Error`: stack overflow |
 
 Each thread has a stack of 1 MiB of address space (memory is used as it grows, with 128 KiB kept for the

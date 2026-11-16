@@ -1,13 +1,29 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (c) 2026 GibblyGobbly
 #
-# zue_rt_blue.zu: blue threads. Light threads that all run on the one thread of the program and share
-# its heap. A blue thread has its own stack; it gives up the processor only where it waits: wait,
-# yield, send and recv. Nothing runs in parallel, so no lock is needed anywhere in this file.
+# zue_rt_blue.zu: blue threads. Light threads with their own stacks, run by a few operating system threads,
+# the workers. A blue thread gives up its worker where it waits (wait, yield, send and recv) and where the
+# scheduler asks it to: at a call and at the head of a loop, once it has run for a time slice while another
+# thread was ready (_blue_preempt).
+#
+# Workers. The thread of the program is the first worker. Another one is started when a thread is spawned
+# and no worker is free, up to the number of processors (ZUE_RT_BLUE_WORKERS sets another number; 1 gives one
+# thread at a time, in a fixed order). A worker with nothing to run looks for work for a short time and then
+# sleeps; it is woken when there is work for it.
+#
+# A thread stays on the worker that first runs it. Generated code keeps the address of a thread's own data
+# (lv_pos, lv_depth and the others are one per operating system thread) across a call, so a thread that went
+# on on another worker could write to the first one's. Threads that have not started are taken by whichever
+# worker is free. Each worker has a queue of its ready threads; the threads that have not started are in one
+# queue for all. A worker takes the thread that has waited longest of the two heads (CO_SEQ).
+#
+# One lock, blue_lock, guards the queues, the channels, the list of threads and the fields of a thread that
+# another thread writes (state, joiner, value). It is held for a few instructions, never across an
+# allocation, a switch or an error: a worker that holds it cannot stop for the collector.
 #
 # A thread and a channel are objects on the collector's heap (the collector frees them when nothing
-# refers to them). The list of all threads and the queue of runnable ones are linked through the
-# objects, and their heads are module variables, which the collector scans as roots.
+# refers to them). The list of all threads and the queues are linked through the objects; their heads are
+# module variables and words of the workers, which the collector scans as roots.
 #
 # Pointer fields of an object that already exists are written with _pw, which applies the write barrier.
 # A field of an object that was just allocated is empty, so it can be written plainly.
@@ -16,31 +32,45 @@ extern("getcontext", "i32", "ptr")
 extern("makecontext", "void", "ptr,ptr,i32,...")
 extern("swapcontext", "i32", "ptr,ptr")
 extern("mprotect", "i32", "ptr,i64,i32")
+extern("pthread_create", "i32", "ptr,ptr,ptr,ptr")
+extern("pthread_attr_init", "i32", "ptr")
+extern("pthread_attr_setdetachstate", "i32", "ptr,i32")
+extern("nanosleep", "i32", "ptr,ptr")
+extern("strtoull", "i64", "ptr,ptr,i32")
+extern("write", "i64", "i32,ptr,i64")
+extern("syscall", "i64", "i64,...")
 
 # struct Co { the thread }
-const CO_STATE = 0       # CO_NEW, CO_READY, CO_RUNNING, CO_WAITING or CO_DONE
+const CO_STATE = 0       # CO_NEW, CO_READY, CO_RUNNING, CO_WAITING or CO_DONE (blue_lock). CO_RUNNING is only what a thread starts as when it is made from a running operating system thread; a thread a worker takes off a queue stays CO_READY
 const CO_UC = 8          # the saved registers (a ucontext_t, an object of its own)
 const CO_LO = 16         # lowest address of the stack mapping, 0 once it is unmapped
-const CO_HI = 24         # end of the stack
+const CO_HI = 24         # end of the stack that is scanned: 16 bytes before the end of the mapping
 const CO_LOW = 32        # lowest usable stack address, the limit the call depth check uses
-const CO_SP = 40         # stack pointer when the thread gave up the processor
+const CO_SP = 40         # stack pointer when the thread gave up its worker; 0 before it first ran and once it is over
 const CO_FN = 48         # LV: the function to run
 const CO_ARGC = 64
 const CO_ARGV = 72       # LV[argc]
 const CO_RES = 80        # LV: what the function returned
-const CO_NEXT = 96       # next thread in the run queue or in a wait queue
+const CO_NEXT = 96       # next thread in a run queue or in a wait queue (blue_lock)
 const CO_DEPTH = 104     # call depth, kept while the thread is away
 const CO_FRAMES = 112    # copy of the call frames (an object holding no pointers)
 const CO_FCAP = 120      # bytes in the copy of the frames
 const CO_POS = 128
 const CO_POSMOD = 136
-const CO_VAL = 144       # LV: the value handed over by send or recv
-const CO_JOINER = 160    # the thread that waits for this one to finish
-const CO_ANEXT = 168     # list of all threads that are not done
+const CO_VAL = 144       # LV: the value handed over by send or recv (blue_lock)
+const CO_JOINER = 160    # the thread that waits for this one to finish (blue_lock)
+const CO_ANEXT = 168     # list of all threads that are not done (blue_lock)
 const CO_APREV = 176
 const CO_WOKE = 184      # 1 when a wait ended because the channel was closed
-const CO_SCANNED = 192   # the number of the collection in which the collector scanned this stack
-const CO_SIZE = 200
+const CO_SCANNED = 192   # the number of the collection in which the collector scanned this stack (CO_SCANLOCK)
+const CO_TAKEN = 200     # 1 once wait has handed the result over
+const CO_BOXES = 208     # { stack, n, cap }: its boxes that end with their scope (see _box_stack_save)
+const CO_WK = 232        # the worker it is bound to, 0 until it first runs
+const CO_ON = 240        # 1 from the moment a worker takes it up until that worker has left its stack (CO_SCANLOCK to set, atomic)
+const CO_SCANLOCK = 248  # spin lock: the collector scans the stack, or a worker takes the thread up or unmaps its stack
+const CO_SEQ = 256       # when it was last put in a queue: a number that only grows
+const CO_RNG = 264       # its random number generator while it is away (16 bytes)
+const CO_SIZE = 280
 
 const CO_NEW = 0
 const CO_READY = 1
@@ -48,7 +78,7 @@ const CO_RUNNING = 2
 const CO_WAITING = 3
 const CO_DONE = 4
 
-# struct Chan
+# struct Chan (blue_lock)
 const CH_CAP = 0
 const CH_COUNT = 8
 const CH_HEAD = 16
@@ -64,13 +94,29 @@ const UC_SIZE = 1024
 const BLUE_STACK = 1048576    # address space of one stack, 1 MiB; memory is used only as the stack grows
 const BLUE_GUARD = 4096       # no access: running off the end of the stack is a fault, not silent damage
 const BLUE_RESERVE = 131072   # kept free for the runtime itself, as for the main thread
+# A thread that has run this long while another was ready is asked to let it run. A switch takes 0.4 to
+# 0.7 microseconds (measured), so a slice of a millisecond keeps switching under a thousandth of the run.
+# ZUE_RT_BLUE_SLICE_US sets another length.
+const BLUE_SLICE_US = 1000
+const BLUE_ASKED = -1         # lv_stack_low while the running thread is asked to come to lvp_stack_slow
+# A worker with nothing to run looks at the queues for this long before it sleeps. Sleeping and being woken
+# go through the kernel (see docs/plan.md for the measured cost); a thread that hands a value to a thread on
+# another worker and waits for the answer finds that worker still awake.
+const BLUE_SPIN_NS = 50000
+const FUTEX = 202             # the system call number
+const FUTEX_WAIT = 128        # FUTEX_WAIT | FUTEX_PRIVATE_FLAG
+const FUTEX_WAKE = 129        # FUTEX_WAKE | FUTEX_PRIVATE_FLAG
 
-let g_blue_cur = 0       # the thread that runs
-let g_blue_all = 0       # every thread that is not done
-let g_blue_runh = 0      # run queue
-let g_blue_runt = 0
-let g_blue_zombie = 0    # finished threads whose stack is still to be unmapped
-let g_blue_count = 0
+let g_blue_all = 0       # every thread that is not done (blue_lock)
+let g_blue_newt = 0      # the tail of the queue of threads that have not started (blue_lock)
+let g_blue_seq = 0       # the last CO_SEQ given (blue_lock)
+let g_blue_nready = 0    # threads in the queues (blue_lock)
+let g_blue_busy = 0      # workers that run a thread or look for one with WK_PARK 0 (blue_lock)
+let g_blue_nworkers = 0  # workers started or being started (blue_lock)
+let g_blue_max = 0       # workers allowed
+let g_blue_slice_ns = 0
+space("blue_lock", 8)
+space("blue_newh", 8)    # the head of the queue of threads that have not started (written with blue_lock held; the ticker and idle workers read it)
 
 func _pw(a, v) {
     lv_wb_word(a)
@@ -81,62 +127,325 @@ func _blue_fail(msg, hint) {
     lv_error(E_RUNTIME, msg, hint)
 }
 
-# The thread of the program itself, made when the first other thread is.
+func _blue_lock() {
+    _spin_lock(addr_of("blue_lock"))
+}
+
+# Lets the lock go, then wakes the workers that were given work while it was held and starts the workers
+# that were asked for: both are calls into the kernel, kept out of the lock.
+func _blue_unlock() {
+    _spin_unlock(addr_of("blue_lock"))
+    let wk = _wk()
+    let n = ld64(wk + WK_WAKE_N)
+    if (n != 0) {
+        st64(wk + WK_WAKE_N, 0)
+        for (let i = 0; i < n; i++) {
+            syscall(FUTEX, ld64(ld64(wk + WK_WAKE) + i * 8) + WK_PARK, FUTEX_WAKE, 1, 0, 0, 0)
+        }
+    }
+    let starts = ld64(wk + WK_STARTS)
+    if (starts != 0) {
+        st64(wk + WK_STARTS, 0)
+        for (let i = 0; i < starts; i++) {
+            _blue_start_worker()
+        }
+    }
+}
+
+func _blue_fail_unlock(msg, hint) {
+    _blue_unlock()
+    lv_error(E_RUNTIME, msg, hint)
+}
+
+# What a worker needs before it runs blue threads.
+func _blue_wk_init(wk) {
+    let wake = calloc(WK_MAX, 8)
+    if (wake == 0) {
+        _die_oom()
+    }
+    st64(wk + WK_WAKE, wake)
+}
+
+# The thread of the program itself becomes a blue thread, and its operating system thread the first worker,
+# when the first other thread is made (or the program waits for something that cannot come).
 func _blue_init() {
-    let h = addr_of("_heap0")
+    let wk = _wk()
+    _blue_wk_init(wk)
     let co = lv_alloc(CO_SIZE)
     st64(co + CO_UC, lv_alloc(UC_SIZE))
     st64(co + CO_STATE, CO_RUNNING)
-    st64(co + CO_HI, ld64(h + H_STACK_BASE))
-    st64(co + CO_LOW, ld64(h + H_STACK_LOW))
-    st64(co + CO_ANEXT, 0)
+    st64(co + CO_HI, ld64(wk + WK_STACK_BASE))
+    st64(co + CO_LOW, ld64(wk + WK_STACK_LOW))
+    st64(co + CO_WK, wk)
+    st64(co + CO_ON, 1)
+    g_blue_max = sysconf(84)    # _SC_NPROCESSORS_ONLN
+    if (g_blue_max < 1) {
+        g_blue_max = 1
+    }
+    let s = getenv(cstr("ZUE_RT_BLUE_WORKERS"))
+    if (s != 0) {
+        let end = stack_buf(8)
+        let k = strtoull(s, end, 10)
+        if (k <= 0 or k > WK_MAX or ld8(ld64(end)) != 0 or ld8(s) < 48 or ld8(s) > 57) {
+            write(2, cstr("Runtime Error: ZUE_RT_BLUE_WORKERS must be a whole number from 1 to 1024\n"), 73)
+            exit(1)
+        }
+        g_blue_max = k
+    }
+    _blue_lock()
     g_blue_all = co
-    g_blue_cur = co
+    g_blue_nworkers = 1
+    g_blue_busy = 1
+    _blue_unlock()
+    st64(wk + WK_CUR, co)
+    _blue_start_ticker()
 }
 
-func _blue_runq_push(co) {
-    _pw(co + CO_NEXT, 0)
-    if (g_blue_runt == 0) {
-        g_blue_runh = co
-    } else {
-        _pw(g_blue_runt + CO_NEXT, co)
+# The ticker is an operating system thread that sleeps a slice at a time. When a worker has run the same
+# blue thread for the whole slice and another thread is ready for it, the ticker raises that worker's
+# lv_stack_low to the highest address. The running thread finds its stack pointer below that at its next call
+# or loop head, and lvp_stack_slow brings it to _blue_preempt. The ticker reads words of the workers and
+# writes two; it takes no lock.
+func _blue_ticker(arg) {
+    let h = addr_of("_heap0")
+    let ts = stack_buf(16)
+    let seen = calloc(WK_MAX, 8)
+    if (seen == 0) {
+        _die_oom()
     }
-    g_blue_runt = co
+    while (true) {
+        st64(ts, g_blue_slice_ns / 1000000000)
+        st64(ts + 8, g_blue_slice_ns % 1000000000)
+        nanosleep(ts, 0)
+        let n = ld64a(h + H_NWORKERS)
+        for (let i = 0; i < n; i++) {
+            let w = ld64(ld64(h + H_WORKERS) + i * 8)
+            let now = ld64a(w + WK_SWITCHES)
+            if (now == ld64(seen + i * 8) and ld64a(w + WK_PARK) == 0) {
+                if (ld64a(w + WK_RUNH) != 0 or ld64a(addr_of("blue_newh")) != 0) {
+                    st64a(w + WK_ASKED, 1)
+                    st64a(ld64(w + WK_LOW_P), BLUE_ASKED)
+                }
+            }
+            st64(seen + i * 8, now)
+        }
+    }
 }
 
+func _blue_start_ticker() {
+    g_blue_slice_ns = BLUE_SLICE_US * 1000
+    let s = getenv(cstr("ZUE_RT_BLUE_SLICE_US"))
+    if (s != 0) {
+        let end = stack_buf(8)
+        let us = strtoull(s, end, 10)
+        if (us <= 0 or ld8(ld64(end)) != 0 or ld8(s) < 48 or ld8(s) > 57) {
+            write(2, cstr("Runtime Error: ZUE_RT_BLUE_SLICE_US must be a whole number of microseconds from 1 up\n"), 85)
+            exit(1)
+        }
+        g_blue_slice_ns = us * 1000
+    }
+    let th = stack_buf(16)
+    if (pthread_create(th, 0, fn_addr("_blue_ticker"), 0) != 0) {
+        write(2, cstr("Runtime Error: cannot start the blue thread ticker\n"), 51)
+        exit(1)
+    }
+}
+
+# A call or the head of a loop found lv_stack_low raised: the collector asks this worker to stop, or the
+# ticker asks the running thread to let another run. Puts the true limit back first and looks at the requests
+# after, so that one made in between is seen. No switch inside an unsafe block, where it would mix the
+# deferred frees of two threads (the ticker asks again).
+func _blue_preempt() {
+    let wk = _wk()
+    st64a(addr_of("lv_stack_low"), ld64(wk + WK_STACK_LOW))
+    _gc_poll()
+    if (ld64a(wk + WK_ASKED) == 0) {
+        return 0
+    }
+    st64a(wk + WK_ASKED, 0)
+    let cur = ld64(wk + WK_CUR)
+    if (cur == 0 or _unsafe_depth() != 0) {
+        return 0
+    }
+    if (ld64a(wk + WK_RUNH) == 0 and ld64a(addr_of("blue_newh")) == 0) {
+        return 0
+    }
+    _blue_lock()
+    _blue_ready(cur)
+    _blue_switch(_blue_next())
+    return 0
+}
+
+# Takes the claim on worker w if it is looking for work or asleep: it has work now, and counts as busy from
+# here. A sleeping one is woken once the lock is let go. blue_lock held.
+func _blue_claim(w) {
+    while (1 == 1) {
+        let p = ld64a(w + WK_PARK)
+        if (p == 0) {
+            return 0
+        }
+        if (cas64(w + WK_PARK, p, 0) != 0) {
+            g_blue_busy += 1
+            if (p == 2) {
+                let me = _wk()
+                st64(ld64(me + WK_WAKE) + ld64(me + WK_WAKE_N) * 8, w)
+                st64(me + WK_WAKE_N, ld64(me + WK_WAKE_N) + 1)
+            }
+            return 1
+        }
+    }
+    return 0
+}
+
+# Thread co can run: onto the queue of its worker, or, if it has not started, onto the queue any worker takes
+# from. A worker that has nothing to do is told; for a thread that has not started, a worker is started when
+# none is free and more are allowed. blue_lock held.
 func _blue_ready(co) {
+    let h = addr_of("_heap0")
     st64(co + CO_STATE, CO_READY)
-    _blue_runq_push(co)
+    _pw(co + CO_NEXT, 0)
+    g_blue_seq += 1
+    st64(co + CO_SEQ, g_blue_seq)
+    g_blue_nready += 1
+    let w = ld64(co + CO_WK)
+    if (w != 0) {
+        if (ld64(w + WK_RUNT) == 0) {
+            st64a(w + WK_RUNH, co)
+        } else {
+            _pw(ld64(w + WK_RUNT) + CO_NEXT, co)
+        }
+        st64(w + WK_RUNT, co)
+        _blue_claim(w)
+        return 0
+    }
+    if (g_blue_newt == 0) {
+        st64a(addr_of("blue_newh"), co)
+    } else {
+        _pw(g_blue_newt + CO_NEXT, co)
+    }
+    g_blue_newt = co
+    let n = ld64a(h + H_NWORKERS)
+    for (let i = 0; i < n; i++) {
+        if (_blue_claim(ld64(ld64(h + H_WORKERS) + i * 8)) != 0) {
+            return 0
+        }
+    }
+    if (g_blue_nworkers < g_blue_max) {
+        g_blue_nworkers += 1
+        g_blue_busy += 1
+        let me = _wk()
+        st64(me + WK_STARTS, ld64(me + WK_STARTS) + 1)
+    }
+    return 0
 }
 
-func _blue_pick() {
-    let co = g_blue_runh
-    if (co == 0) {
-        _blue_fail(cstr("deadlock: every blue thread is waiting for another"),
-                   cstr("A thread waits in wait, send or recv, and nothing is left that could wake it."))
+# The thread worker wk runs next, off its queue: the head of its own queue or the head of the queue of
+# threads that have not started, whichever has waited longer; 0 when both are empty. A thread that has not
+# started is bound to this worker. blue_lock held.
+func _blue_take(wk) {
+    let own = ld64(wk + WK_RUNH)
+    let fresh = ld64(addr_of("blue_newh"))
+    if (own != 0 and (fresh == 0 or ld64(own + CO_SEQ) < ld64(fresh + CO_SEQ))) {
+        st64a(wk + WK_RUNH, ld64(own + CO_NEXT))
+        if (ld64(own + CO_NEXT) == 0) {
+            st64(wk + WK_RUNT, 0)
+        }
+        _pw(own + CO_NEXT, 0)
+        g_blue_nready -= 1
+        return own
     }
-    g_blue_runh = ld64(co + CO_NEXT)
-    if (g_blue_runh == 0) {
-        g_blue_runt = 0
+    if (fresh != 0) {
+        st64a(addr_of("blue_newh"), ld64(fresh + CO_NEXT))
+        if (ld64(fresh + CO_NEXT) == 0) {
+            g_blue_newt = 0
+        }
+        _pw(fresh + CO_NEXT, 0)
+        st64(fresh + CO_WK, wk)
+        g_blue_nready -= 1
+        return fresh
     }
-    _pw(co + CO_NEXT, 0)
-    return co
+    return 0
+}
+
+# The thread the calling worker runs next. Called with blue_lock held, after the running thread was put in
+# a queue, made to wait or finished; returns with the lock let go. With nothing to run the worker waits here,
+# on the stack of the thread it ran last: that thread is bound to this worker, so nobody else can take it up.
+# When no worker runs a thread and none is ready, every thread waits for another: a deadlock.
+func _blue_next() {
+    let wk = _wk()
+    while (1 == 1) {
+        let co = _blue_take(wk)
+        if (co != 0) {
+            _blue_unlock()
+            return co
+        }
+        if (g_blue_busy == 1 and g_blue_nready == 0) {
+            _blue_unlock()
+            _blue_fail(cstr("deadlock: every blue thread is waiting for another"),
+                       cstr("A thread waits in wait, send or recv, and nothing is left that could wake it."))
+        }
+        g_blue_busy -= 1
+        st64a(wk + WK_PARK, 1)
+        _blue_unlock()
+        _blue_idle(wk)
+        _blue_lock()
+        if (ld64a(wk + WK_PARK) != 0) {
+            st64a(wk + WK_PARK, 0)
+            g_blue_busy += 1
+        }
+    }
+    return 0
+}
+
+# The worker has nothing to run. It looks at its queue and at the queue of new threads for BLUE_SPIN_NS, then
+# sleeps until another worker claims it (_blue_claim). All the while it counts as stopped for the collector,
+# with its registers spilled here and its stack scanned from here up: it touches no Zue value.
+func _blue_idle(wk) {
+    spill_regs()
+    _safe_enter(stack_ptr())
+    let t0 = _now_ns()
+    let found = 0
+    let spins = 0
+    while (found == 0) {
+        if (ld64a(wk + WK_PARK) == 0 or ld64a(wk + WK_RUNH) != 0 or ld64a(addr_of("blue_newh")) != 0) {
+            found = 1
+        } else {
+            spins += 1
+            if (band(spins, 63) == 0 and _now_ns() - t0 > BLUE_SPIN_NS) {
+                break
+            }
+        }
+    }
+    if (found == 0 and cas64(wk + WK_PARK, 1, 2) != 0) {
+        while (ld64a(wk + WK_PARK) == 2) {
+            syscall(FUTEX, wk + WK_PARK, FUTEX_WAIT, 2, 0, 0, 0)
+        }
+    }
+    _safe_leave()
+    return 0
 }
 
 # Before every wait. A switch inside an unsafe block would interleave the stacks of deferred calls and
-# boxes of two threads. With no other thread yet, the program's own thread is made, so that waiting for
-# nothing is reported as a deadlock.
+# boxes of two threads. Called with blue_lock held; lets it go before the error.
 func _blue_check_switch() {
     if (_unsafe_depth() != 0) {
-        _blue_fail(cstr("cannot switch blue threads inside an unsafe block"),
-                   cstr("Finish the block first, then wait, yield, send or receive."))
-    }
-    if (g_blue_cur == 0) {
-        _blue_init()
+        _blue_fail_unlock(cstr("cannot switch blue threads inside an unsafe block"),
+                          cstr("Finish the block first, then wait, yield, send or receive."))
     }
 }
 
-# The state a thread keeps for itself while it is away: the call frames and the position.
+# The blue thread the calling worker runs. With no other thread yet, the program's own thread is made one,
+# so that waiting for nothing is reported as a deadlock.
+func _blue_cur() {
+    let wk = _wk()
+    if (ld64(wk + WK_CUR) == 0) {
+        _blue_init()
+    }
+    return ld64(wk + WK_CUR)
+}
+
+# The state a thread keeps for itself while it is away: the call frames, the position, its boxes and its
+# random numbers.
 func _blue_save(co) {
     let depth = ld32(addr_of("lv_depth"))
     st64(co + CO_DEPTH, depth)
@@ -148,62 +457,90 @@ func _blue_save(co) {
         _pw(co + CO_FRAMES, lv_alloc_atomic(cap))
         st64(co + CO_FCAP, cap)
     }
-    memcpy(ld64(co + CO_FRAMES), addr_of("lv_frames"), need)
+    memcpy(ld64(co + CO_FRAMES), _frames(), need)
+    _box_stack_save(co + CO_BOXES)
+    _rng_save(co + CO_RNG)
 }
 
+# The calling worker takes thread co up. The collector may be scanning its stack at this moment (a cycle
+# scans the stacks of the threads that are away in steps): CO_SCANLOCK makes the worker wait for that, and a
+# stack the cycle has not reached is scanned here first, because the thread is about to change it and the
+# cycle's snapshot has to include what it holds now.
 func _blue_load(co) {
-    _blue_scan_resumed(co)
+    let h = addr_of("_heap0")
+    let wk = _wk()
+    _spin_lock(co + CO_SCANLOCK)
+    if (ld64a(h + H_BS_ON) != 0) {
+        _blue_shade_stack(co)
+    }
+    st64a(co + CO_ON, 1)
+    _spin_unlock(co + CO_SCANLOCK)
     let depth = ld64(co + CO_DEPTH)
     st32(addr_of("lv_depth"), depth)
     st64(addr_of("lv_pos"), ld64(co + CO_POS))
     st64(addr_of("lv_pos_mod"), ld64(co + CO_POSMOD))
     if (ld64(co + CO_FRAMES) != 0) {
-        memcpy(addr_of("lv_frames"), ld64(co + CO_FRAMES), (depth + 1) * FRAME_SIZE)
+        memcpy(_frames(), ld64(co + CO_FRAMES), (depth + 1) * FRAME_SIZE)
     }
-    let h = addr_of("_heap0")
-    st64(h + H_STACK_BASE, ld64(co + CO_HI))
-    st64(h + H_STACK_LOW, ld64(co + CO_LOW))
-    st64(addr_of("lv_stack_low"), ld64(co + CO_LOW))
-    st64(co + CO_STATE, CO_RUNNING)
-    g_blue_cur = co
+    _box_stack_load(co + CO_BOXES)
+    _rng_load(co + CO_RNG)
+    st64(wk + WK_STACK_BASE, ld64(co + CO_HI))
+    st64(wk + WK_STACK_LOW, ld64(co + CO_LOW))
+    st64a(addr_of("lv_stack_low"), ld64(co + CO_LOW))
+    st64(wk + WK_CUR, co)
+    st64a(wk + WK_SWITCHES, ld64(wk + WK_SWITCHES) + 1)
 }
 
-# Unmaps the stacks of threads that have finished. Called by the thread that runs next, never from
-# the stack that is being unmapped.
-func _blue_reap() {
-    while (g_blue_zombie != 0) {
-        let z = g_blue_zombie
-        g_blue_zombie = ld64(z + CO_NEXT)
+# First thing on the stack of the thread a worker switched to: the worker has left the stack of the thread
+# before, whose registers are saved, so the collector may scan it from now on; and the stacks of the threads
+# that finished on this worker are unmapped (never from the stack that is being unmapped).
+func _blue_arrive() {
+    let wk = _wk()
+    let prev = ld64(wk + WK_PREV)
+    if (prev != 0) {
+        st64(wk + WK_PREV, 0)
+        st64a(prev + CO_ON, 0)
+    }
+    while (ld64(wk + WK_ZOMBIE) != 0) {
+        let z = ld64(wk + WK_ZOMBIE)
+        st64(wk + WK_ZOMBIE, ld64(z + CO_NEXT))
+        _spin_lock(z + CO_SCANLOCK)
         if (ld64(z + CO_LO) != 0) {
             munmap(ld64(z + CO_LO), BLUE_STACK)
             st64(z + CO_LO, 0)
+            st64(z + CO_SP, 0)
         }
+        _spin_unlock(z + CO_SCANLOCK)
     }
 }
 
-# Gives the processor to next. The caller has already put the running thread in the run queue or in a
-# wait queue. Returns when this thread runs again.
+# Gives the worker to next. The caller has already put the running thread in a queue. Returns when this
+# thread runs again.
 func _blue_switch(next) {
-    let cur = g_blue_cur
+    let wk = _wk()
+    let cur = ld64(wk + WK_CUR)
     if (next == cur) {
-        st64(cur + CO_STATE, CO_RUNNING)
         return 0
     }
     _blue_save(cur)
     st64(cur + CO_SP, stack_ptr())
+    st64(wk + WK_PREV, cur)
     _blue_load(next)
     swapcontext(ld64(cur + CO_UC), ld64(next + CO_UC))
-    _blue_reap()
+    _blue_arrive()
     return 0
 }
 
 # Where a new thread starts.
 func _blue_main() {
-    _blue_reap()
-    let co = g_blue_cur
+    _blue_arrive()
+    let wk = _wk()
+    let co = ld64(wk + WK_CUR)
     let o = stack_buf(16)
     lvp_call(o, co + CO_FN, ld64(co + CO_ARGC), ld64(co + CO_ARGV))
     _cp(co + CO_RES, o)
+    _box_stack_drop()
+    _blue_lock()
     st64(co + CO_STATE, CO_DONE)
     let j = ld64(co + CO_JOINER)
     if (j != 0) {
@@ -224,20 +561,57 @@ func _blue_main() {
     if (ld64(addr_of("_heap0") + H_BS_CUR) == co) {
         st64(addr_of("_heap0") + H_BS_CUR, n)    # the stepwise scan has not reached it, and never will
     }
-    _pw(co + CO_NEXT, g_blue_zombie)
-    g_blue_zombie = co
-    g_blue_count -= 1
-    let next = _blue_pick()
+    let next = _blue_next()
+    st64(co + CO_SP, 0)    # its stack holds nothing the collector has to see
+    _pw(co + CO_NEXT, ld64(wk + WK_ZOMBIE))
+    st64(wk + WK_ZOMBIE, co)
+    st64(wk + WK_PREV, co)
     _blue_load(next)
     swapcontext(ld64(co + CO_UC), ld64(next + CO_UC))
 }
 
-# Called with the registers and stack of the running thread already scanned: marks what the stacks of
-# the threads that are away point to, and the registers they saved (in their ucontext objects).
+# Where a new worker starts: on the stack of its operating system thread, which becomes a thread of its own
+# that never runs again once the worker has found a blue thread.
+func _blue_worker(arg) {
+    _thread_setup()
+    lv_gc_worker_start(frame_addr() + 64)
+    let wk = _wk()
+    _blue_wk_init(wk)
+    let co = lv_alloc(CO_SIZE)
+    st64(co + CO_UC, lv_alloc(UC_SIZE))
+    st64(co + CO_STATE, CO_RUNNING)
+    st64(co + CO_HI, ld64(wk + WK_STACK_BASE))
+    st64(co + CO_LOW, ld64(wk + WK_STACK_LOW))
+    st64(co + CO_WK, wk)
+    st64(co + CO_ON, 1)
+    st64(wk + WK_CUR, co)
+    _blue_lock()
+    _blue_switch(_blue_next())
+    return 0
+}
+
+# Starts one more worker (it was counted when it was asked for). If the system gives no thread, the count is
+# taken back: the threads then wait for the workers there are.
+func _blue_start_worker() {
+    let attr = stack_buf(128)
+    pthread_attr_init(attr)
+    pthread_attr_setdetachstate(attr, 1)
+    let th = stack_buf(16)
+    if (pthread_create(th, attr, fn_addr("_blue_worker"), 0) != 0) {
+        _blue_lock()
+        g_blue_nworkers -= 1
+        g_blue_busy -= 1
+        g_blue_max = g_blue_nworkers
+        _blue_unlock()
+    }
+}
+
+# The verifier, with every worker stopped: marks what the stacks of the threads that are away point to. The
+# registers they saved are in their ucontext objects, which are reached through the threads.
 func _blue_scan_parked() {
     let co = g_blue_all
     while (co != 0) {
-        if (co != g_blue_cur and ld64(co + CO_SP) != 0 and ld64(co + CO_STATE) != CO_DONE) {
+        if (ld64a(co + CO_ON) == 0 and ld64(co + CO_SP) != 0) {
             _scan_range(ld64(co + CO_SP), ld64(co + CO_HI))
         }
         co = ld64(co + CO_ANEXT)
@@ -245,61 +619,273 @@ func _blue_scan_parked() {
 }
 
 # Shades what the stack of a thread that is away points to, and the registers it saved, once per
-# collection. Returns the words looked at.
+# collection. CO_SCANLOCK held. Returns the words looked at.
 func _blue_shade_stack(co) {
     let h = addr_of("_heap0")
     let epoch = ld64(h + H_COLLECTIONS)
-    if (co == g_blue_cur or ld64(co + CO_SP) == 0 or ld64(co + CO_STATE) == CO_DONE or ld64(co + CO_SCANNED) == epoch) {
+    if (ld64(co + CO_SCANNED) == epoch) {
         return 0
     }
     st64(co + CO_SCANNED, epoch)
+    # A worker is on it: it was scanned when the cycle began or when the worker took it up. CO_SP is read
+    # only after that: a worker writes it before it leaves the stack and clears CO_ON.
+    if (ld64a(co + CO_ON) != 0) {
+        return 0
+    }
     let lo = ld64(co + CO_SP)
+    if (lo == 0) {
+        return 0
+    }
     let hi = ld64(co + CO_HI)
     _shade_range(lo, hi)
     _shade_range(ld64(co + CO_UC), ld64(co + CO_UC) + UC_SIZE)
     return (hi - lo) / 8 + UC_SIZE / 8
 }
 
-# At the start of a cycle: the running thread's stack has just been scanned; the others come in steps.
+# At the start of a cycle, with every worker stopped: the stack each worker runs on has just been scanned;
+# the others come in steps.
 func _blue_begin_scan() {
     let h = addr_of("_heap0")
-    if (g_blue_cur != 0) {
-        st64(g_blue_cur + CO_SCANNED, ld64(h + H_COLLECTIONS))
+    let n = ld64a(h + H_NWORKERS)
+    for (let i = 0; i < n; i++) {
+        let cur = ld64(ld64(ld64(h + H_WORKERS) + i * 8) + WK_CUR)
+        if (cur != 0) {
+            st64(cur + CO_SCANNED, ld64(h + H_COLLECTIONS))
+        }
     }
     st64(h + H_BS_CUR, g_blue_all)
     if (g_blue_all != 0) {
-        st64(h + H_BS_ON, 1)
+        st64a(h + H_BS_ON, 1)
     }
 }
 
-# One step: a bounded number of words of the stacks of the threads that are away. The cycle cannot end
-# while this is on.
+# One step, by the worker that drives the collector: a bounded number of words of the stacks of the threads
+# that are away. The cycle cannot end while this is on. A thread that a worker takes up meanwhile is scanned
+# by that worker (_blue_load); a thread a worker is on was scanned when the cycle began or when it was taken up.
 func _blue_scan_step() {
     let h = addr_of("_heap0")
     if (ld64(h + H_BS_ON) == 0) {
         return 0
     }
     let budget = ROOT_STEP_WORDS
-    let co = ld64(h + H_BS_CUR)
-    while (co != 0 and budget > 0) {
+    while (budget > 0) {
+        _blue_lock()
+        let co = ld64(h + H_BS_CUR)
+        if (co != 0) {
+            st64(h + H_BS_CUR, ld64(co + CO_ANEXT))
+        }
+        _blue_unlock()
+        if (co == 0) {
+            st64a(h + H_BS_ON, 0)
+            return 0
+        }
+        _spin_lock(co + CO_SCANLOCK)
         budget -= _blue_shade_stack(co) + 1
-        co = ld64(co + CO_ANEXT)
-        st64(h + H_BS_CUR, co)
-    }
-    if (co == 0) {
-        st64(h + H_BS_ON, 0)
+        _spin_unlock(co + CO_SCANLOCK)
     }
     return 0
 }
 
-# A thread that runs again before the step has reached it is scanned first: it is about to change its
-# stack, and the cycle's snapshot has to include what the stack holds now.
-func _blue_scan_resumed(co) {
-    let h = addr_of("_heap0")
-    if (ld64(h + H_BS_ON) != 0) {
-        _blue_shade_stack(co)
+# Values that cross from one thread to another
+
+# Blue threads share nothing that can change. A value given to spawn or send is copied for the thread that
+# gets it: lists, dense lists, maps, templates and blocs are copied with everything they hold, two references
+# to one object stay two references to one copy, and a value that holds itself is copied once. Numbers,
+# bools, chars, strings (which never change), types, thread handles and channels are handed over as they are.
+# A function, a file, a box and a pointer stay in their thread.
+#
+# struct Copier { tab, cap, n, work, wn, wcap }: tab is an open hash table of { source, copy } pairs, work a
+# stack of { tag, source, copy } whose contents are still to be copied. Both are collector objects, so the
+# copies are reachable while they are being made. The copy is done with a work stack, not by recursion: a
+# thread's stack is small and a list can be nested a million deep.
+const CP_TAB = 0
+const CP_CAP = 8
+const CP_N = 16
+const CP_WORK = 24
+const CP_WN = 32
+const CP_WCAP = 40
+const CP_SIZE = 48
+
+func _iso_fail(what) {
+    _errf(E_RUNTIME, cstr("Blue threads share nothing. Lists, maps, templates and blocs are copied for the other thread; a function, a file, a box or a pointer stays in its own thread."),
+          cstr("cannot give %s to another blue thread"), what, 0, 0)
+}
+
+func _iso_slot(c, p) {
+    let cap = ld64(c + CP_CAP)
+    let tab = ld64(c + CP_TAB)
+    let i = band(shr(p * 5700357409661599243, 20), cap - 1)
+    while (ld64(tab + i * 16) != 0 and ld64(tab + i * 16) != p) {
+        i = band(i + 1, cap - 1)
     }
-    return 0
+    return tab + i * 16
+}
+
+func _iso_note(c, p, copy) {
+    if (ld64(c + CP_N) * 2 >= ld64(c + CP_CAP)) {
+        let old = ld64(c + CP_TAB)
+        let ocap = ld64(c + CP_CAP)
+        let cap = ocap * 2
+        if (cap == 0) {
+            cap = 16
+        }
+        st64(c + CP_TAB, lv_alloc(cap * 16))
+        st64(c + CP_CAP, cap)
+        for (let i = 0; i < ocap; i++) {
+            if (ld64(old + i * 16) != 0) {
+                let e = _iso_slot(c, ld64(old + i * 16))
+                st64(e, ld64(old + i * 16))
+                st64(e + 8, ld64(old + i * 16 + 8))
+            }
+        }
+    }
+    let e = _iso_slot(c, p)
+    st64(e, p)
+    st64(e + 8, copy)
+    st64(c + CP_N, ld64(c + CP_N) + 1)
+}
+
+func _iso_push(c, tag, p, copy) {
+    if (ld64(c + CP_WN) == ld64(c + CP_WCAP)) {
+        let cap = ld64(c + CP_WCAP) * 2
+        if (cap == 0) {
+            cap = 16
+        }
+        let grown = lv_alloc(cap * 24)
+        if (ld64(c + CP_WN) != 0) {
+            memcpy(grown, ld64(c + CP_WORK), ld64(c + CP_WN) * 24)
+        }
+        st64(c + CP_WORK, grown)
+        st64(c + CP_WCAP, cap)
+    }
+    let w = ld64(c + CP_WORK) + ld64(c + CP_WN) * 24
+    st64(w, tag)
+    st64(w + 8, p)
+    st64(w + 16, copy)
+    st64(c + CP_WN, ld64(c + CP_WN) + 1)
+}
+
+# The copy of the object at p (tag t) with its contents still empty, noted and put on the work stack.
+func _iso_shell(c, t, p) {
+    let tmp = stack_buf(16)
+    let copy = 0
+    if (t == T_LIST) {
+        let n = ld64(p + L_COUNT)
+        _list_new(tmp, n)
+        copy = _val(tmp)
+        st64(copy + L_COUNT, n)
+    } else if (t == T_MAP) {
+        _map_new(tmp)
+        copy = _val(tmp)
+        let none = stack_buf(16)
+        st64(none, T_NULL)
+        st64(none + 8, 0)
+        for (let i = 0; i < ld64(p + M_USED); i++) {
+            let e = ld64(p + M_ENTRIES) + i * E_SIZE
+            if (ld32(e + E_LIVE) != 0) {
+                _map_put(tmp, ld64(e + E_KEY), none)
+            }
+        }
+    } else if (t == T_DENSE) {
+        let n = ld64(p + D_COUNT)
+        _dense_new(tmp, n)
+        copy = _val(tmp)
+        if (n != 0) {
+            memcpy(ld64(copy + D_DATA), ld64(p + D_DATA), 8 * n)
+        }
+        _iso_note(c, p, copy)
+        return copy
+    } else if (t == T_TEMPLATE) {
+        let n = ld32(p + TP_N)
+        let room = n
+        if (room == 0) {
+            room = 1
+        }
+        copy = lv_alloc(TP_FIELDS + 16 * room)
+        st64(copy + TP_DT, ld64(p + TP_DT))
+        st32(copy + TP_N, n)
+    } else {
+        let n = ld32(ld64(p + BL_DESC) + BD_NFIELDS)
+        let room = n
+        if (room == 0) {
+            room = 1
+        }
+        copy = lv_alloc(BL_VALS + 16 * room)
+        st64(copy + BL_DESC, ld64(p + BL_DESC))
+    }
+    _iso_note(c, p, copy)
+    _iso_push(c, t, p, copy)
+    return copy
+}
+
+# Writes to dst what the other thread gets for the value at src. c is 0 when no object has been copied yet.
+func _iso_value(c, dst, src) {
+    let t = _tag(src)
+    if (t == T_LIST or t == T_MAP or t == T_DENSE or t == T_TEMPLATE or t == T_BLOC) {
+        let p = _val(src)
+        let copy = 0
+        if (ld64(c + CP_CAP) != 0) {
+            let e = _iso_slot(c, p)
+            if (ld64(e) == p) {
+                copy = ld64(e + 8)
+            }
+        }
+        if (copy == 0) {
+            copy = _iso_shell(c, t, p)
+        }
+        _set(dst, t, copy)
+        return 0
+    }
+    if (t == T_FUNC and ld32(_val(src) + F_NATIVE) == 0) {
+        _iso_fail(cstr("a function"))
+    }
+    if (t == T_FILE) {
+        _iso_fail(cstr("a file"))
+    }
+    if (t == T_BOX) {
+        _iso_fail(cstr("a box"))
+    }
+    if (t == T_PTR) {
+        _iso_fail(cstr("a pointer"))
+    }
+    _cp(dst, src)
+}
+
+func _iso_copy(dst, src) {
+    let c = stack_buf(CP_SIZE)
+    memset(c, 0, CP_SIZE)
+    _iso_value(c, dst, src)
+    while (ld64(c + CP_WN) != 0) {
+        let wn = ld64(c + CP_WN) - 1
+        st64(c + CP_WN, wn)
+        let w = ld64(c + CP_WORK) + wn * 24
+        let t = ld64(w)
+        let p = ld64(w + 8)
+        let copy = ld64(w + 16)
+        if (t == T_LIST) {
+            let n = ld64(p + L_COUNT)
+            for (let i = 0; i < n; i++) {
+                _iso_value(c, ld64(copy + L_ITEMS) + 16 * i, ld64(p + L_ITEMS) + 16 * i)
+            }
+        } else if (t == T_MAP) {
+            let j = 0
+            for (let i = 0; i < ld64(p + M_USED); i++) {
+                let e = ld64(p + M_ENTRIES) + i * E_SIZE
+                if (ld32(e + E_LIVE) != 0) {
+                    _iso_value(c, ld64(copy + M_ENTRIES) + j * E_SIZE + E_VAL, e + E_VAL)
+                    j += 1
+                }
+            }
+        } else if (t == T_TEMPLATE) {
+            for (let i = 0; i < ld32(p + TP_N); i++) {
+                _iso_value(c, copy + TP_FIELDS + 16 * i, p + TP_FIELDS + 16 * i)
+            }
+        } else {
+            for (let i = 0; i < ld32(ld64(p + BL_DESC) + BD_NFIELDS); i++) {
+                _iso_value(c, copy + BL_VALS + 16 * i, p + BL_VALS + 16 * i)
+            }
+        }
+    }
 }
 
 func _arg_thread(self_p, argv, i) {
@@ -316,20 +902,21 @@ func _arg_chan(self_p, argv, i) {
     return _val(argv + 16 * i)
 }
 
-# spawn(fn, args...): starts a thread that runs fn(args...) and returns its handle. The new thread
-# first runs when the running one waits.
+# spawn(fn, args...): starts a thread that runs fn(args...) and returns its handle. The new thread runs on
+# a worker that is free, or first when a running thread waits or its time slice ends.
 func lb_spawn(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1048576)
     if (_tag(argv_p) != T_FUNC) {
         _arg_fail(self_p, argv_p, 0, cstr("function"))
     }
+    if (ld32(_val(argv_p) + F_NCELLS) != 0) {
+        _iso_fail(cstr("a function that uses variables of this thread"))
+    }
     # R2: a pointer may not leave its unsafe block, and the new thread can run after the block ends.
     for (let i = 1; i < argc_i; i++) {
         lvp_ptr_escape_check(argv_p + i * 16)
     }
-    if (g_blue_cur == 0) {
-        _blue_init()
-    }
+    _blue_cur()
     let m = mmap(0, BLUE_STACK, 3, 149538, -1, 0)    # read and write; private, anonymous, no reserve, stack
     if (m == -1) {
         _blue_fail(cstr("cannot create another blue thread: no address space for its stack"),
@@ -347,27 +934,32 @@ func lb_spawn(self_p, argc_i, argv_p) {
     if (n > 0) {
         let args = lv_alloc(n * 16)
         for (let i = 0; i < n; i++) {
-            _cp(args + i * 16, argv_p + (i + 1) * 16)
+            _iso_copy(args + i * 16, argv_p + (i + 1) * 16)
         }
         st64(co + CO_ARGV, args)
     }
     st64(co + CO_ARGC, n)
     _cp(co + CO_FN, argv_p)
     st64(co + CO_LO, m)
-    st64(co + CO_HI, m + BLUE_STACK)
+    # Not the end itself: the end of a stack can be the first address of a chunk of the heap mapped right
+    # above it, and kept in the thread object it would be taken for a pointer to the object there (the
+    # verifier then reports that object as reachable and not marked).
+    st64(co + CO_HI, m + BLUE_STACK - 16)
     st64(co + CO_LOW, m + BLUE_GUARD + BLUE_RESERVE)
+    _rng_child(co + CO_RNG)
     getcontext(uc)
     st64(uc + 8, 0)                           # uc_link
     st64(uc + 16, m + BLUE_GUARD)             # uc_stack.ss_sp
     st32(uc + 24, 0)
     st64(uc + 32, BLUE_STACK - BLUE_GUARD)    # uc_stack.ss_size
     makecontext(uc, fn_addr("_blue_main"), 0)
-    # onto the list of all threads, then the run queue
+    # onto the list of all threads, then the queue of threads that have not started
+    _blue_lock()
     st64(co + CO_ANEXT, g_blue_all)
     _pw(g_blue_all + CO_APREV, co)
     g_blue_all = co
-    g_blue_count += 1
     _blue_ready(co)
+    _blue_unlock()
     let o = stack_buf(16)
     _set(o, T_THREAD, co)
     retp(o)
@@ -378,30 +970,43 @@ func lb_wait(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let co = _arg_thread(self_p, argv_p, 0)
     let o = stack_buf(16)
+    let cur = _blue_cur()
+    _blue_lock()
+    if (ld64(co + CO_TAKEN) != 0) {
+        _blue_fail_unlock(cstr("the result of this blue thread was already taken"),
+                          cstr("wait() hands the result over once, without copying it. Keep it in a variable."))
+    }
     if (ld64(co + CO_STATE) != CO_DONE) {
-        if (co == g_blue_cur) {
-            _blue_fail(cstr("a blue thread cannot wait for itself"), cstr("Wait for another thread."))
+        if (co == cur) {
+            _blue_fail_unlock(cstr("a blue thread cannot wait for itself"), cstr("Wait for another thread."))
         }
         if (ld64(co + CO_JOINER) != 0) {
-            _blue_fail(cstr("another blue thread already waits for this one"), cstr("Only one thread can wait for a thread."))
+            _blue_fail_unlock(cstr("another blue thread already waits for this one"), cstr("Only one thread can wait for a thread."))
         }
         _blue_check_switch()
-        let cur = g_blue_cur
         _pw(co + CO_JOINER, cur)
         st64(cur + CO_STATE, CO_WAITING)
-        _blue_switch(_blue_pick())
+        _blue_switch(_blue_next())
+        _blue_lock()
     }
+    # The thread is over and shared nothing, so its result is handed over as it is, not copied.
     _cp(o, co + CO_RES)
+    _null(co + CO_RES)
+    st64(co + CO_TAKEN, 1)
+    _blue_unlock()
     retp(o)
 }
 
 # yield(): lets the other threads that are ready run first.
 func lb_yield(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 0, 0)
-    if (g_blue_runh != 0) {
+    let wk = _wk()
+    let cur = ld64(wk + WK_CUR)
+    if (cur != 0 and (ld64a(wk + WK_RUNH) != 0 or ld64a(addr_of("blue_newh")) != 0)) {
+        _blue_lock()
         _blue_check_switch()
-        _blue_ready(g_blue_cur)
-        _blue_switch(_blue_pick())
+        _blue_ready(cur)
+        _blue_switch(_blue_next())
     }
     let o = stack_buf(16)
     _null(o)
@@ -428,7 +1033,7 @@ func lb_channel(self_p, argc_i, argv_p) {
     retp(o)
 }
 
-# A queue of waiting threads is a head and a tail field in the channel, linked through CO_NEXT.
+# A queue of waiting threads is a head and a tail field in the channel, linked through CO_NEXT. blue_lock held.
 func _blue_q_push(ch, headf, tailf, co) {
     _pw(co + CO_NEXT, 0)
     if (ld64(ch + tailf) == 0) {
@@ -462,22 +1067,32 @@ func lb_send(self_p, argc_i, argv_p) {
     }
     # R2: the value can be received after the block ends.
     lvp_ptr_escape_check(argv_p + 16)
+    let msg = stack_buf(16)
+    st64(msg, T_NULL)
+    st64(msg + 8, 0)
+    _iso_copy(msg, argv_p + 16)
+    let cur = _blue_cur()
+    _blue_lock()
+    if (ld64(ch + CH_CLOSED) != 0) {
+        _blue_fail_unlock(cstr("send on a closed channel"), cstr("Do not close a channel that is still being sent to."))
+    }
     let r = _blue_q_pop(ch, CH_RECVQ, CH_RECVT)
     if (r != 0) {
-        _cp(r + CO_VAL, argv_p + 16)
+        _cp(r + CO_VAL, msg)
         _blue_ready(r)
+        _blue_unlock()
     } else if (ld64(ch + CH_COUNT) < ld64(ch + CH_CAP)) {
         let at = (ld64(ch + CH_HEAD) + ld64(ch + CH_COUNT)) % ld64(ch + CH_CAP)
-        _cp(ld64(ch + CH_BUF) + at * 16, argv_p + 16)
+        _cp(ld64(ch + CH_BUF) + at * 16, msg)
         st64(ch + CH_COUNT, ld64(ch + CH_COUNT) + 1)
+        _blue_unlock()
     } else {
         _blue_check_switch()
-        let cur = g_blue_cur
-        _cp(cur + CO_VAL, argv_p + 16)
+        _cp(cur + CO_VAL, msg)
         st64(cur + CO_WOKE, 0)
         st64(cur + CO_STATE, CO_WAITING)
         _blue_q_push(ch, CH_SENDQ, CH_SENDT, cur)
-        _blue_switch(_blue_pick())
+        _blue_switch(_blue_next())
         if (ld64(cur + CO_WOKE) != 0) {
             _blue_fail(cstr("the channel was closed while this thread was sending"), cstr("Close a channel only when no thread sends to it."))
         }
@@ -492,6 +1107,8 @@ func lb_recv(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let ch = _arg_chan(self_p, argv_p, 0)
     let o = stack_buf(16)
+    let cur = _blue_cur()
+    _blue_lock()
     if (ld64(ch + CH_COUNT) > 0) {
         let at = ld64(ch + CH_BUF) + ld64(ch + CH_HEAD) * 16
         _cp(o, at)
@@ -505,24 +1122,27 @@ func lb_recv(self_p, argc_i, argv_p) {
             st64(ch + CH_COUNT, ld64(ch + CH_COUNT) + 1)
             _blue_ready(s)
         }
+        _blue_unlock()
     } else {
         let s = _blue_q_pop(ch, CH_SENDQ, CH_SENDT)
         if (s != 0) {
             _cp(o, s + CO_VAL)
             _blue_ready(s)
+            _blue_unlock()
         } else if (ld64(ch + CH_CLOSED) != 0) {
-            _blue_fail(cstr("receive from a closed channel with no values left"), cstr("Send a value before closing, or stop receiving."))
+            _blue_fail_unlock(cstr("receive from a closed channel with no values left"), cstr("Send a value before closing, or stop receiving."))
         } else {
             _blue_check_switch()
-            let cur = g_blue_cur
             st64(cur + CO_WOKE, 0)
             st64(cur + CO_STATE, CO_WAITING)
             _blue_q_push(ch, CH_RECVQ, CH_RECVT, cur)
-            _blue_switch(_blue_pick())
+            _blue_switch(_blue_next())
             if (ld64(cur + CO_WOKE) != 0) {
                 _blue_fail(cstr("the channel was closed while this thread was receiving"), cstr("Send a value before closing, or stop receiving."))
             }
+            _blue_lock()
             _cp(o, cur + CO_VAL)
+            _blue_unlock()
         }
     }
     retp(o)
@@ -532,8 +1152,10 @@ func lb_recv(self_p, argc_i, argv_p) {
 func lb_channel_close(self_p, argc_i, argv_p) {
     lv_arity(self_p, argc_i, 1, 1)
     let ch = _arg_chan(self_p, argv_p, 0)
+    _blue_cur()
+    _blue_lock()
     if (ld64(ch + CH_CLOSED) != 0) {
-        _blue_fail(cstr("the channel is already closed"), cstr("Close a channel once."))
+        _blue_fail_unlock(cstr("the channel is already closed"), cstr("Close a channel once."))
     }
     st64(ch + CH_CLOSED, 1)
     let w = _blue_q_pop(ch, CH_RECVQ, CH_RECVT)
@@ -548,6 +1170,7 @@ func lb_channel_close(self_p, argc_i, argv_p) {
         _blue_ready(w)
         w = _blue_q_pop(ch, CH_SENDQ, CH_SENDT)
     }
+    _blue_unlock()
     let o = stack_buf(16)
     _null(o)
     retp(o)
