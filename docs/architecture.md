@@ -82,7 +82,7 @@ and linked into every program.
 | `zue_rt_lib.zu` | Builtins: conversions, maps, lists, `sort` (insertion, merge and radix sort), strings and the scanning builtins, `args`, `exit`, `system`, `clock` |
 | `zue_rt_math.zu` | Math, files, dense lists, vector math, random numbers (`rand`/`srand` on xoroshiro128++, `trand`/`tshuffle` on `getrandom`), `shuffle` and `ssort` |
 | `zue_rt_data.zu` | `data`, `template`, `bloc`, `box` and `unsafe` |
-| `zue_rt_blue.zu` | Blue threads: the scheduler, thread stacks and switching, time slices (a ticker thread raises `lv_stack_low`, and the stack test of every call and a test at every loop head bring the thread to `lvp_stack_slow`), the copy of values that cross threads, channels, and the builtins `spawn`, `wait`, `yield`, `channel`, `send`, `recv`, `channel_close` |
+| `zue_rt_blue.zu` | Blue threads: the scheduler (a run queue and a lock per worker, idle workers take half of another's queue), thread stacks (kept for reuse) and switching (`switch_stack`), time slices (a ticker thread raises `lv_stack_low`, and the stack test of every call and a test at every loop head bring the thread to `lvp_stack_slow`), the copy of values that cross threads, channels, and the builtins `spawn`, `wait`, `yield`, `channel`, `send`, `recv`, `channel_close` |
 | `zue_rt_rules.zu` | The validation rules behind them: bloc and template schemas, the box handle table, the allocation table and the ten pointer rules. Each rule returns 0 or an error code, which `zue_rt_data.zu` turns into the error message |
 
 Every builtin `name` listed in `compiler/shared.zu` is a runtime function `lb_name(self, argc,
@@ -179,7 +179,7 @@ func lb_len(self_p, argc_i, argv_p) {    // _p is a pointer parameter, _i a C in
 | Overflow | `addof subof mulof` (1 when the signed result overflows) |
 | Doubles | `fadd fsub fmul fdiv fneg flt fle fgt fge feq fne i2f f2i`, `dbl(x)` to pass a double to a variadic call |
 | Symbols | `cstr("text")`, `addr_of("sym")`, `fn_addr("fn")` |
-| Frames | `stack_buf(n)`, `frame_addr`, `stack_ptr`, `spill_regs` |
+| Frames | `stack_buf(n)`, `frame_addr`, `stack_ptr`, `spill_regs`, `switch_stack(save, sp)` (changes to another stack, see `emit_native.zu`), `cpu_relax` (the pause instruction of a spin loop) |
 | Calls | `call_ptr(f, args...)`, `callv(out, f, args...)` for LV-returning functions |
 | Returns | `retv(tag, payload)`, `retp(ptr)` |
 

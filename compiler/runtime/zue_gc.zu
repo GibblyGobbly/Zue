@@ -124,7 +124,7 @@ const AL_SIZE = 40
 
 # struct Worker: what a thread that runs Zue code keeps for itself (the tspace "_wk0": one for each operating
 # system thread). The collector reaches the workers through H_WORKERS. The fields from WK_CUR on belong to the
-# blue threads (zue_rt_blue.zu). The driver scans WK_CUR to WK_ZOMBIE and WK_PREV as roots.
+# blue threads (zue_rt_blue.zu). The driver scans WK_CUR to WK_ZOMBIE and WK_HANDOFF to WK_IDLE as roots.
 const WK_STATE = 0             # 0: runs Zue code. 1: stopped at a safe point, or in a call that may wait (atomic)
 const WK_SP = 8                # its stack pointer when it stopped: the stack from here up does not change while WK_STATE is 1
 const WK_STACK_BASE = 16       # end of the stack of the blue thread it runs
@@ -138,12 +138,11 @@ const WK_LOW_P = 240           # the address of its lv_stack_low, for the thread
 const WK_ID = 248              # its index in H_WORKERS
 const WK_DRIVER = 256          # 1 while it drives the collector
 const WK_CUR = 264             # the blue thread it runs
-const WK_RUNH = 272            # its run queue: the threads that are ready and bound to it
+const WK_RUNH = 272            # its run queue of ready threads (the head is written with st64a: other threads read it without the lock)
 const WK_RUNT = 280
 const WK_ZOMBIE = 288          # finished threads whose stack it still has to unmap
 const WK_SWITCHES = 296        # switches so far, for the ticker (atomic)
 const WK_PARK = 304            # 0: has work or looks for it. 1: looks for work without sleeping. 2: sleeps (atomic)
-const WK_PREV = 312            # the thread it switched away from, until the switch is complete
 const WK_WAKE = 320            # Worker*[]: workers to wake once the scheduler lock is let go
 const WK_WAKE_N = 328
 const WK_FRAMES = 336          # its table of call frames (lv_frames_p), for a crash report from another thread
@@ -152,6 +151,11 @@ const WK_MOD_P = 352
 const WK_DEPTH_P = 360
 const WK_ASKED = 368           # 1 when the ticker asked the running thread to let another run (atomic)
 const WK_STARTS = 376          # workers to start once the scheduler lock is let go
+const WK_HANDOFF = 384         # a thread it took for itself but could not take up yet: it waits on its own stack until the worker before has left that thread's stack
+const WK_IDLE = 392            # the thread it waits for work on, with a stack of its own
+const WK_STEALN = 400          # threads in its run queue that another worker may take (atomic)
+const WK_SEEN = 408            # i64[]: WK_SWITCHES of every worker when it last began to look for work
+const WK_QLOCK = 464           # spin lock of its run queue (WK_RUNH, WK_RUNT, WK_STEALN and the CO_NEXT links)
 const WK_LOCAL_BUF = 512       # MarkItem[LOCAL_CAP]: objects its barrier marked, for the marking threads to scan
 const WK_SIZE = 4608
 const WK_MAX = 1024            # workers the table holds (ZUE_RT_BLUE_WORKERS is at most this)
@@ -308,15 +312,28 @@ func _wk() {
     return addr_of("_wk0")
 }
 
-# A lock held for a few instructions: the word at p is 1 while it is held. A thread that waits for it spins,
-# and lets another thread have the core when that takes long (the holder may have lost its core).
+# A lock held for a few instructions: the word at p is 1 while it is held. A thread that waits for it reads
+# the word until it is 0 and only then tries to take it, so that the waiting threads do not take the cache
+# line from the holder at every turn; after each try that another thread won it waits twice as long before
+# it looks again (up to 256 pauses), so that many threads that wait do not all try at once; and it lets
+# another thread have the core when the wait takes long (the holder may have lost its core).
 func _spin_lock(p) {
     let spins = 0
+    let backoff = 1
     while (cas64(p, 0, 1) == 0) {
-        spins += 1
-        if (spins > 1000) {
-            sched_yield()
-            spins = 0
+        for (let i = 0; i < backoff; i++) {
+            cpu_relax()
+        }
+        if (backoff < 256) {
+            backoff = backoff * 2
+        }
+        while (ld64a(p) != 0) {
+            cpu_relax()
+            spins += 1
+            if (spins > 1000) {
+                sched_yield()
+                spins = 0
+            }
         }
     }
 }
@@ -1933,7 +1950,7 @@ func _scan_workers() {
             _scan_range(ld64(w + WK_SP), ld64(w + WK_STACK_BASE))
         }
         _scan_range(w + WK_CUR, w + WK_ZOMBIE + 8)
-        _scan_range(w + WK_PREV, w + WK_PREV + 8)
+        _scan_range(w + WK_HANDOFF, w + WK_IDLE + 8)
     }
 }
 
@@ -2206,7 +2223,8 @@ func _trim_free() {
     }
 }
 
-# The GC thread's sweep: blocks in claims of SWEEP_CLAIM, then the large objects, then the trim. Mutex held at
+# The GC thread's sweep: blocks in claims of SWEEP_CLAIM, then the stacks of blue threads that were not used
+# again, then the large objects, then the trim. Mutex held at
 # the start and at the end.
 func _gct_sweep() {
     let h = _heap()
@@ -2245,6 +2263,9 @@ func _gct_sweep() {
             }
         }
     }
+    _unlock()
+    _blue_stack_trim()
+    _lock(8)
     _sweep_large()
     _trim_free()
     st64(h + H_SWEEP_NS, ld64(h + H_SWEEP_NS) + (_now_ns() - t0))
@@ -2826,6 +2847,7 @@ func _gc_report() {
         let n5 = snprintf(buf3, 256, cstr("ZUE_RT_GC_MARKER,%llu,%llu words scanned,%llu ns marking,%llu times gave work away,%llu items given,%llu times took work,%llu times waited for work\n"), i, ld64(mk + MK_WORDS), ld64(mk + MK_NS), ld64(mk + MK_GIVEN), ld64(mk + MK_GIVEN_N), ld64(mk + MK_TAKES), ld64(mk + MK_WAITS))
         write(2, buf3, n5)
     }
+    _blue_report()
 }
 
 # Called first thing in main of a program built with --gc=lowmem.

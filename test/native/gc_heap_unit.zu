@@ -39,6 +39,14 @@ func _blue_scan_step() {
     return 0
 }
 
+func _blue_stack_trim() {
+    return 0
+}
+
+func _blue_report() {
+    return 0
+}
+
 # The start address of the object w points into, or 0.
 func start_of(w) {
     let d = _find(w, addr_of("_slot"))

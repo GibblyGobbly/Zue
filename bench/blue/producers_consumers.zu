@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# producers_consumers.zu <pairs> <values>: pairs of threads send and receive on one channel of 128 places.
+func produce(out: channel, n: int) -> int {
+    for (let i = 0; i < n; i++) {
+        send(out, i)
+    }
+    return n
+}
+func consume(inp: channel, n: int) -> int {
+    let s = 0
+    for (let i = 0; i < n; i++) {
+        let v: int = recv(inp)
+        s += v
+    }
+    return s
+}
+let k = int(args()[0])
+let n = int(args()[1])
+let ch = channel(128)
+let t0 = clock()
+let ts: list<thread> = []
+for (let i = 0; i < k; i++) {
+    append(ts, spawn(produce, ch, n))
+    append(ts, spawn(consume, ch, n))
+}
+let s = 0
+for (let t in ts) {
+    let r: int = wait(t)
+    s += r
+}
+print("mpmc {k}x{n} s {s} {clock() - t0} s")

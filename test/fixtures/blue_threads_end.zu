@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# Threads that end before the program does, on several workers: the program's own thread ends last, and the
+# statistics printed after it (ZUE_RT_GC_STATS) must not read the data of a thread that is gone.
+func work(n: int) -> int {
+    return n * 2
+}
+let total = 0
+for (let round = 0; round < 20; round++) {
+    let ts: list<thread> = []
+    for (let i = 0; i < 100; i++) {
+        append(ts, spawn(work, i))
+    }
+    for (let t in ts) {
+        let r: int = wait(t)
+        total += r
+    }
+}
+print(total)

@@ -86,8 +86,8 @@ A `for-in` loop does not iterate a map directly: loop over `map_keys(m)`.
 
 ## Blue threads
 
-Blue threads are light threads. Each has its own stack, and they take turns on the program's own thread.
-A thread runs until it waits (`wait`, `yield`, `send`, `recv`), or until it has run for a time slice of a
+Blue threads are light threads. Each has its own stack, and they run on a few operating system threads, the
+workers. A thread runs until it waits (`wait`, `yield`, `send`, `recv`), or until it has run for a time slice of a
 millisecond while another thread was ready; it is then switched out at its next call or loop head. A loop
 that never waits does not stop the other threads. When the program's own thread ends, the program ends, even
 if other threads have not finished.
@@ -104,8 +104,11 @@ data race and without locks:
 | `wait` hands the result over once | The thread is over, so its result is not copied. A second `wait` for the same thread is a `Runtime Error` (E0453) |
 
 Blue threads run on several processors at once. The program's own thread is the first worker; another
-worker (an operating system thread) is started when a thread is spawned and no worker is free, up to the
-number of processors. A worker with nothing to run sleeps. A thread stays on the worker that first runs it.
+worker is started when a thread becomes ready, every worker is busy and none is looking for work, up to the
+number of processors. A thread that becomes ready goes to the worker that made it ready. A worker with
+nothing to run takes half of the threads waiting on another worker, looks for work for 50 microseconds, and
+then sleeps until there is work; at most half as many workers look for work as run threads. A thread can go
+on on another worker than the one it stopped on, except the program's own thread, which stays on the first.
 
 | Setting | Effect |
 |---|---|

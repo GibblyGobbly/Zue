@@ -23,7 +23,7 @@
 # shl shr sar bnot, ult ule ugt uge udiv urem, addof subof mulof (overflow flags),
 # fadd fsub fmul fdiv fneg flt fle fgt fge feq fne i2f f2i dbl, cstr addr_of fn_addr
 # ld8a ld64a (acquire loads) st8a st64a (release stores) cas8 cas64 xadd64 fence (for data shared between threads),
-# stack_buf frame_addr stack_ptr spill_regs call_ptr callv retv retp trap. p[i] reads and
+# stack_buf frame_addr stack_ptr spill_regs switch_stack cpu_relax (the pause instruction, in a spin loop) call_ptr callv retv retp trap. p[i] reads and
 # p[i] = v writes the 64-bit word at p + 8 * i.
 
 use { die } from "util.zu"
@@ -82,8 +82,46 @@ let ARITY: map<int> = {
     "ld8": 1, "ld16": 1, "ld32": 1, "ld64": 1, "lds8": 1, "lds16": 1, "lds32": 1,
     "ld8a": 1, "ld64a": 1, "st8a": 2, "st64a": 2, "cas8": 3, "cas64": 3, "xadd64": 2, "fence": 0,
     "st8": 2, "st16": 2, "st32": 2, "st64": 2, "frame_addr": 0, "stack_ptr": 0, "spill_regs": 0,
+    "switch_stack": 2, "cpu_relax": 0,
     "trap": 0, "retv": 2, "retp": 1
 }
+
+# switch_stack(save, sp): leaves the running stack for another. Pushes the registers a call must keep (rbp,
+# rbx, r12 to r15) and the control words of SSE and the x87 unit, writes the stack pointer to the word at
+# save, takes sp as the stack pointer, writes 0 to the word at save + 8 (once nothing runs on the old stack
+# any more, so another thread may take it up from then on) and pops the same things off the new stack. It
+# returns when another call switches back with the stack pointer written here. A stack that has not run yet holds, from sp up: the two
+# control words in one word, six words for r15, r14, r13, r12, rbx and rbp, and the address to start at.
+let SWITCH_STACK: list<string> = [
+    "module asm \".text\"",
+    "module asm \".p2align 4\"",
+    "module asm \".type lvn_switch_stack,@function\"",
+    "module asm \"lvn_switch_stack:\"",
+    "module asm \"pushq %rbp\"",
+    "module asm \"pushq %rbx\"",
+    "module asm \"pushq %r12\"",
+    "module asm \"pushq %r13\"",
+    "module asm \"pushq %r14\"",
+    "module asm \"pushq %r15\"",
+    "module asm \"subq $8, %rsp\"",
+    "module asm \"stmxcsr (%rsp)\"",
+    "module asm \"fnstcw 4(%rsp)\"",
+    "module asm \"movq %rsp, (%rdi)\"",
+    "module asm \"movq %rsi, %rsp\"",
+    "module asm \"movq $0, 8(%rdi)\"",
+    "module asm \"ldmxcsr (%rsp)\"",
+    "module asm \"fldcw 4(%rsp)\"",
+    "module asm \"addq $8, %rsp\"",
+    "module asm \"popq %r15\"",
+    "module asm \"popq %r14\"",
+    "module asm \"popq %r13\"",
+    "module asm \"popq %r12\"",
+    "module asm \"popq %rbx\"",
+    "module asm \"popq %rbp\"",
+    "module asm \"retq\"",
+    "module asm \".size lvn_switch_stack, .-lvn_switch_stack\"",
+    "declare void @lvn_switch_stack(i64, i64)"
+]
 
 func commas(items: list<string>) -> string {
     return join(items, ", ")
@@ -541,6 +579,16 @@ func nx_intrinsic(n: Node, name: string, a: list<string>) -> string {
         declare_once("llvm.eh.unwind.init", "declare void @llvm.eh.unwind.init()")
         ll("call void @llvm.eh.unwind.init()")
         ST.ctx.spills = true
+        return "0"
+    }
+    if (name == "cpu_relax") {
+        declare_once("llvm.x86.sse2.pause", "declare void @llvm.x86.sse2.pause()")
+        ll("call void @llvm.x86.sse2.pause()")
+        return "0"
+    }
+    if (name == "switch_stack") {
+        declare_once("lvn_switch_stack", join(SWITCH_STACK, "\n"))
+        ll("call void @lvn_switch_stack(i64 {a[0]}, i64 {a[1]})")
         return "0"
     }
     if (name == "trap") {

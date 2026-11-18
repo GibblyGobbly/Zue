@@ -206,9 +206,11 @@ func churn_threads(n: int) {
     }
     return total
 }
-churn_threads(30000)
+# The warm-up has to reach the size the heap settles at: the collector does not run below 16 MiB, and a
+# thread that is over leaves about 300 bytes until it runs.
+churn_threads(200000)
 let early = peak_kib()
-churn_threads(120000)
+churn_threads(400000)
 print("grew: {grew(early, peak_kib())}")
 # CASE channels made, used and closed do not grow the peak
 func peak_kib() {

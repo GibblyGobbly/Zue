@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# cpu_bound.zu <threads> <n>: every thread computes fib(n); nothing waits.
+func fib(n: int) -> int {
+    if (n < 2) {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+let k = int(args()[0])
+let n = int(args()[1])
+let t0 = clock()
+let ts: list<thread> = []
+for (let i = 0; i < k; i++) {
+    append(ts, spawn(fib, n))
+}
+let s = 0
+for (let t in ts) {
+    let r: int = wait(t)
+    s += r
+}
+print("cpu {k} fib {n} s {s} {clock() - t0} s")

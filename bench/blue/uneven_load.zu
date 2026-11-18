@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# uneven_load.zu <n>: 256 threads start and wait; 16 of them then compute fib(n). Shows whether idle workers take over threads that are ready.
+func fib(n: int) -> int {
+    if (n < 2) {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+func job(inp: channel) -> int {
+    let n: int = recv(inp)
+    return fib(n)
+}
+let heavy = int(args()[0])
+let chans: list<channel> = []
+let ts: list<thread> = []
+for (let i = 0; i < 256; i++) {
+    append(chans, channel(1))
+    append(ts, spawn(job, chans[i]))
+}
+for (let i = 0; i < 2000; i++) {
+    yield()
+}
+let t0 = clock()
+for (let i = 0; i < 256; i++) {
+    if ((i * 37) % 256 < 16) {
+        send(chans[i], heavy)
+    } else {
+        send(chans[i], 1)
+    }
+}
+let s = 0
+for (let t in ts) {
+    let r: int = wait(t)
+    s += r
+}
+print("uneven s {s} {clock() - t0} s")

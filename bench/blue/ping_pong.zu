@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# ping_pong.zu <round trips>: two threads hand a number back and forth on two channels.
+func echo(inp: channel, out: channel, n: int) -> int {
+    for (let i = 0; i < n; i++) {
+        let v: int = recv(inp)
+        send(out, v + 1)
+    }
+    return n
+}
+let n = int(args()[0])
+let a = channel()
+let b = channel()
+let t = spawn(echo, a, b, n)
+let t0 = clock()
+let s = 0
+for (let i = 0; i < n; i++) {
+    send(a, i)
+    let v: int = recv(b)
+    s += v
+}
+wait(t)
+print("pingpong {n} s {s} {clock() - t0} s")

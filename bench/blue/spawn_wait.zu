@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# spawn_wait.zu <threads>: threads that return at once, started and waited for a thousand at a time.
+func work(i: int) -> int {
+    return i + 1
+}
+let n = int(args()[0])
+let t0 = clock()
+let sum = 0
+let done = 0
+while (done < n) {
+    let ts: list<thread> = []
+    for (let i = 0; i < 1000; i++) {
+        append(ts, spawn(work, i))
+    }
+    for (let t in ts) {
+        let r: int = wait(t)
+        sum += r
+    }
+    done += 1000
+}
+print("spawn {n} sum {sum} {clock() - t0} s")

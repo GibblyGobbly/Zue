@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# ring.zu <threads> <hops>: a number goes round a ring of threads, one channel between neighbours.
+func node(inp: channel, out: channel) -> int {
+    while (true) {
+        let v: int = recv(inp)
+        send(out, v - 1)
+        if (v <= 0) {
+            return 0
+        }
+    }
+    return 0
+}
+let nthreads = int(args()[0])
+let hops = int(args()[1])
+let chans: list<channel> = []
+for (let i = 0; i <= nthreads; i++) {
+    append(chans, channel())
+}
+let ts: list<thread> = []
+for (let i = 0; i < nthreads; i++) {
+    append(ts, spawn(node, chans[i], chans[i + 1]))
+}
+let t0 = clock()
+let v = hops
+let laps = 0
+while (v > 0) {
+    send(chans[0], v)
+    let r: int = recv(chans[nthreads])
+    v = r
+    laps += 1
+}
+print("ring {nthreads} hops {hops} laps {laps} {clock() - t0} s")
+exit(0)

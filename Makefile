@@ -4,7 +4,8 @@
 # Zue source -> LLVM IR -> native binary (LLVM's opt, llc and ld.lld, through compiler/llvm_build.sh).
 #
 #   make            build bin/zue from the seeds in bootstrap/ (needs LLVM 22: llvm-22 and lld-22)
-#   make test       compile and run every test, compare with test/expected/
+#   make test       compile and run every test, compare with test/expected/, run the native checks and
+#                   tools/check_thread_pointer.sh
 #   make verify-ir  run the tests and check every generated IR file with LLVM's verifier (opt)
 #   make LLVM=23    use another LLVM version (opt-23, llc-23, ld.lld-23; any target)
 #   make verify-debug  build the examples with zue build -g and check the line tables
@@ -74,6 +75,7 @@ seed: $(BINDIR)/zue
 test: $(BINDIR)/zue
 	@compiler/run_tests.sh
 	@sh test/native/run.sh
+	@tools/check_thread_pointer.sh
 
 codes-check: $(BINDIR)/zue
 	@python3 tools/gen_error_codes.py --check

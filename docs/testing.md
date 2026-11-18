@@ -5,7 +5,7 @@ compared with a recorded copy.
 
 | Command | What it does |
 |---|---|
-| `make test` | Builds `bin/zue` if needed, runs `compiler/run_tests.sh` on every `test/*.zu` file, then runs the native unit tests |
+| `make test` | Builds `bin/zue` if needed, runs `compiler/run_tests.sh` on every `test/*.zu` file, then runs the native unit tests and `tools/check_thread_pointer.sh` (no function that can switch blue threads keeps the thread pointer) |
 | `compiler/run_tests.sh test/test_core.zu` | Runs only the named files |
 | `RECORD=1 compiler/run_tests.sh test/test_core.zu` | Re-records the expected output of the named files |
 | `ZUE_RT_GC_STRESS=1 compiler/run_tests.sh test/test_gc_safety.zu` | Runs with a collection on every allocation (see [gc](gc.md)) |

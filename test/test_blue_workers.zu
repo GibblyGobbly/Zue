@@ -122,3 +122,6 @@ for (let t in cs) {
     wait(t)
 }
 print("made {made} total {total}")
+# CASE the statistics of the blue threads are printed when the program ends normally
+system("ZUE_RT_GC_STATS=1 bin/zue run test/fixtures/blue_threads_end.zu 2>&1 >/dev/null | grep -c '^ZUE_RT_GC_BLUE,'")
+system("ZUE_RT_GC_STATS=1 bin/zue run test/fixtures/blue_threads_end.zu >/dev/null 2>&1; echo \"status $?\"")

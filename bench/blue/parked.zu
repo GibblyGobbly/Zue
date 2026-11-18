@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 GibblyGobbly
+#
+# parked.zu <threads>: threads that wait on one channel, then are woken one by one. Shows the memory of a waiting thread.
+func sit(inp: channel) -> int {
+    let v: int = recv(inp)
+    return v
+}
+let n = int(args()[0])
+let ch = channel()
+let t0 = clock()
+let ts: list<thread> = []
+for (let i = 0; i < n; i++) {
+    append(ts, spawn(sit, ch))
+}
+let t1 = clock()
+for (let i = 0; i < n; i++) {
+    send(ch, i)
+}
+let s = 0
+for (let t in ts) {
+    let r: int = wait(t)
+    s += r
+}
+print("parked {n} s {s} spawn {t1 - t0} s total {clock() - t0} s")
