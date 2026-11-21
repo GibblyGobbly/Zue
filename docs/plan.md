@@ -1,15 +1,114 @@
-# Plan: Hush, a near-pauseless garbage collector
+# Plan
+
+Where Zue stands, what comes next and in which order, and what the owner has decided. Updated 2026-11-16.
+The measurements and reasoning behind past work are kept under [History](#history), oldest first; where an
+older section disagrees with this page, this page is the current one.
+
+## Where Zue stands
+
+| Area | State | Last change |
+|---|---|---|
+| Language | Zue 2 phases 1 to 4 done: conversions (`as`, `T(x)`, `else`, `if (let ...)`), everything that may be missing, named arguments, every type known when the program is built (strict is the rule), every parameter typed | 463e0cb, 2026-11-11 |
+| Compiler | Compiles itself (stage 1 and stage 2 identical); LLVM 22 tools, no C compiler; 1196 tests | 73824a4, 2026-11-16 |
+| Collector | Conservative Immix, several marking threads, concurrent sweep on the GC thread. Before the workers: 11.9 to 13.6 M iterations/s on `bench/gc/mutator_utilization.zu` from 1 MiB to 4 GiB live, longest stop 0.22 to 0.31 ms | e973eb2, c9bff86 |
+| Blue threads | Share nothing, time slices, several workers; threads move between workers, idle workers take half of another's queue, own stack switch, stacks reused. Against Go, see the table below | 73824a4, 2026-11-16 |
+| Audit of 2026-11-02 (`issue.md`) | Every item fixed on 2026-11-03 (2c05fca to 1a572b5) | |
+
+Blue threads against Go on 16 processors, `bench/blue/compare.sh`, seconds, 1 and 16 workers (2026-11-16):
+
+| Program | Zue | Go | Bar met? |
+|---|---|---|---|
+| CPU-bound threads | 0.79, 0.12 | 0.38, 0.04 | Yes (the gap is the speed of the code, item 6) |
+| Uneven load | 0.86, 0.13 | 0.38, 0.04 | Yes (same) |
+| 100,000 parked threads | 1.08, 0.94 | 0.35, 0.18 | Yes, but 5 times slower and twice the memory (item 4) |
+| Spawn and wait | 0.04, 0.07 | 0.07, 0.05 | No (item 3) |
+| Ring of 1,000 threads | 0.06, 0.09 | 0.11, 0.11 | No, though faster than Go (item 1) |
+| Ping-pong | 0.05, 0.07 | 0.10, 0.10 | No, though faster than Go (item 1) |
+| Producers and consumers, one channel | 0.02, 0.43 | 0.04, 0.17 | No (item 2) |
+
+The bar: a program is never slower on more workers than on one; where all the work goes through one shared
+object (one channel), it slows down no more than Go does.
+
+## Next, in order
+
+One item at a time, each closed with a commit. Items 1 to 5 finish blue threads.
+
+| # | Work | Done when | Cause found so far |
+|---|---|---|---|
+| 1 | The program's own thread may move between workers | Ring and ping-pong are not slower on 16 workers than on 1 | It is bound to the first worker (it runs on the stack of the first operating system thread), so a chain of threads on other workers wakes a sleeping worker through the kernel once a lap |
+| 2 | Producers and consumers on one channel | From 1 to 16 workers it slows down no more than Go (4 times) | 1.8 of 3.2 million channel operations find the channel's lock held. Go keeps a sender and the receiver it wakes on one worker more often |
+| 3 | Short threads | Spawn and wait is not slower on 16 workers than on 1 | Nearly every thread is taken by another worker, and moving it costs more than running it |
+| 4 | A parked thread's cost | Proposed: at most twice Go's memory and time per parked thread | About 5.6 KB and 8 microseconds each: a new stack mapping, a guard page, page faults, a 1 KB copy of the call frames |
+| 5 | Blocking calls and long runtime calls | Other threads go on while one waits in `input`, `system` or a file read; a long runtime call does not delay a stop of all workers | Not measured yet |
+| 6 | Speed of single-thread code | Proposed: a measured plan the owner approves; `fib` is 2.3 to 2.8 times slower than Go | Every call stores its position, counts its depth, writes a 24-byte call record and tests the stack; every `+` and `-` tests for overflow |
+| 7 | Compile speed | The front end back to its speed before phase 4 | 2.5 times slower since phase 4; three fixes (E1, E3, E5) were tested at -40 percent and not applied; the one wide `Node` took the compiler from 151 to 205 MB |
+| 8 | Phase 5: immutability | See "Phase 5" under History, with the owner's decisions of 2026-11-10 below | Decided, not started |
+| 9 | Phase 6: values | Copy on write and `mut` parameters, the tracing collector kept | Decided, not started |
+| 10 | Phase 7: 8-byte ints and floats | | |
+| 11 | Typed channels and threads (`channel<int>`), function types (`func(int) -> string`) | `recv`, `wait` and function values need no written type | |
+| 12 | Remove `data`; then `table`, `history`, `decimal` | | After phase 6 |
+| 13 | C headers (`import "x.h"`), the GUI library, the language's identity (owner's choice, by April 2027) | | After the phases |
+
+## Open, not yet in the order
+
+| Area | Problem |
+|---|---|
+| Collector | Default mode with 256 MiB and 1 GiB live fell from 11.5 to 12.3 M to 9.2 to 10.1 M iterations/s when the workers came; cause not found |
+| Collector | `--gc=lowmem`: 3.6 to 3.9 M iterations/s, held back more than half of the run, one stop of about 1 ms per run that its counters do not show |
+| Collector | The time per word marked rises with more marking threads (6.1 to 9.0 ns with 1 to 8); measure again on a quiet machine |
+| Collector | 10 GiB live not tested: needs the 64 GB machine |
+| Checker | F12 to F21, low findings of the review of 2026-11-10; the report is lost, so they have to be found again |
+| Build | `make seed` sometimes needs a second round (the runtime seed was made by the seed compiler before); `build_runtime.sh` has no lock; two programs with one name share `C/<name>.ll` |
+| Tools | `perf` does not run on the development machine (`kernel.perf_event_paranoid` is 4); slow spots are found with counters and gdb |
+| Docs | The owner plans to rewrite the user docs |
+
+## Decided by the owner
+
+The table is the current state of each decision; the date is when it was last changed.
+
+| Topic | Decision | Date |
+|---|---|---|
+| Strictness | No inf or NaN; every failure is a precise error, never `null`, 0 or -1 standing in; int and float never mix; a variable keeps the type of its first value; no math on strings; number literals adapt to context, variables never convert | Before 2026-11 |
+| Simplicity | No generics syntax, union types, classes, interfaces, `?` types or operators, enums with `match`, `try`/`catch`, method syntax, tuples, destructuring | 2026-11-04 |
+| Conversions | `x as T` and `T(x)`, same strict meaning; `else` and `if (let ...)` for anything that may be missing | 2026-11-05 |
+| Parameters | Every parameter has a type (`func dbl(x: int)`); a parameter of an open type (`list`, `map`, a template with an untyped field) takes each call's full argument type | 2026-11-10 |
+| Mixed lists | Allowed; an item read from one is converted with `as` before use | 2026-11-05 |
+| Phase 5 | `let` never changes, `let mut` may; changing a passed value needs `mut` on the parameter and at the call (`func f(mut xs)`, `f(mut xs)`); closures may change an outer `let mut` | 2026-11-10 |
+| Phase 6 | Copies with copy on write and in-place `mut` parameters; the tracing collector stays; no reference counting, no ban on cycles, no exact freeing | 2026-11-10 |
+| Order of phases | Typed parameters, then phase 5 (options shown to the owner first), then phase 6 | 2026-11-10 |
+| Data kinds | Remove `data`; keep `bloc` and `box`; add `table`, `history`, `decimal`, in that order, after phase 6 | 2026-11-06 |
+| GUI and C | Our own GUI library in Zue, outside the core, after the phases; C through `import "x.h"` with no declarations written by the user | 2026-11-06 |
+| Collector goals | Stops under a millisecond up to 10 GiB live; at least 10 M iterations/s on the benchmark; default mode gives memory for speed, `--gc=lowmem` speed for memory | 2026-11-11 |
+| Blue threads | Share nothing: `spawn` takes a named top-level function, values are copied, `wait` hands the result over once; performance on par with Go's goroutines | 2026-11-11, 2026-11-16 |
+| Limits | No arbitrary thresholds or cut-offs as fixes; ask when a limit cannot be avoided | 2026-11 |
+| Text | Strings are for English text (ASCII); UTF-8 behaviour is not a bug | 2026-11 |
+
+## How work is done
+
+| Step | What |
+|---|---|
+| Measure first | Every claim is run; a fix starts from a measured cause. A problem found on the way is reported before it is fixed |
+| A language change | The compiler accepts the new form, `make seed`, the compiler's own source moves, `make seed`, the old form becomes an error, tests are re-recorded on purpose, a commit |
+| Before a commit | `make test` (tests, native checks, thread pointer check); for runtime changes the GC and blue thread tests under `ZUE_RT_GC_STRESS=3 ZUE_RT_GC_VERIFY=1` with 2 to 16 workers; for collector changes `ZUE_RT_GC_STRESS=7 ZUE_RT_GC_SLOW=50` and `tools/gc_race_check.sh`; for parser changes `make round-trip`, `make fuzz`, `make verify-ir` |
+| A test for every change | A safety test is mutation-tested: the bug it guards against is put back and the test must fail |
+
+## History
+
+Everything below was written as the work went, oldest first, and is kept as it was. Decisions in it may have
+been changed later; the table "Decided by the owner" above is the current one.
+
+### Hush, a near-pauseless garbage collector (plan, 2026-10-30)
 
 Written 2026-10-30. Numbers marked "measured" come from `bench/gc/measure.sh` on this machine
 (16 cores, 23 GiB). Everything else is a target, not a result.
 
-## Name and summary
+### Name and summary
 
 **Hush GC**: a conservative, non-moving, incremental tri-color mark-sweep collector with an SATB
 write barrier, lazy sweep and size-class pages. Marking later moves to a GC thread that runs in
 parallel with the program.
 
-## Goals and priorities
+### Goals and priorities
 
 Low pause and low memory come first. CPU use and throughput come second.
 
@@ -20,14 +119,14 @@ Low pause and low memory come first. CPU use and throughput come second.
 | CPU use | The GC thread may use another core; no program-side work that scales with heap size (phase 9) |
 | Throughput | At least twice at the same pause, later |
 
-## Options
+### Options
 
 There are no collector flags. The write barrier is always emitted. The policy (when to start a cycle,
 how much the program may allocate during one) is worked out at run time by the pacer (see "Phase 8b
 result"). Run-time tuning uses environment variables for tests only: `ZUE_RT_GC_STRESS`, `_STATS`,
 `_VERIFY`, `_SLOW`.
 
-## Where we start (measured, old collector)
+### Where we start (measured, old collector)
 
 The old collector is stop-the-world mark-sweep. Program: `bench/gc/live_heap.zu`, which builds a
 live heap and then makes 20 million short-lived objects while reading the live data. "Small"
@@ -59,7 +158,7 @@ Earlier audit findings on the large-object path (objects over 8 KiB):
 | A swept large page keeps its 88-byte descriptor and table entries | 3M large allocations reached 304 MB peak memory |
 | The whole span counts toward the collection trigger | About 778 collections in the 200k run |
 
-## Phase 2 result (measured)
+### Phase 2 result (measured)
 
 Program: build a string of N bytes, then 200,000 times make a new string one byte longer and drop
 it. "Old" is the stop-the-world collector as it was at the baseline.
@@ -104,7 +203,7 @@ figures in this size range as 400 to 640 ms until the collector no longer stops 
 Known limits of this step: the 32752-byte class limit is a compromise, and the span cache search is
 linear (512 slots at most). Neither matters until lazy sweep (phase 5).
 
-## Phase 6 result (measured)
+### Phase 6 result (measured)
 
 Incremental marking with the write barrier works and is checked. The sweep at the end of each cycle
 is still stop-the-world, so the full pause is not under 1 ms yet.
@@ -141,7 +240,7 @@ What was done to make it safe:
 Open items: a mark step starts at a fixed 8 KB of allocation with no pacing
 against how fast the program allocates; the barrier makes every cell write test one flag.
 
-## Phase 5 result (measured)
+### Phase 5 result (measured)
 
 The sweep now runs in steps of at most 50 microseconds between allocations, and cached large-object
 memory is given back at most 1 MiB per step. In incremental mode no single pause is longer than about
@@ -177,7 +276,7 @@ CPU time separately); `lv_data_gc_hook` (freeing the boxes of dead templates) ru
 end of marking and its time grows with the number of live boxes (at most 4096); a very large root range
 from `unsafe` is scanned in one piece at the start of a cycle.
 
-## Phase 7 result (measured)
+### Phase 7 result (measured)
 
 One collector remains. `--gc=lowpause` (default) runs cycles in steps with the write barrier;
 `--gc=throughput` runs each cycle in one piece and the compiler leaves the barrier out. The separate
@@ -228,7 +327,7 @@ the sweep epoch) each make `test_gc_barrier.zu` fail. `test_gc_barrier.zu` with 
 in `throughput` mode with the verifier takes 107 s (a full collection and a full check on every
 allocation), longer than the test runner's 60 s limit; it passes when run directly.
 
-## Phase 3 result (measured)
+### Phase 3 result (measured)
 
 The next collection now starts after a percentage of the live bytes has been allocated (`ZUE_RT_GC_GROWTH`;
 before it was 100). Defaults: 45 for `lowpause`, 200 for `throughput`. Empty pages are given back with
@@ -262,7 +361,7 @@ What this shows, without softening:
 - `test_gc_pages_returned.zu` takes over 60 s with a full collection every 25 allocations in
   `throughput` mode, so it is left out of that stress run; it passes in `lowpause` under stress.
 
-## Phase 4 result (measured)
+### Phase 4 result (measured)
 
 All 55 module-level variables of the collector, the class lists and the span cache are now one
 zero-filled block of 17336 bytes (`_heap0`) in `zue_gc.zu`. A field is read with `ld64(h + H_NAME)`
@@ -276,7 +375,7 @@ and 5.97 before). A mutant that gave two fields the same offset crashed the comp
 For a process to own its own collector (blue threads) or a GC thread to use the state, `_heap()` is the one
 place to change: it returns the block in use.
 
-## Phase 8 stage 1: concurrent marking (plan, then result below)
+### Phase 8 stage 1: concurrent marking (plan, then result below)
 
 Measured first (4 GiB live, `lowpause`, 20 M churn): wall 9.97 s, of which the collector takes 4.24 s
 (marking 3.58 s, sweeping 0.65 s). With all of that off the program thread the run would be about
@@ -302,7 +401,7 @@ Stage 2, later: concurrent sweeping, which touches the page lists the allocator 
 
 Not changed: only one thread runs Zue code. Pause goal is still under 1 ms at 4 GiB.
 
-## Phase 8 result (measured)
+### Phase 8 result (measured)
 
 Marking now runs on a GC thread in `lowpause` mode; sweeping stays in steps on the program thread. First
 the new pieces: atomic intrinsics in the native dialect (`ld8a ld64a st8a st64a cas8 fence`, with a
@@ -378,7 +477,7 @@ How it was checked:
 
 Not changed: only one thread runs Zue code.
 
-## One collector (2026-10-31)
+### One collector (2026-10-31)
 
 The one-piece (stop-the-world) cycle was removed: `_gc_full`, `_mark_some`, `_cache_trim_all`, the
 no-barrier code generation of `--gc=throughput` and the fallback when the GC thread cannot be created.
@@ -411,7 +510,7 @@ What this shows, without softening:
 - The whole suite passes built with either profile (757 tests), and the GC tests pass under stress in
   both, including the page-return test that used to time out in the one-piece mode.
 
-## How Hush works
+### How Hush works
 
 | Technique | What it does |
 |---|---|
@@ -427,7 +526,7 @@ What this shows, without softening:
 What stays inside a pause: scanning the program's stack and registers, and draining the barrier
 buffer at the end. Both depend on stack depth, not heap size.
 
-### Program and collector in parallel
+#### Program and collector in parallel
 
 The program already runs on its own thread (see [memory](memory.md)). Hush adds one GC thread.
 This does not make the language multi-threaded: there is still one thread running Zue code.
@@ -440,7 +539,7 @@ Order of work, because correctness matters more than speed:
    buffer. Shared state (mark bytes, the page table, the mark stack hand-off) is made safe first.
    The program thread scans its own stack at the start of a cycle, then marking runs in parallel.
 
-## Correctness: not freeing live objects
+### Correctness: not freeing live objects
 
 The rule to preserve: **an object that is reachable at the start of a cycle, or allocated during
 it, is never freed in that cycle.**
@@ -464,7 +563,7 @@ Verification, in order of cost:
   `compiler/runtime/`). Each is either given the barrier or shown not to need it.
 - `make` itself: the compiler compiles itself twice and the output must be identical.
 
-## unsafe, box, bloc and template
+### unsafe, box, bloc and template
 
 Decisions made from reading [memory](memory.md), [unsafe](unsafe.md) and the data hook in
 `zue_rt_data.zu`.
@@ -483,7 +582,7 @@ Decisions made from reading [memory](memory.md), [unsafe](unsafe.md) and the dat
 The unsafe `store` is already checked by the rule functions, so adding the barrier there costs
 almost nothing. Anything that is unclear after the audit is treated as needing the barrier.
 
-## Latency that is not the collector
+### Latency that is not the collector
 
 | Source | Fix |
 |---|---|
@@ -492,7 +591,7 @@ almost nothing. Anything that is unclear after the audit is treated as needing t
 | `munmap` and `madvise` on big spans | Do them in slices |
 | A very deep stack | Document a stack limit; root scanning time depends on it |
 
-## Phases
+### Phases
 
 Each phase ends with `make test` green, then `make seed` only when the tests pass.
 
@@ -509,7 +608,7 @@ Each phase ends with `make test` green, then `make seed` only when the tests pas
 | 8b | The pacer replaces fixed growth and throttle numbers; `--gc` flags removed | Done. See "Phase 8b result" |
 | 9 | Optional generational layer (sticky mark bits and card marking) | Throughput gain measured |
 
-## Comparison to fill in
+### Comparison to fill in
 
 For each phase from 3 onward, run `bench/gc/measure.sh` for the old collector, `lowpause` and
 `throughput`, and record these in this file:
@@ -521,7 +620,7 @@ For each phase from 3 onward, run `bench/gc/measure.sh` for the old collector, `
 | CPU use | user plus system time from `/usr/bin/time` |
 | Throughput | churn iterations per second, printed by the program |
 
-## After the collector: blue threads
+### After the collector: blue threads
 
 Light green processes come after Hush is done. Each process gets its own small heap, its own
 collection, and its own stack. Large strings and lists live outside process heaps with a
@@ -529,7 +628,7 @@ reference count so messages can share them. Stack checks in function prologues a
 give overflow detection and preemption. Hush's state moves into a struct in phase 4 so that a
 process can own one.
 
-## Risks
+### Risks
 
 | Risk | Handling |
 |---|---|
@@ -540,7 +639,7 @@ process can own one.
 | The OS adds latency (scheduling, page faults) | Cannot be removed in user space; track the maximum pause over long runs |
 | The compiler and runtime are compiled by themselves | Follow the seed rules in CLAUDE.md |
 
-## References
+### References
 
 | Topic | Source |
 |---|---|
@@ -553,7 +652,7 @@ process can own one.
 | Pony ORCA | https://tutorial.ponylang.io/runtime-basics/garbage-collection |
 | Verona regions | https://arxiv.org/pdf/2309.02983 |
 
-## Phase 8b result: the pacer
+### Phase 8b result: the pacer
 
 The growth percentage (45 or 200), `CAPDIV` and the 64 MiB slack are gone, and so are `--gc=throughput`,
 `ZUE_RT_GC_MODE`, `_GROWTH` and `_CAPDIV`. `_after_sweep` measures the allocation rate and the cycle cost
@@ -577,7 +676,7 @@ Live is the collector's own count, which differs between the builds. Ratios comp
 - Not done: `ulimit -v` is not read; the constants 2 (margin), one half of free memory and 16 MiB remain;
   no test checks the pacer's numbers, only that every collector test passes (also with stress and verify).
 
-## Blue threads, version 1
+### Blue threads, version 1
 
 `compiler/runtime/zue_rt_blue.zu`. Coroutines on the one program thread and the one heap: each has a 1 MiB
 mapped stack with a guard page, `swapcontext` switches, and a thread gives up the processor only in `wait`,
@@ -594,7 +693,7 @@ At the start of a cycle `_scan_stack` also scans the stacks of the threads that 
   a closed-channel receive that is not an error, `sleep`, and a limit on the number of threads other than
   the operating system's.
 
-## Next steps
+### Next steps
 
 The order of work after blue threads version 1. Each step says how to know it is done.
 
@@ -616,7 +715,7 @@ Open decisions:
 A generational layer stays out unless step 3 shows that marking is still the main cost. A page lookup in the
 write barrier cost 29 percent on a write-heavy loop (0.67 s to 0.87 s for 100 passes over 200000 lists).
 
-## Blue threads against goroutines
+### Blue threads against goroutines
 
 What Go's runtime does by itself, and where blue threads version 1 stands:
 
@@ -629,7 +728,7 @@ What Go's runtime does by itself, and where blue threads version 1 stands:
 
 In Go, too, the programmer starts goroutines (`go f()`); here it is `spawn(f)`.
 
-## Decision: no collector inside a blue thread
+### Decision: no collector inside a blue thread
 
 The idea was to collect small heaps in a light thread on the program's own thread and to switch to the GC
 thread past 0.5 ms. It is dropped:
@@ -642,7 +741,7 @@ thread past 0.5 ms. It is dropped:
 The related idea that stays: the pacer sizing the number of GC workers to the heap (none, one, or several marking in
 parallel). It belongs to step 3 above (parallel marking) and has not been measured.
 
-## Goal: blue threads like Go's, and a compiler that uses them
+### Goal: blue threads like Go's, and a compiler that uses them
 
 The goal: blue threads that behave like goroutines but cost less, so that the compiler itself runs on them and
 becomes faster and safer. The steps, each to be shown as a design first:
@@ -671,7 +770,7 @@ program must be measured before and after. Neither has been tried.
 "Safer" comes from threads that share nothing and talk through channels (T3), so there are no data races. It is
 not a property of version 1, where threads share one heap but cannot run at the same moment.
 
-## Session result: stalls, unsafe roots, throughput (measured 2026-11-01)
+### Session result: stalls, unsafe roots, throughput (measured 2026-11-01)
 
 Machine: 16 cores, 23 GB. All counts below are from runs on it. The whole suite passes (787 cases, also under
 `ZUE_RT_GC_STRESS=1`), and `tools/gc_race_check.sh` shows only the expected races.
@@ -691,7 +790,7 @@ times with `--release`). Not done: a cheaper allocation path, an inlined barrier
 per-thread heaps. The pointer table bug was found by a new test; two more tests (`test_gc_chunks`,
 `test_gc_unsafe_roots`) were checked by breaking the code on purpose and seeing them fail.
 
-## Session result: where the time went and what was done about it (measured 2026-11-01)
+### Session result: where the time went and what was done about it (measured 2026-11-01)
 
 `callgrind` of the allocation-only loop (`bench/gc/alloc_only.zu`) showed that LLVM was not the limit. The same
 program compiled at `-O0` ran at 6.3 M/s, at `-O1` 7.0, at `-O3` 7.2. The time went into what each operation
@@ -722,7 +821,7 @@ inlined barrier check, per-thread heaps. At 10 GiB the worst stall with all chan
 over 1 ms per run; the program allocates 1.5 times faster now, which puts more pressure on the kernel's memory
 compaction, and that cause is likely but not proven.
 
-## What limits the collector now, and what was tried (measured 2026-11-01)
+### What limits the collector now, and what was tried (measured 2026-11-01)
 
 With the mutator faster (see above), the program thread spends about 39 percent of its churn time on the
 collector at a 1 GiB live heap (allocation loop, 20 million iterations): 383 ms is the throttle, where the
@@ -756,7 +855,7 @@ What would help, in order of expected gain and of risk:
 | Lists of scalars that the marker does not read | A row of 8 ints is 160 bytes the marker reads and finds nothing in; marking cost per cycle falls with it | The cells would have to live in an atomic object of their own, which gives up the one-object list; a list that gets a pointer item must switch |
 | A bigger heap goal | Fewer cycles, so less marking and no throttling | More memory; against the rule that memory comes first |
 
-## Sweep without touching dead objects, and two things found on the way (measured 2026-11-01)
+### Sweep without touching dead objects, and two things found on the way (measured 2026-11-01)
 
 The sweep used to write a link into every dead object to build a free list, a cache miss per dead object, for memory the
 allocator was about to write anyway. The free slots of a page are now the zero bytes of its used map below `PG_BUMP`;
@@ -790,7 +889,7 @@ Found on the way:
 What limits the allocation loop now: the throttle (about 320 to 350 ms of 1.54 s) and marking, 1.6 s of collector
 thread time for 13 cycles of a 1.5 GB live heap.
 
-## Sweep of heap sizes, 1 to 10 GiB (measured 2026-11-01, one run per row)
+### Sweep of heap sizes, 1 to 10 GiB (measured 2026-11-01, one run per row)
 
 The request is the argument of `bench/gc/live_heap.zu` and `alloc_only.zu` (200 bytes per row assumed; the real live data
 is about 1.2 times that). 20 million iterations, 23.7 GB machine with about 5 GB in use by other things. Old is the commit
@@ -817,7 +916,7 @@ list that outgrows the room inside its own object leaves that room dead (256 byt
 keeps its items apart, as before; only lists made with known contents (literals, slices) share their object.
 Above about 8 GiB both builds are limited by the collector and by the memory of the machine (peak 12 to 13 GB of 23.7).
 
-## Pause distributions, adversarial workloads, cost against no collector, blue threads (measured 2026-11-01)
+### Pause distributions, adversarial workloads, cost against no collector, blue threads (measured 2026-11-01)
 
 Program `bench/gc/pause_profile.zu` times every iteration of a loop with `clock()` (a normal one takes under a
 microsecond) and keeps a histogram; `blue_contention.zu` does the same with many parked blue threads. One run each, on
@@ -883,7 +982,7 @@ There are no safepoints to wait for: the program thread does its own collector s
 thread.
 
 
-## Replacing the collector: conservative Immix (decided 2026-11-04)
+### Replacing the collector: conservative Immix (decided 2026-11-04)
 
 The old collector (size-class pages, one marker, sweep in steps on the program thread) is replaced, not
 tuned. Baseline of the old collector, `bench/gc/mutator_utilization.zu <live MiB> 30000000`, one run each:
@@ -898,7 +997,7 @@ tuned. Baseline of the old collector, `bench/gc/mutator_utilization.zu <live MiB
 Where the program thread's stops went (256 MiB): clearing reused pages 538 ms, throttle spin 160 ms, sweep
 steps 148 ms, giving memory back 128 ms, new pages 46 ms. At 1 GiB the throttle spin was first (579 ms).
 
-### Stages
+#### Stages
 
 | Stage | Work | Done when |
 |---|---|---|
@@ -910,7 +1009,7 @@ steps 148 ms, giving memory back 128 ms, new pages 46 ms. At 1 GiB the throttle 
 The old `zue_gc.zu` is deleted in stage I: the new file has the same name and the same entry points, so the
 compiler and the rest of the runtime do not change.
 
-### Heap layout (stage I)
+#### Heap layout (stage I)
 
 | Unit | Size | Notes |
 |---|---|---|
@@ -930,7 +1029,7 @@ descriptor, as before.
 A word is a pointer to an object when the page table knows its 64 KB, a start bit is found at or before it in
 the same block, and the first end bit after that start is at or after it.
 
-### Allocation
+#### Allocation
 
 The fast path is a bump: cursor plus size against the end of the gap, then the start and end bits. A gap is
 the space from the end of one live object to the start of the next (found in the start bitmap). There is no
@@ -940,7 +1039,7 @@ its lines get the cycle's epoch, so nothing allocated during the cycle is freed 
 writes that map. The collector's state holds the cursor and the bytes left in the gap, never the gap's end: the end is often
 the start of an object, and the conservative scan of the data segment would keep it alive.
 
-### Sweep
+#### Sweep
 
 After the marks are final the GC thread sweeps every block that was in use. The program thread can sweep a
 block itself when it needs one before the GC thread got to it; a block is claimed under the collector mutex.
@@ -952,14 +1051,14 @@ recycle list of its kind. The GC thread then gives back the memory of
 free blocks beyond what the pacer expects the program to need before the next cycle (madvise), off the
 program thread.
 
-### What stays
+#### What stays
 
 Snapshot-at-the-beginning barrier (`lv_wb_cell`, `lv_wb_word`, `lv_wb_range`), the local batch handed to the
 GC thread, root ranges scanned in steps, blue thread stacks scanned in steps, `lv_gc_note_external`, the box
 hook at the end of marking, `--gc=lowmem`, the pacer's measures, `ZUE_RT_GC_STATS`, `_STRESS`, `_SLOW` and
 `_VERIFY`. `lv_gc_is_marked` counts an object made during the cycle as marked.
 
-### Stage I result (measured 2026-11-04, one run each, same benchmark as the baseline)
+#### Stage I result (measured 2026-11-04, one run each, same benchmark as the baseline)
 
 | Live asked | Iterations/s | Stopped | Stops | p99 stop | Longest | MMU 1 ms | MMU 10 ms | MMU 1 s | Peak | Throttle spin |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -981,7 +1080,7 @@ Two fixes found on the way: the program thread sweeping blocks until it found ro
 stop (it now sweeps at most one block per request), and the pacer counted live data in whole lines (2.78 GB
 for 1.84 GB of objects), which made it allow a larger heap (it now uses the bytes the cycle marked).
 
-### Step a result (measured 2026-11-04, one run each, same benchmark)
+#### Step a result (measured 2026-11-04, one run each, same benchmark)
 
 Allocation into the gaps between live objects; an object made during a cycle is marked from birth.
 
@@ -995,7 +1094,7 @@ Peak memory is about 16 percent below stage I and back to the old collector's (1
 Throughput is about the same as stage I, still 10 to 20 percent below the old collector: that is step b.
 The longest stop stays under 0.6 ms. 10 GiB was not run (it needs about 20 GB on a 23 GB machine).
 
-### Stage II result: several markers (measured 2026-11-04, 8 cores / 16 threads)
+#### Stage II result: several markers (measured 2026-11-04, 8 cores / 16 threads)
 
 Marking threads with a mark stack each and a shared pool; a marker gives half its stack away when another
 waits. Default 2 markers (4 or more CPUs), `ZUE_RT_GC_MARKERS` to change it. Three runs each with 2 markers,
@@ -1047,7 +1146,7 @@ Open: with 4 markers, half the runs still had one stop of 1.5 to 2 ms (the progr
 mutex), and 4 GiB throughput fell to 4.1 to 4.7 M. Assists (the program marking instead of the throttle spin)
 are not built: with two markers the spin is 1 percent of the run or less.
 
-### Next, in order
+#### Next, in order
 
 | Step | Work |
 |---|---|
@@ -1056,7 +1155,7 @@ are not built: with two markers the spin is 1 percent of the run or less.
 | c | Default mode keeps low pauses and high throughput and may use more memory; `--gc=lowmem` keeps low pauses and low memory and gives up throughput |
 | d | Stage III, exact heap scanning, then moving the worst blocks in short pauses. Concurrent compaction (a load barrier in generated code and the runtime, about 4,000 to 5,000 lines) only if fragmentation still shows after that |
 
-### Throughput and stops after the program got faster (measured 2026-11-11, 16 threads, 23 GB)
+#### Throughput and stops after the program got faster (measured 2026-11-11, 16 threads, 23 GB)
 
 `bench/gc/mutator_utilization.zu <live MiB> 30000000`, normal build, one run each (three at 4 GiB).
 
@@ -1135,14 +1234,14 @@ Checked: `make test` (1174), the suite under `ZUE_RT_GC_VERIFY=1`, the GC and bl
 codes-check. The capture change was not mutation-tested; `test_capture_scopes.zu` (9 cases) gives the same
 output with the compiler before the change.
 
-## Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 to 4 done 2026-11-06)
+### Zue 2: types, immutability and memory (plan, 2026-11-04; phases 1 to 4 done 2026-11-06)
 
 The language changes after the collector work. The aim: every type known when the program is built, values
 that cannot change unless they say so, conversions with one clear meaning, named arguments, and memory that
 is freed exactly, with no double free, no two names changing one value and no cycles. The language stays
 simple: no generics syntax, no classes or interfaces, no `?` types or operators.
 
-### Decided by the owner
+#### Decided by the owner
 
 | Topic | Decision |
 |---|---|
@@ -1157,7 +1256,7 @@ simple: no generics syntax, no classes or interfaces, no `?` types or operators.
 | One of several kinds | One template with a `kind` field that holds the fields of every kind (no union types) |
 | Left out, to keep the language simple | Generics syntax, union types, classes and interfaces, `?` types and operators (`int?`, `as?`, `??`, `?.`), enums with `match`, errors as values (`try`, `catch`), distinct types, method syntax, tuples, destructuring, short closures |
 
-### Taken as the default until the owner says otherwise
+#### Taken as the default until the owner says otherwise
 
 | Topic | Default | Why |
 |---|---|---|
@@ -1167,7 +1266,7 @@ simple: no generics syntax, no classes or interfaces, no `?` types or operators.
 | Shadowing | Allowed with `let` only: `let age = age as int` declares a new `age` | Conversions read naturally and no variable needs `mut` for them |
 | Failures that are bugs | Overflow, index out of range, a failed `as` without `else`: the program stops, as today | A bug should not be ignored |
 
-### What exists to build on
+#### What exists to build on
 
 | Exists | Where |
 |---|---|
@@ -1178,7 +1277,7 @@ simple: no generics syntax, no classes or interfaces, no `?` types or operators.
 | Number literals that adapt (`sqrt(16)`) | `check.zu` (`int~`, `float~`) |
 | Default parameters (`func greet(name, greeting = "Hello")`) | parser, `emit_llvm.zu`; named arguments build on them |
 
-### Phase 1: conversions (done)
+#### Phase 1: conversions (done)
 
 Done as below, with one difference: `int(p)` stays the pointer cast (no `address(p)`), and `to_int` and
 `to_float` stayed as older names of `int` and `float` until 2026-11-05, when they were removed (using one
@@ -1217,7 +1316,7 @@ if (let n = input("n? ") as int) {         // n exists only here, and is an int
 `trunc(3.7)`). `to_int(s)` and `to_float(s)` go: they are `s as int` and `s as float`. The old forms stay one
 release with a message saying what to write.
 
-### Phase 2: everything that may be missing (done)
+#### Phase 2: everything that may be missing (done)
 
 Done as below, with these additions: a list or string index out of range (`xs[i]`) and `last_index_of`
 are missing values too, a value that is `null` counts as missing (a map key holding `null` as well as
@@ -1233,7 +1332,7 @@ let f = open("data.txt") else { print("no file"); return }
 if (let l = node.left) { walk(l) }
 ```
 
-### Phase 3: named arguments (done)
+#### Phase 3: named arguments (done)
 
 Done as below, with these choices: named arguments go in the order of the parameters (so they run in the
 order they are written; this can be relaxed later without breaking programs), a parameter with a default
@@ -1253,7 +1352,7 @@ before the checker; errors are `E0125`.
 | An unknown name is a compile error that lists the names | `greet("Ann", greting: "Hi")`: `greet has no parameter 'greting' (name, greeting)` |
 | Builtins have names too | `range(0, 10, step: 2)`, `to_string(x, digits: 3)`, `split(s, sep: ",")` |
 
-### Phase 4: every type known when the program is built
+#### Phase 4: every type known when the program is built
 
 | Rule | Example |
 |---|---|
@@ -1338,12 +1437,12 @@ rest follow from them (a node's kind, its name) or from builtins and fields whos
 Step 1 found two calls of `die` in `emit_llvm.zu` with one argument instead of three (they would have
 crashed instead of reporting an internal error); they are fixed.
 
-### Before phase 5 (owner, 2026-11-06)
+#### Before phase 5 (owner, 2026-11-06)
 
 Phase 5 is not started until its options are discussed: how `let`/`let mut` treats parameters, loops,
 closures, fields and collections, and what other languages chose.
 
-### Core data kinds (owner, 2026-11-06; after phase 6)
+#### Core data kinds (owner, 2026-11-06; after phase 6)
 
 `data` is removed (an untyped template does the same). `bloc` and `box` stay for programs that need an exact
 layout or raw memory. Four core kinds, with the compiler as their first user:
@@ -1357,7 +1456,7 @@ layout or raw memory. Four core kinds, with the compiler as their first user:
 
 Order: `table`, `history`, `decimal`. They depend on value semantics, so they come after phase 6.
 
-### Phase 5: immutability
+#### Phase 5: immutability
 
 | Rule | Example |
 |---|---|
@@ -1372,7 +1471,7 @@ Order: `table`, `history`, `decimal`. They depend on value semantics, so they co
 Until phase 6 makes copies automatic, `let mut b = a` with a list, map or template `a` is written
 `let mut b = copy(a)`, so a `let` value can never be changed through a second name.
 
-### Phase 6: values and memory
+#### Phase 6: values and memory
 
 | Rule | What it gives |
 |---|---|
@@ -1386,11 +1485,11 @@ Until phase 6 makes copies automatic, `let mut b = a` with a list, map or templa
 The tracing collector is then needed only for what counting cannot see; how much of it stays is decided when
 phase 6 is measured.
 
-### Phase 7: speed
+#### Phase 7: speed
 
 Typed ints and floats as 8-byte machine values everywhere, not 16-byte cells.
 
-### Order and steps
+#### Order and steps
 
 The compiler compiles itself, so every phase goes the same way: (1) the compiler accepts the new form and the
 old one still works, (2) `make seed`, (3) the compiler's own source moves to the new form, (4) `make seed`,
@@ -1415,7 +1514,7 @@ Each phase is tested the usual way: a test file per feature with `# CASE` sectio
 their messages), `make test`, `ZUE_RT_GC_VERIFY=1`, round-trip, fuzzers, `verify-ir`, `codes-check`, and
 `ast_unparse.zu` and `ast_dump.zu` taught each new form.
 
-### Sources
+#### Sources
 
 Conversions: [Rust casts](https://cppcheatsheet.readthedocs.io/en/latest/notes/rust/rust_casting.html),
 [Swift Int(exactly:)](https://developer.apple.com/documentation/swift/int/init(exactly:)-7qdwf.md),
