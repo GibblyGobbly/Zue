@@ -1423,8 +1423,14 @@ func _thread_main(start) {
     lv_data_init()
     lv_gc_start(frame_addr() + 64)
     call_ptr(ld64(start))
-    lv_gc_dying()    # the program is over: the other workers stop where they are
-    fflush(_stdout())
+    # The program is over: the other workers stop where they are. A thread that failed at the same moment
+    # ends the program itself; this one waits for it.
+    if (lv_gc_dying() == 0) {
+        _gc_park()
+    }
+    # The program's own blue thread may have finished on another worker than the one it started on, so the
+    # program ends here; returning would end that worker's operating system thread and leave lv_main waiting.
+    exit(lv_flush_stdout_at_exit(0))
     return 0
 }
 

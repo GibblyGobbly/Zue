@@ -105,10 +105,12 @@ data race and without locks:
 
 Blue threads run on several processors at once. The program's own thread is the first worker; another
 worker is started when a thread becomes ready, every worker is busy and none is looking for work, up to the
-number of processors. A thread that becomes ready goes to the worker that made it ready. A worker with
+number of processors. A thread that becomes ready goes to the worker that made it ready. A thread woken by
+`send` or `recv` runs next on that worker, in the rest of the waking thread's time slice, and no other
+worker is woken for it; two threads that hand values back and forth so keep one worker. A worker with
 nothing to run takes half of the threads waiting on another worker, looks for work for 50 microseconds, and
-then sleeps until there is work; at most half as many workers look for work as run threads. A thread can go
-on on another worker than the one it stopped on, except the program's own thread, which stays on the first.
+then sleeps until there is work; at most half as many workers look for work as run threads. A thread,
+the program's own included, can go on on another worker than the one it stopped on.
 
 | Setting | Effect |
 |---|---|

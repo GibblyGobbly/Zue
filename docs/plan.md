@@ -11,20 +11,21 @@ older section disagrees with this page, this page is the current one.
 | Language | Zue 2 phases 1 to 4 done: conversions (`as`, `T(x)`, `else`, `if (let ...)`), everything that may be missing, named arguments, every type known when the program is built (strict is the rule), every parameter typed | 463e0cb, 2026-11-11 |
 | Compiler | Compiles itself (stage 1 and stage 2 identical); LLVM 22 tools, no C compiler; 1196 tests | 73824a4, 2026-11-16 |
 | Collector | Conservative Immix, several marking threads, concurrent sweep on the GC thread. Before the workers: 11.9 to 13.6 M iterations/s on `bench/gc/mutator_utilization.zu` from 1 MiB to 4 GiB live, longest stop 0.22 to 0.31 ms | e973eb2, c9bff86 |
-| Blue threads | Share nothing, time slices, several workers; threads move between workers, idle workers take half of another's queue, own stack switch, stacks reused. Against Go, see the table below | 73824a4, 2026-11-16 |
+| Blue threads | Share nothing, time slices, several workers; threads move between workers (the program's own too), a thread a channel woke runs next on the same worker, idle workers take half of another's queue, own stack switch, stacks reused. Against Go, see the table below | 2026-11-16 |
 | Audit of 2026-11-02 (`issue.md`) | Every item fixed on 2026-11-03 (2c05fca to 1a572b5) | |
 
-Blue threads against Go on 16 processors, `bench/blue/compare.sh`, seconds, 1 and 16 workers (2026-11-16):
+Blue threads against Go on 16 processors, `bench/blue/compare.sh` with its default arguments, seconds,
+1 and 16 workers, median of 3 (2026-11-16, after item 1):
 
 | Program | Zue | Go | Bar met? |
 |---|---|---|---|
-| CPU-bound threads | 0.79, 0.12 | 0.38, 0.04 | Yes (the gap is the speed of the code, item 6) |
-| Uneven load | 0.86, 0.13 | 0.38, 0.04 | Yes (same) |
-| 100,000 parked threads | 1.08, 0.94 | 0.35, 0.18 | Yes, but 5 times slower and twice the memory (item 4) |
-| Spawn and wait | 0.04, 0.07 | 0.07, 0.05 | No (item 3) |
-| Ring of 1,000 threads | 0.06, 0.09 | 0.11, 0.11 | No, though faster than Go (item 1) |
-| Ping-pong | 0.05, 0.07 | 0.10, 0.10 | No, though faster than Go (item 1) |
-| Producers and consumers, one channel | 0.02, 0.43 | 0.04, 0.17 | No (item 2) |
+| CPU-bound threads | 5.9, 0.93 | 2.65, 0.31 | Yes (the gap is the speed of the code, item 6) |
+| Uneven load | 5.6, 0.85 | 2.7, 0.32 | Yes (same) |
+| 100,000 parked threads | 1.05, 0.96 | 0.33, 0.17 | Yes, but 3 to 5 times slower and twice the memory (item 4) |
+| Spawn and wait | 0.04, 0.08 | 0.07, 0.05 | No (item 3) |
+| Ring of 1,000 threads | 0.06, 0.05 | 0.11, 0.11 | Yes (was 0.05, 0.12) |
+| Ping-pong | 0.05, 0.04 | 0.10, 0.10 | Yes (was 0.05, 0.08) |
+| Producers and consumers, one channel | 0.02, 0.36 | 0.04, 0.17 | No (item 2; was 0.03, 0.45) |
 
 The bar: a program is never slower on more workers than on one; where all the work goes through one shared
 object (one channel), it slows down no more than Go does.
@@ -35,8 +36,8 @@ One item at a time, each closed with a commit. Items 1 to 5 finish blue threads.
 
 | # | Work | Done when | Cause found so far |
 |---|---|---|---|
-| 1 | The program's own thread may move between workers | Ring and ping-pong are not slower on 16 workers than on 1 | It is bound to the first worker (it runs on the stack of the first operating system thread), so a chain of threads on other workers wakes a sleeping worker through the kernel once a lap |
-| 2 | Producers and consumers on one channel | From 1 to 16 workers it slows down no more than Go (4 times) | 1.8 of 3.2 million channel operations find the channel's lock held. Go keeps a sender and the receiver it wakes on one worker more often |
+| 1 | Done 2026-11-16: ring and ping-pong are not slower on 16 workers than on 1 | | The pin of the program's own thread was not the cause: unpinned alone, ping-pong still took 0.08 s on 16 workers (0.05 on 1). Every thread a channel woke also woke a sleeping worker (1,500 to 2,400 wakes a run, ping-pong had 0 steals); the waking worker ran the thread itself a moment later, and the woken one looked at its queue for 50 microseconds. Fixed with WK_NEXT (Go's runnext); the program's own thread moves too |
+| 2 | Producers and consumers on one channel | From 1 to 16 workers it slows down no more than Go (Go: 0.06, 0.08, 0.12, 0.22, 0.21 s on 1, 2, 4, 8, 16) | Zue: 0.045, 0.23, 0.31, 0.40, 0.36 s. Already 5 times slower on 2 workers, with 721,000 waits for the channel's lock in 3.2 million operations; Go is 1.3 times slower on 2 |
 | 3 | Short threads | Spawn and wait is not slower on 16 workers than on 1 | Nearly every thread is taken by another worker, and moving it costs more than running it |
 | 4 | A parked thread's cost | Proposed: at most twice Go's memory and time per parked thread | About 5.6 KB and 8 microseconds each: a new stack mapping, a guard page, page faults, a 1 KB copy of the call frames |
 | 5 | Blocking calls and long runtime calls | Other threads go on while one waits in `input`, `system` or a file read; a long runtime call does not delay a stop of all workers | Not measured yet |

@@ -124,7 +124,8 @@ const AL_SIZE = 40
 
 # struct Worker: what a thread that runs Zue code keeps for itself (the tspace "_wk0": one for each operating
 # system thread). The collector reaches the workers through H_WORKERS. The fields from WK_CUR on belong to the
-# blue threads (zue_rt_blue.zu). The driver scans WK_CUR to WK_ZOMBIE and WK_HANDOFF to WK_IDLE as roots.
+# blue threads (zue_rt_blue.zu). The driver scans WK_CUR to WK_ZOMBIE, WK_HANDOFF to WK_IDLE and WK_NEXT as
+# roots.
 const WK_STATE = 0             # 0: runs Zue code. 1: stopped at a safe point, or in a call that may wait (atomic)
 const WK_SP = 8                # its stack pointer when it stopped: the stack from here up does not change while WK_STATE is 1
 const WK_STACK_BASE = 16       # end of the stack of the blue thread it runs
@@ -155,6 +156,8 @@ const WK_HANDOFF = 384         # a thread it took for itself but could not take 
 const WK_IDLE = 392            # the thread it waits for work on, with a stack of its own
 const WK_STEALN = 400          # threads in its run queue that another worker may take (atomic)
 const WK_SEEN = 408            # i64[]: WK_SWITCHES of every worker when it last began to look for work
+const WK_NEXT = 416            # the thread it runs next, outside the queue: woken by the running thread through a channel; no other worker takes it (written by this worker only, read by the ticker)
+const WK_INHERIT = 424         # 1 when the thread it takes up is WK_NEXT: the switch does not start a new time slice (WK_SWITCHES stays)
 const WK_QLOCK = 464           # spin lock of its run queue (WK_RUNH, WK_RUNT, WK_STEALN and the CO_NEXT links)
 const WK_LOCAL_BUF = 512       # MarkItem[LOCAL_CAP]: objects its barrier marked, for the marking threads to scan
 const WK_SIZE = 4608
@@ -1951,6 +1954,7 @@ func _scan_workers() {
         }
         _scan_range(w + WK_CUR, w + WK_ZOMBIE + 8)
         _scan_range(w + WK_HANDOFF, w + WK_IDLE + 8)
+        _scan_range(w + WK_NEXT, w + WK_NEXT + 8)
     }
 }
 
