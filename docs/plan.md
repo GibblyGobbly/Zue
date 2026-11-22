@@ -15,7 +15,7 @@ older section disagrees with this page, this page is the current one.
 | Audit of 2026-11-02 (`issue.md`) | Every item fixed on 2026-11-03 (2c05fca to 1a572b5) | |
 
 Blue threads against Go on 16 processors, `bench/blue/compare.sh` with its default arguments, seconds,
-1 and 16 workers, median of 3 (2026-11-16, after item 1):
+1 and 16 workers, median of 3 (2026-11-17, after items 1 and 2):
 
 | Program | Zue | Go | Bar met? |
 |---|---|---|---|
@@ -25,7 +25,7 @@ Blue threads against Go on 16 processors, `bench/blue/compare.sh` with its defau
 | Spawn and wait | 0.04, 0.08 | 0.07, 0.05 | No (item 3) |
 | Ring of 1,000 threads | 0.06, 0.05 | 0.11, 0.11 | Yes (was 0.05, 0.12) |
 | Ping-pong | 0.05, 0.04 | 0.10, 0.10 | Yes (was 0.05, 0.08) |
-| Producers and consumers, one channel | 0.02, 0.36 | 0.04, 0.17 | No (item 2; was 0.03, 0.45) |
+| Producers and consumers, one channel | 0.02, 0.15 | 0.04, 0.17 | Faster than Go; 6 times slower on 16 than on 1, Go 4 times (item 2; was 0.03, 0.45) |
 
 The bar: a program is never slower on more workers than on one; where all the work goes through one shared
 object (one channel), it slows down no more than Go does.
@@ -37,7 +37,7 @@ One item at a time, each closed with a commit. Items 1 to 5 finish blue threads.
 | # | Work | Done when | Cause found so far |
 |---|---|---|---|
 | 1 | Done 2026-11-16: ring and ping-pong are not slower on 16 workers than on 1 | | The pin of the program's own thread was not the cause: unpinned alone, ping-pong still took 0.08 s on 16 workers (0.05 on 1). Every thread a channel woke also woke a sleeping worker (1,500 to 2,400 wakes a run, ping-pong had 0 steals); the waking worker ran the thread itself a moment later, and the woken one looked at its queue for 50 microseconds. Fixed with WK_NEXT (Go's runnext); the program's own thread moves too |
-| 2 | Producers and consumers on one channel | From 1 to 16 workers it slows down no more than Go (Go: 0.06, 0.08, 0.12, 0.22, 0.21 s on 1, 2, 4, 8, 16) | Zue: 0.045, 0.23, 0.31, 0.40, 0.36 s. Already 5 times slower on 2 workers, with 721,000 waits for the channel's lock in 3.2 million operations; Go is 1.3 times slower on 2 |
+| 2 | Producers and consumers on one channel: faster than Go on every number of workers (2026-11-17); slower by more than Go from 1 to 16 workers only because one worker is twice as fast as Go's | Owner to decide whether the bar counts as met | `perf` (with `kernel.perf_event_paranoid` 1): 88 percent of the time in `lb_send` and `lb_recv`, most of it waiting for the channel's lock; Go also spends 43 percent spinning, but a waiting Go thread looks at the lock once every 30 pauses, so the thread that let it go takes it again with the channel's lines still in its cache. Zue's waiter polled without a gap and took the lock at once. With the same gap (BLUE_LOCK_GAP): 8 producers and 8 consumers, 200,000 values each, on 1, 2, 4, 8, 16 workers took 0.045, 0.23, 0.31, 0.40, 0.36 s before and 0.028, 0.036, 0.055, 0.114, 0.156 s after (Go 0.06, 0.08, 0.12, 0.22, 0.21). Tried first and taken out: no backoff at all (2 workers 0.19 s, 16 workers 0.68 s), not counting WK_NEXT in blue_nready (no change) |
 | 3 | Short threads | Spawn and wait is not slower on 16 workers than on 1 | Nearly every thread is taken by another worker, and moving it costs more than running it |
 | 4 | A parked thread's cost | Proposed: at most twice Go's memory and time per parked thread | About 5.6 KB and 8 microseconds each: a new stack mapping, a guard page, page faults, a 1 KB copy of the call frames |
 | 5 | Blocking calls and long runtime calls | Other threads go on while one waits in `input`, `system` or a file read; a long runtime call does not delay a stop of all workers | Not measured yet |
@@ -60,7 +60,7 @@ One item at a time, each closed with a commit. Items 1 to 5 finish blue threads.
 | Collector | 10 GiB live not tested: needs the 64 GB machine |
 | Checker | F12 to F21, low findings of the review of 2026-11-10; the report is lost, so they have to be found again |
 | Build | `make seed` sometimes needs a second round (the runtime seed was made by the seed compiler before); `build_runtime.sh` has no lock; two programs with one name share `C/<name>.ll` |
-| Tools | `perf` does not run on the development machine (`kernel.perf_event_paranoid` is 4); slow spots are found with counters and gdb |
+| Tools | `perf` runs on the development machine after `sudo sysctl kernel.perf_event_paranoid=1` (the default, 4, blocks it; the setting lasts until a reboot) |
 | Docs | The owner plans to rewrite the user docs |
 
 ## Decided by the owner
