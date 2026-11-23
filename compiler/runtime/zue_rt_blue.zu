@@ -467,6 +467,12 @@ func _blue_wake_one() {
             return 0
         }
     }
+    # Every worker allowed is started: nothing to do, and no lock. The count only grows, and where a start
+    # fails the limit comes down to it, so once it reached the limit it stays there; read without the lock it
+    # can only be older, that is lower.
+    if (g_blue_nworkers >= g_blue_max) {
+        return 0
+    }
     let lk = addr_of("blue_wlock")
     _spin_lock(lk)
     let more = 0
@@ -523,6 +529,27 @@ func _blue_ready_next(co) {
         xadd64(addr_of("blue_nready"), -1)
         _blue_ready(old)
     }
+    return 0
+}
+
+# The end of a send or recv that did not wait. before is the thread that was in WK_NEXT when it began: when it
+# is still there, the running thread went on after waking it instead of waiting (a stage of a pipeline sends
+# its next item), so it goes to the queue, where another worker can take it, and one is woken, as Go wakes a
+# worker at every goready. A thread that waits at its next send or recv (ping-pong) never comes here and keeps
+# the worker. Measured with 4 stages that each hash every item, 16 workers: 0.19 s before WK_NEXT, 0.60 s
+# with WK_NEXT kept, since every stage stayed in the slot of the stage before it, on one worker.
+func _blue_next_release(before) {
+    if (before == 0) {
+        return 0
+    }
+    let wk = _wk()
+    if (ld64(wk + WK_NEXT) != before) {
+        return 0
+    }
+    st64a(wk + WK_NEXT, 0)
+    xadd64(addr_of("blue_nready"), -1)
+    _blue_ready(before)
+    _blue_flush()
     return 0
 }
 
@@ -1498,6 +1525,7 @@ func lb_send(self_p, argc_i, argv_p) {
     st64(msg + 8, 0)
     _iso_copy(msg, argv_p + 16)
     let cur = _blue_cur()
+    let before = ld64(_wk() + WK_NEXT)
     let lk = ch + CH_LOCK
     _blue_chan_lock(lk)
     if (ld64(ch + CH_CLOSED) != 0) {
@@ -1509,11 +1537,13 @@ func lb_send(self_p, argc_i, argv_p) {
         _cp(r + CO_VAL, msg)
         _spin_unlock(lk)
         _blue_wake(r)
+        _blue_next_release(before)
     } else if (ld64(ch + CH_COUNT) < ld64(ch + CH_CAP)) {
         let at = (ld64(ch + CH_HEAD) + ld64(ch + CH_COUNT)) % ld64(ch + CH_CAP)
         _cp(ld64(ch + CH_BUF) + at * 16, msg)
         st64(ch + CH_COUNT, ld64(ch + CH_COUNT) + 1)
         _spin_unlock(lk)
+        _blue_next_release(before)
     } else {
         _blue_check_switch(lk)
         _cp(cur + CO_VAL, msg)
@@ -1537,6 +1567,7 @@ func lb_recv(self_p, argc_i, argv_p) {
     let ch = _arg_chan(self_p, argv_p, 0)
     let o = stack_buf(16)
     let cur = _blue_cur()
+    let before = ld64(_wk() + WK_NEXT)
     let lk = ch + CH_LOCK
     _blue_chan_lock(lk)
     if (ld64(ch + CH_COUNT) > 0) {
@@ -1555,12 +1586,14 @@ func lb_recv(self_p, argc_i, argv_p) {
         if (s != 0) {
             _blue_wake(s)
         }
+        _blue_next_release(before)
     } else {
         let s = _blue_q_pop(ch, CH_SENDQ, CH_SENDT)
         if (s != 0) {
             _cp(o, s + CO_VAL)
             _spin_unlock(lk)
             _blue_wake(s)
+            _blue_next_release(before)
         } else if (ld64(ch + CH_CLOSED) != 0) {
             _spin_unlock(lk)
             _blue_fail(cstr("receive from a closed channel with no values left"), cstr("Send a value before closing, or stop receiving."))
